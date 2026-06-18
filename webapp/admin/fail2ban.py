@@ -40,7 +40,7 @@ import shutil
 import subprocess
 from datetime import datetime, timezone
 
-from flask import Blueprint, Response, jsonify, request, stream_with_context
+from flask import Blueprint, jsonify, request
 from sqlalchemy.exc import SQLAlchemyError
 
 from app_core.auth.decorators import require_auth
@@ -95,35 +95,6 @@ def _run(cmd: list[str], timeout: int = 30) -> tuple[bool, str]:
         return False, f"Command timed out after {timeout}s"
     except Exception as exc:  # pragma: no cover - defensive
         return False, str(exc)
-
-
-def _looks_like_sudo_denied(output: str) -> bool:
-    """True when output indicates the NOPASSWD sudoers entry is missing."""
-    low = (output or "").lower()
-    return (
-        "password is required" in low
-        or "a terminal is required" in low
-        or "not allowed to execute" in low
-        or "sudo: a password" in low
-        or "no tty present" in low
-    )
-
-
-# Exact command the install route runs; also used to probe sudo permission.
-_INSTALL_CMD = ["env", "DEBIAN_FRONTEND=noninteractive",
-                "apt-get", "install", "-y", "fail2ban"]
-
-
-def _can_sudo(cmd: list[str]) -> bool:
-    """Return True if the eas-station user may run `cmd` via passwordless sudo."""
-    try:
-        result = subprocess.run(
-            ["sudo", "-n", "-l"] + cmd,
-            capture_output=True, text=True, timeout=10,
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
 
 
 def _fail2ban_installed() -> bool:
@@ -195,8 +166,6 @@ def _status() -> dict:
     return {
         "installed": installed,
         "active": active,
-        # Whether the host grants the passwordless sudo needed to auto-install.
-        "can_install": _can_sudo(_INSTALL_CMD) if not installed else True,
         "enforcement_enabled": settings.enabled,
         "actuator_jail_loaded": EAS_JAIL in loaded,
         "app_ban_count": _app_ban_count(),       # authoritative list size
@@ -278,117 +247,6 @@ def fail2ban_status():
     return jsonify(_status())
 
 
-@fail2ban_bp.route("/install", methods=["POST"])
-@require_auth
-@require_permission("system.configure")
-def install_fail2ban():
-    """Install fail2ban via apt-get (non-interactive)."""
-    if _fail2ban_installed():
-        return jsonify({"success": True, "message": "fail2ban is already installed."})
-
-    ok, output = _run(_INSTALL_CMD, timeout=180)
-    if not ok:
-        logger.error("fail2ban install failed: %s", output)
-        if _looks_like_sudo_denied(output):
-            # The NOPASSWD sudoers entry for the apt-get install isn't present on
-            # this host yet — this is the common case when upgrading to a build
-            # that adds a new privileged command. Give an actionable message.
-            return jsonify({
-                "success": False,
-                "error": (
-                    "Automatic install isn't permitted on this host yet: the "
-                    "sudoers rule for installing fail2ban is missing. Update the "
-                    "host's sudoers (re-run the EAS Station updater, which copies "
-                    "config/sudoers-eas-station to /etc/sudoers.d/eas-station), or "
-                    "install fail2ban once with: sudo apt-get install -y fail2ban"
-                ),
-                "needs_sudoers": True,
-            }), 200
-        return jsonify({"success": False, "error": output or "apt-get install failed"}), 500
-
-    logger.info("fail2ban installed successfully")
-    return jsonify({"success": True, "message": "fail2ban installed successfully."})
-
-
-# Sentinel the client watches for to learn the final result of a streamed run.
-DONE_PREFIX = "__EAS_DONE__"
-
-
-@fail2ban_bp.route("/install-stream", methods=["POST"])
-@require_auth
-@require_permission("system.configure")
-def install_fail2ban_stream():
-    """Install fail2ban, streaming live apt-get output to the browser.
-
-    The response is a plain-text stream. Each line is the raw command output;
-    the final line is ``__EAS_DONE__ success`` or ``__EAS_DONE__ error`` so the
-    client knows the outcome without parsing apt-get text.
-    """
-    def generate():
-        if _fail2ban_installed():
-            yield "fail2ban is already installed.\n"
-            yield f"{DONE_PREFIX} success\n"
-            return
-
-        # Always attempt the real install and stream its output, so the operator
-        # sees the actual reason for any failure rather than a guessed one.
-        yield "$ sudo apt-get install -y fail2ban\n"
-        try:
-            proc = subprocess.Popen(
-                ["sudo", "-n"] + _INSTALL_CMD,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-            )
-        except Exception as exc:  # pragma: no cover - defensive
-            yield f"ERROR: failed to start apt-get: {exc}\n"
-            yield f"{DONE_PREFIX} error\n"
-            return
-
-        captured = []
-        try:
-            for line in iter(proc.stdout.readline, ""):
-                captured.append(line)
-                yield line
-        finally:
-            proc.stdout.close()
-            proc.wait()
-
-        output = "".join(captured)
-        if proc.returncode == 0:
-            logger.info("fail2ban installed successfully (streamed)")
-            yield "\nDone. fail2ban installed.\n"
-            yield f"{DONE_PREFIX} success\n"
-            return
-
-        logger.error("fail2ban streamed install exited %s: %s", proc.returncode, output[-500:])
-        yield f"\napt-get exited with code {proc.returncode}.\n"
-
-        # Translate the common failure modes into an actionable next step.
-        if _looks_like_sudo_denied(output):
-            yield ("\nThis host hasn't granted permission to install fail2ban without a "
-                   "password.\n"
-                   "Re-run the EAS Station updater to refresh sudo permissions:\n"
-                   "    sudo bash update.sh\n"
-                   "or install it once manually:\n"
-                   "    sudo apt-get install -y fail2ban\n")
-        elif "unable to locate package" in output.lower():
-            yield ("\nThe package index may be stale or the 'universe' repository is "
-                   "disabled. Try, on the host:\n"
-                   "    sudo apt-get update && sudo apt-get install -y fail2ban\n")
-        elif "could not get lock" in output.lower() or "is another process using it" in output.lower():
-            yield ("\nAnother package operation is in progress (apt/dpkg lock held). "
-                   "Wait for it to finish and try again.\n")
-        yield f"{DONE_PREFIX} error\n"
-
-    headers = {
-        "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",   # disable nginx proxy buffering for live output
-    }
-    return Response(stream_with_context(generate()), mimetype="text/plain", headers=headers)
-
-
 @fail2ban_bp.route("/configure", methods=["POST"])
 @require_auth
 @require_permission("system.configure")
@@ -415,10 +273,15 @@ def configure_fail2ban():
         return jsonify({"success": False, "error": "Database error"}), 500
 
     if not _fail2ban_installed():
+        # fail2ban ships pre-installed via install.sh / update.sh. If it is
+        # somehow missing, settings are still saved; updating EAS Station
+        # (sudo bash update.sh) reinstalls it.
         return jsonify({
             "success": True,
             "applied": False,
-            "message": "Settings saved. Install fail2ban to enforce bans at the host firewall.",
+            "message": ("Settings saved, but fail2ban isn't installed on this host. "
+                        "It ships pre-installed — run the EAS Station updater "
+                        "(sudo bash update.sh) to restore it, then apply again."),
             "settings": settings.to_dict(),
         })
 

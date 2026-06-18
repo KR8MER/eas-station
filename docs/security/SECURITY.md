@@ -796,8 +796,9 @@ detection, so there is nothing to reconcile between two lists.
 Managed entirely from **Security Center → fail2ban** — no SSH or manual file
 editing required:
 
-1. Open the **fail2ban** tab and click **Install fail2ban** if needed (it is also
-   in `install.sh`'s base packages on fresh deployments).
+1. fail2ban ships **pre-installed** (it is in the base package list in both
+   `install.sh` and `update.sh`), so there is nothing to install. If the tab
+   reports it missing, run `sudo bash update.sh` to restore it.
 2. Toggle **Mirror application bans to the host firewall** and click
    **Save & Apply**. EAS Station writes `/etc/fail2ban/jail.local`, restarts the
    service, and resyncs the current ban list into the firewall.

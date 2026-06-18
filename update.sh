@@ -616,6 +616,7 @@ BASE_PACKAGES=(
     espeak
     libespeak-ng1
     icecast2
+    fail2ban
     libusb-1.0-0
     libusb-1.0-0-dev
     python3-numpy
