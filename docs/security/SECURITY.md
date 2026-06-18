@@ -775,7 +775,33 @@ Comprehensive audit trail of all security events including:
 
 ## fail2ban Integration
 
-### Installation
+### Web UI (recommended)
+
+fail2ban is fully managed from **Security Center → fail2ban** — no SSH or manual
+file editing required:
+
+1. Navigate to **Security Center** and open the **fail2ban** tab.
+2. Click **Install fail2ban** if it is not already installed (the installer also
+   adds it to `install.sh`'s base packages on fresh deployments).
+3. Toggle **Enable EAS Station fail2ban jails** and tune the max-retry / ban-time
+   / find-time values for the malicious-login jail. Optionally enable the
+   `eas-station-auth` jail (repeated failed / rate-limited logins) and the host
+   `sshd` jail.
+4. Click **Save & Apply Configuration**. EAS Station writes
+   `/etc/fail2ban/jail.local` and the matching filter files, then restarts the
+   service.
+5. The **Currently Banned** list shows host-level bans with one-click **Unban**,
+   and you can manually ban an IP from the same panel.
+
+The settings are persisted in the `fail2ban_settings` database table, so they
+survive upgrades. The UI calls the endpoints in `webapp/admin/fail2ban.py`,
+which run privileged commands via the sudoers entries in
+`config/sudoers-eas-station`.
+
+### Manual configuration (advanced / reference)
+
+The UI generates exactly the configuration below. You only need this if you are
+configuring fail2ban by hand.
 
 1. **Install fail2ban**:
 ```bash

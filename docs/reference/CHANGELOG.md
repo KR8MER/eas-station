@@ -8,6 +8,35 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.113.0] - 2026-06-18 - fail2ban configurable from the UI
+
+### Added
+- **fail2ban is now installed, configured, and applied entirely from the web
+  UI** — the Security Center → fail2ban tab was previously a static
+  copy-paste-only reference, which violated the project's CLI-free mandate.
+  Operators can now install fail2ban, toggle the EAS Station jails, tune
+  max-retry / ban-time / find-time for the `eas-station-malicious` jail,
+  optionally enable the `eas-station-auth` and host `sshd` jails, then click
+  **Save & Apply** — EAS Station writes `/etc/fail2ban/jail.local` plus the
+  matching filter files and restarts the service. The tab also shows the live
+  service status, currently banned IPs with one-click **Unban**, and a manual
+  **Ban** control.
+  - New `Fail2banSettings` database model (`app_core/_models_settings.py`) with
+    Alembic migration `20260618_fail2ban_settings`, following the project's
+    "settings in the database, not env vars" policy.
+  - New `webapp/admin/fail2ban.py` blueprint (`/admin/fail2ban/*`) modeled on
+    the Postfix mail-server module: status, install, configure, service
+    control, ban, and unban endpoints. IPs are validated before being passed to
+    `fail2ban-client`.
+  - Rewrote the fail2ban tab in `templates/security/security_center.html` and
+    the controller in `static/js/pages/security_center.js`.
+  - Added the required `fail2ban` sudoers entries to
+    `config/sudoers-eas-station` and added `fail2ban` to `install.sh`'s base
+    packages.
+  - Documentation updated: `docs/security/SECURITY.md` now leads with the UI
+    workflow, plus `templates/help.html` and
+    `docs/reference/dependency_attribution.md`.
+
 ## [2.112.0] - 2026-06-18 - Attribution page redesigned to match the About page
 
 ### Changed

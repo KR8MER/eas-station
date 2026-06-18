@@ -135,6 +135,7 @@ licenses at the time of writing; consult each project for authoritative terms.
 | **gpsd** | GPS daemon for the GPS/RTC HAT | BSD-3-Clause |
 | **espeak-ng** | Offline speech backend for pyttsx3 | GPL-3.0 |
 | **Postfix** | Optional local mail server | IPL-1.0 / EPL-2.0 |
+| **fail2ban** | Host-level intrusion banning (Security Center → fail2ban) | GPL-2.0+ |
 
 ---
 

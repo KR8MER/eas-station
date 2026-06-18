@@ -258,23 +258,123 @@
                 <div class="admin-warning-box mb-3">
                     <h5><i class="bi bi-info-circle-fill"></i> fail2ban Integration</h5>
                     <p class="mb-0">Malicious and failed login attempts are written to the security log in a
-                    fail2ban-parseable format. Deploy the configuration below on the host to have fail2ban
-                    automatically ban attacking IPs at the firewall level (in addition to the application-level
-                    bans managed on the <strong>Banned IPs</strong> tab).</p>
+                    fail2ban-parseable format. Configure and apply fail2ban directly from here — EAS Station
+                    writes the jail and filter files and (re)starts the service for you, so attacking IPs are
+                    banned at the host firewall level (in addition to the application-level bans on the
+                    <strong>Banned IPs</strong> tab). No SSH or manual file editing required.</p>
                 </div>
 
-                <div class="admin-accent-card accent-danger">
-                    <h6>1. Jail Configuration <code>/etc/fail2ban/jail.local</code></h6>
-                    <div class="code-block" id="jail-config"></div>
-                    <button class="btn btn-sm btn-secondary" onclick="SC.copyToClipboard('jail-config')">
-                        <i class="bi bi-clipboard"></i> Copy Jail Config
-                    </button>
+                <!-- Status / service control -->
+                <div class="admin-accent-card accent-danger mb-3">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                        <h4 class="mb-0"><i class="bi bi-hdd-network"></i> fail2ban Service</h4>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button class="btn btn-sm btn-success" id="f2b-install-btn" onclick="SC.installFail2ban()">
+                                <i class="bi bi-download"></i> Install fail2ban
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="SC.serviceAction('restart')">
+                                <i class="bi bi-arrow-repeat"></i> Restart
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="SC.serviceAction('stop')">
+                                <i class="bi bi-stop-circle"></i> Stop
+                            </button>
+                            <button class="btn btn-sm btn-secondary" onclick="SC.loadFail2banStatus()">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div id="f2b-status">
+                        <span class="text-muted">Loading fail2ban status…</span>
+                    </div>
+                </div>
 
-                    <h6 class="mt-4">2. Filter Configuration <code>/etc/fail2ban/filter.d/eas-station-malicious.conf</code></h6>
-                    <div class="code-block" id="filter-config"></div>
-                    <button class="btn btn-sm btn-secondary" onclick="SC.copyToClipboard('filter-config')">
-                        <i class="bi bi-clipboard"></i> Copy Filter Config
-                    </button>
+                <!-- Jail configuration form -->
+                <div class="admin-accent-card accent-danger mb-3">
+                    <h4 class="mb-3"><i class="bi bi-sliders"></i> Jail Configuration</h4>
+                    <form id="f2b-config-form" onsubmit="return false;">
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" role="switch" id="f2b-enabled">
+                            <label class="form-check-label" for="f2b-enabled">
+                                <strong>Enable EAS Station fail2ban jails</strong>
+                            </label>
+                            <div class="form-text">When off, the EAS Station jails are removed and fail2ban falls
+                                back to its packaged defaults.</div>
+                        </div>
+
+                        <h6 class="mt-3"><i class="bi bi-shield-exclamation"></i> Malicious-login jail
+                            <code>eas-station-malicious</code></h6>
+                        <p class="text-muted small mb-2">Bans IPs that trigger SQL/command-injection detection.</p>
+                        <div class="row g-2 mb-3">
+                            <div class="col-sm-4">
+                                <label class="form-label">Max retries</label>
+                                <input type="number" class="form-control" id="f2b-maxretry" min="1" max="100" value="1">
+                            </div>
+                            <div class="col-sm-4">
+                                <label class="form-label">Ban time (seconds)</label>
+                                <input type="number" class="form-control" id="f2b-bantime" min="60" max="31536000" value="3600">
+                            </div>
+                            <div class="col-sm-4">
+                                <label class="form-label">Find time (seconds)</label>
+                                <input type="number" class="form-control" id="f2b-findtime" min="60" max="31536000" value="600">
+                            </div>
+                        </div>
+
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="f2b-protect-auth">
+                            <label class="form-check-label" for="f2b-protect-auth">
+                                <strong>Also ban repeated failed / rate-limited logins</strong>
+                                (<code>eas-station-auth</code>)
+                            </label>
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col-sm-6">
+                                <label class="form-label">Auth max retries</label>
+                                <input type="number" class="form-control" id="f2b-auth-maxretry" min="1" max="100" value="5">
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="form-label">Auth ban time (seconds)</label>
+                                <input type="number" class="form-control" id="f2b-auth-bantime" min="60" max="31536000" value="1800">
+                            </div>
+                        </div>
+
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="f2b-protect-ssh">
+                            <label class="form-check-label" for="f2b-protect-ssh">
+                                <strong>Also protect host SSH daemon</strong> (<code>sshd</code> jail)
+                            </label>
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col-sm-6">
+                                <label class="form-label">SSH max retries</label>
+                                <input type="number" class="form-control" id="f2b-ssh-maxretry" min="1" max="100" value="5">
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="form-label">SSH ban time (seconds)</label>
+                                <input type="number" class="form-control" id="f2b-ssh-bantime" min="60" max="31536000" value="3600">
+                            </div>
+                        </div>
+
+                        <button class="btn btn-primary" onclick="SC.saveFail2banConfig()">
+                            <i class="bi bi-save"></i> Save &amp; Apply Configuration
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Currently banned IPs -->
+                <div class="admin-accent-card accent-danger mb-3">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                        <h4 class="mb-0"><i class="bi bi-ban"></i> Currently Banned (host firewall)</h4>
+                        <div class="d-flex gap-2">
+                            <input type="text" class="form-control form-control-sm" id="f2b-ban-ip"
+                                   placeholder="IP to ban" style="max-width: 180px;">
+                            <button class="btn btn-sm btn-danger" onclick="SC.manualBan()">
+                                <i class="bi bi-plus-circle"></i> Ban
+                            </button>
+                        </div>
+                    </div>
+                    <div id="f2b-banned-list">
+                        <p class="text-muted mb-0">No host-level bans, or fail2ban is not active.</p>
+                    </div>
                 </div>
             </div>
         </div>
