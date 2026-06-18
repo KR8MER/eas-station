@@ -7,6 +7,27 @@
 {# Traffic dashboard styles (the Traffic tab embeds the full dashboard) #}
 {% include 'security/_traffic_styles.html' %}
 <style>
+    /* Live install console (streamed apt-get output) */
+    .eas-console {
+        background: #0b0e14;
+        color: #d6deeb;
+        border: 1px solid var(--border-color, #343d54);
+        border-radius: var(--radius-sm, 6px);
+        padding: 0.75rem 0.9rem;
+        margin: 0;
+        max-height: 320px;
+        overflow: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+        font-size: 0.82rem;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    .eas-console:empty::before {
+        content: "Waiting for output…";
+        color: var(--text-muted, #6c7793);
+    }
+
     /* IP statistics list rows */
     .ip-stat-item {
         display: flex;
@@ -285,6 +306,18 @@
                     </div>
                     <div id="f2b-status">
                         <span class="text-muted">Loading fail2ban status…</span>
+                    </div>
+
+                    <!-- Live install console (streams apt-get output) -->
+                    <div id="f2b-console-wrap" class="mt-3" style="display: none;">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <small class="text-muted"><i class="bi bi-terminal"></i> Install output</small>
+                            <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none"
+                                    onclick="document.getElementById('f2b-console-wrap').style.display='none';">
+                                Hide
+                            </button>
+                        </div>
+                        <pre id="f2b-console" class="eas-console" aria-live="polite" role="log"></pre>
                     </div>
                 </div>
 

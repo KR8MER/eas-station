@@ -413,19 +413,26 @@
             .catch(error => notify('Error loading fail2ban status: ' + error, true));
     }
 
+    const F2B_DONE_PREFIX = '__EAS_DONE__';
+
     function installFail2ban() {
         const btn = document.getElementById('f2b-install-btn');
-        const statusEl = document.getElementById('f2b-status');
         const originalBtn = btn ? btn.innerHTML : '';
+        const wrap = document.getElementById('f2b-console-wrap');
+        const consoleEl = document.getElementById('f2b-console');
+
         if (btn) {
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Installing…';
         }
-        if (statusEl) {
-            statusEl.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ' +
-                'Installing fail2ban — this can take a minute. Please wait…';
-        }
-        notify('Installing fail2ban… this may take a minute.');
+        if (wrap) wrap.style.display = '';
+        if (consoleEl) consoleEl.textContent = '';
+
+        const appendLine = (line) => {
+            if (!consoleEl) return;
+            consoleEl.textContent += line;
+            consoleEl.scrollTop = consoleEl.scrollHeight;   // auto-scroll
+        };
 
         const restoreBtn = () => {
             if (btn) {
@@ -434,43 +441,71 @@
             }
         };
 
-        const showFailure = (msg) => {
-            notify(msg, true);
-            if (statusEl) {
-                statusEl.innerHTML = '<div class="alert alert-danger small mb-0">' +
-                    '<i class="bi bi-x-octagon-fill"></i> ' + esc(msg) + '</div>';
+        // Stream the install so apt-get output appears live, line by line.
+        // We read the raw text body and watch for the "__EAS_DONE__ <result>"
+        // sentinel, which the server appends as its final line.
+        let resultStatus = null;
+        let pending = '';
+
+        const consumeBuffer = (flush) => {
+            let nl;
+            while ((nl = pending.indexOf('\n')) !== -1) {
+                const line = pending.slice(0, nl + 1);
+                pending = pending.slice(nl + 1);
+                if (line.startsWith(F2B_DONE_PREFIX)) {
+                    resultStatus = line.slice(F2B_DONE_PREFIX.length).trim();
+                } else {
+                    appendLine(line);
+                }
+            }
+            if (flush && pending) {
+                if (pending.startsWith(F2B_DONE_PREFIX)) {
+                    resultStatus = pending.slice(F2B_DONE_PREFIX.length).trim();
+                } else {
+                    appendLine(pending);
+                }
+                pending = '';
             }
         };
 
-        fetch(`${F2B_API}/install`, { method: 'POST' })
-            .then(r => r.text().then(text => ({ ok: r.ok, status: r.status, text: text })))
-            .then(res => {
-                restoreBtn();
-                let data = null;
-                try { data = JSON.parse(res.text); } catch (e) { /* non-JSON body */ }
+        const finish = () => {
+            restoreBtn();
+            if (resultStatus === 'success') {
+                notify('fail2ban installed.');
+            } else {
+                notify('fail2ban install did not complete — see the install output above.', true);
+            }
+            loadFail2banStatus();
+        };
 
-                if (data && data.success) {
-                    notify(data.message || 'fail2ban installed.');
-                    loadFail2banStatus();
-                    return;
+        notify('Installing fail2ban… watch the console for live output.');
+
+        fetch(`${F2B_API}/install-stream`, { method: 'POST' })
+            .then(resp => {
+                if (!resp.body || !resp.body.getReader) {
+                    // Browser without streaming support — fall back to plain text.
+                    return resp.text().then(t => { pending = t; consumeBuffer(true); finish(); });
                 }
-                if (data && data.error) {
-                    // Actionable backend error (e.g. missing sudoers entry).
-                    showFailure(data.error);
-                    loadFail2banStatus();
-                    return;
-                }
-                // Non-JSON / proxy timeout / 5xx — give a useful hint.
-                showFailure(
-                    `Install request failed (HTTP ${res.status}). The web worker may have ` +
-                    'timed out during apt-get. Check the service logs, or install once with ' +
-                    'sudo apt-get install -y fail2ban.'
-                );
-                loadFail2banStatus();
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                const pump = () => reader.read().then(({ done, value }) => {
+                    if (done) {
+                        pending += decoder.decode();
+                        consumeBuffer(true);
+                        finish();
+                        return;
+                    }
+                    pending += decoder.decode(value, { stream: true });
+                    consumeBuffer(false);
+                    return pump();
+                });
+                return pump();
             })
             .catch(error => {
+                appendLine('\nConnection error: ' + error + '\n');
                 restoreBtn();
-                showFailure('Could not reach the server while installing fail2ban: ' + error);
+                notify('Lost connection during install: ' + error, true);
+                loadFail2banStatus();
             });
     }
 
