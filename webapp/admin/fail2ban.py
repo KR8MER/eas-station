@@ -509,17 +509,22 @@ def configure_fail2ban():
 
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
+    # If a privileged write is denied, the cause is almost always a stale
+    # sudoers file on the host — point the operator at the updater.
+    sudoers_hint = (" This usually means the host's sudoers is out of date — "
+                    "run 'sudo bash update.sh' to redeploy it, then apply again.")
+
     # The actuator jail needs its (never-matching) filter AND its logpath to
     # exist, or fail2ban won't start the jail and nothing gets mirrored.
     if settings.enabled:
         ok, err = _write_via_sudo(EMPTY_FILTER_PATH, _EMPTY_FILTER.format(generated=generated))
         if not ok:
-            return jsonify({"success": False, "error": f"Failed to write filter: {err}"}), 500
+            return jsonify({"success": False, "error": f"Failed to write filter: {err}.{sudoers_hint}"}), 500
         _ensure_security_log()
 
     ok, err = _write_via_sudo(JAIL_LOCAL_PATH, _render_jail_local(settings))
     if not ok:
-        return jsonify({"success": False, "error": f"Failed to write jail.local: {err}"}), 500
+        return jsonify({"success": False, "error": f"Failed to write jail.local: {err}.{sudoers_hint}"}), 500
 
     _run(["systemctl", "enable", "fail2ban"])
     ok_restart, restart_out = _run(["systemctl", "restart", "fail2ban"])
@@ -528,6 +533,20 @@ def configure_fail2ban():
         return jsonify({
             "success": False,
             "error": f"Config written but fail2ban restart failed: {restart_out}",
+        }), 500
+
+    # Verify the jail actually loaded before claiming success — a valid-looking
+    # write can still fail to produce a running jail (missing logpath, bad
+    # banaction, etc.). Don't report "enabled" if it isn't really enforcing.
+    if settings.enabled and EAS_JAIL not in _loaded_jails():
+        detail = _actuator_error()
+        logger.error("eas-station jail did not load after configure: %s", detail)
+        return jsonify({
+            "success": False,
+            "error": ("Configuration applied, but the eas-station firewall jail did not load, "
+                      "so bans are NOT being mirrored to the host firewall."
+                      + (f" fail2ban: {detail}" if detail else "")),
+            "settings": settings.to_dict(),
         }), 500
 
     # Restart flushes all bans, so re-mirror the authoritative app ban list.

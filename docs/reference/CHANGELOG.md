@@ -8,6 +8,25 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.116.3] - 2026-06-18 - Save & Apply verifies the jail actually loaded
+
+### Fixed
+- **"Save & Apply Configuration" could report success (and leave enforcement
+  showing "On") even when it never wrote the jail/filter files.** On a host with
+  a stale sudoers file, the privileged `tee` write fails, so
+  `/etc/fail2ban/jail.local` and the filter were never created and the
+  `eas-station` jail never existed — yet the toggle still read On (settings are
+  saved before the write). `configure()` now:
+  - returns an actionable error when a privileged write is denied, pointing at
+    `sudo bash update.sh` to redeploy sudoers; and
+  - **verifies the `eas-station` jail is actually loaded after restart**, failing
+    with the real fail2ban error (`actuator_error`) instead of falsely reporting
+    enforcement is on (`webapp/admin/fail2ban.py`).
+
+  Root cause on affected hosts: the fail2ban sudoers `tee` entries weren't
+  deployed yet — running the updater (which redeploys `config/sudoers-eas-station`)
+  resolves the write failure.
+
 ## [2.116.2] - 2026-06-18 - Reliably load the firewall actuator jail + surface its errors
 
 ### Fixed
