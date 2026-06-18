@@ -51,6 +51,53 @@ class IPFilterReason(Enum):
     AUTO_FLOOD = 'auto_flood'
 
 
+class IPFilterSource(Enum):
+    """Which security system added a ban to the Global Ban List.
+
+    The Global Ban List (``ip_filters``) is the single source of truth; this
+    field records *which* detector/operator put an entry there so the UI can
+    badge it. It is independent of ``reason`` (which describes *why*).
+    """
+    MANUAL = 'manual'                       # Administrator added it by hand
+    LOGIN_BRUTE_FORCE = 'login_brute_force' # Web login brute-force detection
+    SSH_BRUTE_FORCE = 'ssh_brute_force'     # fail2ban sshd jail (imported)
+    MALICIOUS_REQUEST = 'malicious_request' # SQL/command-injection attempt
+    FLOOD = 'flood'                         # Request flooding
+    API_ABUSE = 'api_abuse'                 # API abuse
+    STREAM_ABUSE = 'stream_abuse'           # Stream abuse
+
+
+# Human-readable labels for ban sources (used by to_dict and the UI badges).
+IP_FILTER_SOURCE_LABELS = {
+    IPFilterSource.MANUAL.value: 'Manual',
+    IPFilterSource.LOGIN_BRUTE_FORCE.value: 'Login Brute Force',
+    IPFilterSource.SSH_BRUTE_FORCE.value: 'SSH Brute Force',
+    IPFilterSource.MALICIOUS_REQUEST.value: 'Malicious Request',
+    IPFilterSource.FLOOD.value: 'Flood',
+    IPFilterSource.API_ABUSE.value: 'API Abuse',
+    IPFilterSource.STREAM_ABUSE.value: 'Stream Abuse',
+}
+
+
+def source_from_reason(reason: str, description: str = None) -> str:
+    """Best-effort map a legacy ``reason`` (+ description) to an IPFilterSource.
+
+    Used to backfill existing rows and to default ``source`` when a caller does
+    not supply one. SSH imports are distinguished from web-login brute force by
+    the description fail2ban_import writes.
+    """
+    desc = (description or '').lower()
+    if reason == IPFilterReason.AUTO_MALICIOUS.value:
+        return IPFilterSource.MALICIOUS_REQUEST.value
+    if reason == IPFilterReason.AUTO_FLOOD.value:
+        return IPFilterSource.FLOOD.value
+    if reason == IPFilterReason.AUTO_BRUTE_FORCE.value:
+        if 'ssh' in desc:
+            return IPFilterSource.SSH_BRUTE_FORCE.value
+        return IPFilterSource.LOGIN_BRUTE_FORCE.value
+    return IPFilterSource.MANUAL.value
+
+
 class IPFilter(db.Model):
     """IP address filter (allowlist or blocklist)."""
     __tablename__ = 'ip_filters'
@@ -59,6 +106,7 @@ class IPFilter(db.Model):
     ip_address = Column(String(45), nullable=False, index=True)  # IP or CIDR range
     filter_type = Column(String(20), nullable=False, index=True)  # allowlist or blocklist
     reason = Column(String(50), nullable=False)  # Why was this added
+    source = Column(String(40), nullable=True, index=True)  # Which system added it (IPFilterSource)
     description = Column(Text, nullable=True)  # User-provided description
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     created_by = Column(Integer, nullable=True)  # User ID who created it
@@ -70,11 +118,14 @@ class IPFilter(db.Model):
     
     def to_dict(self):
         """Convert to dictionary."""
+        source = self.source or source_from_reason(self.reason, self.description)
         return {
             'id': self.id,
             'ip_address': self.ip_address,
             'filter_type': self.filter_type,
             'reason': self.reason,
+            'source': source,
+            'source_label': IP_FILTER_SOURCE_LABELS.get(source, 'Manual'),
             'description': self.description,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'created_by': self.created_by,
@@ -216,29 +267,36 @@ class IPFilter(db.Model):
         reason: str,
         description: Optional[str] = None,
         created_by: Optional[int] = None,
-        expires_in_hours: Optional[int] = None
+        expires_in_hours: Optional[int] = None,
+        source: Optional[str] = None
     ) -> 'IPFilter':
         """
-        Add an IP to the blocklist.
-        
+        Add an IP to the blocklist (the Global Ban List).
+
         Args:
             ip_address: IP address or CIDR range
             reason: Reason for blocking
             description: User-provided description
             created_by: User ID who created it
             expires_in_hours: Optional expiration time in hours
-            
+            source: Which security system added it (IPFilterSource value).
+                Defaults to a value inferred from ``reason``/``description``.
+
         Returns:
             Created IPFilter instance
         """
         expires_at = None
         if expires_in_hours:
             expires_at = utc_now() + timedelta(hours=expires_in_hours)
-        
+
+        if not source:
+            source = source_from_reason(reason, description)
+
         filter_entry = IPFilter(
             ip_address=ip_address,
             filter_type=IPFilterType.BLOCKLIST.value,
             reason=reason,
+            source=source,
             description=description,
             created_by=created_by,
             expires_at=expires_at,

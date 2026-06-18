@@ -105,7 +105,7 @@
 <div class="admin-page-header header-danger">
     <div class="container">
         <h1><i class="bi bi-shield-lock"></i> Security Center</h1>
-        <p class="lead mb-0">Traffic, malicious logins, IP bans, and fail2ban — all in one place</p>
+        <p class="lead mb-0">One Global Ban List, enforced by multiple security layers</p>
     </div>
 </div>
 
@@ -127,13 +127,13 @@
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="bans-tab" data-bs-toggle="tab"
                     data-bs-target="#bans-pane" type="button" role="tab">
-                <i class="bi bi-ban"></i> Banned IPs
+                <i class="bi bi-ban"></i> Global Ban List
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="fail2ban-tab" data-bs-toggle="tab"
                     data-bs-target="#fail2ban-pane" type="button" role="tab">
-                <i class="bi bi-hdd-network"></i> fail2ban
+                <i class="bi bi-hdd-network"></i> Host Firewall
             </button>
         </li>
     </ul>
@@ -232,9 +232,41 @@
         <!-- ============ BANNED IPS TAB ============ -->
         <div class="tab-pane fade" id="bans-pane" role="tabpanel" aria-labelledby="bans-tab">
             <div class="container">
+                <div class="admin-warning-box mb-3">
+                    <h5 class="mb-1"><i class="bi bi-diagram-3-fill"></i> One ban list. Multiple enforcement layers.</h5>
+                    <p class="mb-0">The <strong>Global Ban List</strong> below is the single source of truth. Bans
+                    arrive from several detectors (manual, login brute force, SSH brute force, malicious requests),
+                    and are enforced by multiple layers — the <strong>application gate</strong>, the
+                    <strong>host firewall</strong>, and <strong>fail2ban integration</strong>. You manage everything
+                    in one place.</p>
+                </div>
+
+                <!-- Security Enforcement Status -->
+                <div class="admin-accent-card accent-danger mb-3">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                        <h4 class="mb-0"><i class="bi bi-shield-check"></i> Enforcement Status</h4>
+                        <button class="btn btn-sm btn-secondary" onclick="SC.loadSecurityOverview()">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </button>
+                    </div>
+                    <div id="sec-enforcement" class="row g-2">
+                        <span class="text-muted small">Loading enforcement status…</span>
+                    </div>
+                    <div id="sec-sync" class="mt-2"></div>
+                </div>
+
+                <!-- Security Metrics -->
+                <div class="admin-accent-card accent-danger mb-3">
+                    <h4 class="mb-2"><i class="bi bi-graph-up"></i> Security Metrics</h4>
+                    <div id="sec-metrics" class="row g-2 text-center">
+                        <span class="text-muted small">Loading metrics…</span>
+                    </div>
+                </div>
+
+                <!-- Global Ban List management -->
                 <div class="admin-accent-card accent-danger mb-4">
                     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                        <h4 class="mb-0"><i class="bi bi-shield-lock"></i> IP Filter Management</h4>
+                        <h4 class="mb-0"><i class="bi bi-shield-lock"></i> Global Ban List</h4>
                         <div>
                             <button class="btn btn-success btn-sm" onclick="SC.showAddFilterModal('allowlist')">
                                 <i class="bi bi-plus-circle"></i> Add Allowlist
@@ -251,12 +283,13 @@
                         </div>
                     </div>
                     <p class="text-muted small">
-                        <i class="bi bi-info-circle"></i> Banned IPs are blocked from the <strong>entire</strong>
-                        application, not just the login page. Loopback (127.0.0.1) is always exempt so you can never
-                        lock the appliance out of itself.
+                        <i class="bi bi-info-circle"></i> Every banned IP is blocked from the <strong>entire</strong>
+                        application (not just the login page) and, when host firewall enforcement is on, dropped at
+                        the firewall too. Loopback (127.0.0.1) is always exempt so you can never lock the appliance
+                        out of itself.
                     </p>
                     <div id="ip-filters-list">
-                        <p class="text-center text-muted">Loading IP filters...</p>
+                        <p class="text-center text-muted">Loading the Global Ban List...</p>
                     </div>
                 </div>
             </div>
@@ -267,10 +300,10 @@
             <div class="container">
                 <div class="admin-warning-box mb-3">
                     <h5><i class="bi bi-info-circle-fill"></i> Host-Firewall Enforcement (fail2ban)</h5>
-                    <p class="mb-0">There is <strong>one</strong> ban list — the <strong>Banned IPs</strong> tab.
+                    <p class="mb-0">There is <strong>one</strong> ban list — the <strong>Global Ban List</strong> tab.
                     fail2ban is an optional <em>firewall enforcer</em> for it: when enabled, every application
                     ban (manual or automatic) is also dropped at the host firewall, before traffic reaches the
-                    web app. You still add, remove, and review web bans on the <strong>Banned IPs</strong> tab —
+                    web app. You still add, remove, and review web bans on the <strong>Global Ban List</strong> tab —
                     nothing to manage twice here.</p>
                 </div>
 
@@ -305,7 +338,7 @@
                                 <strong>Mirror application bans to the host firewall</strong>
                             </label>
                         </div>
-                        <div class="form-text mb-3">When on, the IPs on the <strong>Banned IPs</strong> tab are
+                        <div class="form-text mb-3">When on, the IPs on the <strong>Global Ban List</strong> tab are
                             also blocked at the host firewall (all ports). The application-level ban always
                             applies regardless of this setting; this only adds firewall-level blocking.</div>
 
@@ -320,7 +353,7 @@
                         <div class="form-text mb-2">Optional: fail2ban watches the system's SSH log and bans
                             brute-force attempts the web app can't see. Because an IP hammering port 22 is a bad
                             actor everywhere, these offenders are <strong>automatically added to the global ban
-                            list</strong> (Banned IPs tab) and blocked at all ports. They're also listed below;
+                            list</strong> (Global Ban List tab) and blocked at all ports. They're also listed below;
                             unbanning there clears them globally.</div>
                         <div class="row g-2 mb-3">
                             <div class="col-sm-6">
@@ -345,7 +378,7 @@
                         <small class="text-muted">(also added to the global ban list)</small></h4>
                     <p class="text-muted small mb-2">This lists only what fail2ban's <code>sshd</code> jail is
                         currently holding — those bans <strong>expire after the SSH ban time</strong> above. Each
-                        offender is also copied into the <strong>Banned IPs</strong> list <em>permanently</em>, so
+                        offender is also copied into the <strong>Global Ban List</strong> <em>permanently</em>, so
                         that list can show more entries than this one. That's expected, not a mismatch.</p>
                     <div id="f2b-ssh-banned-list">
                         <p class="text-muted mb-0">No SSH bans.</p>

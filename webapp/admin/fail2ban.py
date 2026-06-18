@@ -171,7 +171,7 @@ def _import_ssh_bans() -> int:
         return 0
 
     try:
-        from app_core.auth.ip_filter import IPFilter, IPFilterType, IPFilterReason
+        from app_core.auth.ip_filter import IPFilter, IPFilterType, IPFilterReason, IPFilterSource
     except Exception:
         return 0
 
@@ -193,6 +193,7 @@ def _import_ssh_bans() -> int:
                 ip_address=ip,
                 reason=IPFilterReason.AUTO_BRUTE_FORCE.value,
                 description="SSH brute-force detected by fail2ban (sshd jail)",
+                source=IPFilterSource.SSH_BRUTE_FORCE.value,
             )
             added += 1
         except Exception as exc:
@@ -254,6 +255,8 @@ def _ssh_bans_detailed() -> list:
         out.append({
             "ip_address": ip,
             "reason": rec.reason if rec else "auto_brute_force",
+            "source": "ssh_brute_force",
+            "source_label": "SSH Brute Force",
             "description": (rec.description if rec and rec.description
                             else "SSH brute-force detected by fail2ban (sshd jail)"),
             "created_at": rec.created_at.isoformat() if rec and rec.created_at else None,

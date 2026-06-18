@@ -176,8 +176,85 @@
             .catch(error => {
                 console.error('Error loading IP filters:', error);
                 document.getElementById('ip-filters-list').innerHTML =
-                    '<p class="text-center text-danger">Error loading IP filters</p>';
+                    '<p class="text-center text-danger">Error loading the Global Ban List</p>';
             });
+        loadSecurityOverview();
+    }
+
+    /* -------------------------------------------------------------- */
+    /* Security overview: enforcement layers + metrics + sync health  */
+    /* -------------------------------------------------------------- */
+
+    function pill(ok, onText, offText) {
+        return `<span class="badge ${ok ? 'bg-success' : 'bg-secondary'}">${ok ? onText : offText}</span>`;
+    }
+
+    function metricTile(value, label) {
+        return '<div class="col-6 col-md">' +
+            `<div class="border rounded p-2 h-100"><div class="h4 mb-0">${esc(String(value))}</div>` +
+            `<div class="text-muted small">${esc(label)}</div></div></div>`;
+    }
+
+    function loadSecurityOverview() {
+        const enf = document.getElementById('sec-enforcement');
+        const met = document.getElementById('sec-metrics');
+        const syncEl = document.getElementById('sec-sync');
+        if (!enf && !met) return;
+        fetch('/security/overview')
+            .then(r => r.json())
+            .then(data => {
+                const e = data.enforcement || {};
+                const m = data.metrics || {};
+                const s = data.sync || {};
+                if (enf) {
+                    enf.innerHTML =
+                        '<div class="col-6 col-md-3"><div class="text-muted small">Application gate</div>' +
+                        pill(e.application, 'Enabled', 'Disabled') + '</div>' +
+                        '<div class="col-6 col-md-3"><div class="text-muted small">Host firewall</div>' +
+                        pill(e.host_firewall, 'Enabled', 'Disabled') + '</div>' +
+                        '<div class="col-6 col-md-3"><div class="text-muted small">fail2ban service</div>' +
+                        pill(e.fail2ban_service, 'Running', 'Stopped') + '</div>' +
+                        '<div class="col-6 col-md-3"><div class="text-muted small">Firewall sync</div>' +
+                        `<span class="badge ${s.status === 'ok' ? 'bg-success' : (s.status === 'disabled' ? 'bg-secondary' : 'bg-danger')}">` +
+                        `${esc((s.status || 'unknown').toUpperCase())}</span></div>`;
+                }
+                if (met) {
+                    met.innerHTML =
+                        metricTile(m.failed_logins_24h ?? 0, 'Failed logins (24h)') +
+                        metricTile(m.ips_banned_24h ?? 0, 'IPs banned (24h)') +
+                        metricTile(m.active_bans ?? 0, 'Active bans') +
+                        metricTile(m.ssh_attacks_blocked ?? 0, 'SSH attacks blocked') +
+                        metricTile(m.mirrored_to_firewall ?? 0, 'Mirrored to firewall');
+                }
+                if (syncEl) {
+                    if (s.status && s.status !== 'ok' && s.status !== 'disabled') {
+                        syncEl.innerHTML = '<div class="alert alert-warning small mb-0 d-flex ' +
+                            'justify-content-between align-items-center flex-wrap gap-2">' +
+                            `<span><i class="bi bi-exclamation-triangle-fill"></i> ${esc(s.message || '')}</span>` +
+                            '<button class="btn btn-sm btn-danger" onclick="SC.resyncFirewall()">' +
+                            '<i class="bi bi-arrow-left-right"></i> Resync firewall enforcement</button></div>';
+                    } else if (s.message) {
+                        syncEl.innerHTML = `<div class="text-muted small"><i class="bi bi-check-circle"></i> ${esc(s.message)}</div>`;
+                    } else {
+                        syncEl.innerHTML = '';
+                    }
+                }
+            })
+            .catch(error => {
+                if (enf) enf.innerHTML = '<span class="text-danger small">Error loading enforcement status</span>';
+                console.error('Error loading security overview:', error);
+            });
+    }
+
+    // One-click "Resync firewall enforcement" used by the sync warning.
+    function resyncFirewall() {
+        fetch('/admin/fail2ban/resync', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                notify(data.success ? (data.message || 'Resynced.') : (data.error || 'Resync failed'), !data.success);
+                loadSecurityOverview();
+            })
+            .catch(error => notify('Error resyncing: ' + error, true));
     }
 
     // Local flag SVG for an ISO 3166-1 alpha-2 code (bundled — no CDN calls).
@@ -201,17 +278,33 @@
         return `${flag}<span class="text-break-anywhere">${esc(text || loc.country_code || '')}</span>`;
     }
 
+    // Colored badge for the ban "source" (which detector/operator added it).
+    function sourceBadge(filter) {
+        const src = filter.source || 'manual';
+        const label = filter.source_label || 'Manual';
+        const cls = {
+            manual: 'bg-secondary',
+            login_brute_force: 'bg-warning text-dark',
+            ssh_brute_force: 'bg-danger',
+            malicious_request: 'bg-dark',
+            flood: 'bg-info text-dark',
+            api_abuse: 'bg-primary',
+            stream_abuse: 'bg-primary',
+        }[src] || 'bg-secondary';
+        return `<span class="badge ${cls}">${esc(label)}</span>`;
+    }
+
     function renderFilterRows(filters, isBlock) {
         return filters.map(filter => {
             const expires = filter.expires_at ? new Date(filter.expires_at).toLocaleString() : 'Never';
             const statusClass = filter.is_active ? (isBlock ? 'bg-danger' : 'bg-success') : 'bg-secondary';
-            const reasonCell = isBlock
-                ? `<td data-label="Reason"><span class="badge bg-danger">${esc(filter.reason)}</span></td>` : '';
+            const sourceCell = isBlock
+                ? `<td data-label="Source">${sourceBadge(filter)}</td>` : '';
             const expiresCell = isBlock ? `<td data-label="Expires">${esc(expires)}</td>` : '';
             return `
                 <tr>
                     <td data-label="IP/Range" class="admin-mono-badge">${esc(filter.ip_address)}</td>
-                    ${reasonCell}
+                    ${sourceCell}
                     <td data-label="Location">${locationCell(filter)}</td>
                     <td data-label="Description">${esc(filter.description || '-')}</td>
                     ${expiresCell}
@@ -242,9 +335,9 @@
         let html = '';
 
         if (blocklist.length > 0) {
-            html += '<h6 class="text-danger"><i class="bi bi-ban"></i> Blocklist (banned)</h6>';
+            html += '<h6 class="text-danger"><i class="bi bi-ban"></i> Banned (blocklist)</h6>';
             html += '<div class="table-responsive mb-4"><table class="table eas-table table-sm">';
-            html += '<thead><tr><th>IP/Range</th><th>Reason</th><th>Location</th><th>Description</th><th>Expires</th><th>Created</th><th>Status</th><th>Actions</th></tr></thead>';
+            html += '<thead><tr><th>IP/Range</th><th>Source</th><th>Location</th><th>Description</th><th>Expires</th><th>Created</th><th>Status</th><th>Actions</th></tr></thead>';
             html += `<tbody>${renderFilterRows(blocklist, true)}</tbody></table></div>`;
         }
         if (allowlist.length > 0) {
@@ -419,13 +512,13 @@
                 sshList.innerHTML = '<p class="text-muted mb-0">No SSH bans.</p>';
             } else {
                 let t = '<div class="table-responsive"><table class="table eas-table table-sm mb-0"><thead><tr>' +
-                    '<th>IP/Range</th><th>Reason</th><th>Location</th><th>Description</th>' +
+                    '<th>IP/Range</th><th>Source</th><th>Location</th><th>Description</th>' +
                     '<th>Created</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
                 banned.forEach(b => {
                     const created = b.created_at ? new Date(b.created_at).toLocaleString() : '—';
                     t += '<tr>' +
                         `<td data-label="IP/Range" class="admin-mono-badge">${esc(b.ip_address)}</td>` +
-                        `<td data-label="Reason"><span class="badge bg-danger">${esc(b.reason || 'auto_brute_force')}</span></td>` +
+                        `<td data-label="Source">${sourceBadge(b)}</td>` +
                         `<td data-label="Location">${locationCell(b)}</td>` +
                         `<td data-label="Description">${esc(b.description || '-')}</td>` +
                         `<td data-label="Created">${esc(created)}</td>` +
@@ -540,6 +633,8 @@
         deleteFilter: deleteFilter,
         toggleFilter: toggleFilter,
         cleanupExpiredFilters: cleanupExpiredFilters,
+        loadSecurityOverview: loadSecurityOverview,
+        resyncFirewall: resyncFirewall,
         loadFail2banStatus: loadFail2banStatus,
         serviceAction: serviceAction,
         resyncFail2ban: resyncFail2ban,
