@@ -8,6 +8,27 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.116.2] - 2026-06-18 - Reliably load the firewall actuator jail + surface its errors
+
+### Fixed
+- **The `eas-station` firewall jail still failed to load (0 mirrored) because its
+  logpath never existed.** `/var/log/eas-station/security.log` is only created by
+  the app at need, and the application security logger writes to the journal —
+  not that file — so the path was frequently absent. Under
+  `ProtectSystem=strict` the web process also can't always create it. fail2ban
+  then refuses to start the jail. `_ensure_security_log()` now creates the file
+  as **root** via `sudo` when the sandboxed direct write fails
+  (`webapp/admin/fail2ban.py`; new sudoers entries for
+  `mkdir -p /var/log/eas-station` and `tee -a …/security.log`).
+
+### Added
+- **The fail2ban error is now shown in the UI** when the jail won't load. The
+  status endpoint runs fail2ban's own config self-test (`fail2ban-client -t`,
+  newly allowed in sudoers) and returns `actuator_error`; both the Host Firewall
+  tab and the Enforcement Status sync warning display it, so an operator can see
+  *why* the jail failed instead of just that it did
+  (`webapp/routes_security.py`, `static/js/pages/security_center.js`).
+
 ## [2.116.1] - 2026-06-18 - Carry fail2ban SSH ban expiration into the Global Ban List
 
 ### Fixed

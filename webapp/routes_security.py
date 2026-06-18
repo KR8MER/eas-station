@@ -860,7 +860,8 @@ def security_overview():
     elif not jail_loaded:
         sync = {'status': 'error',
                 'message': f'{active_bans} active ban(s), but the host firewall jail is not loaded — 0 mirrored. '
-                           'Open Host Firewall Enforcement and click Save & Apply Configuration.'}
+                           'Open Host Firewall Enforcement and click Save & Apply Configuration.',
+                'detail': f2b.get('actuator_error') or ''}
     elif mirrored < active_bans:
         sync = {'status': 'degraded',
                 'message': f'{active_bans} active ban(s), {mirrored} mirrored to the host firewall. Click Resync.'}

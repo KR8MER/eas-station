@@ -291,11 +291,18 @@ def _status() -> dict:
     ssh_loaded = "sshd" in loaded
     ssh_banned = _ssh_bans_detailed() if ssh_loaded else []
 
+    # When enforcement is on but the actuator jail failed to load, capture the
+    # real fail2ban error so the UI can show *why* (instead of just "not loaded").
+    actuator_error = ""
+    if settings.enabled and active and EAS_JAIL not in loaded:
+        actuator_error = _actuator_error()
+
     return {
         "installed": installed,
         "active": active,
         "enforcement_enabled": settings.enabled,
         "actuator_jail_loaded": EAS_JAIL in loaded,
+        "actuator_error": actuator_error,
         "app_ban_count": _app_ban_count(),       # authoritative list size
         "firewall_ban_count": len(enforced),     # mirrored into the firewall
         "ssh_jail_loaded": ssh_loaded,
@@ -353,22 +360,67 @@ def _ensure_security_log() -> bool:
     """Make sure the actuator jail's logpath exists before fail2ban (re)starts.
 
     The ``eas-station`` jail declares ``logpath = SECURITY_LOG_PATH``. If that
-    file is absent (e.g. no malicious logins have ever been recorded), fail2ban
-    refuses to start the jail — so app bans silently never reach the firewall and
-    "Mirrored to host firewall" stays 0. The web service can write
-    /var/log/eas-station (systemd ReadWritePaths), so create an empty log if
-    needed. Best-effort; returns True if the file exists afterwards.
+    file is absent, fail2ban refuses to start the jail — so app bans silently
+    never reach the firewall and "Mirrored to host firewall" stays 0. Nothing
+    else writes this file (the app's security logger goes to the journal), so we
+    create it here.
+
+    The web service runs under ProtectSystem=strict and may be unable to write
+    /var/log/eas-station, so try a direct write first and fall back to creating
+    the file as root via sudo. Best-effort; returns True if the file exists.
     """
     import os
+    # Fast path: write directly (works when /var/log/eas-station is writable).
     try:
         os.makedirs(os.path.dirname(SECURITY_LOG_PATH), exist_ok=True)
         if not os.path.exists(SECURITY_LOG_PATH):
             with open(SECURITY_LOG_PATH, "a", encoding="utf-8"):
                 pass
-        return os.path.exists(SECURITY_LOG_PATH)
     except Exception as exc:
-        logger.warning("Could not ensure security log %s exists: %s", SECURITY_LOG_PATH, exc)
-        return os.path.exists(SECURITY_LOG_PATH)
+        logger.info("Direct security-log create failed (%s); trying via sudo", exc)
+
+    if os.path.exists(SECURITY_LOG_PATH):
+        return True
+
+    # Fallback: create it as root, outside the web service's sandbox.
+    _run(["mkdir", "-p", os.path.dirname(SECURITY_LOG_PATH)])
+    try:
+        subprocess.run(
+            ["sudo", "-n", "tee", "-a", SECURITY_LOG_PATH],
+            input="", capture_output=True, text=True, timeout=10,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("sudo create of %s failed: %s", SECURITY_LOG_PATH, exc)
+
+    exists = os.path.exists(SECURITY_LOG_PATH)
+    if not exists:
+        logger.error("Could not create actuator log %s — eas-station jail will not load",
+                     SECURITY_LOG_PATH)
+    return exists
+
+
+def _actuator_error() -> str:
+    """Best-effort reason the eas-station jail failed to load (for the UI).
+
+    Runs fail2ban's own config self-test and returns the relevant error lines,
+    so an operator can see *why* the jail isn't loaded instead of just that it
+    isn't. Never raises.
+    """
+    msgs = []
+    ok, out = _run(["fail2ban-client", "-t"])
+    for line in (out or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        low = line.lower()
+        if "error" in low or "eas-station" in low or "have not been read" in low:
+            msgs.append(line)
+    # De-dup, keep the most relevant tail.
+    seen = []
+    for m in msgs:
+        if m not in seen:
+            seen.append(m)
+    return " | ".join(seen[-4:])
 
 
 def _write_via_sudo(path: str, content: str) -> tuple[bool, str]:
