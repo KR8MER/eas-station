@@ -8,95 +8,49 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.114.0] - 2026-06-18 - Live install console for fail2ban
-
-### Added
-- **The fail2ban tab now streams the live `apt-get` output into an on-screen
-  console while installing**, so you can watch progress and — crucially — see
-  the exact reason if it fails, instead of staring at a spinner.
-  - New streaming endpoint `POST /admin/fail2ban/install-stream`
-    (`webapp/admin/fail2ban.py`) runs the install via `subprocess.Popen` and
-    streams stdout/stderr line-by-line as a `text/plain` response, ending with a
-    `__EAS_DONE__ success|error` sentinel. `X-Accel-Buffering: no` keeps output
-    flowing through nginx unbuffered.
-  - The install always runs and shows real output; on failure it appends an
-    actionable hint for the common causes (missing sudoers / `sudo bash
-    update.sh`, stale package index / `apt-get update`, dpkg lock held).
-  - A terminal-styled `<pre class="eas-console">` panel was added to the
-    fail2ban tab; the button handler consumes the stream via
-    `fetch().body.getReader()`, auto-scrolls, and falls back to a plain read on
-    browsers without streaming support (`static/js/pages/security_center.js`,
-    `templates/security/security_center.html`).
-
-## [2.113.2] - 2026-06-18 - fail2ban install fails fast with an actionable reason
-
-### Fixed
-- **"Install fail2ban" silently did nothing when the host's sudoers had not
-  been refreshed.** The privileged commands ran `sudo` without `-n`, so when the
-  new fail2ban NOPASSWD entries weren't yet deployed, `apt-get` blocked waiting
-  for a password until the web worker timed out — with no usable error.
-  - All fail2ban `sudo` calls (and the firewall bridge) now use `sudo -n`
-    (non-interactive) so they fail immediately instead of hanging
-    (`webapp/admin/fail2ban.py`, `app_core/auth/firewall.py`).
-  - The install route now detects a missing/denied sudoers rule and returns a
-    clear, actionable message: re-run `sudo bash update.sh` (which redeploys
-    `config/sudoers-eas-station`) or run `sudo apt-get install -y fail2ban` once.
-  - The status endpoint reports `can_install`, so the fail2ban tab shows an
-    inline warning (instead of a dead button) when automatic install isn't
-    permitted.
-  - The install button handler now tolerates non-JSON responses (proxy timeout /
-    5xx) and renders the failure reason persistently in the status panel
-    (`static/js/pages/security_center.js`).
-  - Note: no `update.sh` change was required — it already re-copies the entire
-    `config/sudoers-eas-station` to `/etc/sudoers.d/eas-station` and validates it
-    on every run, so the fail2ban entries ship as soon as the updater is re-run.
-
-## [2.113.1] - 2026-06-18 - fail2ban install button feedback
-
-### Fixed
-- **Clicking "Install fail2ban" now shows progress.** The install runs
-  `apt-get` (up to ~3 minutes) but the button gave no visible feedback, so it
-  appeared dead. The button now immediately switches to a disabled spinner
-  ("Installing…") and the status panel shows a persistent "Installing fail2ban —
-  this can take a minute" message; both are restored and the status refreshed
-  on success or failure (`static/js/pages/security_center.js`).
-
 ## [2.113.0] - 2026-06-18 - fail2ban as a UI-managed firewall enforcer for the ban list
 
 ### Added
-- **fail2ban can now enforce the existing application ban list at the host
+- **fail2ban now enforces the existing application ban list at the host
   firewall, configured entirely from the web UI** — the Security Center →
   fail2ban tab was previously a static copy-paste-only reference (violating the
   project's CLI-free mandate). Rather than introducing a *second* ban list,
   fail2ban is wired up as an optional **firewall actuator** for the single
   authoritative `ip_filters` ban list (the Banned IPs tab):
+  - **fail2ban ships pre-installed** via the base package list in both
+    `install.sh` and `update.sh` — there is no in-UI installer (the web service
+    runs under `ProtectSystem=strict` and cannot install packages anyway). The
+    tab configures and applies the jails; if fail2ban is somehow missing it tells
+    the operator to run `sudo bash update.sh`.
   - Every application ban/unban — manual *and* automatic (malicious,
     brute-force, flood) — is mirrored to a dedicated `eas-station` fail2ban jail
     (`bantime = -1`) by the new `app_core/auth/firewall.py` bridge, hooked into
     `IPFilter.add_to_blocklist` / `remove_filter` / `cleanup_expired` and the
     blocklist toggle route. fail2ban does **not** independently scan the web log,
     so there is still only one ban list to maintain.
-  - The fail2ban tab now exposes: install, service status, a **Mirror
-    application bans to the host firewall** toggle, a **Resync bans** button (the
-    firewall is also auto-resynced on apply/restart, since fail2ban flushes bans
-    on restart), and an optional **host SSH (`sshd`) jail** — clearly scoped as a
-    separate concern from the web ban list, with its own banned-IP view/unban.
+  - The fail2ban tab exposes: service status, a **Mirror application bans to the
+    host firewall** toggle, a **Resync bans** button (the firewall is also
+    auto-resynced on apply/restart, since fail2ban flushes bans on restart), and
+    an optional **host SSH (`sshd`) jail** — clearly scoped as a separate concern
+    from the web ban list, with its own banned-IP view/unban.
   - New `Fail2banSettings` database model (`app_core/_models_settings.py`) with
     Alembic migration `20260618_fail2ban_settings`, following the project's
     "settings in the database, not env vars" policy.
   - New `webapp/admin/fail2ban.py` blueprint (`/admin/fail2ban/*`): status,
-    install, configure, resync, service control, and sshd-unban endpoints. IPs
-    are validated before being passed to `fail2ban-client`. The firewall bridge
-    is best-effort and never breaks the application-level ban path, so web bans
-    stay enforced at the app layer even if fail2ban is stopped.
+    configure, resync, service control, and sshd-unban endpoints. IPs are
+    validated before being passed to `fail2ban-client`. All `sudo` calls are
+    non-interactive (`sudo -n`). The firewall bridge is best-effort and never
+    breaks the application-level ban path, so web bans stay enforced at the app
+    layer even if fail2ban is stopped.
   - Rewrote the fail2ban tab in `templates/security/security_center.html` and
     the controller in `static/js/pages/security_center.js`.
-  - Added the required `fail2ban` sudoers entries to
-    `config/sudoers-eas-station` and added `fail2ban` to `install.sh`'s base
-    packages.
+  - Added the required `fail2ban` sudoers entries to `config/sudoers-eas-station`
+    and added `fail2ban` to the base package lists in `install.sh` and
+    `update.sh`.
   - Documentation updated: `docs/security/SECURITY.md` (one list, two
-    enforcement layers), `templates/help.html`, and
-    `docs/reference/dependency_attribution.md`.
+    enforcement layers), `templates/help.html`,
+    `docs/reference/dependency_attribution.md`, and a discoverability note in
+    `requirements.txt`.
 
 ## [2.112.0] - 2026-06-18 - Attribution page redesigned to match the About page
 

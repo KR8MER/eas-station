@@ -350,7 +350,6 @@
 
     function renderFail2banStatus(data) {
         const statusEl = document.getElementById('f2b-status');
-        const installBtn = document.getElementById('f2b-install-btn');
         if (!statusEl) return;
 
         const badge = (ok, yes, no) =>
@@ -365,20 +364,14 @@
             html += '<p class="text-muted small mb-0 mt-2">' +
                 `Application ban list: <strong>${data.app_ban_count}</strong> active. ` +
                 `Mirrored to host firewall: <strong>${data.firewall_ban_count}</strong>.</p>`;
-        } else if (data.can_install === false) {
-            html += '<div class="alert alert-warning small mb-0 mt-2">' +
-                '<i class="bi bi-exclamation-triangle-fill"></i> fail2ban is not installed, and ' +
-                'this host has not granted the permission needed to install it automatically. ' +
-                'Re-run the EAS Station updater (<code>sudo bash update.sh</code>) to refresh sudo ' +
-                'permissions, or install it once manually with ' +
-                '<code class="text-break-anywhere">sudo apt-get install -y fail2ban</code>.</div>';
         } else {
-            html += '<p class="text-muted small mb-0 mt-2">fail2ban is not installed on this host. ' +
-                'Click <strong>Install fail2ban</strong>, then enable firewall enforcement below.</p>';
+            html += '<div class="alert alert-warning small mb-0 mt-2">' +
+                '<i class="bi bi-exclamation-triangle-fill"></i> fail2ban ships pre-installed, but ' +
+                'it isn\'t present on this host. Run the EAS Station updater ' +
+                '(<code class="text-break-anywhere">sudo bash update.sh</code>) to restore it, then ' +
+                'reload this page. Web bans stay enforced at the application layer regardless.</div>';
         }
         statusEl.innerHTML = html;
-
-        if (installBtn) installBtn.style.display = data.installed ? 'none' : '';
 
         // SSH jail bans (separate concern — host SSH, not the web ban list).
         const sshCard = document.getElementById('f2b-ssh-card');
@@ -411,102 +404,6 @@
                 renderFail2banStatus(data);
             })
             .catch(error => notify('Error loading fail2ban status: ' + error, true));
-    }
-
-    const F2B_DONE_PREFIX = '__EAS_DONE__';
-
-    function installFail2ban() {
-        const btn = document.getElementById('f2b-install-btn');
-        const originalBtn = btn ? btn.innerHTML : '';
-        const wrap = document.getElementById('f2b-console-wrap');
-        const consoleEl = document.getElementById('f2b-console');
-
-        if (btn) {
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Installing…';
-        }
-        if (wrap) wrap.style.display = '';
-        if (consoleEl) consoleEl.textContent = '';
-
-        const appendLine = (line) => {
-            if (!consoleEl) return;
-            consoleEl.textContent += line;
-            consoleEl.scrollTop = consoleEl.scrollHeight;   // auto-scroll
-        };
-
-        const restoreBtn = () => {
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = originalBtn;
-            }
-        };
-
-        // Stream the install so apt-get output appears live, line by line.
-        // We read the raw text body and watch for the "__EAS_DONE__ <result>"
-        // sentinel, which the server appends as its final line.
-        let resultStatus = null;
-        let pending = '';
-
-        const consumeBuffer = (flush) => {
-            let nl;
-            while ((nl = pending.indexOf('\n')) !== -1) {
-                const line = pending.slice(0, nl + 1);
-                pending = pending.slice(nl + 1);
-                if (line.startsWith(F2B_DONE_PREFIX)) {
-                    resultStatus = line.slice(F2B_DONE_PREFIX.length).trim();
-                } else {
-                    appendLine(line);
-                }
-            }
-            if (flush && pending) {
-                if (pending.startsWith(F2B_DONE_PREFIX)) {
-                    resultStatus = pending.slice(F2B_DONE_PREFIX.length).trim();
-                } else {
-                    appendLine(pending);
-                }
-                pending = '';
-            }
-        };
-
-        const finish = () => {
-            restoreBtn();
-            if (resultStatus === 'success') {
-                notify('fail2ban installed.');
-            } else {
-                notify('fail2ban install did not complete — see the install output above.', true);
-            }
-            loadFail2banStatus();
-        };
-
-        notify('Installing fail2ban… watch the console for live output.');
-
-        fetch(`${F2B_API}/install-stream`, { method: 'POST' })
-            .then(resp => {
-                if (!resp.body || !resp.body.getReader) {
-                    // Browser without streaming support — fall back to plain text.
-                    return resp.text().then(t => { pending = t; consumeBuffer(true); finish(); });
-                }
-                const reader = resp.body.getReader();
-                const decoder = new TextDecoder();
-                const pump = () => reader.read().then(({ done, value }) => {
-                    if (done) {
-                        pending += decoder.decode();
-                        consumeBuffer(true);
-                        finish();
-                        return;
-                    }
-                    pending += decoder.decode(value, { stream: true });
-                    consumeBuffer(false);
-                    return pump();
-                });
-                return pump();
-            })
-            .catch(error => {
-                appendLine('\nConnection error: ' + error + '\n');
-                restoreBtn();
-                notify('Lost connection during install: ' + error, true);
-                loadFail2banStatus();
-            });
     }
 
     function serviceAction(action) {
@@ -600,7 +497,6 @@
         toggleFilter: toggleFilter,
         cleanupExpiredFilters: cleanupExpiredFilters,
         loadFail2banStatus: loadFail2banStatus,
-        installFail2ban: installFail2ban,
         serviceAction: serviceAction,
         resyncFail2ban: resyncFail2ban,
         saveFail2banConfig: saveFail2banConfig,

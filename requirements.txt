@@ -144,3 +144,10 @@ audioop-lts==0.2.2  # Drop-in replacement for audioop (removed in Python 3.13)
 # avoid GHSA on SECT-curve subgroup validation (we use Ed25519, which is
 # unaffected, but the same library exposes the affected curves).
 cryptography>=46.0.5
+
+# ── System packages (NOT installed by pip) ─────────────────────────────────────
+# fail2ban is a host service, not a Python package, so it cannot be installed
+# from this file. It ships pre-installed via the base package list in install.sh
+# and update.sh, and the Security Center → fail2ban tab configures it as a
+# firewall enforcer for the application ban list. Listed here only for
+# discoverability — pip ignores comments.

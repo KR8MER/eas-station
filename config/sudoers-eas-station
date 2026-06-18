@@ -167,5 +167,6 @@ eas-station ALL=(ALL) NOPASSWD: /usr/bin/fail2ban-client set * banip *
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/fail2ban/jail.local
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/fail2ban/filter.d/eas-station-empty.conf
 
-# fail2ban installation via apt-get (non-interactive, suppresses debconf prompts)
-eas-station ALL=(ALL) NOPASSWD: /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get install -y fail2ban
+# fail2ban is shipped pre-installed via install.sh / update.sh (it is in the
+# base package list), so the web UI never installs packages itself — it only
+# configures, applies, and inspects the jails through the entries above.
