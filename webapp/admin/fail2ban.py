@@ -80,8 +80,11 @@ ignoreregex =
 def _run(cmd: list[str], timeout: int = 30) -> tuple[bool, str]:
     """Run a privileged command via sudo. Returns (success, output)."""
     try:
+        # -n (non-interactive): never block waiting for a sudo password. If the
+        # required NOPASSWD sudoers entry is missing, sudo fails immediately with
+        # a clear message instead of hanging until the worker times out.
         result = subprocess.run(
-            ["sudo"] + cmd,
+            ["sudo", "-n"] + cmd,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -92,6 +95,35 @@ def _run(cmd: list[str], timeout: int = 30) -> tuple[bool, str]:
         return False, f"Command timed out after {timeout}s"
     except Exception as exc:  # pragma: no cover - defensive
         return False, str(exc)
+
+
+def _looks_like_sudo_denied(output: str) -> bool:
+    """True when output indicates the NOPASSWD sudoers entry is missing."""
+    low = (output or "").lower()
+    return (
+        "password is required" in low
+        or "a terminal is required" in low
+        or "not allowed to execute" in low
+        or "sudo: a password" in low
+        or "no tty present" in low
+    )
+
+
+# Exact command the install route runs; also used to probe sudo permission.
+_INSTALL_CMD = ["env", "DEBIAN_FRONTEND=noninteractive",
+                "apt-get", "install", "-y", "fail2ban"]
+
+
+def _can_sudo(cmd: list[str]) -> bool:
+    """Return True if the eas-station user may run `cmd` via passwordless sudo."""
+    try:
+        result = subprocess.run(
+            ["sudo", "-n", "-l"] + cmd,
+            capture_output=True, text=True, timeout=10,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
 
 
 def _fail2ban_installed() -> bool:
@@ -163,6 +195,8 @@ def _status() -> dict:
     return {
         "installed": installed,
         "active": active,
+        # Whether the host grants the passwordless sudo needed to auto-install.
+        "can_install": _can_sudo(_INSTALL_CMD) if not installed else True,
         "enforcement_enabled": settings.enabled,
         "actuator_jail_loaded": EAS_JAIL in loaded,
         "app_ban_count": _app_ban_count(),       # authoritative list size
@@ -222,14 +256,14 @@ def _write_via_sudo(path: str, content: str) -> tuple[bool, str]:
     """Write content to a root-owned path through `sudo tee`."""
     try:
         proc = subprocess.run(
-            ["sudo", "tee", path],
+            ["sudo", "-n", "tee", path],
             input=content,
             capture_output=True,
             text=True,
             timeout=15,
         )
         if proc.returncode != 0:
-            return False, proc.stderr.strip()
+            return False, (proc.stderr.strip() or "permission denied")
         return True, ""
     except Exception as exc:  # pragma: no cover - defensive
         return False, str(exc)
@@ -252,14 +286,25 @@ def install_fail2ban():
     if _fail2ban_installed():
         return jsonify({"success": True, "message": "fail2ban is already installed."})
 
-    ok, output = _run(
-        ["env", "DEBIAN_FRONTEND=noninteractive",
-         "apt-get", "install", "-y", "fail2ban"],
-        timeout=180,
-    )
+    ok, output = _run(_INSTALL_CMD, timeout=180)
     if not ok:
         logger.error("fail2ban install failed: %s", output)
-        return jsonify({"success": False, "error": output}), 500
+        if _looks_like_sudo_denied(output):
+            # The NOPASSWD sudoers entry for the apt-get install isn't present on
+            # this host yet — this is the common case when upgrading to a build
+            # that adds a new privileged command. Give an actionable message.
+            return jsonify({
+                "success": False,
+                "error": (
+                    "Automatic install isn't permitted on this host yet: the "
+                    "sudoers rule for installing fail2ban is missing. Update the "
+                    "host's sudoers (re-run the EAS Station updater, which copies "
+                    "config/sudoers-eas-station to /etc/sudoers.d/eas-station), or "
+                    "install fail2ban once with: sudo apt-get install -y fail2ban"
+                ),
+                "needs_sudoers": True,
+            }), 200
+        return jsonify({"success": False, "error": output or "apt-get install failed"}), 500
 
     logger.info("fail2ban installed successfully")
     return jsonify({"success": True, "message": "fail2ban installed successfully."})

@@ -8,6 +8,29 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.113.2] - 2026-06-18 - fail2ban install fails fast with an actionable reason
+
+### Fixed
+- **"Install fail2ban" silently did nothing when the host's sudoers had not
+  been refreshed.** The privileged commands ran `sudo` without `-n`, so when the
+  new fail2ban NOPASSWD entries weren't yet deployed, `apt-get` blocked waiting
+  for a password until the web worker timed out — with no usable error.
+  - All fail2ban `sudo` calls (and the firewall bridge) now use `sudo -n`
+    (non-interactive) so they fail immediately instead of hanging
+    (`webapp/admin/fail2ban.py`, `app_core/auth/firewall.py`).
+  - The install route now detects a missing/denied sudoers rule and returns a
+    clear, actionable message: re-run `sudo bash update.sh` (which redeploys
+    `config/sudoers-eas-station`) or run `sudo apt-get install -y fail2ban` once.
+  - The status endpoint reports `can_install`, so the fail2ban tab shows an
+    inline warning (instead of a dead button) when automatic install isn't
+    permitted.
+  - The install button handler now tolerates non-JSON responses (proxy timeout /
+    5xx) and renders the failure reason persistently in the status panel
+    (`static/js/pages/security_center.js`).
+  - Note: no `update.sh` change was required — it already re-copies the entire
+    `config/sudoers-eas-station` to `/etc/sudoers.d/eas-station` and validates it
+    on every run, so the fail2ban entries ship as soon as the updater is re-run.
+
 ## [2.113.1] - 2026-06-18 - fail2ban install button feedback
 
 ### Fixed

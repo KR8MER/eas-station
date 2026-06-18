@@ -48,7 +48,7 @@ def _fail2ban_available() -> bool:
         return False
     try:
         result = subprocess.run(
-            ["sudo", "systemctl", "is-active", "--quiet", "fail2ban"],
+            ["sudo", "-n", "systemctl", "is-active", "--quiet", "fail2ban"],
             capture_output=True, text=True, timeout=10,
         )
         return result.returncode == 0
@@ -85,7 +85,7 @@ def _client(*args: str, timeout: int = 15) -> bool:
     """Run `sudo fail2ban-client <args>`; return success, never raise."""
     try:
         result = subprocess.run(
-            ["sudo", "fail2ban-client", *args],
+            ["sudo", "-n", "fail2ban-client", *args],
             capture_output=True, text=True, timeout=timeout,
         )
         return result.returncode == 0
