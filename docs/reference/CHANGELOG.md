@@ -8,6 +8,24 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.114.0] - 2026-06-18 - SSH brute-forcers are banned globally
+
+### Added
+- **SSH (`sshd`) jail offenders are now automatically added to the unified ban
+  list.** An IP hammering port 22 is a bad actor everywhere, so when the host SSH
+  jail is enabled its bans are imported into `ip_filters` — blocking the IP at the
+  web layer and, when firewall enforcement is on, at all ports via the
+  `eas-station` jail. Previously SSH bans were siloed in the sshd jail only.
+  - New `_import_ssh_bans()` in `webapp/admin/fail2ban.py`: reads
+    `fail2ban-client status sshd` and adds any new offender to the blocklist
+    (reason `auto_brute_force`, labeled "SSH brute-force detected by fail2ban").
+    One-way and idempotent; runs on fail2ban-tab refresh and on **Resync bans**.
+  - The **SSH Jail Bans** unban action now also removes the IP from the unified
+    ban list (and lifts the all-ports firewall ban), so unbanning fully clears an
+    offender from one place instead of leaving it globally blocked / re-imported.
+  - Updated the fail2ban tab copy, `docs/security/SECURITY.md`, and
+    `templates/help.html` to describe the global-ban behavior.
+
 ## [2.113.0] - 2026-06-18 - fail2ban as a UI-managed firewall enforcer for the ban list
 
 ### Added

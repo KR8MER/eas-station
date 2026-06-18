@@ -307,9 +307,11 @@
                                 <strong>Protect host SSH daemon</strong> (<code>sshd</code> jail)
                             </label>
                         </div>
-                        <div class="form-text mb-2">Optional, and <strong>separate from the web ban list</strong>:
-                            fail2ban watches the system's SSH log and bans brute-force attempts the web app can't
-                            see. SSH bans appear below, not on the Banned IPs tab.</div>
+                        <div class="form-text mb-2">Optional: fail2ban watches the system's SSH log and bans
+                            brute-force attempts the web app can't see. Because an IP hammering port 22 is a bad
+                            actor everywhere, these offenders are <strong>automatically added to the global ban
+                            list</strong> (Banned IPs tab) and blocked at all ports. They're also listed below;
+                            unbanning there clears them globally.</div>
                         <div class="row g-2 mb-3">
                             <div class="col-sm-6">
                                 <label class="form-label">SSH max retries</label>
@@ -330,7 +332,7 @@
                 <!-- SSH jail bans (host SSH protection, separate concern) -->
                 <div class="admin-accent-card accent-danger mb-3" id="f2b-ssh-card" style="display: none;">
                     <h4 class="mb-2"><i class="bi bi-terminal"></i> SSH Jail Bans
-                        <small class="text-muted">(host SSH — separate from web bans)</small></h4>
+                        <small class="text-muted">(also added to the global ban list)</small></h4>
                     <div id="f2b-ssh-banned-list">
                         <p class="text-muted mb-0">No SSH bans.</p>
                     </div>

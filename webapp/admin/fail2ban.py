@@ -150,6 +150,59 @@ def _app_ban_count() -> int:
         return 0
 
 
+def _import_ssh_bans() -> int:
+    """Mirror current sshd-jail bans into the unified application ban list.
+
+    SSH brute-force attempts hit port 22 directly, where the web application
+    can't see them — only the host SSH (sshd) jail catches them. When that jail
+    is enabled, an offender hammering port 22 should be banned *globally*, not
+    just on SSH: this copies each sshd-jail ban into ip_filters, which blocks it
+    at the web layer and (via add_to_blocklist) mirrors it into the all-ports
+    ``eas-station`` firewall jail. One-way and idempotent — only IPs not already
+    on the active blocklist are added.
+    """
+    settings = _get_settings()
+    if not settings.protect_ssh:
+        return 0
+    if not (_fail2ban_installed() and _fail2ban_active()):
+        return 0
+    banned = _jail_banned_ips("sshd")
+    if not banned:
+        return 0
+
+    try:
+        from app_core.auth.ip_filter import IPFilter, IPFilterType, IPFilterReason
+    except Exception:
+        return 0
+
+    added = 0
+    for ip in banned:
+        try:
+            ipaddress.ip_address(ip)
+        except ValueError:
+            continue
+        existing = IPFilter.query.filter_by(
+            ip_address=ip,
+            filter_type=IPFilterType.BLOCKLIST.value,
+            is_active=True,
+        ).first()
+        if existing:
+            continue
+        try:
+            IPFilter.add_to_blocklist(
+                ip_address=ip,
+                reason=IPFilterReason.AUTO_BRUTE_FORCE.value,
+                description="SSH brute-force detected by fail2ban (sshd jail)",
+            )
+            added += 1
+        except Exception as exc:
+            logger.warning("Failed to import SSH ban %s into ban list: %s", ip, exc)
+
+    if added:
+        logger.info("Imported %d SSH-jail ban(s) into the application ban list", added)
+    return added
+
+
 def _status() -> dict:
     installed = _fail2ban_installed()
     active = _fail2ban_active() if installed else False
@@ -244,6 +297,11 @@ def _write_via_sudo(path: str, content: str) -> tuple[bool, str]:
 @require_auth
 @require_permission("system.configure")
 def fail2ban_status():
+    # Pull any new SSH-jail bans into the unified ban list before reporting.
+    try:
+        _import_ssh_bans()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("SSH ban import skipped: %s", exc)
     return jsonify(_status())
 
 
@@ -334,8 +392,12 @@ def resync_fail2ban():
     """Re-push the authoritative app ban list into the firewall jail."""
     if not _fail2ban_installed() or not _fail2ban_active():
         return jsonify({"success": False, "error": "fail2ban is not installed/active."}), 400
-    synced = resync_bans()
-    return jsonify({"success": True, "message": f"Resynced {synced} ban(s) to the firewall."})
+    imported = _import_ssh_bans()          # pull SSH offenders into the ban list
+    synced = resync_bans()                 # push the ban list into the firewall jail
+    msg = f"Resynced {synced} ban(s) to the firewall."
+    if imported:
+        msg += f" Imported {imported} SSH offender(s) into the ban list."
+    return jsonify({"success": True, "message": msg})
 
 
 @fail2ban_bp.route("/service", methods=["POST"])
@@ -381,8 +443,28 @@ def ssh_unban():
     if not ok:
         return jsonify({"success": False, "error": output}), 500
 
-    logger.info("Unbanned %s from sshd jail", ip_address)
-    return jsonify({"success": True, "message": f"Unbanned {ip_address} from the SSH jail."})
+    # Also clear it from the unified ban list, otherwise it stays globally
+    # blocked (and a leftover sshd entry would just be re-imported). remove_filter
+    # also lifts the matching all-ports firewall ban.
+    removed = 0
+    try:
+        from app_core.auth.ip_filter import IPFilter, IPFilterType
+        entries = IPFilter.query.filter_by(
+            ip_address=ip_address,
+            filter_type=IPFilterType.BLOCKLIST.value,
+            is_active=True,
+        ).all()
+        for entry in entries:
+            if IPFilter.remove_filter(entry.id):
+                removed += 1
+    except Exception as exc:
+        logger.warning("Failed to clear %s from ban list during SSH unban: %s", ip_address, exc)
+
+    logger.info("Unbanned %s from sshd jail (and %d ban-list entr(y/ies))", ip_address, removed)
+    msg = f"Unbanned {ip_address} from the SSH jail."
+    if removed:
+        msg += " Also removed it from the global ban list."
+    return jsonify({"success": True, "message": msg})
 
 
 def register_fail2ban_routes(app, logger_):
