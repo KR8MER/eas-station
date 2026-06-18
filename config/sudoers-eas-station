@@ -160,12 +160,19 @@ eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload-or-restart fail2ban
 # fail2ban status inspection and ban/unban operations
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/fail2ban-client status
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/fail2ban-client status *
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/fail2ban-client -t
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/fail2ban-client set * unbanip *
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/fail2ban-client set * banip *
 
 # Write generated jail/filter config (web process cannot write /etc/fail2ban directly)
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/fail2ban/jail.local
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/fail2ban/filter.d/eas-station-empty.conf
+
+# Ensure the actuator jail's logpath exists as root. The web service runs under
+# ProtectSystem=strict and may be unable to create /var/log/eas-station/security.log
+# itself; if that file is missing fail2ban refuses to start the eas-station jail.
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /var/log/eas-station
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee -a /var/log/eas-station/security.log
 
 # fail2ban is shipped pre-installed via install.sh / update.sh (it is in the
 # base package list), so the web UI never installs packages itself — it only

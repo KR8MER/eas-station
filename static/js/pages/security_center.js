@@ -228,11 +228,15 @@
                 }
                 if (syncEl) {
                     if (s.status && s.status !== 'ok' && s.status !== 'disabled') {
-                        syncEl.innerHTML = '<div class="alert alert-warning small mb-0 d-flex ' +
-                            'justify-content-between align-items-center flex-wrap gap-2">' +
+                        const detail = s.detail
+                            ? `<div class="mt-1"><small class="text-muted">fail2ban: </small>` +
+                              `<code class="text-break-anywhere">${esc(s.detail)}</code></div>` : '';
+                        syncEl.innerHTML = '<div class="alert alert-warning small mb-0">' +
+                            '<div class="d-flex justify-content-between align-items-center flex-wrap gap-2">' +
                             `<span><i class="bi bi-exclamation-triangle-fill"></i> ${esc(s.message || '')}</span>` +
                             '<button class="btn btn-sm btn-danger" onclick="SC.resyncFirewall()">' +
-                            '<i class="bi bi-arrow-left-right"></i> Resync firewall enforcement</button></div>';
+                            '<i class="bi bi-arrow-left-right"></i> Resync firewall enforcement</button></div>' +
+                            detail + '</div>';
                     } else if (s.message) {
                         syncEl.innerHTML = `<div class="text-muted small"><i class="bi bi-check-circle"></i> ${esc(s.message)}</div>`;
                     } else {
@@ -484,10 +488,14 @@
             // The common "Mirrored: 0 while enforcement is On" case: the actuator
             // jail failed to load, so nothing reaches the firewall.
             if (data.enforcement_enabled && !data.actuator_jail_loaded) {
+                const detail = data.actuator_error
+                    ? '<div class="mt-1"><small>fail2ban error: </small>' +
+                      `<code class="text-break-anywhere">${esc(data.actuator_error)}</code></div>` : '';
                 html += '<div class="alert alert-warning small mb-0 mt-2">' +
                     '<i class="bi bi-exclamation-triangle-fill"></i> Firewall enforcement is on, but the ' +
                     '<code>eas-station</code> firewall jail isn\'t loaded — so bans aren\'t reaching the host ' +
-                    'firewall. Click <strong>Save &amp; Apply Configuration</strong> below to (re)create it.</div>';
+                    'firewall. Click <strong>Save &amp; Apply Configuration</strong> below to (re)create it.' +
+                    detail + '</div>';
             } else if (data.enforcement_enabled && data.app_ban_count > data.firewall_ban_count) {
                 html += '<div class="text-muted small mb-0 mt-1">' +
                     'Some bans aren\'t mirrored yet — click <strong>Resync bans</strong> to push them now.</div>';
