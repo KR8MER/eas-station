@@ -365,6 +365,13 @@
             html += '<p class="text-muted small mb-0 mt-2">' +
                 `Application ban list: <strong>${data.app_ban_count}</strong> active. ` +
                 `Mirrored to host firewall: <strong>${data.firewall_ban_count}</strong>.</p>`;
+        } else if (data.can_install === false) {
+            html += '<div class="alert alert-warning small mb-0 mt-2">' +
+                '<i class="bi bi-exclamation-triangle-fill"></i> fail2ban is not installed, and ' +
+                'this host has not granted the permission needed to install it automatically. ' +
+                'Re-run the EAS Station updater (<code>sudo bash update.sh</code>) to refresh sudo ' +
+                'permissions, or install it once manually with ' +
+                '<code class="text-break-anywhere">sudo apt-get install -y fail2ban</code>.</div>';
         } else {
             html += '<p class="text-muted small mb-0 mt-2">fail2ban is not installed on this host. ' +
                 'Click <strong>Install fail2ban</strong>, then enable firewall enforcement below.</p>';
@@ -407,18 +414,64 @@
     }
 
     function installFail2ban() {
+        const btn = document.getElementById('f2b-install-btn');
+        const statusEl = document.getElementById('f2b-status');
+        const originalBtn = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Installing…';
+        }
+        if (statusEl) {
+            statusEl.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ' +
+                'Installing fail2ban — this can take a minute. Please wait…';
+        }
         notify('Installing fail2ban… this may take a minute.');
+
+        const restoreBtn = () => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalBtn;
+            }
+        };
+
+        const showFailure = (msg) => {
+            notify(msg, true);
+            if (statusEl) {
+                statusEl.innerHTML = '<div class="alert alert-danger small mb-0">' +
+                    '<i class="bi bi-x-octagon-fill"></i> ' + esc(msg) + '</div>';
+            }
+        };
+
         fetch(`${F2B_API}/install`, { method: 'POST' })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
+            .then(r => r.text().then(text => ({ ok: r.ok, status: r.status, text: text })))
+            .then(res => {
+                restoreBtn();
+                let data = null;
+                try { data = JSON.parse(res.text); } catch (e) { /* non-JSON body */ }
+
+                if (data && data.success) {
                     notify(data.message || 'fail2ban installed.');
                     loadFail2banStatus();
-                } else {
-                    notify(data.error || 'Install failed', true);
+                    return;
                 }
+                if (data && data.error) {
+                    // Actionable backend error (e.g. missing sudoers entry).
+                    showFailure(data.error);
+                    loadFail2banStatus();
+                    return;
+                }
+                // Non-JSON / proxy timeout / 5xx — give a useful hint.
+                showFailure(
+                    `Install request failed (HTTP ${res.status}). The web worker may have ` +
+                    'timed out during apt-get. Check the service logs, or install once with ' +
+                    'sudo apt-get install -y fail2ban.'
+                );
+                loadFail2banStatus();
             })
-            .catch(error => notify('Error installing fail2ban: ' + error, true));
+            .catch(error => {
+                restoreBtn();
+                showFailure('Could not reach the server while installing fail2ban: ' + error);
+            });
     }
 
     function serviceAction(action) {
