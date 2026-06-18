@@ -8,7 +8,42 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.115.0] - 2026-06-18 - Country/city geolocation on the ban list
+## [2.115.2] - 2026-06-18 - Fix "Mirrored to firewall: 0" and clarify ban counts
+
+### Fixed
+- **App bans weren't reaching the host firewall (showed "Mirrored to host
+  firewall: 0" with enforcement on).** Root cause: the `eas-station` actuator
+  jail declares `logpath = /var/log/eas-station/security.log`, and if that file
+  didn't exist yet, fail2ban refused to start the jail — so every mirror/resync
+  targeted a jail that wasn't loaded. `configure()` now ensures the log file
+  exists before restarting fail2ban (`_ensure_security_log()` in
+  `webapp/admin/fail2ban.py`).
+- **Self-heal:** the status endpoint now re-pushes the ban list into the
+  firewall when enforcement is on, the actuator jail is loaded, and not all
+  active bans are mirrored — so the count corrects itself on refresh instead of
+  requiring another Save & Apply.
+
+### Changed
+- The fail2ban tab now **warns** when enforcement is on but the `eas-station`
+  jail isn't loaded (the real cause of a 0 count), and explains why the **SSH
+  Jail Bans** list can be shorter than the Banned IPs list: fail2ban's `sshd`
+  bans expire after the SSH ban time, while each offender is copied into the
+  ban list permanently. That divergence is expected, not a mismatch
+  (`static/js/pages/security_center.js`, `templates/security/security_center.html`).
+
+### Fixed
+- **The Banned IPs action buttons were unreadable** — they were icon-only and
+  rendered as near-blank colored bars (especially on mobile). They now carry
+  text labels: **Enable/Disable** (toggle) and **Remove/Delete**
+  (`static/js/pages/security_center.js`).
+
+### Changed
+- **The fail2ban tab's "SSH Jail Bans" list now uses the same card/table layout
+  as the Banned IPs list** — IP/Range, Reason, Location (country flag + city),
+  Description, Created, Status, and a labeled Unban action — instead of a bare
+  IP + button. The backend (`webapp/admin/fail2ban.py`) returns rich records by
+  reusing each offender's imported `ip_filters` entry and the same MaxMind
+  geolocation.
 
 ### Added
 - **The Banned IPs list now shows where each IP is from** — country flag, city,

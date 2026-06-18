@@ -203,6 +203,66 @@ def _import_ssh_bans() -> int:
     return added
 
 
+def _ssh_bans_detailed() -> list:
+    """Return sshd-jail bans as rich records mirroring the Banned IPs list.
+
+    Each entry: ``{ip_address, reason, description, created_at, is_active,
+    location:{country_code,country,city,region}}``. SSH offenders are imported
+    into ip_filters, so we reuse that record (and the same MaxMind geolocation)
+    when present, falling back to sensible defaults for an IP fail2ban just
+    banned but that hasn't been imported yet.
+    """
+    ips = _jail_banned_ips("sshd")
+    if not ips:
+        return []
+
+    classify_location = None
+    db_path = None
+    try:
+        from app_core.analytics.geo import classify_location as _cl
+        from app_core.analytics.web_traffic import TrafficAnalyticsSettings
+        classify_location = _cl
+        db_path = TrafficAnalyticsSettings.get_settings().geoip_database_path
+    except Exception:
+        pass
+
+    records = {}
+    try:
+        from app_core.auth.ip_filter import IPFilter, IPFilterType
+        for rec in IPFilter.query.filter_by(
+            filter_type=IPFilterType.BLOCKLIST.value, is_active=True,
+        ).filter(IPFilter.ip_address.in_(ips)).all():
+            records[rec.ip_address] = rec
+    except Exception:
+        pass
+
+    out = []
+    for ip in ips:
+        loc = {"country_code": None, "country": None, "city": None, "region": None}
+        if classify_location is not None:
+            try:
+                info = classify_location(ip, db_path)
+                loc = {
+                    "country_code": info.get("country_code"),
+                    "country": info.get("label") if info.get("country_code") else None,
+                    "city": info.get("city"),
+                    "region": info.get("region"),
+                }
+            except Exception:
+                pass
+        rec = records.get(ip)
+        out.append({
+            "ip_address": ip,
+            "reason": rec.reason if rec else "auto_brute_force",
+            "description": (rec.description if rec and rec.description
+                            else "SSH brute-force detected by fail2ban (sshd jail)"),
+            "created_at": rec.created_at.isoformat() if rec and rec.created_at else None,
+            "is_active": True,
+            "location": loc,
+        })
+    return out
+
+
 def _status() -> dict:
     installed = _fail2ban_installed()
     active = _fail2ban_active() if installed else False
@@ -214,7 +274,7 @@ def _status() -> dict:
         enforced = _jail_banned_ips(EAS_JAIL)
 
     ssh_loaded = "sshd" in loaded
-    ssh_banned = _jail_banned_ips("sshd") if ssh_loaded else []
+    ssh_banned = _ssh_bans_detailed() if ssh_loaded else []
 
     return {
         "installed": installed,
@@ -274,6 +334,28 @@ bantime = {settings.ssh_bantime}
     return "\n".join(blocks).rstrip() + "\n"
 
 
+def _ensure_security_log() -> bool:
+    """Make sure the actuator jail's logpath exists before fail2ban (re)starts.
+
+    The ``eas-station`` jail declares ``logpath = SECURITY_LOG_PATH``. If that
+    file is absent (e.g. no malicious logins have ever been recorded), fail2ban
+    refuses to start the jail — so app bans silently never reach the firewall and
+    "Mirrored to host firewall" stays 0. The web service can write
+    /var/log/eas-station (systemd ReadWritePaths), so create an empty log if
+    needed. Best-effort; returns True if the file exists afterwards.
+    """
+    import os
+    try:
+        os.makedirs(os.path.dirname(SECURITY_LOG_PATH), exist_ok=True)
+        if not os.path.exists(SECURITY_LOG_PATH):
+            with open(SECURITY_LOG_PATH, "a", encoding="utf-8"):
+                pass
+        return os.path.exists(SECURITY_LOG_PATH)
+    except Exception as exc:
+        logger.warning("Could not ensure security log %s exists: %s", SECURITY_LOG_PATH, exc)
+        return os.path.exists(SECURITY_LOG_PATH)
+
+
 def _write_via_sudo(path: str, content: str) -> tuple[bool, str]:
     """Write content to a root-owned path through `sudo tee`."""
     try:
@@ -302,7 +384,22 @@ def fail2ban_status():
         _import_ssh_bans()
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("SSH ban import skipped: %s", exc)
-    return jsonify(_status())
+
+    data = _status()
+
+    # Self-heal: if enforcement is on and the actuator jail is loaded but not all
+    # active bans are mirrored (e.g. after a fail2ban restart flushed them),
+    # re-push the ban list into the firewall and refresh the counts.
+    try:
+        if (data.get("enforcement_enabled") and data.get("active")
+                and data.get("actuator_jail_loaded")
+                and data.get("firewall_ban_count", 0) < data.get("app_ban_count", 0)):
+            resync_bans()
+            data = _status()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("fail2ban self-heal resync skipped: %s", exc)
+
+    return jsonify(data)
 
 
 @fail2ban_bp.route("/configure", methods=["POST"])
@@ -345,11 +442,13 @@ def configure_fail2ban():
 
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
-    # The actuator jail needs its (never-matching) filter to exist.
+    # The actuator jail needs its (never-matching) filter AND its logpath to
+    # exist, or fail2ban won't start the jail and nothing gets mirrored.
     if settings.enabled:
         ok, err = _write_via_sudo(EMPTY_FILTER_PATH, _EMPTY_FILTER.format(generated=generated))
         if not ok:
             return jsonify({"success": False, "error": f"Failed to write filter: {err}"}), 500
+        _ensure_security_log()
 
     ok, err = _write_via_sudo(JAIL_LOCAL_PATH, _render_jail_local(settings))
     if not ok:

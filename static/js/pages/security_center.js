@@ -217,12 +217,14 @@
                     ${expiresCell}
                     <td data-label="Created">${esc(new Date(filter.created_at).toLocaleString())}</td>
                     <td data-label="Status"><span class="badge ${statusClass}">${filter.is_active ? 'Active' : 'Inactive'}</span></td>
-                    <td>
-                        <button class="btn btn-sm btn-warning" onclick="SC.toggleFilter(${filter.id})" title="Toggle active">
+                    <td data-label="Actions">
+                        <button class="btn btn-sm btn-warning" onclick="SC.toggleFilter(${filter.id})"
+                                title="${filter.is_active ? 'Disable this entry' : 'Enable this entry'}">
                             <i class="bi bi-toggle-${filter.is_active ? 'on' : 'off'}"></i>
+                            ${filter.is_active ? 'Disable' : 'Enable'}
                         </button>
-                        <button class="btn btn-sm btn-danger" onclick="SC.deleteFilter(${filter.id})" title="Delete">
-                            <i class="bi bi-trash"></i>
+                        <button class="btn btn-sm btn-danger" onclick="SC.deleteFilter(${filter.id})" title="Delete this entry">
+                            <i class="bi bi-trash"></i> ${isBlock ? 'Remove' : 'Delete'}
                         </button>
                     </td>
                 </tr>`;
@@ -386,6 +388,17 @@
             html += '<p class="text-muted small mb-0 mt-2">' +
                 `Application ban list: <strong>${data.app_ban_count}</strong> active. ` +
                 `Mirrored to host firewall: <strong>${data.firewall_ban_count}</strong>.</p>`;
+            // The common "Mirrored: 0 while enforcement is On" case: the actuator
+            // jail failed to load, so nothing reaches the firewall.
+            if (data.enforcement_enabled && !data.actuator_jail_loaded) {
+                html += '<div class="alert alert-warning small mb-0 mt-2">' +
+                    '<i class="bi bi-exclamation-triangle-fill"></i> Firewall enforcement is on, but the ' +
+                    '<code>eas-station</code> firewall jail isn\'t loaded — so bans aren\'t reaching the host ' +
+                    'firewall. Click <strong>Save &amp; Apply Configuration</strong> below to (re)create it.</div>';
+            } else if (data.enforcement_enabled && data.app_ban_count > data.firewall_ban_count) {
+                html += '<div class="text-muted small mb-0 mt-1">' +
+                    'Some bans aren\'t mirrored yet — click <strong>Resync bans</strong> to push them now.</div>';
+            }
         } else {
             html += '<div class="alert alert-warning small mb-0 mt-2">' +
                 '<i class="bi bi-exclamation-triangle-fill"></i> fail2ban ships pre-installed, but ' +
@@ -405,12 +418,21 @@
             if (!banned.length) {
                 sshList.innerHTML = '<p class="text-muted mb-0">No SSH bans.</p>';
             } else {
-                let t = '<div class="table-responsive"><table class="table eas-table mb-0"><thead><tr>' +
-                    '<th>IP Address</th><th class="text-end">Action</th></tr></thead><tbody>';
-                banned.forEach(ip => {
-                    t += `<tr><td class="text-break-anywhere">${esc(ip)}</td>` +
-                        '<td class="text-end"><button class="btn btn-sm btn-outline-success" ' +
-                        `onclick="SC.sshUnban('${esc(ip)}')"><i class="bi bi-unlock"></i> Unban</button></td></tr>`;
+                let t = '<div class="table-responsive"><table class="table eas-table table-sm mb-0"><thead><tr>' +
+                    '<th>IP/Range</th><th>Reason</th><th>Location</th><th>Description</th>' +
+                    '<th>Created</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+                banned.forEach(b => {
+                    const created = b.created_at ? new Date(b.created_at).toLocaleString() : '—';
+                    t += '<tr>' +
+                        `<td data-label="IP/Range" class="admin-mono-badge">${esc(b.ip_address)}</td>` +
+                        `<td data-label="Reason"><span class="badge bg-danger">${esc(b.reason || 'auto_brute_force')}</span></td>` +
+                        `<td data-label="Location">${locationCell(b)}</td>` +
+                        `<td data-label="Description">${esc(b.description || '-')}</td>` +
+                        `<td data-label="Created">${esc(created)}</td>` +
+                        `<td data-label="Status"><span class="badge bg-danger">Active</span></td>` +
+                        '<td data-label="Actions"><button class="btn btn-sm btn-outline-success" ' +
+                        `onclick="SC.sshUnban('${esc(b.ip_address)}')"><i class="bi bi-unlock"></i> Unban</button></td>` +
+                        '</tr>';
                 });
                 t += '</tbody></table></div>';
                 sshList.innerHTML = t;
