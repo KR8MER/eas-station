@@ -8,6 +8,23 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.111.0] - 2026-06-18 - Project logos on the Attribution page
+
+### Added
+- **Self-hosted project logos on the Attribution page** (`templates/attribution.html`).
+  The Open-Source Software and Infrastructure sections now lead with a wall of
+  the actual project brand marks (Flask, SQLAlchemy, PostgreSQL, Redis, nginx,
+  Icecast, NumPy, SciPy, …) drawn from the existing
+  `static/img/tech-stack-logos/*.svg` assets. Each mark sits on a fixed dark
+  tile so the white-filled SVGs (built for the shields.io footer badges) stay
+  visible under every theme, light or dark. No new dependencies or external
+  requests — the logos are served locally, consistent with the page's
+  self-hosted philosophy.
+
+### Notes
+- The About page already renders these marks inline via its `stack_icon`
+  macro + the global `shield_logos` context, so no change was needed there.
+
 ## [2.110.0] - 2026-06-18 - Audit log action filter + Configuration Changes quick-link
 
 ### Added

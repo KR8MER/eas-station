@@ -2,7 +2,37 @@
 {% block title %}Attribution &amp; Credits | EAS Station™{% endblock %}
 {% block extra_css %}
 {# Reuses the shared EAS visual system (.about-* / .eas-* classes) defined in
-   static/css/styles.css. No page-specific CSS required. #}
+   static/css/styles.css. The logo wall below uses the self-hosted brand marks
+   in static/img/tech-stack-logos/. Those SVGs are white-filled (built for the
+   shields.io footer badges), so each sits on a fixed dark tile that keeps them
+   visible under every theme — light or dark. #}
+<style>
+    .attr-logo-wall {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.6rem;
+    }
+    .attr-logo-tile {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 64px;
+        height: 64px;
+        padding: 0.6rem;
+        background: #20283a;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: var(--radius-md, 0.5rem);
+        box-shadow: 0 1px 2px var(--shadow-color, rgba(0, 0, 0, 0.15));
+    }
+    .attr-logo-tile img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+    @media (max-width: 575.98px) {
+        .attr-logo-tile { width: 56px; height: 56px; padding: 0.5rem; }
+    }
+</style>
 {% endblock %}
 {% block content %}
 <div class="about-page container py-4">
@@ -81,6 +111,35 @@
                         <p class="about-section-sub">The Python libraries that make every feature work.</p>
                     </div>
                 </div>
+                {# Self-hosted brand marks for the projects credited below. #}
+                {% set credit_logos = [
+                    ('flask.svg', 'Flask'),
+                    ('werkzeug.svg', 'Werkzeug'),
+                    ('jinja2.svg', 'Jinja2'),
+                    ('socketio.svg', 'Socket.IO'),
+                    ('gunicorn.svg', 'Gunicorn'),
+                    ('gevent.svg', 'gevent'),
+                    ('sqlalchemy.svg', 'SQLAlchemy'),
+                    ('alembic.svg', 'Alembic'),
+                    ('postgresql.svg', 'PostgreSQL'),
+                    ('redis.svg', 'Redis'),
+                    ('lxml.svg', 'lxml'),
+                    ('numpy.svg', 'NumPy'),
+                    ('scipy.svg', 'SciPy'),
+                    ('numba.svg', 'Numba'),
+                    ('pydub.svg', 'pydub'),
+                    ('pillow.svg', 'Pillow'),
+                    ('pyotp.svg', 'PyOTP'),
+                    ('twilio.svg', 'Twilio'),
+                ] %}
+                <div class="attr-logo-wall mb-3" role="list" aria-label="Open-source project logos">
+                    {% for file, label in credit_logos %}
+                    <span class="attr-logo-tile" role="listitem" title="{{ label }}">
+                        <img src="{{ url_for('static', filename='img/tech-stack-logos/' ~ file) }}"
+                             alt="{{ label }} logo" loading="lazy" width="48" height="48">
+                    </span>
+                    {% endfor %}
+                </div>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
                         <thead>
@@ -121,6 +180,27 @@
                         <h2 id="infra-heading" class="about-section-title">Infrastructure &amp; System Packages</h2>
                         <p class="about-section-sub">The platform services running underneath the application.</p>
                     </div>
+                </div>
+                {% set infra_logos = [
+                    ('postgresql.svg', 'PostgreSQL'),
+                    ('redis.svg', 'Redis'),
+                    ('nginx.svg', 'nginx'),
+                    ('letsencrypt.svg', "Let's Encrypt / certbot"),
+                    ('icecast.svg', 'Icecast'),
+                    ('ffmpeg.svg', 'FFmpeg'),
+                    ('systemd.svg', 'systemd'),
+                    ('chrony.svg', 'chrony'),
+                    ('gpsd.svg', 'gpsd'),
+                    ('soapysdr.svg', 'SoapySDR'),
+                    ('espeak-ng.svg', 'eSpeak NG'),
+                ] %}
+                <div class="attr-logo-wall mb-3" role="list" aria-label="Infrastructure logos">
+                    {% for file, label in infra_logos %}
+                    <span class="attr-logo-tile" role="listitem" title="{{ label }}">
+                        <img src="{{ url_for('static', filename='img/tech-stack-logos/' ~ file) }}"
+                             alt="{{ label }} logo" loading="lazy" width="48" height="48">
+                    </span>
+                    {% endfor %}
                 </div>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
