@@ -754,13 +754,57 @@ def list_ip_filters():
         query = query.filter_by(is_active=is_active)
     
     query = query.order_by(IPFilter.created_at.desc())
-    
+
     filters = query.all()
-    
+
+    payload = [f.to_dict() for f in filters]
+    _attach_geo(payload)
+
     return jsonify({
-        'filters': [f.to_dict() for f in filters],
-        'total': len(filters)
+        'filters': payload,
+        'total': len(payload)
     })
+
+
+def _attach_geo(filter_dicts):
+    """Add a ``location`` block (country/city/region + flag code) to each filter.
+
+    Uses the operator-supplied MaxMind GeoLite2 database (Settings → Traffic
+    Analytics). If no database is configured or the optional reader is missing,
+    every entry simply gets a ``None`` location and the UI shows a dash — no
+    network calls are ever made. Never raises: geolocation must not break the
+    ban-list view.
+    """
+    if not filter_dicts:
+        return
+    classify_location = None
+    db_path = None
+    try:
+        from app_core.analytics.geo import classify_location as _cl
+        from app_core.analytics.web_traffic import TrafficAnalyticsSettings
+        classify_location = _cl
+        db_path = TrafficAnalyticsSettings.get_settings().geoip_database_path
+    except Exception as e:
+        logger.debug(f"Geo enrichment unavailable for ban list: {e}")
+
+    for entry in filter_dicts:
+        loc = {'country_code': None, 'country': None, 'city': None, 'region': None}
+        try:
+            if classify_location is None:
+                raise RuntimeError("geo unavailable")
+            info = classify_location(entry.get('ip_address'), db_path)
+            country = info.get('label')
+            loc = {
+                'country_code': info.get('country_code'),
+                # Only surface a country name when it actually resolved — skip
+                # generic labels like "Internet (Public)" / "Local Network".
+                'country': country if info.get('country_code') else None,
+                'city': info.get('city'),
+                'region': info.get('region'),
+            }
+        except Exception:
+            pass
+        entry['location'] = loc
 
 
 @security_bp.route('/ip-filters', methods=['POST'])

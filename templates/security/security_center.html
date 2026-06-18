@@ -7,6 +7,16 @@
 {# Traffic dashboard styles (the Traffic tab embeds the full dashboard) #}
 {% include 'security/_traffic_styles.html' %}
 <style>
+    /* Country flag images in the ban list (bundled flag-icons SVGs) */
+    .ti-flag {
+        width: 1.33em;
+        height: 1em;
+        vertical-align: -0.12em;
+        object-fit: cover;
+        border-radius: 2px;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+    }
+
     /* IP statistics list rows */
     .ip-stat-item {
         display: flex;

@@ -8,7 +8,22 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.114.0] - 2026-06-18 - SSH brute-forcers are banned globally
+## [2.115.0] - 2026-06-18 - Country/city geolocation on the ban list
+
+### Added
+- **The Banned IPs list now shows where each IP is from** — country flag, city,
+  region, and country — reusing the same operator-supplied MaxMind GeoLite2
+  database as the Traffic Analytics dashboard (Settings → Traffic Analytics).
+  - `GET /security/ip-filters` enriches each entry with a `location` block via a
+    new `_attach_geo()` helper (`webapp/routes_security.py`) using
+    `geo.classify_location()`. It is best-effort and never raises: with no
+    database configured (or the optional `maxminddb` reader missing) entries show
+    a dash and no network calls are made. CIDR ranges and local addresses get no
+    location.
+  - The Banned IPs / Allowlist tables gained a **Location** column rendering the
+    bundled flag-icons SVG (no CDN) plus "City, Region, Country"
+    (`static/js/pages/security_center.js`, `templates/security/security_center.html`).
+  - Works for IPv4 and IPv6, matching the rest of the ban pipeline.
 
 ### Added
 - **SSH (`sshd`) jail offenders are now automatically added to the unified ban
