@@ -40,7 +40,7 @@ import shutil
 import subprocess
 from datetime import datetime, timezone
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request, stream_with_context
 from sqlalchemy.exc import SQLAlchemyError
 
 from app_core.auth.decorators import require_auth
@@ -308,6 +308,85 @@ def install_fail2ban():
 
     logger.info("fail2ban installed successfully")
     return jsonify({"success": True, "message": "fail2ban installed successfully."})
+
+
+# Sentinel the client watches for to learn the final result of a streamed run.
+DONE_PREFIX = "__EAS_DONE__"
+
+
+@fail2ban_bp.route("/install-stream", methods=["POST"])
+@require_auth
+@require_permission("system.configure")
+def install_fail2ban_stream():
+    """Install fail2ban, streaming live apt-get output to the browser.
+
+    The response is a plain-text stream. Each line is the raw command output;
+    the final line is ``__EAS_DONE__ success`` or ``__EAS_DONE__ error`` so the
+    client knows the outcome without parsing apt-get text.
+    """
+    def generate():
+        if _fail2ban_installed():
+            yield "fail2ban is already installed.\n"
+            yield f"{DONE_PREFIX} success\n"
+            return
+
+        # Always attempt the real install and stream its output, so the operator
+        # sees the actual reason for any failure rather than a guessed one.
+        yield "$ sudo apt-get install -y fail2ban\n"
+        try:
+            proc = subprocess.Popen(
+                ["sudo", "-n"] + _INSTALL_CMD,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            yield f"ERROR: failed to start apt-get: {exc}\n"
+            yield f"{DONE_PREFIX} error\n"
+            return
+
+        captured = []
+        try:
+            for line in iter(proc.stdout.readline, ""):
+                captured.append(line)
+                yield line
+        finally:
+            proc.stdout.close()
+            proc.wait()
+
+        output = "".join(captured)
+        if proc.returncode == 0:
+            logger.info("fail2ban installed successfully (streamed)")
+            yield "\nDone. fail2ban installed.\n"
+            yield f"{DONE_PREFIX} success\n"
+            return
+
+        logger.error("fail2ban streamed install exited %s: %s", proc.returncode, output[-500:])
+        yield f"\napt-get exited with code {proc.returncode}.\n"
+
+        # Translate the common failure modes into an actionable next step.
+        if _looks_like_sudo_denied(output):
+            yield ("\nThis host hasn't granted permission to install fail2ban without a "
+                   "password.\n"
+                   "Re-run the EAS Station updater to refresh sudo permissions:\n"
+                   "    sudo bash update.sh\n"
+                   "or install it once manually:\n"
+                   "    sudo apt-get install -y fail2ban\n")
+        elif "unable to locate package" in output.lower():
+            yield ("\nThe package index may be stale or the 'universe' repository is "
+                   "disabled. Try, on the host:\n"
+                   "    sudo apt-get update && sudo apt-get install -y fail2ban\n")
+        elif "could not get lock" in output.lower() or "is another process using it" in output.lower():
+            yield ("\nAnother package operation is in progress (apt/dpkg lock held). "
+                   "Wait for it to finish and try again.\n")
+        yield f"{DONE_PREFIX} error\n"
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",   # disable nginx proxy buffering for live output
+    }
+    return Response(stream_with_context(generate()), mimetype="text/plain", headers=headers)
 
 
 @fail2ban_bp.route("/configure", methods=["POST"])

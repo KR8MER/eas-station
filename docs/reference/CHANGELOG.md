@@ -8,6 +8,26 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.114.0] - 2026-06-18 - Live install console for fail2ban
+
+### Added
+- **The fail2ban tab now streams the live `apt-get` output into an on-screen
+  console while installing**, so you can watch progress and — crucially — see
+  the exact reason if it fails, instead of staring at a spinner.
+  - New streaming endpoint `POST /admin/fail2ban/install-stream`
+    (`webapp/admin/fail2ban.py`) runs the install via `subprocess.Popen` and
+    streams stdout/stderr line-by-line as a `text/plain` response, ending with a
+    `__EAS_DONE__ success|error` sentinel. `X-Accel-Buffering: no` keeps output
+    flowing through nginx unbuffered.
+  - The install always runs and shows real output; on failure it appends an
+    actionable hint for the common causes (missing sudoers / `sudo bash
+    update.sh`, stale package index / `apt-get update`, dpkg lock held).
+  - A terminal-styled `<pre class="eas-console">` panel was added to the
+    fail2ban tab; the button handler consumes the stream via
+    `fetch().body.getReader()`, auto-scrolls, and falls back to a plain read on
+    browsers without streaming support (`static/js/pages/security_center.js`,
+    `templates/security/security_center.html`).
+
 ## [2.113.2] - 2026-06-18 - fail2ban install fails fast with an actionable reason
 
 ### Fixed
