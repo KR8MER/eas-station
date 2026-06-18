@@ -174,6 +174,12 @@ class IPFilter(db.Model):
                     filter_entry.is_active = False
                     db.session.add(filter_entry)
                     db.session.commit()
+                    # Lift the matching host-firewall ban for the expired entry.
+                    try:
+                        from app_core.auth.firewall import firewall_unban
+                        firewall_unban(filter_entry.ip_address)
+                    except Exception:
+                        pass
                     continue
 
             if IPFilter._ip_matches(ip_address, filter_entry.ip_address):
@@ -241,9 +247,16 @@ class IPFilter(db.Model):
         
         db.session.add(filter_entry)
         db.session.commit()
-        
+
+        # Mirror to the host firewall (no-op unless fail2ban enforcement is on).
+        try:
+            from app_core.auth.firewall import firewall_ban
+            firewall_ban(ip_address)
+        except Exception:
+            pass
+
         return filter_entry
-    
+
     @staticmethod
     def add_to_allowlist(
         ip_address: str,
@@ -288,8 +301,18 @@ class IPFilter(db.Model):
         """
         filter_entry = IPFilter.query.get(filter_id)
         if filter_entry:
+            ip_address = filter_entry.ip_address
+            was_blocklist = filter_entry.filter_type == IPFilterType.BLOCKLIST.value
             db.session.delete(filter_entry)
             db.session.commit()
+
+            # Lift the matching host-firewall ban, if any.
+            if was_blocklist:
+                try:
+                    from app_core.auth.firewall import firewall_unban
+                    firewall_unban(ip_address)
+                except Exception:
+                    pass
             return True
         return False
     
@@ -309,12 +332,24 @@ class IPFilter(db.Model):
         ).all()
         
         count = 0
+        unban_ips = []
         for filter_entry in expired:
             filter_entry.is_active = False
             db.session.add(filter_entry)
+            if filter_entry.filter_type == IPFilterType.BLOCKLIST.value:
+                unban_ips.append(filter_entry.ip_address)
             count += 1
-        
+
         db.session.commit()
+
+        # Lift the matching host-firewall bans for the now-expired entries.
+        if unban_ips:
+            try:
+                from app_core.auth.firewall import firewall_unban
+                for ip in unban_ips:
+                    firewall_unban(ip)
+            except Exception:
+                pass
         return count
 
 

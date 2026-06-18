@@ -143,3 +143,29 @@ eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/postfix/main.cf
 
 # Postfix installation via apt-get (non-interactive, suppresses debconf prompts)
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get install -y postfix libsasl2-modules
+
+# fail2ban management (required for the Security Center fail2ban tab)
+# These commands are used by webapp/admin/fail2ban.py to install, configure,
+# apply, and inspect host-level fail2ban jails for the EAS Station security log.
+# IP addresses passed to fail2ban-client are validated in Python first.
+
+# fail2ban service lifecycle
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active --quiet fail2ban
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable fail2ban
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl start fail2ban
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop fail2ban
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart fail2ban
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload-or-restart fail2ban
+
+# fail2ban status inspection and ban/unban operations
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/fail2ban-client status
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/fail2ban-client status *
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/fail2ban-client set * unbanip *
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/fail2ban-client set * banip *
+
+# Write generated jail/filter config (web process cannot write /etc/fail2ban directly)
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/fail2ban/jail.local
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/fail2ban/filter.d/eas-station-empty.conf
+
+# fail2ban installation via apt-get (non-interactive, suppresses debconf prompts)
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get install -y fail2ban

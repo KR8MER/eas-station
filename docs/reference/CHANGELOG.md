@@ -8,6 +8,43 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.113.0] - 2026-06-18 - fail2ban as a UI-managed firewall enforcer for the ban list
+
+### Added
+- **fail2ban can now enforce the existing application ban list at the host
+  firewall, configured entirely from the web UI** — the Security Center →
+  fail2ban tab was previously a static copy-paste-only reference (violating the
+  project's CLI-free mandate). Rather than introducing a *second* ban list,
+  fail2ban is wired up as an optional **firewall actuator** for the single
+  authoritative `ip_filters` ban list (the Banned IPs tab):
+  - Every application ban/unban — manual *and* automatic (malicious,
+    brute-force, flood) — is mirrored to a dedicated `eas-station` fail2ban jail
+    (`bantime = -1`) by the new `app_core/auth/firewall.py` bridge, hooked into
+    `IPFilter.add_to_blocklist` / `remove_filter` / `cleanup_expired` and the
+    blocklist toggle route. fail2ban does **not** independently scan the web log,
+    so there is still only one ban list to maintain.
+  - The fail2ban tab now exposes: install, service status, a **Mirror
+    application bans to the host firewall** toggle, a **Resync bans** button (the
+    firewall is also auto-resynced on apply/restart, since fail2ban flushes bans
+    on restart), and an optional **host SSH (`sshd`) jail** — clearly scoped as a
+    separate concern from the web ban list, with its own banned-IP view/unban.
+  - New `Fail2banSettings` database model (`app_core/_models_settings.py`) with
+    Alembic migration `20260618_fail2ban_settings`, following the project's
+    "settings in the database, not env vars" policy.
+  - New `webapp/admin/fail2ban.py` blueprint (`/admin/fail2ban/*`): status,
+    install, configure, resync, service control, and sshd-unban endpoints. IPs
+    are validated before being passed to `fail2ban-client`. The firewall bridge
+    is best-effort and never breaks the application-level ban path, so web bans
+    stay enforced at the app layer even if fail2ban is stopped.
+  - Rewrote the fail2ban tab in `templates/security/security_center.html` and
+    the controller in `static/js/pages/security_center.js`.
+  - Added the required `fail2ban` sudoers entries to
+    `config/sudoers-eas-station` and added `fail2ban` to `install.sh`'s base
+    packages.
+  - Documentation updated: `docs/security/SECURITY.md` (one list, two
+    enforcement layers), `templates/help.html`, and
+    `docs/reference/dependency_attribution.md`.
+
 ## [2.112.0] - 2026-06-18 - Attribution page redesigned to match the About page
 
 ### Changed

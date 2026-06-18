@@ -479,6 +479,52 @@ class CertbotSettings(db.Model):
         }
 
 
+class Fail2banSettings(db.Model):
+    """fail2ban firewall-enforcement configuration stored in the database.
+
+    EAS Station's application-level ban list (the ``ip_filters`` table, managed
+    on the Security Center "Banned IPs" tab) is the single source of truth for
+    who is banned. fail2ban is used purely as an optional *firewall actuator*:
+    when enabled, every app-level ban/unban is mirrored to a dedicated
+    ``eas-station`` fail2ban jail (``bantime = -1``) so the attacker is also
+    dropped at the host firewall, before traffic ever reaches the web process.
+    fail2ban does NOT independently scan the web log here — the application
+    already detects malicious / brute-force / flood activity — so there is only
+    one ban list to maintain.
+
+    The optional ``sshd`` jail is the one exception: it protects the host SSH
+    daemon (which the application cannot see) and is therefore managed entirely
+    by fail2ban, separate from the web ban list.
+
+    All settings are stored in a single row (id=1).
+    """
+    __tablename__ = "fail2ban_settings"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Mirror application-level bans to the host firewall via fail2ban
+    enabled = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Optional sshd jail to protect the host's SSH daemon (separate concern —
+    # SSH bans are not part of the web application ban list)
+    protect_ssh = db.Column(db.Boolean, nullable=False, default=False)
+    ssh_maxretry = db.Column(db.Integer, nullable=False, default=5)
+    ssh_bantime = db.Column(db.Integer, nullable=False, default=3600)   # seconds
+
+    # Metadata
+    updated_at = db.Column(db.DateTime, nullable=True, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        """Convert model to dictionary."""
+        return {
+            "enabled": self.enabled,
+            "protect_ssh": self.protect_ssh,
+            "ssh_maxretry": self.ssh_maxretry,
+            "ssh_bantime": self.ssh_bantime,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class TTSSettings(db.Model):
     """Text-to-Speech configuration stored in database.
 
