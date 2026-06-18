@@ -8,6 +8,22 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.110.0] - 2026-06-18 - Audit log action filter + Configuration Changes quick-link
+
+### Added
+- **"Configuration Changes" quick-link** in the navbar Logs menu
+  (`templates/components/navbar.html`) that jumps straight to the audit trail
+  filtered to `config.updated` events — the fastest way to answer "who changed
+  a setting?".
+- **Audit-action filter on the Logs → Audit page** (`/logs?type=audit&action=…`).
+  The `/logs` route and both exporters (`/logs/export.csv`, `/logs/export.pdf`)
+  now accept an `action` parameter applied at the database level so the newest
+  matching rows survive the record limit (`webapp/routes_public.py`). The audit
+  tab gained an **Audit Action** dropdown (Configuration Changes, EAS Broadcast,
+  Manual Activation, Alert Deleted, Login Success/Failure, etc.) that preserves
+  the selection and is included in CSV/PDF exports and the Clear Filters control
+  (`templates/logs.html`).
+
 ## [2.109.0] - 2026-06-18 - Traffic analytics: purge-all, faster dashboard, clearer auto-purge
 
 ### Added
