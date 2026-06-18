@@ -1,39 +1,46 @@
 {% extends 'base.html' %}
 {% block title %}Attribution &amp; Credits | EAS Station™{% endblock %}
 {% block extra_css %}
-{# Reuses the shared EAS visual system (.about-* / .eas-* classes) defined in
-   static/css/styles.css. The logo wall below uses the self-hosted brand marks
-   in static/img/tech-stack-logos/. Those SVGs are white-filled (built for the
-   shields.io footer badges), so each sits on a fixed dark tile that keeps them
-   visible under every theme — light or dark. #}
+{# Reuses the shared EAS visual system (.about-* / .stack-* / .eas-* classes)
+   defined in static/css/styles.css — the same components the About page's
+   "Software Stack" section uses, so this page matches it visually. The only
+   page-specific addition is the small license pill below. #}
 <style>
-    .attr-logo-wall {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.6rem;
-    }
-    .attr-logo-tile {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 64px;
-        height: 64px;
-        padding: 0.6rem;
-        background: #20283a;
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        border-radius: var(--radius-md, 0.5rem);
-        box-shadow: 0 1px 2px var(--shadow-color, rgba(0, 0, 0, 0.15));
-    }
-    .attr-logo-tile img {
-        max-width: 100%;
-        max-height: 100%;
-        object-fit: contain;
-    }
-    @media (max-width: 575.98px) {
-        .attr-logo-tile { width: 56px; height: 56px; padding: 0.5rem; }
+    .attr-lic {
+        display: inline-block;
+        font-size: 0.72em;
+        font-weight: 600;
+        line-height: 1.4;
+        padding: 0.05rem 0.45rem;
+        border-radius: 999px;
+        background: var(--bg-color, rgba(127, 127, 127, 0.12));
+        color: var(--text-secondary, #667);
+        border: 1px solid var(--border-color, rgba(127, 127, 127, 0.25));
+        white-space: nowrap;
+        vertical-align: baseline;
     }
 </style>
 {% endblock %}
+{# ------------------------------------------------------------------ #}
+{# Software-stack icon helper (mirrors templates/about.html).          #}
+{# Renders the gradient chip next to each project. When a matching     #}
+{# brand SVG exists under static/img/tech-stack-logos/<slug>.svg       #}
+{# (declared in the `shield_logos` context processor) the chip shows   #}
+{# the real white-tinted project mark; otherwise it falls back to the  #}
+{# supplied Font Awesome icon. The white-tint filter is applied via    #}
+{# `.stack-item-ico img` in styles.css.                                #}
+{# ------------------------------------------------------------------ #}
+{%- macro stack_icon(slug, fa, gradient, label='') -%}
+<span class="stack-item-ico" style="background: linear-gradient({{ gradient }});">
+{%- if shield_logos and shield_logos.get(slug) -%}
+    <img src="{{ url_for('static', filename='img/tech-stack-logos/' ~ slug ~ '.svg') }}" alt="{{ label }} logo">
+{%- else -%}
+    <i class="{{ fa }}"></i>
+{%- endif -%}
+</span>
+{%- endmacro %}
+{# Small inline license pill. #}
+{%- macro lic(text) -%}<span class="attr-lic">{{ text }}</span>{%- endmacro %}
 {% block content %}
 <div class="about-page container py-4">
     <div class="row justify-content-center">
@@ -111,64 +118,142 @@
                         <p class="about-section-sub">The Python libraries that make every feature work.</p>
                     </div>
                 </div>
-                {# Self-hosted brand marks for the projects credited below. #}
-                {% set credit_logos = [
-                    ('flask.svg', 'Flask'),
-                    ('werkzeug.svg', 'Werkzeug'),
-                    ('jinja2.svg', 'Jinja2'),
-                    ('socketio.svg', 'Socket.IO'),
-                    ('gunicorn.svg', 'Gunicorn'),
-                    ('gevent.svg', 'gevent'),
-                    ('sqlalchemy.svg', 'SQLAlchemy'),
-                    ('alembic.svg', 'Alembic'),
-                    ('postgresql.svg', 'PostgreSQL'),
-                    ('redis.svg', 'Redis'),
-                    ('lxml.svg', 'lxml'),
-                    ('numpy.svg', 'NumPy'),
-                    ('scipy.svg', 'SciPy'),
-                    ('numba.svg', 'Numba'),
-                    ('pydub.svg', 'pydub'),
-                    ('pillow.svg', 'Pillow'),
-                    ('pyotp.svg', 'PyOTP'),
-                    ('twilio.svg', 'Twilio'),
-                ] %}
-                <div class="attr-logo-wall mb-3" role="list" aria-label="Open-source project logos">
-                    {% for file, label in credit_logos %}
-                    <span class="attr-logo-tile" role="listitem" title="{{ label }}">
-                        <img src="{{ url_for('static', filename='img/tech-stack-logos/' ~ file) }}"
-                             alt="{{ label }} logo" loading="lazy" width="48" height="48">
-                    </span>
-                    {% endfor %}
+                <h6 class="text-uppercase text-muted small fw-bold mb-2" style="letter-spacing: 0.06em;">Application Framework</h6>
+                <div class="stack-grid mb-3">
+                    <div class="stack-item">
+                        {{ stack_icon('flask', 'fas fa-flask', '135deg, #000, #444', 'Flask') }}
+                        <div><div class="stack-item-name">Flask</div><div class="stack-item-desc">Web framework, routing &amp; templating {{ lic('BSD-3-Clause') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('werkzeug', 'fas fa-network-wired', '135deg, #000, #666', 'Werkzeug') }}
+                        <div><div class="stack-item-name">Werkzeug</div><div class="stack-item-desc">WSGI request/response plumbing under Flask {{ lic('BSD-3-Clause') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('jinja2', 'fas fa-scroll', '135deg, #B41717, #7a0f0f', 'Jinja2') }}
+                        <div><div class="stack-item-name">Jinja2</div><div class="stack-item-desc">Server-side template engine for every page {{ lic('BSD-3-Clause') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('socketio', 'fas fa-plug', '135deg, #010101, #333', 'Socket.IO') }}
+                        <div><div class="stack-item-name">Flask-SocketIO · python-socketio</div><div class="stack-item-desc">Live WebSocket updates for alerts, radio &amp; GPS {{ lic('MIT') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, var(--vibrant-purple), var(--vibrant-indigo));"><i class="fas fa-shield-halved"></i></span>
+                        <div><div class="stack-item-name">Flask-WTF · Flask-Limiter · Flask-Compress</div><div class="stack-item-desc">CSRF protection, rate limiting &amp; compression {{ lic('BSD / MIT') }}</div></div>
+                    </div>
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th scope="col">Project</th>
-                                <th scope="col" class="d-none d-sm-table-cell">What it does for EAS Station™</th>
-                                <th scope="col">License</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr><td><strong>Flask</strong> · Werkzeug · Jinja2</td><td class="d-none d-sm-table-cell">Web framework, routing, and templating for every page &amp; API</td><td class="text-break-anywhere">BSD-3-Clause</td></tr>
-                            <tr><td><strong>Flask-SocketIO</strong> · python-socketio</td><td class="d-none d-sm-table-cell">Live WebSocket updates for alerts, radio &amp; GPS</td><td class="text-break-anywhere">MIT</td></tr>
-                            <tr><td><strong>Flask-WTF</strong> · Flask-Limiter · Flask-Compress</td><td class="d-none d-sm-table-cell">CSRF protection, rate limiting, response compression</td><td class="text-break-anywhere">BSD / MIT</td></tr>
-                            <tr><td><strong>gunicorn</strong> · gevent · greenlet</td><td class="d-none d-sm-table-cell">Production WSGI server and async workers</td><td class="text-break-anywhere">MIT</td></tr>
-                            <tr><td><strong>SQLAlchemy</strong> · GeoAlchemy2 · Alembic</td><td class="d-none d-sm-table-cell">ORM, PostGIS spatial extensions, schema migrations</td><td class="text-break-anywhere">MIT</td></tr>
-                            <tr><td><strong>psycopg2</strong></td><td class="d-none d-sm-table-cell">PostgreSQL database driver</td><td class="text-break-anywhere">LGPL-3.0</td></tr>
-                            <tr><td><strong>pyshp</strong> · pyproj</td><td class="d-none d-sm-table-cell">Shapefile reading &amp; CRS reprojection for boundaries</td><td class="text-break-anywhere">MIT</td></tr>
-                            <tr><td><strong>requests</strong> · httpx · certifi</td><td class="d-none d-sm-table-cell">HTTP clients &amp; CA bundle for CAP/IPAWS polling</td><td class="text-break-anywhere">Apache-2.0 / BSD / MPL-2.0</td></tr>
-                            <tr><td><strong>lxml</strong> · BeautifulSoup4 · feedparser</td><td class="d-none d-sm-table-cell">XML/HTML/RSS parsing for CAP messages &amp; tickers</td><td class="text-break-anywhere">BSD / MIT</td></tr>
-                            <tr><td><strong>numpy</strong> · scipy · numba</td><td class="d-none d-sm-table-cell">Sample processing &amp; real-time FM/RBDS demodulation</td><td class="text-break-anywhere">BSD</td></tr>
-                            <tr><td><strong>pydub</strong> · audioop-lts · pyttsx3</td><td class="d-none d-sm-table-cell">Audio decoding, resampling &amp; offline text-to-speech</td><td class="text-break-anywhere">MIT / Python-2.0</td></tr>
-                            <tr><td><strong>pyserial</strong> · pynmea2 · Pillow · luma.oled</td><td class="d-none d-sm-table-cell">VFD/OLED displays, GPS HAT &amp; graphics rendering</td><td class="text-break-anywhere">BSD / MIT</td></tr>
-                            <tr><td><strong>gpiozero</strong> · rpi-ws281x · zigpy</td><td class="d-none d-sm-table-cell">GPIO relays, NeoPixel LEDs &amp; Zigbee coordinator</td><td class="text-break-anywhere">BSD / GPL-3.0</td></tr>
-                            <tr><td><strong>cryptography</strong> · pyotp · qrcode</td><td class="d-none d-sm-table-cell">Audit-log signatures &amp; multi-factor authentication</td><td class="text-break-anywhere">Apache-2.0 / MIT</td></tr>
-                            <tr><td><strong>twilio</strong> · pysnmp</td><td class="d-none d-sm-table-cell">SMS alert delivery &amp; SNMP trap notifications</td><td class="text-break-anywhere">MIT / BSD</td></tr>
-                            <tr><td><strong>redis</strong> · hiredis · psutil</td><td class="d-none d-sm-table-cell">State management, pub/sub &amp; system monitoring</td><td class="text-break-anywhere">MIT / BSD</td></tr>
-                            <tr><td><strong>geoip2</strong> · maxminddb</td><td class="d-none d-sm-table-cell">Country-level visitor geolocation (Traffic Analytics)</td><td class="text-break-anywhere">Apache-2.0 / MIT</td></tr>
-                        </tbody>
-                    </table>
+                <h6 class="text-uppercase text-muted small fw-bold mb-2" style="letter-spacing: 0.06em;">Data Layer</h6>
+                <div class="stack-grid mb-3">
+                    <div class="stack-item">
+                        {{ stack_icon('sqlalchemy', 'fas fa-table', '135deg, #CA2C39, #7a1820', 'SQLAlchemy') }}
+                        <div><div class="stack-item-name">SQLAlchemy</div><div class="stack-item-desc">ORM behind every persisted entity {{ lic('MIT') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, var(--vibrant-green), var(--vibrant-teal));"><i class="fas fa-map-location-dot"></i></span>
+                        <div><div class="stack-item-name">GeoAlchemy2</div><div class="stack-item-desc">PostGIS spatial extensions for SQLAlchemy {{ lic('MIT') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('alembic', 'fas fa-code-branch', '135deg, #6BA3BE, #3d6675', 'Alembic') }}
+                        <div><div class="stack-item-name">Alembic</div><div class="stack-item-desc">Schema migrations · runs on every install/update {{ lic('MIT') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #0093D0, #1F3B73);"><i class="fas fa-database"></i></span>
+                        <div><div class="stack-item-name">psycopg2</div><div class="stack-item-desc">PostgreSQL database driver {{ lic('LGPL-3.0') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, var(--vibrant-orange), var(--vibrant-yellow)); color: #1a1a1a;"><i class="fas fa-draw-polygon"></i></span>
+                        <div><div class="stack-item-name">pyshp · pyproj</div><div class="stack-item-desc">Shapefile reading &amp; CRS reprojection for boundaries {{ lic('MIT') }}</div></div>
+                    </div>
+                </div>
+                <h6 class="text-uppercase text-muted small fw-bold mb-2" style="letter-spacing: 0.06em;">Networking &amp; Parsing</h6>
+                <div class="stack-grid mb-3">
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, var(--vibrant-teal), var(--vibrant-blue));"><i class="fas fa-arrow-down-wide-short"></i></span>
+                        <div><div class="stack-item-name">requests · httpx · certifi</div><div class="stack-item-desc">HTTP clients &amp; CA bundle for CAP/IPAWS polling {{ lic('Apache-2.0 / BSD / MPL-2.0') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('lxml', 'fas fa-code', '135deg, #4A7EBB, #284667', 'lxml') }}
+                        <div><div class="stack-item-name">lxml</div><div class="stack-item-desc">High-performance XML parsing for CAP ingestion {{ lic('BSD') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, var(--vibrant-indigo), var(--vibrant-purple));"><i class="fas fa-rss"></i></span>
+                        <div><div class="stack-item-name">BeautifulSoup4 · feedparser</div><div class="stack-item-desc">HTML/RSS parsing for tickers &amp; secondary feeds {{ lic('MIT') }}</div></div>
+                    </div>
+                </div>
+                <h6 class="text-uppercase text-muted small fw-bold mb-2" style="letter-spacing: 0.06em;">Signal &amp; Audio</h6>
+                <div class="stack-grid mb-3">
+                    <div class="stack-item">
+                        {{ stack_icon('numpy', 'fas fa-square-root-variable', '135deg, #4DABCF, #013243', 'NumPy') }}
+                        <div><div class="stack-item-name">NumPy</div><div class="stack-item-desc">Foundation for every IQ buffer, FFT &amp; bit slicer {{ lic('BSD') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('scipy', 'fas fa-wave-square', '135deg, #8CAAE6, #0054a6', 'SciPy') }}
+                        <div><div class="stack-item-name">SciPy</div><div class="stack-item-desc">DSP filter design (deemphasis, channel, notch) {{ lic('BSD') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('numba', 'fas fa-gauge-high', '135deg, #00A3E0, #0b5d80', 'Numba') }}
+                        <div><div class="stack-item-name">Numba</div><div class="stack-item-desc">JIT-compiles the SAME &amp; RBDS demod workers {{ lic('BSD') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('pydub', 'fas fa-music', '135deg, #FF8A65, #a1432a', 'pydub') }}
+                        <div><div class="stack-item-name">pydub · audioop-lts · pyttsx3</div><div class="stack-item-desc">Audio decode, resampling &amp; offline text-to-speech {{ lic('MIT / Python-2.0') }}</div></div>
+                    </div>
+                </div>
+                <h6 class="text-uppercase text-muted small fw-bold mb-2" style="letter-spacing: 0.06em;">Hardware &amp; Displays</h6>
+                <div class="stack-grid mb-3">
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, var(--vibrant-blue), var(--vibrant-indigo));"><i class="fas fa-plug"></i></span>
+                        <div><div class="stack-item-name">pyserial · pynmea2</div><div class="stack-item-desc">Serial I/O for displays &amp; GPS NMEA parsing {{ lic('BSD / MIT') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('pillow', 'fas fa-image', '135deg, #3776AB, #1d4060', 'Pillow') }}
+                        <div><div class="stack-item-name">Pillow · luma.oled</div><div class="stack-item-desc">Glyph/bitmap rendering for VFD &amp; OLED frames {{ lic('BSD / MIT') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, var(--vibrant-red), var(--vibrant-orange));"><i class="fas fa-microchip"></i></span>
+                        <div><div class="stack-item-name">gpiozero · rpi-ws281x · zigpy</div><div class="stack-item-desc">GPIO relays, NeoPixel LEDs &amp; Zigbee coordinator {{ lic('BSD / GPL-3.0') }}</div></div>
+                    </div>
+                </div>
+                <h6 class="text-uppercase text-muted small fw-bold mb-2" style="letter-spacing: 0.06em;">Security &amp; Notifications</h6>
+                <div class="stack-grid mb-3">
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #2c5282, #1a365d);"><i class="fas fa-lock"></i></span>
+                        <div><div class="stack-item-name">cryptography</div><div class="stack-item-desc">Ed25519 signatures backing the tamper-evident audit log {{ lic('Apache-2.0 / BSD') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('pyotp', 'fas fa-key', '135deg, #2E7D32, #14431a', 'PyOTP') }}
+                        <div><div class="stack-item-name">PyOTP · qrcode</div><div class="stack-item-desc">TOTP multi-factor auth &amp; QR enrollment {{ lic('MIT') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('twilio', 'fas fa-comment-sms', '135deg, #F22F46, #8a0e1e', 'Twilio') }}
+                        <div><div class="stack-item-name">Twilio</div><div class="stack-item-desc">SMS alert delivery &amp; compliance notifications {{ lic('MIT') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, var(--vibrant-teal), var(--vibrant-green));"><i class="fas fa-network-wired"></i></span>
+                        <div><div class="stack-item-name">pysnmp</div><div class="stack-item-desc">SNMP trap notifications to NMS platforms {{ lic('BSD') }}</div></div>
+                    </div>
+                </div>
+                <h6 class="text-uppercase text-muted small fw-bold mb-2" style="letter-spacing: 0.06em;">Runtime &amp; Ops</h6>
+                <div class="stack-grid mb-0">
+                    <div class="stack-item">
+                        {{ stack_icon('gunicorn', 'fas fa-server', '135deg, #499848, #2a5a29', 'Gunicorn') }}
+                        <div><div class="stack-item-name">Gunicorn</div><div class="stack-item-desc">Production WSGI server fronting Flask {{ lic('MIT') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('gevent', 'fas fa-bolt-lightning', '135deg, #1F8B4C, #0e4525', 'gevent') }}
+                        <div><div class="stack-item-name">gevent · greenlet</div><div class="stack-item-desc">Async workers for thousands of WebSocket clients {{ lic('MIT') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('redis', 'fas fa-bolt', '135deg, #DC382D, #8B0000', 'Redis') }}
+                        <div><div class="stack-item-name">redis-py · hiredis</div><div class="stack-item-desc">State, pub/sub &amp; rate-limit store client {{ lic('MIT') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, var(--vibrant-blue), var(--vibrant-teal));"><i class="fas fa-gauge"></i></span>
+                        <div><div class="stack-item-name">psutil</div><div class="stack-item-desc">System &amp; process monitoring {{ lic('BSD') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #0a6ebd, #0b3d66);"><i class="fas fa-earth-americas"></i></span>
+                        <div><div class="stack-item-name">geoip2 · maxminddb</div><div class="stack-item-desc">Visitor geolocation for Traffic Analytics {{ lic('Apache-2.0 / MIT') }}</div></div>
+                    </div>
                 </div>
             </section>
 
@@ -181,48 +266,51 @@
                         <p class="about-section-sub">The platform services running underneath the application.</p>
                     </div>
                 </div>
-                {% set infra_logos = [
-                    ('postgresql.svg', 'PostgreSQL'),
-                    ('redis.svg', 'Redis'),
-                    ('nginx.svg', 'nginx'),
-                    ('letsencrypt.svg', "Let's Encrypt / certbot"),
-                    ('icecast.svg', 'Icecast'),
-                    ('ffmpeg.svg', 'FFmpeg'),
-                    ('systemd.svg', 'systemd'),
-                    ('chrony.svg', 'chrony'),
-                    ('gpsd.svg', 'gpsd'),
-                    ('soapysdr.svg', 'SoapySDR'),
-                    ('espeak-ng.svg', 'eSpeak NG'),
-                ] %}
-                <div class="attr-logo-wall mb-3" role="list" aria-label="Infrastructure logos">
-                    {% for file, label in infra_logos %}
-                    <span class="attr-logo-tile" role="listitem" title="{{ label }}">
-                        <img src="{{ url_for('static', filename='img/tech-stack-logos/' ~ file) }}"
-                             alt="{{ label }} logo" loading="lazy" width="48" height="48">
-                    </span>
-                    {% endfor %}
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th scope="col">Component</th>
-                                <th scope="col" class="d-none d-sm-table-cell">Purpose</th>
-                                <th scope="col">License</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr><td><strong>PostgreSQL + PostGIS</strong></td><td class="d-none d-sm-table-cell">Spatial database &amp; geographic alert filtering</td><td class="text-break-anywhere">PostgreSQL / GPL-2.0</td></tr>
-                            <tr><td><strong>Redis</strong></td><td class="d-none d-sm-table-cell">Metrics cache &amp; inter-service messaging</td><td class="text-break-anywhere">BSD-3-Clause</td></tr>
-                            <tr><td><strong>nginx</strong></td><td class="d-none d-sm-table-cell">Reverse proxy &amp; TLS termination</td><td class="text-break-anywhere">BSD-2-Clause</td></tr>
-                            <tr><td><strong>certbot</strong></td><td class="d-none d-sm-table-cell">Automated Let's Encrypt certificate management</td><td class="text-break-anywhere">Apache-2.0</td></tr>
-                            <tr><td><strong>Icecast</strong> · ffmpeg</td><td class="d-none d-sm-table-cell">Audio streaming server &amp; transcoding</td><td class="text-break-anywhere">GPL-2.0 / LGPL-2.1</td></tr>
-                            <tr><td><strong>systemd</strong></td><td class="d-none d-sm-table-cell">Native service orchestration</td><td class="text-break-anywhere">LGPL-2.1</td></tr>
-                            <tr><td><strong>chrony</strong> · gpsd</td><td class="d-none d-sm-table-cell">Stratum-1 timekeeping &amp; GPS daemon</td><td class="text-break-anywhere">GPL-2.0 / BSD-3-Clause</td></tr>
-                            <tr><td><strong>SoapySDR</strong></td><td class="d-none d-sm-table-cell">SDR receiver abstraction (system binding)</td><td class="text-break-anywhere">Boost-1.0</td></tr>
-                            <tr><td><strong>espeak-ng</strong></td><td class="d-none d-sm-table-cell">Offline speech backend for pyttsx3</td><td class="text-break-anywhere">GPL-3.0</td></tr>
-                        </tbody>
-                    </table>
+                <div class="stack-grid mb-0">
+                    <div class="stack-item">
+                        {{ stack_icon('postgresql', 'fas fa-database', '135deg, #0093D0, #1F3B73', 'PostgreSQL') }}
+                        <div><div class="stack-item-name">PostgreSQL + PostGIS</div><div class="stack-item-desc">Spatial database &amp; geographic alert filtering {{ lic('PostgreSQL / GPL-2.0') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('redis', 'fas fa-bolt', '135deg, #DC382D, #8B0000', 'Redis') }}
+                        <div><div class="stack-item-name">Redis</div><div class="stack-item-desc">Metrics cache &amp; inter-service messaging {{ lic('BSD-3-Clause') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('nginx', 'fas fa-shield-halved', '135deg, #009639, #00521f', 'Nginx') }}
+                        <div><div class="stack-item-name">nginx</div><div class="stack-item-desc">Reverse proxy &amp; TLS termination {{ lic('BSD-2-Clause') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('letsencrypt', 'fas fa-lock', '135deg, #003A70, #001f3f', "Let's Encrypt") }}
+                        <div><div class="stack-item-name">certbot · Let's Encrypt</div><div class="stack-item-desc">Automated certificate issuance &amp; renewal {{ lic('Apache-2.0') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('icecast', 'fas fa-tower-broadcast', '135deg, #1F3B73, #0c1d3d', 'Icecast') }}
+                        <div><div class="stack-item-name">Icecast</div><div class="stack-item-desc">Audio streaming server for remote monitoring {{ lic('GPL-2.0') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('ffmpeg', 'fas fa-film', '135deg, #007808, #003c04', 'FFmpeg') }}
+                        <div><div class="stack-item-name">FFmpeg</div><div class="stack-item-desc">Codec backend for stream transcoding/decode {{ lic('LGPL-2.1 / GPL-2.0') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('systemd', 'fas fa-cogs', '135deg, #333, #111', 'systemd') }}
+                        <div><div class="stack-item-name">systemd</div><div class="stack-item-desc">Native service orchestration {{ lic('LGPL-2.1') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('chrony', 'fas fa-clock', '135deg, #1F4E79, #0c2740', 'chrony') }}
+                        <div><div class="stack-item-name">chrony</div><div class="stack-item-desc">Stratum-1 NTP disciplined by GPS + PPS {{ lic('GPL-2.0') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('gpsd', 'fas fa-satellite', '135deg, #2E86AB, #134055', 'gpsd') }}
+                        <div><div class="stack-item-name">gpsd</div><div class="stack-item-desc">Multiplexes the GPS receiver for chrony &amp; dashboards {{ lic('BSD-3-Clause') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('soapysdr', 'fas fa-satellite-dish', '135deg, #FF6600, #a13d00', 'SoapySDR') }}
+                        <div><div class="stack-item-name">SoapySDR</div><div class="stack-item-desc">SDR receiver abstraction (system binding) {{ lic('Boost-1.0') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('espeak-ng', 'fas fa-comment', '135deg, #5C2D91, #2c1547', 'eSpeak NG') }}
+                        <div><div class="stack-item-name">eSpeak NG</div><div class="stack-item-desc">Offline speech backend for pyttsx3 {{ lic('GPL-3.0') }}</div></div>
+                    </div>
                 </div>
             </section>
 
@@ -235,24 +323,39 @@
                         <p class="about-section-sub">Self-hosted UI frameworks, icons &amp; brand marks.</p>
                     </div>
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th scope="col">Asset</th>
-                                <th scope="col" class="d-none d-sm-table-cell">Use</th>
-                                <th scope="col">License</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr><td><strong>Bootstrap 5</strong></td><td class="d-none d-sm-table-cell">Mobile-first responsive UI framework</td><td class="text-break-anywhere">MIT</td></tr>
-                            <tr><td><strong>Font Awesome (Free)</strong></td><td class="d-none d-sm-table-cell">UI iconography</td><td class="text-break-anywhere">CC BY 4.0 / OFL / MIT</td></tr>
-                            <tr><td><strong>Chart.js</strong></td><td class="d-none d-sm-table-cell">Analytics charts &amp; sparklines</td><td class="text-break-anywhere">MIT</td></tr>
-                            <tr><td><strong>Socket.IO client</strong></td><td class="d-none d-sm-table-cell">Browser WebSocket client</td><td class="text-break-anywhere">MIT</td></tr>
-                            <tr><td><strong>simple-icons</strong></td><td class="d-none d-sm-table-cell">Brand marks for the tech-stack badges</td><td class="text-break-anywhere">CC0-1.0</td></tr>
-                            <tr><td><strong>Flag assets</strong></td><td class="d-none d-sm-table-cell">Country flags for Traffic Analytics</td><td class="text-break-anywhere">Public domain / CC0</td></tr>
-                        </tbody>
-                    </table>
+                <div class="stack-grid mb-0">
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #7952B3, #563d7c);"><i class="fab fa-bootstrap"></i></span>
+                        <div><div class="stack-item-name">Bootstrap 5</div><div class="stack-item-desc">Mobile-first responsive UI framework {{ lic('MIT') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #528DD7, #2b5b9e);"><i class="fab fa-font-awesome"></i></span>
+                        <div><div class="stack-item-name">Font Awesome (Free)</div><div class="stack-item-desc">UI iconography throughout the interface {{ lic('CC BY 4.0 / OFL / MIT') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('chartjs', 'fas fa-chart-line', '135deg, #FF6384, #a11e3a', 'Chart.js') }}
+                        <div><div class="stack-item-name">Chart.js</div><div class="stack-item-desc">Analytics charts &amp; sparklines {{ lic('MIT') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('leaflet', 'fas fa-map', '135deg, #199900, #0d5200', 'Leaflet') }}
+                        <div><div class="stack-item-name">Leaflet</div><div class="stack-item-desc">Interactive maps for alert polygons &amp; coverage {{ lic('BSD-2-Clause') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('socketio', 'fas fa-plug', '135deg, #010101, #333', 'Socket.IO') }}
+                        <div><div class="stack-item-name">Socket.IO client</div><div class="stack-item-desc">Browser WebSocket client {{ lic('MIT') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        {{ stack_icon('mermaid', 'fas fa-diagram-project', '135deg, #FF3670, #9c1540', 'Mermaid') }}
+                        <div><div class="stack-item-name">Mermaid</div><div class="stack-item-desc">Diagrams rendered in docs &amp; admin pages {{ lic('MIT') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, var(--vibrant-purple), var(--vibrant-pink));"><i class="fas fa-shapes"></i></span>
+                        <div><div class="stack-item-name">simple-icons</div><div class="stack-item-desc">Brand marks for the tech-stack badges {{ lic('CC0-1.0') }}</div></div>
+                    </div>
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, var(--vibrant-blue), var(--vibrant-indigo));"><i class="fas fa-flag"></i></span>
+                        <div><div class="stack-item-name">Flag assets</div><div class="stack-item-desc">Country flags for Traffic Analytics {{ lic('Public domain / CC0') }}</div></div>
+                    </div>
                 </div>
             </section>
 
