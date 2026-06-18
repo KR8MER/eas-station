@@ -1,8 +1,8 @@
-"""Add fail2ban_settings table for UI-managed fail2ban configuration.
+"""Add fail2ban_settings table for UI-managed firewall enforcement.
 
-Stores the eas-station-malicious / eas-station-auth / sshd jail tuning that
-the Security Center renders to /etc/fail2ban/jail.local and applies on the
-host, so fail2ban can be configured entirely from the web UI.
+Stores whether app-level bans (ip_filters) are mirrored to the host firewall
+via a fail2ban actuator jail, plus the optional sshd-jail tuning. Rendered to
+/etc/fail2ban/jail.local and applied from the Security Center UI.
 
 Revision ID: 20260618_fail2ban_settings
 Revises: 20260616_traffic_privacy_anomaly
@@ -31,12 +31,6 @@ def upgrade() -> None:
             "fail2ban_settings",
             sa.Column("id", sa.Integer(), primary_key=True),
             sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.false()),
-            sa.Column("maxretry", sa.Integer(), nullable=False, server_default="1"),
-            sa.Column("bantime", sa.Integer(), nullable=False, server_default="3600"),
-            sa.Column("findtime", sa.Integer(), nullable=False, server_default="600"),
-            sa.Column("protect_auth", sa.Boolean(), nullable=False, server_default=sa.true()),
-            sa.Column("auth_maxretry", sa.Integer(), nullable=False, server_default="5"),
-            sa.Column("auth_bantime", sa.Integer(), nullable=False, server_default="1800"),
             sa.Column("protect_ssh", sa.Boolean(), nullable=False, server_default=sa.false()),
             sa.Column("ssh_maxretry", sa.Integer(), nullable=False, server_default="5"),
             sa.Column("ssh_bantime", sa.Integer(), nullable=False, server_default="3600"),

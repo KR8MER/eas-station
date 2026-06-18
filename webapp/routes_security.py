@@ -855,7 +855,19 @@ def toggle_ip_filter(filter_id):
     filter_entry.is_active = not filter_entry.is_active
     db.session.add(filter_entry)
     db.session.commit()
-    
+
+    # Keep the host firewall in sync for blocklist entries (no-op unless
+    # fail2ban enforcement is enabled).
+    if filter_entry.filter_type == IPFilterType.BLOCKLIST.value:
+        try:
+            from app_core.auth.firewall import firewall_ban, firewall_unban
+            if filter_entry.is_active:
+                firewall_ban(filter_entry.ip_address)
+            else:
+                firewall_unban(filter_entry.ip_address)
+        except Exception:
+            pass
+
     # Log the action
     AuditLogger.log(
         action=AuditAction.CONFIG_UPDATED,
@@ -866,7 +878,7 @@ def toggle_ip_filter(filter_id):
             'is_active': filter_entry.is_active
         }
     )
-    
+
     return jsonify(filter_entry.to_dict()), 200
 
 

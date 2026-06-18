@@ -775,33 +775,50 @@ Comprehensive audit trail of all security events including:
 
 ## fail2ban Integration
 
+### One ban list, two enforcement layers
+
+EAS Station keeps a **single** ban list in the database — the `ip_filters` table,
+managed on **Security Center → Banned IPs**. A global `before_request` gate
+(`app.py`) checks every request against it, and the application **auto-bans**
+malicious / brute-force / flooding IPs into that same table
+(`app_core/auth/ip_filter.py`).
+
+fail2ban is an **optional firewall actuator** for that one list — it is *not* a
+second ban list. When firewall enforcement is enabled, every application
+ban/unban (manual or automatic) is mirrored by `app_core/auth/firewall.py` into a
+dedicated `eas-station` fail2ban jail (`bantime = -1`), so the attacker is also
+dropped at the host firewall before traffic reaches the web process. fail2ban
+does **not** independently scan the web log here; the application performs
+detection, so there is nothing to reconcile between two lists.
+
 ### Web UI (recommended)
 
-fail2ban is fully managed from **Security Center → fail2ban** — no SSH or manual
-file editing required:
+Managed entirely from **Security Center → fail2ban** — no SSH or manual file
+editing required:
 
-1. Navigate to **Security Center** and open the **fail2ban** tab.
-2. Click **Install fail2ban** if it is not already installed (the installer also
-   adds it to `install.sh`'s base packages on fresh deployments).
-3. Toggle **Enable EAS Station fail2ban jails** and tune the max-retry / ban-time
-   / find-time values for the malicious-login jail. Optionally enable the
-   `eas-station-auth` jail (repeated failed / rate-limited logins) and the host
-   `sshd` jail.
-4. Click **Save & Apply Configuration**. EAS Station writes
-   `/etc/fail2ban/jail.local` and the matching filter files, then restarts the
-   service.
-5. The **Currently Banned** list shows host-level bans with one-click **Unban**,
-   and you can manually ban an IP from the same panel.
+1. Open the **fail2ban** tab and click **Install fail2ban** if needed (it is also
+   in `install.sh`'s base packages on fresh deployments).
+2. Toggle **Mirror application bans to the host firewall** and click
+   **Save & Apply**. EAS Station writes `/etc/fail2ban/jail.local`, restarts the
+   service, and resyncs the current ban list into the firewall.
+3. Continue to add/remove/review web bans on the **Banned IPs** tab — they are
+   mirrored automatically. Use **Resync bans** if the firewall and database ever
+   drift (e.g. after a manual fail2ban restart).
+4. Optionally enable **Protect host SSH daemon** (`sshd` jail). This is a separate
+   concern from the web ban list — it bans SSH brute-force the app cannot see, and
+   those bans are shown/unbanned on the fail2ban tab, not the Banned IPs tab.
 
-The settings are persisted in the `fail2ban_settings` database table, so they
-survive upgrades. The UI calls the endpoints in `webapp/admin/fail2ban.py`,
-which run privileged commands via the sudoers entries in
-`config/sudoers-eas-station`.
+Settings persist in the `fail2ban_settings` table (survives upgrades). The UI
+calls `webapp/admin/fail2ban.py`, which runs privileged commands via the sudoers
+entries in `config/sudoers-eas-station`. Because the application-level gate always
+applies, web bans remain enforced even if fail2ban is stopped — the firewall layer
+is purely additive defence-in-depth.
 
 ### Manual configuration (advanced / reference)
 
-The UI generates exactly the configuration below. You only need this if you are
-configuring fail2ban by hand.
+You normally never need this. For reference, the legacy log-scanning jail/filter
+approach (if you prefer fail2ban to parse the security log directly instead of
+being driven by the application) is:
 
 1. **Install fail2ban**:
 ```bash

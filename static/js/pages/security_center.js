@@ -4,7 +4,7 @@
  * Drives three of the four Security Center tabs:
  *   - Malicious Logins : malicious attempt stats + table
  *   - Banned IPs       : allowlist/blocklist (IP filter) management
- *   - fail2ban         : install/configure/apply host-level jails + unban
+ *   - fail2ban         : firewall enforcement of the app ban list + SSH jail
  *
  * The Traffic tab is the full traffic dashboard, rendered natively from
  * templates/security/_traffic_content.html with its own scripts loaded just
@@ -325,7 +325,7 @@
     }
 
     /* -------------------------------------------------------------- */
-    /* fail2ban configuration                                         */
+    /* fail2ban — host-firewall enforcement of the app ban list       */
     /* -------------------------------------------------------------- */
 
     const F2B_API = '/admin/fail2ban';
@@ -343,12 +343,6 @@
     function applySettingsToForm(s) {
         if (!s) return;
         setChecked('f2b-enabled', s.enabled);
-        setVal('f2b-maxretry', s.maxretry);
-        setVal('f2b-bantime', s.bantime);
-        setVal('f2b-findtime', s.findtime);
-        setChecked('f2b-protect-auth', s.protect_auth);
-        setVal('f2b-auth-maxretry', s.auth_maxretry);
-        setVal('f2b-auth-bantime', s.auth_bantime);
         setChecked('f2b-protect-ssh', s.protect_ssh);
         setVal('f2b-ssh-maxretry', s.ssh_maxretry);
         setVal('f2b-ssh-bantime', s.ssh_bantime);
@@ -365,40 +359,39 @@
         let html = '<div class="d-flex gap-3 flex-wrap align-items-center">';
         html += `<div>Installed: ${badge(data.installed, 'Yes', 'No')}</div>`;
         html += `<div>Service: ${badge(data.active, 'Running', 'Stopped')}</div>`;
-        if (data.loaded_jails && data.loaded_jails.length) {
-            html += `<div>Active jails: <code class="text-break-anywhere">${esc(data.loaded_jails.join(', '))}</code></div>`;
-        }
+        html += `<div>Firewall enforcement: ${badge(data.enforcement_enabled, 'On', 'Off')}</div>`;
         html += '</div>';
-        if (!data.installed) {
+        if (data.installed) {
+            html += '<p class="text-muted small mb-0 mt-2">' +
+                `Application ban list: <strong>${data.app_ban_count}</strong> active. ` +
+                `Mirrored to host firewall: <strong>${data.firewall_ban_count}</strong>.</p>`;
+        } else {
             html += '<p class="text-muted small mb-0 mt-2">fail2ban is not installed on this host. ' +
-                'Click <strong>Install fail2ban</strong>, then configure the jails below.</p>';
+                'Click <strong>Install fail2ban</strong>, then enable firewall enforcement below.</p>';
         }
         statusEl.innerHTML = html;
 
         if (installBtn) installBtn.style.display = data.installed ? 'none' : '';
 
-        // Render banned IPs
-        const listEl = document.getElementById('f2b-banned-list');
-        if (listEl) {
-            const banned = data.banned || {};
-            const rows = [];
-            Object.keys(banned).forEach(jail => {
-                (banned[jail] || []).forEach(ip => rows.push({ jail, ip }));
-            });
-            if (!rows.length) {
-                listEl.innerHTML = '<p class="text-muted mb-0">No host-level bans, or fail2ban is not active.</p>';
+        // SSH jail bans (separate concern — host SSH, not the web ban list).
+        const sshCard = document.getElementById('f2b-ssh-card');
+        const sshList = document.getElementById('f2b-ssh-banned-list');
+        if (sshCard && sshList) {
+            const show = !!(data.settings && data.settings.protect_ssh) || data.ssh_jail_loaded;
+            sshCard.style.display = show ? '' : 'none';
+            const banned = data.ssh_banned || [];
+            if (!banned.length) {
+                sshList.innerHTML = '<p class="text-muted mb-0">No SSH bans.</p>';
             } else {
                 let t = '<div class="table-responsive"><table class="table eas-table mb-0"><thead><tr>' +
-                    '<th>IP Address</th><th>Jail</th><th class="text-end">Action</th></tr></thead><tbody>';
-                rows.forEach(r => {
-                    t += `<tr><td class="text-break-anywhere">${esc(r.ip)}</td>` +
-                        `<td><code class="text-break-anywhere">${esc(r.jail)}</code></td>` +
-                        `<td class="text-end"><button class="btn btn-sm btn-outline-success" ` +
-                        `onclick="SC.unbanIP('${esc(r.ip)}','${esc(r.jail)}')">` +
-                        '<i class="bi bi-unlock"></i> Unban</button></td></tr>';
+                    '<th>IP Address</th><th class="text-end">Action</th></tr></thead><tbody>';
+                banned.forEach(ip => {
+                    t += `<tr><td class="text-break-anywhere">${esc(ip)}</td>` +
+                        '<td class="text-end"><button class="btn btn-sm btn-outline-success" ' +
+                        `onclick="SC.sshUnban('${esc(ip)}')"><i class="bi bi-unlock"></i> Unban</button></td></tr>`;
                 });
                 t += '</tbody></table></div>';
-                listEl.innerHTML = t;
+                sshList.innerHTML = t;
             }
         }
     }
@@ -446,6 +439,20 @@
             .catch(error => notify('Error: ' + error, true));
     }
 
+    function resyncFail2ban() {
+        fetch(`${F2B_API}/resync`, { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    notify(data.message || 'Resynced.');
+                    loadFail2banStatus();
+                } else {
+                    notify(data.error || 'Resync failed', true);
+                }
+            })
+            .catch(error => notify('Error resyncing: ' + error, true));
+    }
+
     function numVal(id) {
         const el = document.getElementById(id);
         return el ? parseInt(el.value, 10) : null;
@@ -454,12 +461,6 @@
     function saveFail2banConfig() {
         const payload = {
             enabled: document.getElementById('f2b-enabled').checked,
-            maxretry: numVal('f2b-maxretry'),
-            bantime: numVal('f2b-bantime'),
-            findtime: numVal('f2b-findtime'),
-            protect_auth: document.getElementById('f2b-protect-auth').checked,
-            auth_maxretry: numVal('f2b-auth-maxretry'),
-            auth_bantime: numVal('f2b-auth-bantime'),
             protect_ssh: document.getElementById('f2b-protect-ssh').checked,
             ssh_maxretry: numVal('f2b-ssh-maxretry'),
             ssh_bantime: numVal('f2b-ssh-bantime'),
@@ -481,11 +482,11 @@
             .catch(error => notify('Error saving configuration: ' + error, true));
     }
 
-    function unbanIP(ip, jail) {
-        fetch(`${F2B_API}/unban`, {
+    function sshUnban(ip) {
+        fetch(`${F2B_API}/ssh-unban`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ip_address: ip, jail: jail }),
+            body: JSON.stringify({ ip_address: ip }),
         })
             .then(r => r.json())
             .then(data => {
@@ -497,31 +498,6 @@
                 }
             })
             .catch(error => notify('Error unbanning IP: ' + error, true));
-    }
-
-    function manualBan() {
-        const ipEl = document.getElementById('f2b-ban-ip');
-        const ip = ipEl ? ipEl.value.trim() : '';
-        if (!ip) {
-            notify('Enter an IP address to ban.', true);
-            return;
-        }
-        fetch(`${F2B_API}/ban`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ip_address: ip }),
-        })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    notify(data.message || `Banned ${ip}.`);
-                    if (ipEl) ipEl.value = '';
-                    loadFail2banStatus();
-                } else {
-                    notify(data.error || 'Ban failed', true);
-                }
-            })
-            .catch(error => notify('Error banning IP: ' + error, true));
     }
 
     // Export only the handlers referenced by inline onclick=.
@@ -538,8 +514,8 @@
         loadFail2banStatus: loadFail2banStatus,
         installFail2ban: installFail2ban,
         serviceAction: serviceAction,
+        resyncFail2ban: resyncFail2ban,
         saveFail2banConfig: saveFail2banConfig,
-        unbanIP: unbanIP,
-        manualBan: manualBan,
+        sshUnban: sshUnban,
     };
 })();

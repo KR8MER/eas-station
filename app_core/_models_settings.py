@@ -480,14 +480,21 @@ class CertbotSettings(db.Model):
 
 
 class Fail2banSettings(db.Model):
-    """fail2ban jail configuration stored in the database.
+    """fail2ban firewall-enforcement configuration stored in the database.
 
-    EAS Station writes malicious / failed-login events to
-    ``/var/log/eas-station/security.log`` in a fail2ban-parseable format.
-    These settings drive the ``eas-station-malicious`` (and optional
-    ``eas-station-auth`` + ``sshd``) jails that are rendered to
-    ``/etc/fail2ban/jail.local`` and applied from the Security Center UI,
-    so an operator never needs CLI access to configure host-level banning.
+    EAS Station's application-level ban list (the ``ip_filters`` table, managed
+    on the Security Center "Banned IPs" tab) is the single source of truth for
+    who is banned. fail2ban is used purely as an optional *firewall actuator*:
+    when enabled, every app-level ban/unban is mirrored to a dedicated
+    ``eas-station`` fail2ban jail (``bantime = -1``) so the attacker is also
+    dropped at the host firewall, before traffic ever reaches the web process.
+    fail2ban does NOT independently scan the web log here — the application
+    already detects malicious / brute-force / flood activity — so there is only
+    one ban list to maintain.
+
+    The optional ``sshd`` jail is the one exception: it protects the host SSH
+    daemon (which the application cannot see) and is therefore managed entirely
+    by fail2ban, separate from the web ban list.
 
     All settings are stored in a single row (id=1).
     """
@@ -495,20 +502,11 @@ class Fail2banSettings(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
 
-    # Master toggle for the EAS Station malicious-login jail
+    # Mirror application-level bans to the host firewall via fail2ban
     enabled = db.Column(db.Boolean, nullable=False, default=False)
 
-    # eas-station-malicious jail tuning (immediate ban on a single hit by default)
-    maxretry = db.Column(db.Integer, nullable=False, default=1)
-    bantime = db.Column(db.Integer, nullable=False, default=3600)   # seconds
-    findtime = db.Column(db.Integer, nullable=False, default=600)   # seconds
-
-    # Optional eas-station-auth jail for repeated failed/rate-limited logins
-    protect_auth = db.Column(db.Boolean, nullable=False, default=True)
-    auth_maxretry = db.Column(db.Integer, nullable=False, default=5)
-    auth_bantime = db.Column(db.Integer, nullable=False, default=1800)  # seconds
-
-    # Optional sshd jail to protect the host's SSH daemon as well
+    # Optional sshd jail to protect the host's SSH daemon (separate concern —
+    # SSH bans are not part of the web application ban list)
     protect_ssh = db.Column(db.Boolean, nullable=False, default=False)
     ssh_maxretry = db.Column(db.Integer, nullable=False, default=5)
     ssh_bantime = db.Column(db.Integer, nullable=False, default=3600)   # seconds
@@ -520,12 +518,6 @@ class Fail2banSettings(db.Model):
         """Convert model to dictionary."""
         return {
             "enabled": self.enabled,
-            "maxretry": self.maxretry,
-            "bantime": self.bantime,
-            "findtime": self.findtime,
-            "protect_auth": self.protect_auth,
-            "auth_maxretry": self.auth_maxretry,
-            "auth_bantime": self.auth_bantime,
             "protect_ssh": self.protect_ssh,
             "ssh_maxretry": self.ssh_maxretry,
             "ssh_bantime": self.ssh_bantime,

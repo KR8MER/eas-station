@@ -165,8 +165,7 @@ eas-station ALL=(ALL) NOPASSWD: /usr/bin/fail2ban-client set * banip *
 
 # Write generated jail/filter config (web process cannot write /etc/fail2ban directly)
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/fail2ban/jail.local
-eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/fail2ban/filter.d/eas-station-malicious.conf
-eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/fail2ban/filter.d/eas-station-auth.conf
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/fail2ban/filter.d/eas-station-empty.conf
 
 # fail2ban installation via apt-get (non-interactive, suppresses debconf prompts)
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get install -y fail2ban
