@@ -376,10 +376,10 @@
                 <div class="admin-accent-card accent-danger mb-3" id="f2b-ssh-card" style="display: none;">
                     <h4 class="mb-2"><i class="bi bi-terminal"></i> SSH Jail Bans
                         <small class="text-muted">(also added to the global ban list)</small></h4>
-                    <p class="text-muted small mb-2">This lists only what fail2ban's <code>sshd</code> jail is
-                        currently holding — those bans <strong>expire after the SSH ban time</strong> above. Each
-                        offender is also copied into the <strong>Global Ban List</strong> <em>permanently</em>, so
-                        that list can show more entries than this one. That's expected, not a mismatch.</p>
+                    <p class="text-muted small mb-2">This lists what fail2ban's <code>sshd</code> jail is
+                        currently holding. Each offender is also copied into the <strong>Global Ban List</strong>
+                        with a matching expiration (the <strong>SSH ban time</strong> set above), so both expire
+                        together rather than leaving a permanent entry behind.</p>
                     <div id="f2b-ssh-banned-list">
                         <p class="text-muted mb-0">No SSH bans.</p>
                     </div>

@@ -8,6 +8,18 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.116.1] - 2026-06-18 - Carry fail2ban SSH ban expiration into the Global Ban List
+
+### Fixed
+- **SSH bans imported from fail2ban became permanent instead of inheriting the
+  jail's expiration.** `_import_ssh_bans()` called `add_to_blocklist` with no
+  expiry, so an offender that fail2ban would unban after `ssh_bantime` stayed in
+  the Global Ban List forever. The import now sets `expires_at` to the SSH ban
+  time (from import, which tracks the jail's own expiry), so the Global Ban List
+  entry and the sshd jail expire together (`webapp/admin/fail2ban.py`). Updated
+  the SSH Jail Bans card copy accordingly. Existing permanent SSH entries from
+  before this fix are unchanged — remove them from the Global Ban List if needed.
+
 ## [2.116.0] - 2026-06-18 - Unified Global Ban List with enforcement layers
 
 ### Changed
