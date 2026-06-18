@@ -805,9 +805,13 @@ editing required:
 3. Continue to add/remove/review web bans on the **Banned IPs** tab — they are
    mirrored automatically. Use **Resync bans** if the firewall and database ever
    drift (e.g. after a manual fail2ban restart).
-4. Optionally enable **Protect host SSH daemon** (`sshd` jail). This is a separate
-   concern from the web ban list — it bans SSH brute-force the app cannot see, and
-   those bans are shown/unbanned on the fail2ban tab, not the Banned IPs tab.
+4. Optionally enable **Protect host SSH daemon** (`sshd` jail). fail2ban bans SSH
+   brute-force attempts the app cannot see (they hit port 22 directly). Because an
+   IP hammering SSH is a bad actor everywhere, these offenders are **automatically
+   imported into the unified ban list** (so they're blocked at the web layer and,
+   when enforcement is on, at all ports on the host firewall). They're also listed
+   on the fail2ban tab; unbanning there clears them from the global list too. The
+   import is one-way and idempotent, running on tab refresh and on **Resync bans**.
 
 Settings persist in the `fail2ban_settings` table (survives upgrades). The UI
 calls `webapp/admin/fail2ban.py`, which runs privileged commands via the sudoers
@@ -906,6 +910,10 @@ sudo fail2ban-client set eas-station-malicious unbanip 192.168.1.1
 - Toggle active/inactive
 - Delete filters
 - View reason and description
+- **Geolocation**: each entry shows a country flag, city, region and country
+  (IPv4 and IPv6) when a MaxMind GeoLite2 database is configured under Settings →
+  Traffic Analytics. Resolution is best-effort and offline — no database means a
+  blank location and no network calls; CIDR ranges and local addresses show none.
 
 **Example Allowlist Entries**:
 - `192.168.1.0/24` - Internal network

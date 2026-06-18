@@ -180,6 +180,27 @@
             });
     }
 
+    // Local flag SVG for an ISO 3166-1 alpha-2 code (bundled — no CDN calls).
+    function flagImg(cc, title) {
+        if (!cc || !/^[A-Za-z]{2}$/.test(cc)) return '';
+        const c = cc.toLowerCase();
+        return `<img src="/static/vendor/flags/${c}.svg" alt="${esc(cc.toUpperCase())}" ` +
+            `title="${esc(title || cc.toUpperCase())}" class="ti-flag me-1" loading="lazy">`;
+    }
+
+    // "🏳 City, Region, Country" cell built from the geo block the API attaches.
+    function locationCell(filter) {
+        const loc = filter.location || {};
+        const parts = [];
+        if (loc.city) parts.push(loc.city);
+        if (loc.region) parts.push(loc.region);
+        if (loc.country) parts.push(loc.country);
+        const text = parts.join(', ');
+        const flag = flagImg(loc.country_code, loc.country);
+        if (!flag && !text) return '<span class="text-muted">—</span>';
+        return `${flag}<span class="text-break-anywhere">${esc(text || loc.country_code || '')}</span>`;
+    }
+
     function renderFilterRows(filters, isBlock) {
         return filters.map(filter => {
             const expires = filter.expires_at ? new Date(filter.expires_at).toLocaleString() : 'Never';
@@ -191,6 +212,7 @@
                 <tr>
                     <td data-label="IP/Range" class="admin-mono-badge">${esc(filter.ip_address)}</td>
                     ${reasonCell}
+                    <td data-label="Location">${locationCell(filter)}</td>
                     <td data-label="Description">${esc(filter.description || '-')}</td>
                     ${expiresCell}
                     <td data-label="Created">${esc(new Date(filter.created_at).toLocaleString())}</td>
@@ -220,13 +242,13 @@
         if (blocklist.length > 0) {
             html += '<h6 class="text-danger"><i class="bi bi-ban"></i> Blocklist (banned)</h6>';
             html += '<div class="table-responsive mb-4"><table class="table eas-table table-sm">';
-            html += '<thead><tr><th>IP/Range</th><th>Reason</th><th>Description</th><th>Expires</th><th>Created</th><th>Status</th><th>Actions</th></tr></thead>';
+            html += '<thead><tr><th>IP/Range</th><th>Reason</th><th>Location</th><th>Description</th><th>Expires</th><th>Created</th><th>Status</th><th>Actions</th></tr></thead>';
             html += `<tbody>${renderFilterRows(blocklist, true)}</tbody></table></div>`;
         }
         if (allowlist.length > 0) {
             html += '<h6 class="text-success"><i class="bi bi-check-circle"></i> Allowlist</h6>';
             html += '<div class="table-responsive"><table class="table eas-table table-sm">';
-            html += '<thead><tr><th>IP/Range</th><th>Description</th><th>Created</th><th>Status</th><th>Actions</th></tr></thead>';
+            html += '<thead><tr><th>IP/Range</th><th>Location</th><th>Description</th><th>Created</th><th>Status</th><th>Actions</th></tr></thead>';
             html += `<tbody>${renderFilterRows(allowlist, false)}</tbody></table></div>`;
         }
         container.innerHTML = html;
