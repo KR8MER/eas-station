@@ -1546,6 +1546,7 @@ def register(app: Flask, logger) -> None:
         log_type: str,
         limit: int,
         service_filter: str = None,
+        action_filter: str = None,
     ) -> Tuple[str, List[Dict[str, Any]], Optional[Dict[str, Any]]]:
         """Load the requested log data and metadata for rendering or export.
 
@@ -1554,6 +1555,11 @@ def register(app: Flask, logger) -> None:
         the FCC report's column labels, summary lines, and window — the
         template uses it to render a real columnar layout instead of cramming
         every column into the generic ``message`` cell.
+
+        ``action_filter`` applies only to the ``audit`` log type and restricts
+        the query to a single ``AuditAction`` value (e.g. ``config.updated``)
+        at the database level so the newest matching rows aren't lost behind
+        the ``limit`` window.
         """
 
         log_type_name = "System Logs"
@@ -2147,8 +2153,13 @@ def register(app: Flask, logger) -> None:
         elif log_type == 'audit':
             log_type_name = "Audit Log"
             from app_core.auth.audit import AuditLog
+            audit_query = AuditLog.query
+            # Optional action filter (e.g. config.updated) applied at the DB
+            # level so the newest matching rows survive the limit window.
+            if action_filter:
+                audit_query = audit_query.filter(AuditLog.action == action_filter)
             logs_result = (
-                AuditLog.query
+                audit_query
                 .order_by(AuditLog.timestamp.desc())
                 .limit(limit)
                 .all()
@@ -2367,9 +2378,10 @@ def register(app: Flask, logger) -> None:
             date_to = request.args.get('date_to', '').strip()
             service_filter = request.args.get('service', '').strip()
             alert_filter = request.args.get('alert', '').strip()
+            action_filter = request.args.get('action', '').strip()
 
             log_type_name, logs_data, report_meta = _load_logs_data(
-                log_type, limit, service_filter
+                log_type, limit, service_filter, action_filter
             )
 
             # Apply filters
@@ -2457,6 +2469,7 @@ def register(app: Flask, logger) -> None:
                 date_to=date_to,
                 service_filter=service_filter,
                 alert_filter=alert_filter,
+                action_filter=action_filter,
                 available_services=get_all_log_services(),
                 compliance_summary=compliance_summary,
                 report=report_meta,
@@ -2480,8 +2493,11 @@ def register(app: Flask, logger) -> None:
 
             log_type = request.args.get('type', 'system')
             limit = min(int(request.args.get('limit', 100)), 500)
+            action_filter = request.args.get('action', '').strip()
 
-            log_type_name, logs_data, _report_meta = _load_logs_data(log_type, limit)
+            log_type_name, logs_data, _report_meta = _load_logs_data(
+                log_type, limit, action_filter=action_filter
+            )
 
             # Create CSV in memory
             output = io.StringIO()
@@ -2526,10 +2542,13 @@ def register(app: Flask, logger) -> None:
         try:
             log_type = request.args.get('type', 'system')
             limit = min(int(request.args.get('limit', 100)), 500)
+            action_filter = request.args.get('action', '').strip()
 
             from datetime import datetime
 
-            log_type_name, logs_data, _report_meta = _load_logs_data(log_type, limit)
+            log_type_name, logs_data, _report_meta = _load_logs_data(
+                log_type, limit, action_filter=action_filter
+            )
 
             sections = []
 

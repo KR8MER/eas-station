@@ -45,10 +45,10 @@
                                     <i class="fas fa-file-pdf"></i><span class="d-none d-sm-inline"> PDF</span>
                                 </a>
                             {% else %}
-                                <a href="/logs/export.csv?type={{ log_type }}&limit={{ limit }}" class="btn btn-sm btn-outline-success" title="Export logs as CSV (opens in Excel)">
+                                <a href="/logs/export.csv?type={{ log_type }}&limit={{ limit }}{% if action_filter %}&action={{ action_filter }}{% endif %}" class="btn btn-sm btn-outline-success" title="Export logs as CSV (opens in Excel)">
                                     <i class="fas fa-file-excel"></i><span class="d-none d-sm-inline"> CSV/Excel</span>
                                 </a>
-                                <a href="/logs/export.pdf?type={{ log_type }}&limit={{ limit }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Export logs as PDF">
+                                <a href="/logs/export.pdf?type={{ log_type }}&limit={{ limit }}{% if action_filter %}&action={{ action_filter }}{% endif %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Export logs as PDF">
                                     <i class="fas fa-file-pdf"></i><span class="d-none d-sm-inline"> PDF</span>
                                 </a>
                             {% endif %}
@@ -265,6 +265,29 @@
                                     </select>
                                 </div>
 
+                                {% if log_type == 'audit' %}
+                                <!-- Audit Action Filter (audit tab only) -->
+                                <div class="col-12 col-sm-6 col-md-3">
+                                    <label for="actionFilter" class="form-label">
+                                        <i class="fas fa-bolt"></i> Audit Action
+                                    </label>
+                                    <select class="form-select form-select-sm" id="actionFilter" name="action">
+                                        <option value="">All Actions</option>
+                                        <option value="config.updated" {% if action_filter == 'config.updated' %}selected{% endif %}>Configuration Changes</option>
+                                        <option value="eas.broadcast" {% if action_filter == 'eas.broadcast' %}selected{% endif %}>EAS Broadcast (sent)</option>
+                                        <option value="eas.manual_activation" {% if action_filter == 'eas.manual_activation' %}selected{% endif %}>EAS Manual Activation (created)</option>
+                                        <option value="alert.deleted" {% if action_filter == 'alert.deleted' %}selected{% endif %}>Alert/Activation Deleted</option>
+                                        <option value="alert.received" {% if action_filter == 'alert.received' %}selected{% endif %}>Alert Received</option>
+                                        <option value="auth.login.success" {% if action_filter == 'auth.login.success' %}selected{% endif %}>Login Success</option>
+                                        <option value="auth.login.failure" {% if action_filter == 'auth.login.failure' %}selected{% endif %}>Login Failure</option>
+                                        <option value="user.role.changed" {% if action_filter == 'user.role.changed' %}selected{% endif %}>User Role Changed</option>
+                                        {% if action_filter and action_filter not in ['config.updated', 'eas.broadcast', 'eas.manual_activation', 'alert.deleted', 'alert.received', 'auth.login.success', 'auth.login.failure', 'user.role.changed'] %}
+                                        <option value="{{ action_filter }}" selected>{{ action_filter }}</option>
+                                        {% endif %}
+                                    </select>
+                                </div>
+                                {% endif %}
+
                                 <!-- Date From -->
                                 <div class="col-6 col-md-2">
                                     <label for="dateFrom" class="form-label">
@@ -313,7 +336,7 @@
                                         Filtered to alert
                                         <code class="ms-1">{{ alert_filter }}</code>
                                         <a class="ms-2 text-dark"
-                                           href="?type={{ log_type }}&limit={{ limit }}{% if search_query %}&search={{ search_query }}{% endif %}{% if log_level_filter %}&level={{ log_level_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if service_filter %}&service={{ service_filter }}{% endif %}"
+                                           href="?type={{ log_type }}&limit={{ limit }}{% if search_query %}&search={{ search_query }}{% endif %}{% if log_level_filter %}&level={{ log_level_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if service_filter %}&service={{ service_filter }}{% endif %}{% if action_filter %}&action={{ action_filter }}{% endif %}"
                                            title="Remove alert filter">
                                             <i class="fas fa-times-circle"></i>
                                         </a>
@@ -323,7 +346,7 @@
                             {% endif %}
 
                             <!-- Clear Filters Button -->
-                            {% if search_query or log_level_filter or date_from or date_to or service_filter or alert_filter %}
+                            {% if search_query or log_level_filter or date_from or date_to or service_filter or alert_filter or action_filter %}
                             <div class="row mt-2">
                                 <div class="col-12">
                                     <a href="?type={{ log_type }}&limit={{ limit }}" class="btn btn-sm btn-outline-secondary">
