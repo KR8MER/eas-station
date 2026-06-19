@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import re
 import shutil
 import subprocess
 
@@ -94,6 +95,41 @@ def _client(*args: str, timeout: int = 15) -> bool:
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("fail2ban-client %s failed: %s", " ".join(args), exc)
         return False
+
+
+def _client_output(*args: str, timeout: int = 15) -> tuple[bool, str]:
+    """Run `sudo fail2ban-client <args>` and return (success, combined output)."""
+    try:
+        result = subprocess.run(
+            ["sudo", "-n", "fail2ban-client", *args],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        return result.returncode == 0, (result.stdout + result.stderr).strip()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("fail2ban-client %s failed: %s", " ".join(args), exc)
+        return False, ""
+
+
+def _loaded_jails() -> set[str]:
+    """Return the set of jail names fail2ban currently has loaded."""
+    ok, out = _client_output("status")
+    if not ok:
+        return set()
+    match = re.search(r"Jail list:\s*(.*)", out)
+    if not match:
+        return set()
+    return {j.strip() for j in match.group(1).replace(",", " ").split() if j.strip()}
+
+
+def _jail_banned_ips(jail: str) -> list[str]:
+    """Return the IPs currently banned in *jail* (empty list on any error)."""
+    ok, out = _client_output("status", jail)
+    if not ok:
+        return []
+    match = re.search(r"Banned IP list:\s*(.*)", out)
+    if not match:
+        return []
+    return [ip for ip in match.group(1).split() if ip]
 
 
 def firewall_ban(ip_address: str) -> None:
@@ -225,3 +261,122 @@ def resync_ssh_bans() -> int:
     if count:
         logger.info("Re-applied %d SSH ban(s) to the sshd jail after restart", count)
     return count
+
+
+def active_blocklist_count() -> int:
+    """Number of active, non-expired application blocklist entries.
+
+    This is the authoritative Global Ban List size that the firewall jail
+    should mirror. Best-effort; returns 0 on any error.
+    """
+    try:
+        from app_core.auth.ip_filter import IPFilter, IPFilterType
+        from app_utils import utc_now
+        entries = IPFilter.query.filter_by(
+            filter_type=IPFilterType.BLOCKLIST.value, is_active=True,
+        ).all()
+        now = utc_now()
+        return sum(1 for e in entries if e.expires_at is None or e.expires_at > now)
+    except Exception:
+        return 0
+
+
+def import_ssh_bans() -> int:
+    """Mirror current ``sshd``-jail bans into the unified application ban list.
+
+    SSH brute-force attempts hit port 22 directly, where the web application
+    can't see them — only the host SSH (``sshd``) jail catches them. When that
+    jail is enabled, an offender hammering port 22 should be banned *globally*,
+    not just on SSH: this copies each sshd-jail ban into ``ip_filters``, which
+    blocks it at the web layer and (via ``add_to_blocklist``) mirrors it into
+    the all-ports ``eas-station`` firewall jail.
+
+    One-way and idempotent — only IPs not already on the active blocklist are
+    added. Returns the number of newly imported IPs. Best-effort; never raises.
+
+    Historically this ran *only* while the Security Center page was polling the
+    status endpoint, so overnight SSH bans were enforced at the firewall but
+    never recorded in the ban list. It is now also driven by a background
+    scheduler (``app_core.fail2ban_sync``) so the list stays current with the
+    UI closed.
+    """
+    if not _fail2ban_available():
+        return 0
+    try:
+        from app_core.models import Fail2banSettings
+        settings = Fail2banSettings.query.get(1)
+        if not settings or not settings.protect_ssh:
+            return 0
+    except Exception:
+        return 0
+
+    banned = _jail_banned_ips(SSH_JAIL)
+    if not banned:
+        return 0
+
+    try:
+        from app_core.auth.ip_filter import (
+            IPFilter, IPFilterType, IPFilterReason, IPFilterSource,
+        )
+    except Exception:
+        return 0
+
+    # Carry over the sshd jail's ban time so the imported entry expires when the
+    # fail2ban ban would — rather than becoming a permanent ban. The import runs
+    # shortly after fail2ban bans the IP, so "now + ssh_bantime" closely tracks
+    # the jail's own expiry. A non-positive bantime means permanent.
+    ban_seconds = settings.ssh_bantime or 0
+    expires_in_hours = (ban_seconds / 3600.0) if ban_seconds and ban_seconds > 0 else None
+    if expires_in_hours is not None:
+        expiry_note = f"; expires with the sshd jail ban (~{ban_seconds}s)"
+    else:
+        expiry_note = " (permanent)"
+
+    added = 0
+    for ip in banned:
+        if not _valid_ip(ip):
+            continue
+        existing = IPFilter.query.filter_by(
+            ip_address=ip,
+            filter_type=IPFilterType.BLOCKLIST.value,
+            is_active=True,
+        ).first()
+        if existing:
+            continue
+        try:
+            IPFilter.add_to_blocklist(
+                ip_address=ip,
+                reason=IPFilterReason.AUTO_BRUTE_FORCE.value,
+                description="SSH brute-force detected by fail2ban (sshd jail)" + expiry_note,
+                source=IPFilterSource.SSH_BRUTE_FORCE.value,
+                expires_in_hours=expires_in_hours,
+            )
+            added += 1
+        except Exception as exc:
+            logger.warning("Failed to import SSH ban %s into ban list: %s", ip, exc)
+
+    if added:
+        logger.info("Imported %d SSH-jail ban(s) into the application ban list", added)
+    return added
+
+
+def heal_firewall_bans() -> bool:
+    """Re-push the ban list into the firewall jail when the two have drifted.
+
+    fail2ban flushes its jails on restart (host reboot, package upgrade, etc.),
+    which leaves the ``eas-station`` jail holding fewer bans than the
+    authoritative blocklist. When enforcement is on, the jail is loaded, and it
+    is missing bans, re-sync from the database. Returns True if a resync ran.
+    Best-effort; never raises.
+    """
+    try:
+        if not is_enforcement_active():
+            return False
+        if EAS_JAIL not in _loaded_jails():
+            return False
+        if len(_jail_banned_ips(EAS_JAIL)) < active_blocklist_count():
+            resync_bans()
+            return True
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("heal_firewall_bans skipped: %s", exc)
+    return False

@@ -868,6 +868,19 @@ if not skip_background_services:
     except Exception as _auto_purge_sched_err:
         logger.warning('Auto-purge scheduler could not be started: %s', _auto_purge_sched_err)
 
+# Start fail2ban sync scheduler so SSH-jail bans are imported into the Global
+# Ban List continuously, not only while the Security Center page is open and
+# polling /admin/fail2ban/status. Without this, overnight SSH brute-force bans
+# are enforced at the firewall but never recorded in the ban list.
+if not skip_background_services:
+    try:
+        from app_core.fail2ban_sync import start_scheduler as start_fail2ban_sync
+        if not app.config.get('SETUP_MODE'):
+            start_fail2ban_sync(app)
+            logger.info('fail2ban sync scheduler started')
+    except Exception as _fail2ban_sync_err:
+        logger.warning('fail2ban sync scheduler could not be started: %s', _fail2ban_sync_err)
+
 # Start system-health metrics sampler so the dashboard's Performance Trends
 # chart and sparklines have history even when the page has not been open.
 if not skip_background_services:

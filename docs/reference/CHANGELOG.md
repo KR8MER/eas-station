@@ -8,6 +8,25 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.119.1] - 2026-06-19 - fail2ban SSH bans sync in the background
+
+### Fixed
+- **fail2ban SSH bans only reached the Global Ban List while the Security Center
+  page was open.** The host `sshd` jail blocks SSH brute-force at the firewall
+  around the clock, but those bans were copied into the application ban list
+  (`ip_filters`) *only* as a side effect of the Security Center polling
+  `GET /admin/fail2ban/status`. With the UI closed (e.g. overnight) attacks were
+  still firewalled but never recorded, so the list looked empty until an operator
+  reopened the page — and each entry's `created_at` reflected when the page was
+  next loaded rather than when fail2ban actually banned the IP. Added a
+  background sync scheduler (`app_core/fail2ban_sync.py`) that runs the SSH-ban
+  import, `sshd`-jail re-apply, and firewall self-heal on a short interval,
+  independent of the UI (started from `app.py` alongside the other schedulers).
+  The import/self-heal logic moved into `app_core/auth/firewall.py`
+  (`import_ssh_bans`, `heal_firewall_bans`, `active_blocklist_count`) so it runs
+  without importing the web layer; `webapp/admin/fail2ban.py` now delegates to
+  it, keeping a single code path shared by the UI poll and the scheduler.
+
 ## [2.119.0] - 2026-06-19 - SSH bans survive a fail2ban restart
 
 ### Fixed
