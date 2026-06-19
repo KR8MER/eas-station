@@ -824,7 +824,10 @@ editing required:
    imported into the unified ban list** (so they're blocked at the web layer and,
    when enforcement is on, at all ports on the host firewall). They're also listed
    on the fail2ban tab; unbanning there clears them from the global list too. The
-   import is one-way and idempotent, running on tab refresh and on **Resync bans**.
+   import is one-way and idempotent. It runs continuously in the background (a
+   sync scheduler, `app_core/fail2ban_sync.py`, started with the web app), so SSH
+   bans reach the Global Ban List even with the UI closed — and also on tab
+   refresh and on **Resync bans**.
 
 Settings persist in the `fail2ban_settings` table (survives upgrades). The UI
 calls `webapp/admin/fail2ban.py`, which runs privileged commands via the sudoers

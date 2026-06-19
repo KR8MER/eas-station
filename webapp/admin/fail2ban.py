@@ -44,7 +44,13 @@ from flask import Blueprint, jsonify, request
 from sqlalchemy.exc import SQLAlchemyError
 
 from app_core.auth.decorators import require_auth
-from app_core.auth.firewall import EAS_JAIL, resync_bans, resync_ssh_bans
+from app_core.auth.firewall import (
+    EAS_JAIL,
+    heal_firewall_bans,
+    import_ssh_bans,
+    resync_bans,
+    resync_ssh_bans,
+)
 from app_core.auth.roles import require_permission
 from app_core.extensions import db
 from app_core.models import Fail2banSettings
@@ -153,67 +159,13 @@ def _app_ban_count() -> int:
 def _import_ssh_bans() -> int:
     """Mirror current sshd-jail bans into the unified application ban list.
 
-    SSH brute-force attempts hit port 22 directly, where the web application
-    can't see them — only the host SSH (sshd) jail catches them. When that jail
-    is enabled, an offender hammering port 22 should be banned *globally*, not
-    just on SSH: this copies each sshd-jail ban into ip_filters, which blocks it
-    at the web layer and (via add_to_blocklist) mirrors it into the all-ports
-    ``eas-station`` firewall jail. One-way and idempotent — only IPs not already
-    on the active blocklist are added.
+    Thin wrapper around :func:`app_core.auth.firewall.import_ssh_bans`. The
+    detection + import logic lives in the firewall actuator bridge so it can run
+    from a background thread (``app_core.fail2ban_sync``) without importing the
+    web layer; this wrapper is kept so the existing route call sites read
+    naturally and stay patchable in tests.
     """
-    settings = _get_settings()
-    if not settings.protect_ssh:
-        return 0
-    if not (_fail2ban_installed() and _fail2ban_active()):
-        return 0
-    banned = _jail_banned_ips("sshd")
-    if not banned:
-        return 0
-
-    try:
-        from app_core.auth.ip_filter import IPFilter, IPFilterType, IPFilterReason, IPFilterSource
-    except Exception:
-        return 0
-
-    # Carry over the sshd jail's ban time so the imported entry expires when the
-    # fail2ban ban would — rather than becoming a permanent ban. The import runs
-    # shortly after fail2ban bans the IP, so "now + ssh_bantime" closely tracks
-    # the jail's own expiry. A non-positive bantime means permanent.
-    ban_seconds = settings.ssh_bantime or 0
-    expires_in_hours = (ban_seconds / 3600.0) if ban_seconds and ban_seconds > 0 else None
-    if expires_in_hours is not None:
-        expiry_note = f"; expires with the sshd jail ban (~{ban_seconds}s)"
-    else:
-        expiry_note = " (permanent)"
-
-    added = 0
-    for ip in banned:
-        try:
-            ipaddress.ip_address(ip)
-        except ValueError:
-            continue
-        existing = IPFilter.query.filter_by(
-            ip_address=ip,
-            filter_type=IPFilterType.BLOCKLIST.value,
-            is_active=True,
-        ).first()
-        if existing:
-            continue
-        try:
-            IPFilter.add_to_blocklist(
-                ip_address=ip,
-                reason=IPFilterReason.AUTO_BRUTE_FORCE.value,
-                description="SSH brute-force detected by fail2ban (sshd jail)" + expiry_note,
-                source=IPFilterSource.SSH_BRUTE_FORCE.value,
-                expires_in_hours=expires_in_hours,
-            )
-            added += 1
-        except Exception as exc:
-            logger.warning("Failed to import SSH ban %s into ban list: %s", ip, exc)
-
-    if added:
-        logger.info("Imported %d SSH-jail ban(s) into the application ban list", added)
-    return added
+    return import_ssh_bans()
 
 
 def _ssh_bans_detailed() -> list:
@@ -440,33 +392,48 @@ def _write_via_sudo(path: str, content: str) -> tuple[bool, str]:
         return False, str(exc)
 
 
+def run_background_sync() -> dict:
+    """Import new sshd-jail bans into the unified ban list, self-heal the
+    firewall mirror, and return the resulting status dict.
+
+    fail2ban's ``sshd`` jail blocks SSH brute-force at the host firewall in real
+    time, but those bans only become visible in the Global Ban List once they
+    are copied into the ``ip_filters`` table by :func:`_import_ssh_bans`. That
+    copy used to happen *only* while the Security Center page was open and
+    polling this module's ``/status`` route — so overnight SSH attacks were
+    enforced but never recorded, and their ``created_at`` reflected when an
+    operator next opened the UI rather than when fail2ban actually banned them.
+
+    The actual work now lives in ``app_core.auth.firewall`` so it can also run
+    from the background sync scheduler (``app_core.fail2ban_sync``) without
+    importing the web layer; this function keeps the UI's behaviour (import +
+    self-heal, then return the rich status dict) in one place. Must be called
+    inside a Flask app context. Never raises.
+    """
+    # Pull any new SSH-jail bans into the unified ban list before reporting.
+    try:
+        import_ssh_bans()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("SSH ban import skipped: %s", exc)
+
+    # Self-heal: if enforcement is on and the actuator jail is loaded but not all
+    # active bans are mirrored (e.g. after a fail2ban restart flushed them),
+    # re-push the ban list into the firewall.
+    try:
+        heal_firewall_bans()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("fail2ban self-heal resync skipped: %s", exc)
+
+    return _status()
+
+
 # ── Routes ──────────────────────────────────────────────────────────────────────
 
 @fail2ban_bp.route("/status", methods=["GET"])
 @require_auth
 @require_permission("system.configure")
 def fail2ban_status():
-    # Pull any new SSH-jail bans into the unified ban list before reporting.
-    try:
-        _import_ssh_bans()
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.debug("SSH ban import skipped: %s", exc)
-
-    data = _status()
-
-    # Self-heal: if enforcement is on and the actuator jail is loaded but not all
-    # active bans are mirrored (e.g. after a fail2ban restart flushed them),
-    # re-push the ban list into the firewall and refresh the counts.
-    try:
-        if (data.get("enforcement_enabled") and data.get("active")
-                and data.get("actuator_jail_loaded")
-                and data.get("firewall_ban_count", 0) < data.get("app_ban_count", 0)):
-            resync_bans()
-            data = _status()
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.debug("fail2ban self-heal resync skipped: %s", exc)
-
-    return jsonify(data)
+    return jsonify(run_background_sync())
 
 
 @fail2ban_bp.route("/configure", methods=["POST"])
