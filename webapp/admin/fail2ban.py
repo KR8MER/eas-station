@@ -44,7 +44,7 @@ from flask import Blueprint, jsonify, request
 from sqlalchemy.exc import SQLAlchemyError
 
 from app_core.auth.decorators import require_auth
-from app_core.auth.firewall import EAS_JAIL, resync_bans
+from app_core.auth.firewall import EAS_JAIL, resync_bans, resync_ssh_bans
 from app_core.auth.roles import require_permission
 from app_core.extensions import db
 from app_core.models import Fail2banSettings
@@ -526,6 +526,15 @@ def configure_fail2ban():
     if not ok:
         return jsonify({"success": False, "error": f"Failed to write jail.local: {err}.{sudoers_hint}"}), 500
 
+    # A restart flushes every live ban. Snapshot the sshd jail's current bans
+    # into the durable ban list first so they aren't lost (they're re-applied
+    # to the sshd jail after the restart, below).
+    if settings.protect_ssh:
+        try:
+            _import_ssh_bans()
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("pre-restart SSH ban import skipped: %s", exc)
+
     _run(["systemctl", "enable", "fail2ban"])
     ok_restart, restart_out = _run(["systemctl", "restart", "fail2ban"])
     if not ok_restart:
@@ -549,14 +558,19 @@ def configure_fail2ban():
             "settings": settings.to_dict(),
         }), 500
 
-    # Restart flushes all bans, so re-mirror the authoritative app ban list.
+    # Restart flushes all bans, so re-apply the authoritative lists. Web bans go
+    # back into the eas-station all-ports jail; SSH offenders go back into the
+    # sshd jail (so an "apply" never silently un-bans known SSH attackers).
     synced = 0
     if settings.enabled:
         synced = resync_bans()
+    ssh_synced = 0
+    if settings.protect_ssh:
+        ssh_synced = resync_ssh_bans()
 
     logger.info(
-        "fail2ban configured (enforcement=%s ssh=%s); resynced %d ban(s)",
-        settings.enabled, settings.protect_ssh, synced,
+        "fail2ban configured (enforcement=%s ssh=%s); resynced %d web ban(s), %d ssh ban(s)",
+        settings.enabled, settings.protect_ssh, synced, ssh_synced,
     )
     msg = ("Firewall enforcement enabled — "
            f"{synced} active ban(s) mirrored to the host firewall."
@@ -578,8 +592,11 @@ def resync_fail2ban():
     if not _fail2ban_installed() or not _fail2ban_active():
         return jsonify({"success": False, "error": "fail2ban is not installed/active."}), 400
     imported = _import_ssh_bans()          # pull SSH offenders into the ban list
-    synced = resync_bans()                 # push the ban list into the firewall jail
+    synced = resync_bans()                 # push the ban list into the eas-station jail
+    ssh_synced = resync_ssh_bans()         # re-apply SSH offenders into the sshd jail
     msg = f"Resynced {synced} ban(s) to the firewall."
+    if ssh_synced:
+        msg += f" Re-applied {ssh_synced} SSH ban(s) to the sshd jail."
     if imported:
         msg += f" Imported {imported} SSH offender(s) into the ban list."
     return jsonify({"success": True, "message": msg})
@@ -598,13 +615,22 @@ def fail2ban_service():
     if action not in ("start", "stop", "restart"):
         return jsonify({"success": False, "error": "action must be start, stop, or restart"}), 400
 
+    # A stop/restart flushes every live ban. Snapshot the sshd jail's current
+    # bans into the durable ban list first so they survive (re-applied below).
+    if action in ("stop", "restart"):
+        try:
+            _import_ssh_bans()
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("pre-%s SSH ban import skipped: %s", action, exc)
+
     ok, output = _run(["systemctl", action, "fail2ban"])
     if not ok:
         return jsonify({"success": False, "error": output}), 500
 
-    # A fresh start/restart loses bans — repopulate from the database.
+    # A fresh start/restart loses bans — repopulate both jails from the database.
     if action in ("start", "restart"):
         resync_bans()
+        resync_ssh_bans()
 
     return jsonify({"success": True, "message": f"fail2ban {action}ed.", "output": output})
 
