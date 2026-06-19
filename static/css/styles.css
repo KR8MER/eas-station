@@ -3726,6 +3726,19 @@ textarea:focus {
     font-weight: var(--font-weight-bold);
 }
 
+/* iOS Safari fix: scrollable modals (`.modal-dialog-scrollable`) make
+   `.modal-content` an `overflow: hidden` container that clips the scrolling
+   `.modal-body` (`overflow-y: auto`). On iOS Safari a `backdrop-filter` on an
+   `overflow: hidden` ancestor silently disables scrolling in its
+   `overflow: auto` descendant — leaving long modals (e.g. the Add Audio Source
+   "stream" form) unscrollable, with the footer Save button stranded below the
+   viewport. The panel background is already a solid surface colour, so dropping
+   the blur here costs nothing visually while restoring touch scrolling. */
+.modal-dialog-scrollable .modal-content {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
 /* Dropdowns - Modern Glass Effect */
 .dropdown-menu {
     background-color: color-mix(in srgb, var(--surface-color) 96%, transparent);
