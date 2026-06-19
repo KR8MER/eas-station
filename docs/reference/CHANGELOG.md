@@ -11,20 +11,29 @@ tracks releases under the 2.x series.
 ## [2.117.0] - 2026-06-19 - Scrollable audio modals on touch devices + bulk-clear alerts
 
 ### Fixed
-- **Long modals (e.g. the "Add Audio Source" stream form) could not be scrolled
-  on iPadOS/iOS — and in Chrome on those devices — leaving the footer Save
-  button unreachable.** Bootstrap's `.modal-dialog-scrollable` turns
-  `.modal-content` into an `overflow: hidden` container around the scrolling
-  `.modal-body`. The global `.modal-content` glass styling added a
-  `backdrop-filter: blur(24px)`, and WebKit (which backs both Safari and Chrome
-  on iOS/iPadOS) has a long-standing bug where a `backdrop-filter` on an
-  `overflow: hidden` ancestor silently disables scrolling in its
-  `overflow: auto` descendant. Scrollable modals now drop the backdrop blur on
-  their content panel, restoring touch scrolling with no visible change (the
-  panel is already a solid surface colour). This fixes every
-  `.modal-dialog-scrollable` modal site-wide — Audio Sources, Stream Profiles,
-  Radio, Radio Diagnostics, Hardware Settings, and Admin
-  (`static/css/styles.css`).
+- **Long modals (e.g. the Add/Edit Audio Source stream form) could not be
+  scrolled on iPadOS/iOS — and Chrome on those devices — leaving the footer Save
+  button unreachable; dragging scrolled the page *behind* the modal instead.**
+  Three independent WebKit behaviours combined to cause this, so the fix defends
+  against all three (`static/css/styles.css`):
+  1. **Backdrop blur killed the inner scroll.** Bootstrap's
+     `.modal-dialog-scrollable` turns `.modal-content` into an `overflow: hidden`
+     container around the scrolling `.modal-body`, and WebKit silently disables
+     scrolling inside an `overflow: auto` descendant of a `backdrop-filter`ed
+     `overflow: hidden` ancestor. The global `.modal-content` glass blur is now
+     dropped on scrollable modals (no visible change — the panel is already a
+     solid surface colour).
+  2. **Scroll chained to the background.** `.modal-body` now uses
+     `overscroll-behavior: contain` (plus `-webkit-overflow-scrolling: touch`)
+     so a scroll gesture stays inside the modal.
+  3. **The page behind stayed scrollable.** Bootstrap's `.modal-open` only locks
+     `<body>`, but this layout's document scroller is `<html>`; an
+     `html:has(.modal.show) { overflow: hidden }` rule now locks the background
+     while any modal is open.
+
+  Fixes 2 and 3 are global, so this resolves the same bug for every modal
+  site-wide (Audio Sources, Stream Profiles, Radio, Radio Diagnostics, Hardware
+  Settings, Admin, and all others).
 
 ### Added
 - **"Clear All" button for unresolved audio alerts.** Silence/health alerts can
