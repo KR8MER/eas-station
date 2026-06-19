@@ -8,6 +8,22 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.119.0] - 2026-06-19 - SSH bans survive a fail2ban restart
+
+### Fixed
+- **fail2ban restarts (including every Security Center "Save & Apply") silently
+  un-banned known SSH attackers.** A restart flushes every live ban; web bans
+  were restored afterwards (`resync_bans` re-pushes the `eas-station` jail from
+  the database) but `sshd`-jail bans were not re-applied to any jail, so active
+  SSH offenders dropped off the firewall until re-detected. Added
+  `resync_ssh_bans()` (`app_core/auth/firewall.py`), which re-applies still-active
+  SSH-sourced ban-list entries (`source = ssh_brute_force`) back into the `sshd`
+  jail, skipping expired and loopback entries. The Security Center now snapshots
+  live SSH bans into the durable ban list *before* a stop/restart and re-applies
+  them *after* — wired into Save & Apply, the Restart action, and the manual
+  Resync button (`webapp/admin/fail2ban.py`). Unlike web-ban mirroring, this only
+  requires SSH protection to be enabled, not firewall mirroring.
+
 ## [2.118.0] - 2026-06-19 - Allowlist self-lockout guard
 
 ### Added

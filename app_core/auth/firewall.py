@@ -40,6 +40,8 @@ logger = logging.getLogger(__name__)
 
 # Dedicated jail that exists only to hold app-driven bans (bantime = -1).
 EAS_JAIL = "eas-station"
+# Standard fail2ban jail that watches the host SSH daemon's log.
+SSH_JAIL = "sshd"
 
 
 def _fail2ban_available() -> bool:
@@ -157,4 +159,69 @@ def resync_bans() -> int:
         if _client("set", EAS_JAIL, "banip", ip):
             count += 1
     logger.info("Resynced %d application ban(s) into host firewall (fail2ban)", count)
+    return count
+
+
+def resync_ssh_bans() -> int:
+    """Re-apply still-active SSH-sourced bans back into the ``sshd`` jail.
+
+    fail2ban flushes every live ban when it restarts. SSH offenders are imported
+    into the application ban list (``ip_filters`` with
+    ``source = ssh_brute_force``), but unlike web bans they were not being
+    restored to any jail on restart — so a fail2ban restart (which the Security
+    Center triggers on every "Save & Apply") silently un-banned known SSH
+    attackers until they were re-detected. This re-pushes the durable list into
+    the ``sshd`` jail so those bans survive a restart.
+
+    Unlike :func:`resync_bans`, this does not require web-ban mirroring
+    (``Fail2banSettings.enabled``) to be on — only that SSH protection is
+    enabled and fail2ban is up. Returns the number of IPs (re)banned.
+    Best-effort; never raises.
+    """
+    if not _fail2ban_available():
+        return 0
+    try:
+        from app_core.models import Fail2banSettings
+        settings = Fail2banSettings.query.get(1)
+        if not settings or not settings.protect_ssh:
+            return 0
+    except Exception:
+        return 0
+    try:
+        from app_core.auth.ip_filter import IPFilter, IPFilterType, IPFilterSource
+        from app_utils import utc_now
+        entries = IPFilter.query.filter_by(
+            filter_type=IPFilterType.BLOCKLIST.value,
+            is_active=True,
+            source=IPFilterSource.SSH_BRUTE_FORCE.value,
+        ).all()
+    except Exception as exc:
+        logger.debug("resync_ssh_bans could not load SSH bans: %s", exc)
+        return 0
+
+    from datetime import timezone
+
+    count = 0
+    now = utc_now()
+    for entry in entries:
+        # Coerce naive timestamps (e.g. from SQLite, which drops tzinfo) to UTC
+        # so the expiry comparison can never raise.
+        expires_at = entry.expires_at
+        if expires_at is not None:
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at <= now:
+                continue
+        ip = entry.ip_address
+        if not ip or not _valid_ip(ip):
+            continue
+        try:
+            if ipaddress.ip_address(ip).is_loopback:
+                continue
+        except ValueError:
+            continue
+        if _client("set", SSH_JAIL, "banip", ip):
+            count += 1
+    if count:
+        logger.info("Re-applied %d SSH ban(s) to the sshd jail after restart", count)
     return count
