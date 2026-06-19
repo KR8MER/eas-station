@@ -362,10 +362,12 @@
             filterType === 'allowlist' ? 'Add to Allowlist' : 'Ban an IP Address';
         document.getElementById('expires-field').style.display =
             filterType === 'blocklist' ? 'block' : 'none';
+        document.getElementById('allowlist-lockout-note').style.display =
+            filterType === 'allowlist' ? 'block' : 'none';
         addFilterModal.show();
     }
 
-    function submitIPFilter() {
+    function submitIPFilter(confirmLockout) {
         const formData = {
             ip_address: document.getElementById('filter-ip').value.trim(),
             filter_type: document.getElementById('filter-type').value,
@@ -377,6 +379,7 @@
         if (expiresValue && formData.filter_type === 'blocklist') {
             formData.expires_in_hours = parseInt(expiresValue, 10);
         }
+        if (confirmLockout) { formData.confirm_lockout = true; }
 
         fetch('/security/ip-filters', {
             method: 'POST',
@@ -385,6 +388,16 @@
         })
             .then(response => response.json())
             .then(data => {
+                // The server refuses an allowlist entry that would lock the
+                // current admin out (allowlist-only login mode). Offer to retry
+                // with explicit confirmation rather than silently failing.
+                if (data.lockout_warning) {
+                    // eslint-disable-next-line no-alert
+                    if (window.confirm(data.message + '\n\nProceed anyway?')) {
+                        submitIPFilter(true);
+                    }
+                    return;
+                }
                 if (data.error) { notify('Error: ' + data.error, true); return; }
                 addFilterModal.hide();
                 loadIPFilters();

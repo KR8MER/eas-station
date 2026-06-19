@@ -186,6 +186,30 @@ class IPFilter(db.Model):
         return True, None
     
     @staticmethod
+    def allowlist_addition_would_lock_out(admin_ip: str, new_ip_address: str) -> bool:
+        """Return True if allowlisting ``new_ip_address`` would lock ``admin_ip`` out.
+
+        Any active allowlist entry flips login into allowlist-only mode (see
+        :meth:`is_ip_allowed` and ``webapp/admin/auth.py``), where only IPs
+        matching an allowlist entry may sign in — loopback is NOT exempt. The
+        admin keeps login access only if their IP is covered by the new entry or
+        by some already-active allowlist entry. This drives the self-lockout
+        guard on ``POST /security/ip-filters``.
+        """
+        if not admin_ip:
+            return False
+        if IPFilter._ip_matches(admin_ip, new_ip_address):
+            return False
+        existing_allow = IPFilter.query.filter_by(
+            filter_type=IPFilterType.ALLOWLIST.value,
+            is_active=True,
+        ).all()
+        return not any(
+            IPFilter._ip_matches(admin_ip, entry.ip_address)
+            for entry in existing_allow
+        )
+
+    @staticmethod
     def is_ip_blocked(ip_address: str) -> Tuple[bool, Optional[str]]:
         """
         Check whether an IP address is on the active blocklist.

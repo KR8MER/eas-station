@@ -400,6 +400,13 @@
             <div class="modal-body">
                 <form id="addFilterForm">
                     <input type="hidden" id="filter-type" name="filter_type">
+                    <div class="alert alert-warning py-2 small" id="allowlist-lockout-note" style="display: none;">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Adding any allowlist entry switches login to
+                        <strong>allowlist-only mode</strong> &mdash; only listed IPs can sign in
+                        (loopback is <em>not</em> exempt). Make sure your own IP is covered, or
+                        you may lock yourself out.
+                    </div>
                     <div class="mb-3">
                         <label class="form-label">IP Address or CIDR Range</label>
                         <input type="text" class="form-control" id="filter-ip" name="ip_address"
