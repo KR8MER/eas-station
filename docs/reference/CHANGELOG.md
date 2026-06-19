@@ -8,6 +8,18 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.117.1] - 2026-06-19 - Manual-only release workflow
+
+### Changed
+- **The `Release` GitHub Actions workflow no longer fires automatically when
+  the `VERSION` file changes on `main`.** It is now triggered manually only
+  (*Actions → Release → Run workflow*), making publishing a deliberate,
+  on-demand step. Removed the `push` trigger from
+  `.github/workflows/release.yml`, leaving `workflow_dispatch` as the sole
+  trigger. Updated `docs/process/RELEASING.md`,
+  `docs/process/CONTRIBUTING.md`, and `docs/development/AGENTS.md` to describe
+  the manual release step.
+
 ## [2.117.0] - 2026-06-19 - Scrollable audio modals on touch devices + bulk-clear alerts
 
 ### Fixed
