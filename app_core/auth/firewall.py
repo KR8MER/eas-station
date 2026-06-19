@@ -158,16 +158,24 @@ def firewall_unban(ip_address: str) -> None:
         logger.info("Removed host-firewall ban of %s (fail2ban)", ip_address)
 
 
-def resync_bans() -> int:
-    """Push every active application blocklist entry into the firewall jail.
+def mirrorable_blocklist_ips() -> set[str]:
+    """The set of ban-list IPs that *can* be held in the firewall jail.
 
-    fail2ban flushes all bans on restart, so this is called after applying the
-    configuration (and after a service restart) to bring the firewall back in
-    sync with the authoritative ``ip_filters`` table. Returns the number of IPs
-    (re)banned.
+    The actuator jail enforces bans with ``fail2ban-client ... banip``, which
+    only accepts single routable IPs. CIDR ranges and loopback addresses on the
+    application ban list are therefore deliberately never mirrored — they are
+    enforced at the application layer only. The firewall jail consequently tops
+    out at *this* set, not the full ban-list size.
+
+    This is the correct baseline for every "is the firewall in sync?" check.
+    Comparing the jail's IP count against the raw ban-list count instead makes a
+    list holding even one CIDR range look permanently out of sync: the self-heal
+    fires a no-op ``resync_bans`` on every cycle and the Security Center shows a
+    "Some bans aren't mirrored yet — click Resync bans" banner that Resync can
+    never clear (the missing entry is unmirrorable by design).
+
+    Best-effort; returns an empty set on any error.
     """
-    if not is_enforcement_active():
-        return 0
     try:
         from app_core.auth.ip_filter import IPFilter, IPFilterType
         from app_utils import utc_now
@@ -176,14 +184,22 @@ def resync_bans() -> int:
             is_active=True,
         ).all()
     except Exception as exc:
-        logger.debug("resync_bans could not load blocklist: %s", exc)
-        return 0
+        logger.debug("mirrorable_blocklist_ips could not load blocklist: %s", exc)
+        return set()
 
-    count = 0
+    from datetime import timezone
+
     now = utc_now()
+    ips: set[str] = set()
     for entry in entries:
-        if entry.expires_at is not None and entry.expires_at <= now:
-            continue
+        # Coerce naive timestamps (e.g. from SQLite, which drops tzinfo) to UTC
+        # so the expiry comparison can never raise.
+        expires_at = entry.expires_at
+        if expires_at is not None:
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at <= now:
+                continue
         ip = entry.ip_address
         if not ip or not _valid_ip(ip):
             continue  # CIDR ranges are skipped (fail2ban banip wants single IPs)
@@ -192,6 +208,22 @@ def resync_bans() -> int:
                 continue
         except ValueError:
             continue
+        ips.add(ip)
+    return ips
+
+
+def resync_bans() -> int:
+    """Push every mirrorable application blocklist entry into the firewall jail.
+
+    fail2ban flushes all bans on restart, so this is called after applying the
+    configuration (and after a service restart) to bring the firewall back in
+    sync with the authoritative ``ip_filters`` table. Returns the number of IPs
+    (re)banned.
+    """
+    if not is_enforcement_active():
+        return 0
+    count = 0
+    for ip in mirrorable_blocklist_ips():
         if _client("set", EAS_JAIL, "banip", ip):
             count += 1
     logger.info("Resynced %d application ban(s) into host firewall (fail2ban)", count)
@@ -360,21 +392,46 @@ def import_ssh_bans() -> int:
     return added
 
 
+def firewall_pending_bans() -> int:
+    """How many *mirrorable* ban-list IPs are not yet present in the firewall jail.
+
+    Zero means the firewall is fully in sync with the mirrorable subset of the
+    ban list (CIDR ranges and loopback are app-layer only and never counted).
+    This — not ``app_ban_count > firewall_ban_count`` — is the correct "needs a
+    resync" signal: the raw-count comparison reports a list holding any range as
+    permanently out of sync. Best-effort; returns 0 on any error.
+    """
+    try:
+        if not is_enforcement_active():
+            return 0
+        if EAS_JAIL not in _loaded_jails():
+            return 0
+        return len(mirrorable_blocklist_ips() - set(_jail_banned_ips(EAS_JAIL)))
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("firewall_pending_bans skipped: %s", exc)
+        return 0
+
+
 def heal_firewall_bans() -> bool:
     """Re-push the ban list into the firewall jail when the two have drifted.
 
     fail2ban flushes its jails on restart (host reboot, package upgrade, etc.),
     which leaves the ``eas-station`` jail holding fewer bans than the
-    authoritative blocklist. When enforcement is on, the jail is loaded, and it
-    is missing bans, re-sync from the database. Returns True if a resync ran.
-    Best-effort; never raises.
+    authoritative blocklist. When enforcement is on, the jail is loaded, and a
+    *mirrorable* ban is missing from it, re-sync from the database. Returns True
+    if a resync ran.
+
+    The drift check compares against :func:`mirrorable_blocklist_ips`, not the
+    raw blocklist size: CIDR ranges and loopback can never live in the jail, so
+    counting them would make a list holding any range look permanently drifted
+    and trigger a wasteful no-op resync on every cycle. Best-effort; never raises.
     """
     try:
         if not is_enforcement_active():
             return False
         if EAS_JAIL not in _loaded_jails():
             return False
-        if len(_jail_banned_ips(EAS_JAIL)) < active_blocklist_count():
+        if mirrorable_blocklist_ips() - set(_jail_banned_ips(EAS_JAIL)):
             resync_bans()
             return True
     except Exception as exc:  # pragma: no cover - defensive

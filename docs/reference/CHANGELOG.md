@@ -8,6 +8,31 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.119.2] - 2026-06-19 - Firewall sync state ignores unmirrorable bans
+
+### Fixed
+- **The Security Center reported SSH/web bans as perpetually "not synced" and
+  re-ran a no-op resync every cycle whenever the Global Ban List held a CIDR
+  range or loopback entry.** The actuator jail enforces bans with
+  `fail2ban-client ... banip`, which only accepts single routable IPs, so CIDR
+  ranges and loopback addresses are intentionally never mirrored to the firewall
+  — they stay enforced at the application layer. But the "is the firewall in
+  sync?" checks compared the jail's IP count against the *full* ban-list size
+  (`active_blocklist_count` / `app_ban_count`). A list holding even one range
+  therefore always showed `firewall_ban_count < app_ban_count`, so
+  `heal_firewall_bans` (`app_core/auth/firewall.py`) fired a wasteful
+  `resync_bans` on every 60s background cycle and the UI showed a "Some bans
+  aren't mirrored yet — click Resync bans" banner that Resync could never clear.
+  Added `mirrorable_blocklist_ips()` (active, non-expired, single, non-loopback
+  IPs — the set the jail can actually hold) and `firewall_pending_bans()`, and
+  pinned the drift check and the status endpoint to that subset. `resync_bans`
+  now reuses the same helper. The status payload exposes `firewall_pending`
+  (`webapp/admin/fail2ban.py`); the Security Center only prompts for a Resync
+  when bans are genuinely pending and otherwise explains that the remaining
+  difference is range/loopback entries enforced at the app layer only
+  (`static/js/pages/security_center.js`). Regression coverage in
+  `tests/test_firewall_sync_state.py`.
+
 ## [2.119.1] - 2026-06-19 - fail2ban SSH bans sync in the background
 
 ### Fixed

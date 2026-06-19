@@ -48,6 +48,7 @@ from app_core.auth.firewall import (
     EAS_JAIL,
     heal_firewall_bans,
     import_ssh_bans,
+    mirrorable_blocklist_ips,
     resync_bans,
     resync_ssh_bans,
 )
@@ -240,6 +241,14 @@ def _status() -> dict:
     if EAS_JAIL in loaded:
         enforced = _jail_banned_ips(EAS_JAIL)
 
+    # Count only *mirrorable* bans (single, non-loopback IPs) that aren't in the
+    # jail yet. CIDR ranges and loopback are app-layer only, so the firewall is
+    # legitimately smaller than the ban list; counting them would flag a list
+    # holding any range as permanently out of sync. Zero ⇒ fully mirrored.
+    firewall_pending = 0
+    if settings.enabled and EAS_JAIL in loaded:
+        firewall_pending = len(mirrorable_blocklist_ips() - set(enforced))
+
     ssh_loaded = "sshd" in loaded
     ssh_banned = _ssh_bans_detailed() if ssh_loaded else []
 
@@ -257,6 +266,7 @@ def _status() -> dict:
         "actuator_error": actuator_error,
         "app_ban_count": _app_ban_count(),       # authoritative list size
         "firewall_ban_count": len(enforced),     # mirrored into the firewall
+        "firewall_pending": firewall_pending,    # mirrorable bans not yet in jail
         "ssh_jail_loaded": ssh_loaded,
         "ssh_banned": ssh_banned,
         "log_path": SECURITY_LOG_PATH,
