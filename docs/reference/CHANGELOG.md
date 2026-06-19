@@ -8,6 +8,22 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.118.0] - 2026-06-19 - Allowlist self-lockout guard
+
+### Added
+- **Adding an allowlist entry that excludes your own IP is now blocked by
+  default.** The moment any active allowlist entry exists, login flips into
+  allowlist-only mode (`IPFilter.is_ip_allowed` / `webapp/admin/auth.py`) where
+  only listed IPs may sign in and loopback is *not* exempt — so an admin who
+  allowlisted, say, a private LAN range on a public deployment locked themselves
+  out of login entirely. The `POST /security/ip-filters` endpoint
+  (`webapp/routes_security.py`) now checks the requesting admin's IP against the
+  resulting allowlist and refuses with a `lockout_risk` response (HTTP 409)
+  unless `confirm_lockout=true` is supplied. The Security Center "Banned IPs"
+  UI surfaces a warning note on the allowlist modal and prompts for explicit
+  confirmation before proceeding (`templates/security/security_center.html`,
+  `static/js/pages/security_center.js`).
+
 ## [2.117.1] - 2026-06-19 - Manual-only release workflow
 
 ### Changed

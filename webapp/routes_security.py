@@ -903,9 +903,31 @@ def add_ip_filter():
     
     if filter_type not in ['allowlist', 'blocklist']:
         return jsonify({'error': 'filter_type must be allowlist or blocklist'}), 400
-    
+
+    # Self-lockout guard for allowlist entries. The moment ANY active allowlist
+    # entry exists, login flips into allowlist-only mode (see
+    # IPFilter.is_ip_allowed / webapp/admin/auth.py): only IPs matching an
+    # allowlist entry may sign in — loopback is NOT exempt. So an admin who adds
+    # an allowlist range that does not include their own IP locks themselves out
+    # of login entirely. Refuse such an addition unless the request explicitly
+    # confirms it (confirm_lockout=true).
+    if filter_type == 'allowlist' and not data.get('confirm_lockout'):
+        admin_ip = request.remote_addr
+        if IPFilter.allowlist_addition_would_lock_out(admin_ip, ip_address):
+            return jsonify({
+                'error': 'lockout_risk',
+                'lockout_warning': True,
+                'admin_ip': admin_ip,
+                'message': (
+                    f"Your current IP ({admin_ip}) is not covered by this "
+                    "allowlist entry. Adding it switches login to "
+                    "allowlist-only mode, which would lock you out. Add your "
+                    "own IP to the allowlist first, or confirm to proceed anyway."
+                ),
+            }), 409
+
     user_id = session.get('user_id')
-    
+
     try:
         if filter_type == 'allowlist':
             filter_entry = IPFilter.add_to_allowlist(
