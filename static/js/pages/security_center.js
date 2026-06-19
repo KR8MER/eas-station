@@ -509,9 +509,18 @@
                     '<code>eas-station</code> firewall jail isn\'t loaded — so bans aren\'t reaching the host ' +
                     'firewall. Click <strong>Save &amp; Apply Configuration</strong> below to (re)create it.' +
                     detail + '</div>';
-            } else if (data.enforcement_enabled && data.app_ban_count > data.firewall_ban_count) {
+            } else if (data.enforcement_enabled && (data.firewall_pending ?? 0) > 0) {
                 html += '<div class="text-muted small mb-0 mt-1">' +
                     'Some bans aren\'t mirrored yet — click <strong>Resync bans</strong> to push them now.</div>';
+            } else if (data.enforcement_enabled && data.app_ban_count > data.firewall_ban_count) {
+                // The list is fully mirrored; the remaining difference is CIDR
+                // ranges / loopback, which the firewall jail can't hold. Explain
+                // it so the gap doesn't read as an unresolved sync problem.
+                const n = data.app_ban_count - data.firewall_ban_count;
+                html += '<div class="text-muted small mb-0 mt-1">' +
+                    `<i class="bi bi-info-circle"></i> ${n} ban-list entr${n === 1 ? 'y' : 'ies'} ` +
+                    `(IP range${n === 1 ? '' : 's'} or loopback) ${n === 1 ? 'is' : 'are'} ` +
+                    'enforced at the application layer only and not mirrored to the firewall.</div>';
             }
         } else {
             html += '<div class="alert alert-warning small mb-0 mt-2">' +
