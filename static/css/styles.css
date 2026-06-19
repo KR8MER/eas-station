@@ -3726,17 +3726,41 @@ textarea:focus {
     font-weight: var(--font-weight-bold);
 }
 
-/* iOS Safari fix: scrollable modals (`.modal-dialog-scrollable`) make
-   `.modal-content` an `overflow: hidden` container that clips the scrolling
-   `.modal-body` (`overflow-y: auto`). On iOS Safari a `backdrop-filter` on an
-   `overflow: hidden` ancestor silently disables scrolling in its
-   `overflow: auto` descendant — leaving long modals (e.g. the Add Audio Source
-   "stream" form) unscrollable, with the footer Save button stranded below the
-   viewport. The panel background is already a solid surface colour, so dropping
-   the blur here costs nothing visually while restoring touch scrolling. */
+/* ------------------------------------------------------------------
+   Touch-device modal scrolling fixes
+   ------------------------------------------------------------------
+   Symptom: on iPad/iPhone (and Chrome on those devices, which is also
+   WebKit) long modals — e.g. the Add/Edit Audio Source "stream" form —
+   could not be scrolled; dragging scrolled the PAGE behind the modal
+   instead, leaving the footer Save button unreachable. Three independent
+   WebKit behaviours conspire here, so we defend against all three. */
+
+/* 1. Scrollable modals (`.modal-dialog-scrollable`) make `.modal-content` an
+      `overflow: hidden` container clipping the scrolling `.modal-body`. WebKit
+      silently disables scrolling inside an `overflow: auto` descendant of a
+      `backdrop-filter`ed `overflow: hidden` ancestor, so the global glass blur
+      on `.modal-content` killed the body's scroll. The panel background is
+      already a solid surface colour, so dropping the blur costs nothing. */
 .modal-dialog-scrollable .modal-content {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+}
+
+/* 2. Keep touch momentum scrolling inside the modal body and stop the scroll
+      from chaining to the page behind it (the "background scrolls, not the
+      popup" symptom). */
+.modal-body {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* 3. Lock the background scroll while a modal is open. Bootstrap's `.modal-open`
+      only sets `overflow: hidden` on <body>, but on this layout the document
+      scroller is <html> (body is a min-height:100vh flex column), so the page
+      behind stays scrollable on iOS. `:has()` is supported on the modern
+      iPadOS/iOS Safari and Chromium this targets. */
+html:has(.modal.show) {
+    overflow: hidden;
 }
 
 /* Dropdowns - Modern Glass Effect */
