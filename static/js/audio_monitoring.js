@@ -1880,6 +1880,61 @@ async function resolveAlert(alertId) {
 }
 
 /**
+ * Resolve every outstanding (unresolved) audio alert at once.
+ *
+ * Silence/health alerts can pile up into the tens of thousands, so this gives
+ * operators a single "Clear All" action instead of resolving them one-by-one.
+ */
+async function resolveAllAlerts() {
+    const countEl = document.getElementById('alerts-count');
+    const current = countEl ? parseInt(countEl.textContent, 10) : 0;
+    if (!current) {
+        showToast('No unresolved alerts to clear', 'info');
+        return;
+    }
+
+    if (!confirm(`Clear all ${current.toLocaleString()} unresolved alert(s)? This marks them resolved and cannot be undone.`)) {
+        return;
+    }
+
+    const btn = document.getElementById('clearAlertsBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.dataset.originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Clearing…';
+    }
+
+    try {
+        const response = await fetch('/api/audio/alerts/resolve-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                resolved_by: 'web_user',
+                resolution_notes: 'Bulk resolved via web interface',
+            }),
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            showSuccess(`Cleared ${(data.resolved_count || 0).toLocaleString()} alert(s)`);
+            if (countEl) countEl.textContent = '0';
+            loadAudioAlerts();
+        } else {
+            const error = await response.json().catch(() => ({}));
+            showError(`Failed to clear alerts: ${error.error || response.statusText}`);
+        }
+    } catch (error) {
+        console.error('Error clearing alerts:', error);
+        showError('Failed to clear alerts');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            if (btn.dataset.originalHtml) btn.innerHTML = btn.dataset.originalHtml;
+        }
+    }
+}
+
+/**
  * Show success toast notification
  */
 function showSuccess(message) {

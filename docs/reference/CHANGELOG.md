@@ -8,6 +8,33 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.117.0] - 2026-06-19 - Scrollable audio modals on touch devices + bulk-clear alerts
+
+### Fixed
+- **Long modals (e.g. the "Add Audio Source" stream form) could not be scrolled
+  on iPadOS/iOS — and in Chrome on those devices — leaving the footer Save
+  button unreachable.** Bootstrap's `.modal-dialog-scrollable` turns
+  `.modal-content` into an `overflow: hidden` container around the scrolling
+  `.modal-body`. The global `.modal-content` glass styling added a
+  `backdrop-filter: blur(24px)`, and WebKit (which backs both Safari and Chrome
+  on iOS/iPadOS) has a long-standing bug where a `backdrop-filter` on an
+  `overflow: hidden` ancestor silently disables scrolling in its
+  `overflow: auto` descendant. Scrollable modals now drop the backdrop blur on
+  their content panel, restoring touch scrolling with no visible change (the
+  panel is already a solid surface colour). This fixes every
+  `.modal-dialog-scrollable` modal site-wide — Audio Sources, Stream Profiles,
+  Radio, Radio Diagnostics, Hardware Settings, and Admin
+  (`static/css/styles.css`).
+
+### Added
+- **"Clear All" button for unresolved audio alerts.** Silence/health alerts can
+  accumulate into the tens of thousands, and the only previous way to clear them
+  was one alert at a time (and the per-alert list is hidden on the Audio Sources
+  page). The Alerts card now has a **Clear All** action backed by a new
+  `POST /api/audio/alerts/resolve-all` endpoint that bulk-resolves every
+  outstanding alert in a single query (`webapp/admin/audio_ingest.py`,
+  `static/js/audio_monitoring.js`, `templates/admin/audio_sources.html`).
+
 ## [2.116.3] - 2026-06-18 - Save & Apply verifies the jail actually loaded
 
 ### Fixed

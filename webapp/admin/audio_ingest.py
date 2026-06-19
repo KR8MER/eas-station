@@ -2684,6 +2684,50 @@ def api_resolve_alert(alert_id: int):
         db.session.rollback()
         return jsonify({'error': str(exc)}), 500
 
+@audio_ingest_bp.route('/api/audio/alerts/resolve-all', methods=['POST'])
+@require_permission('system.configure')
+def api_resolve_all_alerts():
+    """Resolve every currently-unresolved audio alert in one operation.
+
+    Silence/health alerts can accumulate into the tens of thousands, which makes
+    clearing them one-by-one from the UI impractical. This bulk-resolves all
+    outstanding alerts so the operator can reset the unresolved count.
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        resolved_by = data.get('resolved_by', 'web_user')
+        resolution_notes = data.get('resolution_notes', 'Bulk resolved from UI')
+        now = utc_now()
+
+        updated = (
+            AudioAlert.query
+            .filter(AudioAlert.resolved == False)
+            .update(
+                {
+                    AudioAlert.resolved: True,
+                    AudioAlert.resolved_by: resolved_by,
+                    AudioAlert.resolved_at: now,
+                    AudioAlert.resolution_notes: resolution_notes,
+                    AudioAlert.updated_at: now,
+                },
+                synchronize_session=False,
+            )
+        )
+
+        db.session.commit()
+
+        logger.info('Bulk-resolved %d audio alert(s) by %s', updated, resolved_by)
+
+        return jsonify({
+            'message': f'Resolved {updated} alert(s)',
+            'resolved_count': updated,
+        })
+
+    except Exception as exc:
+        logger.error('Error bulk-resolving audio alerts: %s', exc)
+        db.session.rollback()
+        return jsonify({'error': str(exc)}), 500
+
 @audio_ingest_bp.route('/api/audio/devices', methods=['GET'])
 def api_discover_audio_devices():
     """Discover available audio input devices."""
