@@ -62,6 +62,7 @@ def _capture_client(monkeypatch):
 
 
 def test_active_ssh_ban_is_reapplied_to_sshd_jail(app_with_tables, monkeypatch):
+    """An active SSH-sourced ban is pushed back into the sshd jail on resync."""
     app, _ = app_with_tables
     from app_core.auth import firewall
     from app_core.auth.ip_filter import IPFilter, IPFilterReason, IPFilterSource
@@ -79,6 +80,7 @@ def test_active_ssh_ban_is_reapplied_to_sshd_jail(app_with_tables, monkeypatch):
 
 
 def test_non_ssh_ban_is_not_pushed_to_sshd_jail(app_with_tables, monkeypatch):
+    """A non-SSH (e.g. manual/web) ban is never re-applied to the sshd jail."""
     app, _ = app_with_tables
     from app_core.auth import firewall
     from app_core.auth.ip_filter import IPFilter, IPFilterReason, IPFilterSource
@@ -96,6 +98,7 @@ def test_non_ssh_ban_is_not_pushed_to_sshd_jail(app_with_tables, monkeypatch):
 
 
 def test_expired_and_loopback_ssh_bans_are_skipped(app_with_tables, monkeypatch):
+    """Expired entries and loopback addresses are excluded from the resync."""
     app, db = app_with_tables
     from app_core.auth import firewall
     from app_core.auth.ip_filter import IPFilter, IPFilterReason, IPFilterSource
@@ -121,6 +124,7 @@ def test_expired_and_loopback_ssh_bans_are_skipped(app_with_tables, monkeypatch)
 
 
 def test_resync_is_noop_when_ssh_protection_disabled(app_with_tables, monkeypatch):
+    """With SSH protection off, resync does nothing even if SSH bans exist."""
     app, db = app_with_tables
     from app_core.auth import firewall
     from app_core.auth.ip_filter import IPFilter, IPFilterReason, IPFilterSource
