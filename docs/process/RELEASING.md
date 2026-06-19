@@ -5,19 +5,22 @@ are signed, and how anyone can verify a download before trusting it.
 
 ## How a release happens
 
-Releases are fully automated by the
-[`release.yml`](../../.github/workflows/release.yml) GitHub Actions workflow.
-There is no manual tagging, uploading, or signing step.
+Releases are cut by the
+[`release.yml`](../../.github/workflows/release.yml) GitHub Actions workflow,
+which is **triggered manually**. There is no manual tagging, uploading, or
+signing step — but publishing the release is a deliberate, on-demand action.
 
 1. **Bump the version.** Update the root [`VERSION`](../../VERSION) file and
    move the corresponding notes in
    [`CHANGELOG.md`](../reference/CHANGELOG.md) from `[Unreleased]` into a new
    `## [X.Y.Z]` heading. The `tests/test_release_metadata.py` guardrail (run
    on every PR by `release-metadata.yml`) enforces that these stay aligned.
-2. **Merge to `main`.** Any push to `main` that touches `VERSION` triggers the
-   release workflow (it can also be run manually via *Actions → Release →
-   Run workflow*).
-3. **The workflow then:**
+2. **Merge to `main`.** Land the version bump on `main` as usual. Merging
+   does **not** publish a release on its own.
+3. **Run the release workflow manually.** When you are ready to publish, go to
+   *Actions → Release → Run workflow* and run it against `main`. The workflow
+   reads the current `VERSION` and releases that version.
+4. **The workflow then:**
    - re-validates the release metadata (`tests/test_release_metadata.py`);
    - builds a reproducible source tarball
      (`eas-station-X.Y.Z.tar.gz`) with `git archive` from the exact commit
@@ -29,8 +32,7 @@ There is no manual tagging, uploading, or signing step.
      release notes.
 
 The workflow is idempotent: if a release for the current `VERSION` already
-exists, it exits without doing anything, so re-runs and unrelated pushes are
-safe.
+exists, it exits without doing anything, so re-running it is safe.
 
 ## How releases are signed
 
