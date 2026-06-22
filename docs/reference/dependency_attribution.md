@@ -18,9 +18,9 @@ branded summary is available in the running application at **`/attribution`**
 
 | Item | Detail |
 | --- | --- |
-| **Copyright** | © 2025–2026 Timothy Kramer (KR8MER) |
+| **Copyright** | © 2025–2026 EAS Station, LLC (KR8MER) |
 | **License** | Dual-licensed: **AGPL-3.0** (`LICENSE`) **or** Commercial (`LICENSE-COMMERCIAL`) |
-| **Required attribution** | `"Powered by EAS Station - Copyright (c) 2025-2026 Timothy Kramer (KR8MER)"` (see `NOTICE`) |
+| **Required attribution** | `"Powered by EAS Station - Copyright (c) 2025-2026 EAS Station, LLC (KR8MER)"` (see `NOTICE`) |
 | **Trademarks & branding** | "EAS Station", logos, and wordmarks are **not** covered by the software licenses — see `docs/policies/TRADEMARK_POLICY.md` |
 | **Repository** | <https://github.com/KR8MER/eas-station> |
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """
 EAS Station - Emergency Alert System
-Copyright (c) 2025-2026 Timothy Kramer (KR8MER)
+Copyright (c) 2025-2026 EAS Station, LLC (KR8MER)
 
 This file is part of EAS Station.
 

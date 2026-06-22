@@ -32,7 +32,7 @@ You may not, without explicit written permission:
 - Use "EAS Station™" as the primary name of a modified fork in a way that implies official endorsement
 - Use project logos/wordmarks for your modified distribution branding
 - Use confusingly similar names, logos, or trade dress
-- State or imply sponsorship, certification, or endorsement by Timothy Kramer or the EAS Station™ project
+- State or imply sponsorship, certification, or endorsement by EAS Station, LLC or the EAS Station™ project
 
 ## 5. Fork Naming Guidance
 

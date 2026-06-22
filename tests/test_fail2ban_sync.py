@@ -1,6 +1,6 @@
 """
 EAS Station - Emergency Alert System
-Copyright (c) 2025-2026 Timothy Kramer (KR8MER)
+Copyright (c) 2025-2026 EAS Station, LLC (KR8MER)
 
 Regression tests for the background fail2ban → Global Ban List sync.
 

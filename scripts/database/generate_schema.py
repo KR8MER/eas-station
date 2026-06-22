@@ -42,7 +42,7 @@ def generate_schema_sql():
         # Header
         output.write("-- EAS Station Database Schema\n")
         output.write("-- Auto-generated from SQLAlchemy models\n")
-        output.write("-- Copyright (c) 2025-2026 Timothy Kramer (KR8MER)\n")
+        output.write("-- Copyright (c) 2025-2026 EAS Station, LLC (KR8MER)\n")
         output.write("--\n")
         output.write("-- This schema file is used for fresh installations.\n")
         output.write("-- For existing database upgrades, use Alembic migrations.\n")

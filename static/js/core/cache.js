@@ -1,6 +1,6 @@
 /**
  * EAS Station™ - Frontend API Cache Module
- * Copyright (c) 2025-2026 Timothy Kramer (KR8MER)
+ * Copyright (c) 2025-2026 EAS Station, LLC (KR8MER)
  * 
  * Provides client-side caching for API requests to reduce server load.
  * Implements time-based cache expiration and automatic cache invalidation.

@@ -130,7 +130,7 @@ with app.app_context():
             # Write header
             f.write("-- EAS Station Database Schema\n")
             f.write("-- Auto-generated from SQLAlchemy models using pg_dump\n")
-            f.write("-- Copyright (c) 2025-2026 Timothy Kramer (KR8MER)\n")
+            f.write("-- Copyright (c) 2025-2026 EAS Station, LLC (KR8MER)\n")
             f.write("--\n")
             f.write("-- This schema file is used for fresh installations.\n")
             f.write("-- For existing database upgrades, use Alembic migrations.\n")

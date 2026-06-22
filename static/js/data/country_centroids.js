@@ -1,6 +1,6 @@
 /*
  * EAS Station - Emergency Alert System
- * Copyright (c) 2025-2026 Timothy Kramer (KR8MER)
+ * Copyright (c) 2025-2026 EAS Station, LLC (KR8MER)
  *
  * Approximate geographic centroids (latitude, longitude) for ISO 3166-1
  * alpha-2 country codes. Used by the Traffic Analytics visitor map to place a

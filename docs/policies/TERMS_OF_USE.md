@@ -145,7 +145,7 @@ See the [SMS Messaging Policy](SMS_MESSAGING.md) (served live at `/sms-complianc
 - Third-party libraries, firmware, container images, and hardware integrations are subject to their own licenses and warranties. You are responsible for reviewing and complying with those terms.
 
 ## 9. Licensing & Contributions
-- The EAS Station™ source code is dual-licensed under the [GNU Affero General Public License v3 (AGPL-3.0)](../../LICENSE) and a [Commercial License](../../LICENSE-COMMERCIAL). AGPL availability is not limited to non-commercial users; commercial users may also use AGPL if they comply with its terms. Copyright remains with Timothy Kramer (KR8MER).
+- The EAS Station™ source code is dual-licensed under the [GNU Affero General Public License v3 (AGPL-3.0)](../../LICENSE) and a [Commercial License](../../LICENSE-COMMERCIAL). AGPL availability is not limited to non-commercial users; commercial users may also use AGPL if they comply with its terms. Copyright remains with EAS Station, LLC (KR8MER).
 - By submitting code, documentation, or other content, contributors agree that their work is provided under the AGPL-3.0 license unless a separate commercial agreement is in place.
 - All commits must include a Developer Certificate of Origin (DCO) sign-off line (`Signed-off-by`) affirming that the contributor has the right to submit the work under the project license. Instructions are provided in [CONTRIBUTING.md](../process/CONTRIBUTING.md).
 

@@ -8,6 +8,26 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.119.3] - 2026-06-22 - Move copyright/ownership to EAS Station, LLC
+
+### Changed
+- **Transferred all project copyright, licensing, and attribution from the
+  personal name "Timothy Kramer (KR8MER)" to the newly formed legal entity
+  "EAS Station, LLC (KR8MER)".** Following the filing of the Ohio Articles of
+  Organization for EAS Station, LLC (effective 2026-06-17), every ownership and
+  legal-attribution reference was updated: source-file `Copyright (c)` headers
+  across the codebase, the `Licensor` line in `LICENSE-COMMERCIAL`, the `NOTICE`
+  attribution string and endorsement clause, the recommended "Powered by EAS
+  Station" attribution, the in-app footer (`templates/base.html`) and
+  attribution page (`templates/attribution.html`), the `author` metadata in
+  `webapp/routes_monitoring.py`, and the copyright/ownership statements in
+  `docs/process/CONTRIBUTING.md`, `docs/policies/TERMS_OF_USE.md`,
+  `docs/policies/TRADEMARK_POLICY.md`, and
+  `docs/reference/dependency_attribution.md`. The personal "about the
+  maintainer" biography and portrait (`templates/about.html`,
+  `docs/reference/ABOUT.md`) were intentionally left intact, as they describe
+  the human maintainer rather than asserting ownership.
+
 ## [2.119.2] - 2026-06-19 - Firewall sync state ignores unmirrorable bans
 
 ### Fixed
