@@ -2,7 +2,7 @@
 
 _Last updated: February 14, 2026_
 
-EAS Station™ is a self-hosted project that runs entirely under your control. The maintainers do not operate a hosted service, collect analytics, or receive telemetry from deployments. This policy explains how to handle data while testing the software in lab environments.
+EAS Station™ is a self-hosted project maintained by EAS Station, LLC (KR8MER) that runs entirely under your control. EAS Station, LLC does not operate a hosted service, collect analytics, or receive telemetry from deployments. This policy explains how to handle data while testing the software in lab environments.
 
 ## 1. Project Scope
 - The maintainers do not collect or process any information from your installations.
@@ -33,5 +33,6 @@ EAS Station™ is a self-hosted project that runs entirely under your control. T
 - You are solely responsible for implementing appropriate backups and safeguards.
 
 ## 7. Contact
+- This policy is provided by EAS Station, LLC (KR8MER).
 - Submit privacy-related questions through the GitHub issue tracker.
 - Do **not** send sensitive personal data, emergency requests, or proprietary information through that channel.
