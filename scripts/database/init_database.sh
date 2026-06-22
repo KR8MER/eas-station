@@ -1,6 +1,6 @@
 #!/bin/bash
 # Initialize EAS Station database schema
-# Copyright (c) 2025-2026 Timothy Kramer (KR8MER)
+# Copyright (c) 2025-2026 EAS Station, LLC (KR8MER)
 # Licensed under AGPL v3 or Commercial License
 #
 # This script:

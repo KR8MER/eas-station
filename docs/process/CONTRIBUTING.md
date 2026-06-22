@@ -8,7 +8,7 @@ Be respectful and constructive. EAS Station™ is maintained by volunteers suppo
 
 ## Licensing and Copyright
 
-- The EAS Station™ source code is dual-licensed under the [GNU Affero General Public License v3 (AGPL-3.0)](../../LICENSE) for open-source use and a [Commercial License](../../LICENSE-COMMERCIAL) for proprietary use. Timothy Kramer (KR8MER) retains the project copyright.
+- The EAS Station™ source code is dual-licensed under the [GNU Affero General Public License v3 (AGPL-3.0)](../../LICENSE) for open-source use and a [Commercial License](../../LICENSE-COMMERCIAL) for proprietary use. EAS Station, LLC (KR8MER) retains the project copyright.
 - By contributing, you agree that your submissions will be licensed under the AGPL-3.0 license and may be redistributed under those terms.
 
 ## Developer Certificate of Origin (DCO)

@@ -1,6 +1,6 @@
 """
 EAS Station - Emergency Alert System
-Copyright (c) 2025-2026 Timothy Kramer (KR8MER)
+Copyright (c) 2025-2026 EAS Station, LLC (KR8MER)
 
 This file is part of EAS Station.
 
@@ -514,7 +514,7 @@ def register(app: Flask, logger) -> None:
         version_data = {
             "version": current_version,
             "name": "EAS Station",
-            "author": "Timothy Kramer (KR8MER) / KR8MER Amateur Radio Emergency Communications",
+            "author": "EAS Station, LLC (KR8MER) / KR8MER Amateur Radio Emergency Communications",
             "description": (
                 f"Emergency alert system for {location['county_name']}, "
                 f"{location['state_code']}"

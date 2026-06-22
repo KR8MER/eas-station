@@ -1,5 +1,5 @@
 # EAS Station™ Requirements
-# Copyright (c) 2025-2026 Timothy Kramer (KR8MER)
+# Copyright (c) 2025-2026 EAS Station, LLC (KR8MER)
 # Licensed under AGPL v3 or Commercial License
 # See LICENSE and LICENSE-COMMERCIAL files
 #

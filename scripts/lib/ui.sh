@@ -20,7 +20,7 @@
 #   * All TUI output goes to /dev/tty so it survives the `exec 1>>LOG 2>&1`
 #     redirect both scripts perform after the root check.
 #
-# Copyright (c) 2025-2026 Timothy Kramer (KR8MER)
+# Copyright (c) 2025-2026 EAS Station, LLC (KR8MER)
 # Licensed under AGPL v3 or Commercial License
 
 # Guard against double-sourcing.
@@ -80,7 +80,7 @@ whiptail() {
 
 # Branding line shown as the whiptail backtitle on every dialog.
 whiptail_footer() {
-    echo "Copyright (c) 2025-2026 Timothy Kramer (KR8MER) | AGPL v3 / Commercial License"
+    echo "Copyright (c) 2025-2026 EAS Station, LLC (KR8MER) | AGPL v3 / Commercial License"
 }
 
 # ── Time formatting ────────────────────────────────────────────────────────
@@ -130,7 +130,7 @@ ui_banner() {
             if [ -n "$log_line" ]; then
                 printf '   %sLog:%s %s\n' "$DIM" "$NC" "$log_line"
             fi
-            printf '   %sCopyright (c) 2025-2026 Timothy Kramer (KR8MER) — AGPL v3 / Commercial%s\n' \
+            printf '   %sCopyright (c) 2025-2026 EAS Station, LLC (KR8MER) — AGPL v3 / Commercial%s\n' \
                 "$DIM" "$NC"
             printf '\n'
         } >/dev/tty 2>/dev/null || true
@@ -141,7 +141,7 @@ ui_banner() {
             printf '  %s — Emergency Alert System\n' "$subtitle"
             [ -n "$version_line" ] && printf '  %s\n' "$version_line"
             [ -n "$log_line" ] && printf '  Log: %s\n' "$log_line"
-            printf '  Copyright (c) 2025-2026 Timothy Kramer (KR8MER) — AGPL v3 / Commercial\n'
+            printf '  Copyright (c) 2025-2026 EAS Station, LLC (KR8MER) — AGPL v3 / Commercial\n'
             printf '\n'
         } >/dev/tty 2>/dev/null || true
     fi

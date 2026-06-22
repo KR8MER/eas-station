@@ -1,6 +1,6 @@
 """
 EAS Station - Emergency Alert System
-Copyright (c) 2025-2026 Timothy Kramer (KR8MER)
+Copyright (c) 2025-2026 EAS Station, LLC (KR8MER)
 
 Database and extension singletons for the EAS Station application.
 This module provides SQLAlchemy database session management and shared

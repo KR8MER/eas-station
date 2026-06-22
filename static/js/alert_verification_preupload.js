@@ -1,6 +1,6 @@
 /*
  * EAS Station™ - Alert Verification pre-upload audio inspector.
- * Copyright (c) 2025-2026 Timothy Kramer (KR8MER)
+ * Copyright (c) 2025-2026 EAS Station, LLC (KR8MER)
  *
  * Parses the RIFF/WAV header of the selected file in the browser BEFORE
  * upload so the user gets instant feedback ("file is 12.3s @ 44100 Hz,
