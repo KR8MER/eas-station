@@ -585,6 +585,6 @@ NOAA/NWS · FEMA/IPAWS · PostGIS Team · U.S. Census Bureau (TIGER/Line) · Put
 
 <div align="center">
   <strong>Made with ☕ and 📻 for Amateur Radio Emergency Communications</strong><br>
-  <strong>Contact:</strong> <a href="mailto:Timothy.Kramer@easstation.com">Timothy.Kramer@easstation.com</a> · (419) 890-1890<br>
+  <strong>Contact:</strong> <a href="mailto:sales@easstation.com">sales@easstation.com</a> · (419) 890-1890<br>
   <strong>73 de KR8MER</strong> 📡
 </div>

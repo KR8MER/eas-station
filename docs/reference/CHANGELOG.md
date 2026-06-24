@@ -27,6 +27,14 @@ tracks releases under the 2.x series.
   maintainer" biography and portrait (`templates/about.html`,
   `docs/reference/ABOUT.md`) were intentionally left intact, as they describe
   the human maintainer rather than asserting ownership.
+- **Updated operational contacts and policy text for the LLC.** The security
+  vulnerability contact is now `security@easstation.com`
+  (`docs/security/SECURITY.md`), the general public contact in `README.md` and
+  `docs/README.md` is the business inbox `sales@easstation.com` and business
+  line, the privacy policy (`docs/policies/PRIVACY_POLICY.md`) now names
+  EAS Station, LLC as the maintaining entity, and `docs/process/CONTRIBUTING.md`
+  adds a commercial-relicensing grant so contributions can be included under the
+  dual-license commercial terms.
 
 ## [2.119.2] - 2026-06-19 - Firewall sync state ignores unmirrorable bans
 

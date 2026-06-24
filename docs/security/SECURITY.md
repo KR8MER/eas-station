@@ -673,7 +673,7 @@ When deploying security features to existing EAS Station™:
 
 For security issues or questions:
 - Review audit logs for suspicious activity
-- Contact the maintainer: Timothy.Kramer@easstation.com
+- Contact security: security@easstation.com
 - File GitHub issue: https://github.com/KR8MER/eas-station/issues
 
 **Security Vulnerabilities:** Report privately via email, not public issues.

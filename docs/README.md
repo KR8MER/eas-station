@@ -113,7 +113,7 @@ EAS Station™ integrates multiple alert sources (NOAA Weather, IPAWS Federal) a
 3. **Run diagnostics** - Use built-in diagnostic tools
 4. **Ask for help** - [GitHub Discussions](https://github.com/KR8MER/eas-station/discussions)
 5. **Report bugs** - [GitHub Issues](https://github.com/KR8MER/eas-station/issues)
-6. **Contact the maintainer** - [Timothy.Kramer@easstation.com](mailto:Timothy.Kramer@easstation.com) · (419) 890-1890
+6. **Contact** - [sales@easstation.com](mailto:sales@easstation.com) · (419) 890-1890 (general/licensing) · [security@easstation.com](mailto:security@easstation.com) (security)
 
 ---
 
