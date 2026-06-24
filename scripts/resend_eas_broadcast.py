@@ -98,6 +98,7 @@ def _run(message_id: int, operator: str | None) -> int:
         tmp_file = None
         audio_played = False
         audio_injected = False
+        airchain_signalled = False
 
         try:
             tmp_file = tempfile.NamedTemporaryFile(suffix='.wav', prefix='eas_resend_', delete=False)
@@ -112,7 +113,7 @@ def _run(message_id: int, operator: str | None) -> int:
             # for exactly the composite audio duration without this process
             # touching GPIO.
             activation_ts = time.monotonic()
-            set_broadcast_active(
+            airchain_signalled = set_broadcast_active(
                 event_code=event_code,
                 label=event_label,
                 duration_seconds=playback_duration,
@@ -170,8 +171,9 @@ def _run(message_id: int, operator: str | None) -> int:
 
         finally:
             # Falling edge: clearing the marker releases the relay in the GPIO
-            # subprocess (which also self-releases on the marker TTL).
-            clear_broadcast_active()
+            # subprocess (which also self-releases on the marker TTL).  Pass the
+            # identifier so an overlapping newer broadcast's marker isn't erased.
+            clear_broadcast_active(identifier=str(message_id))
             if tmp_file is not None:
                 try:
                     os.unlink(tmp_file.name)
@@ -188,9 +190,10 @@ def _run(message_id: int, operator: str | None) -> int:
                         'message_id': message_id,
                         'event_code': event_code,
                         # The GPIO subprocess keys the relay off the broadcast
-                        # marker we published; record that the airchain was
-                        # signalled rather than a per-process activation result.
-                        'airchain_signalled': True,
+                        # marker we published; record whether that marker was
+                        # actually written rather than a per-process activation
+                        # result (the write is best-effort).
+                        'airchain_signalled': airchain_signalled,
                         'audio_played': audio_played if audio_player_cmd else None,
                         'audio_injected': audio_injected,
                         'playback_duration_seconds': round(float(playback_duration), 2),

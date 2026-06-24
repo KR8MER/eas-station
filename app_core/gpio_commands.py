@@ -45,8 +45,11 @@ constructing a controller of its own.
 """
 
 import json
+import logging
 import time
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 #: Pub/sub channel the GPIO subprocess listens on for manual control commands.
 GPIO_COMMAND_CHANNEL = "eas:gpio_commands"
@@ -178,8 +181,10 @@ def publish_pin_states(redis_client, states: List[Dict[str, Any]]) -> None:
             json.dumps({"pins": states, "ts": time.time()}),
             ex=GPIO_PIN_STATE_TTL,
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        # Best-effort: a failed snapshot only means the UI shows stale state
+        # briefly, but log it so a persistently broken Redis is diagnosable.
+        logger.debug("publish_pin_states failed: %s", exc)
 
 
 def get_pin_states() -> Dict[str, Any]:

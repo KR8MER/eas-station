@@ -225,18 +225,28 @@ def register(app: Flask, logger) -> None:
 
         # --- Output pins from the GPIO subprocess's published snapshot ---
         try:
-            pins_list, _live = _gpio_pins_snapshot()
+            pins_list, live = _gpio_pins_snapshot()
             for info in pins_list:
                 pin = info.get("pin")
                 if pin is None:
                     continue
                 bcm = str(pin)
-                is_active = info.get("is_active", False)
+                is_active = bool(info.get("is_active", False))
+                # Only report an electrical HIGH/LOW from a live subprocess
+                # reading; fallback (config-only) pins are UNKNOWN.  Translate
+                # logical active -> electrical level using the pin's polarity so
+                # active-low relays aren't inverted.
+                if not live or str(info.get("state", "")).lower() == "unknown":
+                    electrical_state = "UNKNOWN"
+                else:
+                    active_high = bool(info.get("active_high", True))
+                    electrical_high = is_active if active_high else not is_active
+                    electrical_state = "HIGH" if electrical_high else "LOW"
                 result[bcm] = {
                     "bcm": pin,
                     "source": "gpio_controller",
                     "is_active": is_active,
-                    "state": "HIGH" if is_active else "LOW",
+                    "state": electrical_state,
                     "name": info.get("name", f"GPIO {pin}"),
                 }
         except Exception as exc:
@@ -294,7 +304,7 @@ def register(app: Flask, logger) -> None:
         try:
             from app_core.gpio_commands import publish_gpio_command
 
-            data = request.get_json() or {}
+            data = request.get_json(silent=True) or {}
             reason = data.get("reason", "Manual activation via web UI")
             activation_type = data.get("activation_type", "manual")
             operator = _get_current_user()
@@ -322,8 +332,9 @@ def register(app: Flask, logger) -> None:
                     {
                         "success": False,
                         "error": (
-                            "GPIO service is not running — start the "
-                            "eas-station-gpio service to control relays."
+                            "GPIO is disabled or the GPIO service is not running — "
+                            "enable GPIO and start the eas-station-gpio service to "
+                            "control relays."
                         ),
                     }
                 ),
@@ -350,7 +361,7 @@ def register(app: Flask, logger) -> None:
         try:
             from app_core.gpio_commands import publish_gpio_command
 
-            data = request.get_json() or {}
+            data = request.get_json(silent=True) or {}
             force = data.get("force", False)
 
             receivers = publish_gpio_command("deactivate", pin=pin, force=force)
@@ -368,8 +379,9 @@ def register(app: Flask, logger) -> None:
                     {
                         "success": False,
                         "error": (
-                            "GPIO service is not running — start the "
-                            "eas-station-gpio service to control relays."
+                            "GPIO is disabled or the GPIO service is not running — "
+                            "enable GPIO and start the eas-station-gpio service to "
+                            "control relays."
                         ),
                     }
                 ),
@@ -562,8 +574,9 @@ def register(app: Flask, logger) -> None:
             environment_issues = []
             if not live and configured_count:
                 environment_issues.append(
-                    "The GPIO service (eas-station-gpio) is not reporting state. "
-                    "Relays cannot be controlled until it is running."
+                    "GPIO is disabled or the GPIO service (eas-station-gpio) is not "
+                    "reporting state. Relays cannot be controlled until GPIO is "
+                    "enabled and the service is running."
                 )
 
             # Get recent history (last 24 hours)

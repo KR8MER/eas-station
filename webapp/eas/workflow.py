@@ -1326,14 +1326,16 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             _elabel = (
                 _ei.get('name', event_code) if isinstance(_ei, dict) else event_code
             ) or 'EAS Alert'
-            set_broadcast_active(
+            # gpio_activated reflects whether the airchain marker was actually
+            # published (the GPIO subprocess keys the relay off it) — not an
+            # unconditional True, since the marker write is best-effort.
+            send_result['gpio_activated'] = set_broadcast_active(
                 event_code=event_code or '',
                 label=_elabel,
                 duration_seconds=playback_duration,
                 source='manual',
                 identifier=alert_id or '',
             )
-            send_result['gpio_activated'] = True
 
             # Play audio via configured player command. The broadcast marker must
             # stay set for the full composite duration regardless of whether the
@@ -1377,8 +1379,9 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
         finally:
             # Falling edge: clearing the broadcast marker is what the
             # eas-station-gpio subprocess watches to release the relay (it also
-            # self-releases on the marker TTL as a backstop).
-            clear_broadcast_active()
+            # self-releases on the marker TTL as a backstop).  Pass the
+            # identifier so an overlapping newer broadcast's marker isn't erased.
+            clear_broadcast_active(identifier=alert_id or '')
 
             # Clean up temp file
             if tmp_file is not None:

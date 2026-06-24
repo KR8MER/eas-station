@@ -36,6 +36,14 @@ tracks releases under the 2.x series.
   falling edge, so the release path now calls `end_alert(forwarded=True)` (a
   safe superset — a no-op for any behavior that wasn't actually held) to
   guarantee forwarding-hold pins are released at end-of-message.
+- **An overlapping broadcast could release the relay early.** Broadcasts share
+  one global `eas:broadcast_active` marker; an older playout finishing used to
+  delete it unconditionally, which could erase a newer overlapping broadcast's
+  marker and drop the relay mid-air. `clear_broadcast_active(identifier=...)`
+  now compare-and-deletes — it only clears the marker when it still belongs to
+  the finishing broadcast. The pre-broadcast `eas:incoming_alert` marker also
+  now carries the alert identifier so the INCOMING_ALERT pulse is attributed
+  correctly in the GPIO audit log.
 
 ### Changed
 - **The web app, poller, RWT scheduler, and resend helper no longer build a
@@ -52,7 +60,11 @@ tracks releases under the 2.x series.
   the WebSocket GPIO push render from a pin-state snapshot the subprocess
   publishes each heartbeat. When the GPIO service is down, manual control
   returns `503` with an actionable message and the panel flags that relays
-  can't be controlled. New module `app_core/gpio_commands.py`.
+  can't be controlled. New module `app_core/gpio_commands.py`. The manual-send
+  and resend paths now report airchain status from the actual marker-publish
+  result (`set_broadcast_active()` returns whether the write succeeded) rather
+  than assuming success, and `/api/gpio/live-pin-states` reports `UNKNOWN` for
+  config-only fallback pins and honours each relay's `active_high` polarity.
 
 ## [2.119.3] - 2026-06-22 - Move copyright/ownership to EAS Station, LLC
 

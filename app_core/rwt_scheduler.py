@@ -226,8 +226,9 @@ def _drive_rwt_airchain(
 
     finally:
         # Clearing the marker is the falling edge the GPIO subprocess watches to
-        # release the relay.
-        clear_broadcast_active()
+        # release the relay.  Pass the identifier so an overlapping newer
+        # broadcast's marker is never erased by this RWT finishing.
+        clear_broadcast_active(identifier=alert_id)
         if tmp_file is not None:
             try:
                 os.unlink(tmp_file.name)

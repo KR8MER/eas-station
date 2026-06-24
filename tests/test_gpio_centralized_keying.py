@@ -227,3 +227,81 @@ def test_dispatch_unknown_action_is_noop():
 
 def test_dispatch_without_controller_is_safe():
     assert dispatch_gpio_command(None, {"action": "activate", "pin": 1}) is False
+
+
+# ---------------------------------------------------------------------------
+# Broadcast-marker lifecycle (identifier + return value + guarded clear)
+# ---------------------------------------------------------------------------
+
+
+class _FakeRedis:
+    """Tiny in-memory stand-in for the Redis client used by the marker helpers."""
+
+    def __init__(self):
+        self.store = {}
+
+    def set(self, key, value, ex=None):
+        self.store[key] = value
+
+    def get(self, key):
+        return self.store.get(key)
+
+    def delete(self, key):
+        self.store.pop(key, None)
+
+    def publish(self, channel, message):
+        return 0
+
+
+def _patch_redis(monkeypatch, client):
+    import app_core.redis_client as rc
+    monkeypatch.setattr(rc, "get_redis_client", lambda *a, **k: client)
+
+
+def test_set_broadcast_active_returns_true_when_written(monkeypatch):
+    import app_utils.eas as eas
+
+    client = _FakeRedis()
+    _patch_redis(monkeypatch, client)
+    ok = eas.set_broadcast_active("RWT", "Test", 30.0, source="automated_rwt", identifier="RWT-1")
+    assert ok is True
+    import json
+    stored = json.loads(client.store[eas._BROADCAST_STATE_KEY])
+    assert stored["identifier"] == "RWT-1"
+
+
+def test_set_broadcast_active_returns_false_without_redis(monkeypatch):
+    import app_utils.eas as eas
+
+    _patch_redis(monkeypatch, None)
+    assert eas.set_broadcast_active("RWT", "Test", 30.0) is False
+
+
+def test_clear_broadcast_active_guarded_by_identifier(monkeypatch):
+    import app_utils.eas as eas
+
+    client = _FakeRedis()
+    _patch_redis(monkeypatch, client)
+
+    # A newer broadcast (idB) owns the marker.
+    eas.set_broadcast_active("TOR", "Tornado", 60.0, identifier="idB")
+
+    # An older broadcast (idA) finishing must NOT erase idB's marker.
+    eas.clear_broadcast_active(identifier="idA")
+    assert eas._BROADCAST_STATE_KEY in client.store
+
+    # The owning broadcast clears its own marker.
+    eas.clear_broadcast_active(identifier="idB")
+    assert eas._BROADCAST_STATE_KEY not in client.store
+
+
+def test_set_incoming_alert_carries_identifier(monkeypatch):
+    import json
+    import app_utils.eas as eas
+
+    client = _FakeRedis()
+    _patch_redis(monkeypatch, client)
+    eas.set_incoming_alert(event_code="TOR", identifier="urn:cap:42")
+    stored = json.loads(client.store[eas._INCOMING_STATE_KEY])
+    assert stored["identifier"] == "urn:cap:42"
+    assert stored["event_code"] == "TOR"

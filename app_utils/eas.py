@@ -97,20 +97,29 @@ def _notify_indicator_change() -> None:
         pass
 
 
-def set_incoming_alert(event_code: str = '') -> None:
+def set_incoming_alert(event_code: str = '', identifier: str = '') -> None:
     """Record in Redis that an alert has been received but broadcast has not started.
 
     Called when an alert is first processed so hardware indicators (tower light)
     can show a pre-broadcast "incoming" state (e.g. yellow blink) while audio
     is being generated and the playout decision is being made.  The key carries
     a short TTL so stale entries self-expire if the broadcast never starts.
+
+    *identifier* is the originating alert id; it is carried in the marker so the
+    GPIO subprocess can attribute the INCOMING_ALERT pulse to the right alert in
+    the activation audit log.
     """
     try:
         from app_core.redis_client import get_redis_client
         client = get_redis_client()
         if client is None:
             return
-        payload = json.dumps({'incoming': True, 'event_code': event_code or '', 'ts': time.time()})
+        payload = json.dumps({
+            'incoming': True,
+            'event_code': event_code or '',
+            'identifier': identifier or '',
+            'ts': time.time(),
+        })
         client.set(_INCOMING_STATE_KEY, payload, ex=300)  # 5-minute safety TTL
     except Exception:
         pass
@@ -151,7 +160,7 @@ def set_broadcast_active(
     duration_seconds: float,
     source: str = 'manual',
     identifier: str = '',
-) -> None:
+) -> bool:
     """Record in Redis that an EAS broadcast is in progress.
 
     Called just before audio playback begins so all connected clients can
@@ -161,12 +170,16 @@ def set_broadcast_active(
     It is carried in the marker so the GPIO subprocess — which now keys the
     relay off this marker rather than each producer keying its own controller —
     can record the originating alert in the GPIO activation audit log.
+
+    Returns ``True`` when the marker was actually written to Redis, so callers
+    can report whether the airchain was really signalled rather than assuming
+    success (the write is best-effort and Redis failures are swallowed).
     """
     try:
         from app_core.redis_client import get_redis_client
         client = get_redis_client()
         if client is None:
-            return
+            return False
         payload = json.dumps({
             'active': True,
             'start_ts': time.time(),
@@ -181,18 +194,41 @@ def set_broadcast_active(
         client.set(_BROADCAST_STATE_KEY, payload, ex=ttl)
         # Broadcast starting supersedes the incoming-alert state
         client.delete(_INCOMING_STATE_KEY)
+        _notify_indicator_change()
+        return True
     except Exception:
-        pass
-    _notify_indicator_change()
+        _notify_indicator_change()
+        return False
 
 
-def clear_broadcast_active() -> None:
-    """Remove the active broadcast marker from Redis once playback ends."""
+def clear_broadcast_active(identifier: str = '') -> None:
+    """Remove the active broadcast marker from Redis once playback ends.
+
+    When *identifier* is supplied, only clear the marker if it still belongs to
+    that broadcast.  Broadcasts share one global marker key, so without this
+    guard an older playout finishing could erase the marker a newer overlapping
+    broadcast just wrote — releasing the relay (which the GPIO subprocess keys
+    off this marker) mid-broadcast.  The compare-and-delete window is sub-ms on
+    single-threaded Redis; on any error we fall back to an unconditional delete
+    (the safe direction — the relay drops rather than sticks).
+    """
     try:
         from app_core.redis_client import get_redis_client
         client = get_redis_client()
         if client is None:
             return
+        if identifier:
+            try:
+                raw = client.get(_BROADCAST_STATE_KEY)
+                if raw:
+                    current_id = (json.loads(raw) or {}).get('identifier', '')
+                    if current_id and current_id != identifier:
+                        # A newer broadcast owns the marker now; leave it.
+                        _notify_indicator_change()
+                        return
+            except Exception:
+                # Fall through to an unconditional delete on any read/parse error.
+                pass
         client.delete(_BROADCAST_STATE_KEY)
     except Exception:
         pass
@@ -3646,7 +3682,10 @@ class EASBroadcaster:
         # Signal hardware indicators that an alert has arrived but broadcast has
         # not started yet.  The eas-station-gpio subprocess reads this marker and
         # pulses any INCOMING_ALERT pins / shows the pre-broadcast tower light.
-        set_incoming_alert(event_code=event_code or '')
+        set_incoming_alert(
+            event_code=event_code or '',
+            identifier=str(alert_identifier) if alert_identifier else '',
+        )
 
         # Create and persist database record BEFORE queue/immediate mode split
         # This ensures both modes have consistent database tracking
@@ -3749,7 +3788,11 @@ class EASBroadcaster:
         finally:
             # Falling edge: the GPIO subprocess releases the relay when this
             # marker clears (and self-releases on the marker TTL as a backstop).
-            clear_broadcast_active()
+            # Pass the identifier so an overlapping newer broadcast's marker is
+            # never erased by this one finishing.
+            clear_broadcast_active(
+                identifier=str(alert_identifier) if alert_identifier else ''
+            )
 
         return result
 
