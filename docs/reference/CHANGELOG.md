@@ -8,6 +8,52 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.120.0] - 2026-06-24 - Centralize relay keying in the GPIO subprocess
+
+### Fixed
+- **Broadcast relays (transmitter PTT, audio mute, duration-of-alert holds, and
+  flash) were not reliably keying the physical hardware — most visibly, an
+  automated RWT could leave no relay action at all, or hold the relay for the
+  full 300 s watchdog instead of the broadcast length.** The root cause was
+  GPIO pin-ownership contention across processes. `lgpio`'s `gpio_claim_output`
+  is *exclusive per process*, but the `eas-station-gpio` subprocess claimed every
+  configured relay pin at boot (and only used them for the tower light), while
+  each broadcast producer — the RWT scheduler and manual-send path (both inside
+  the gunicorn **gevent** web workers), `EASBroadcaster` in the poller, and the
+  detached resend helper — built its *own* `GPIOController` and tried to claim
+  the same pins. Those claims failed and silently fell back to the no-op
+  backend, so the relay never moved; in the web workers, importing `lgpio` also
+  stalled the gevent event loop. Relay keying is now **centralized in the
+  single pin-owning `eas-station-gpio` subprocess**, which keys the relay off
+  the `eas:broadcast_active` / `eas:incoming_alert` Redis markers every producer
+  already publishes (rising edge → hold for the broadcast window via the
+  behavior manager, falling edge → release). The relay is therefore asserted for
+  exactly the broadcast duration. New regression coverage in
+  `tests/test_gpio_centralized_keying.py` (8 tests) on top of the existing 74
+  GPIO tests.
+- **A forwarded alert could leave its `FORWARDING_ALERT` hold relay energised
+  until the watchdog.** The broadcast-state marker drops its `source` on the
+  falling edge, so the release path now calls `end_alert(forwarded=True)` (a
+  safe superset — a no-op for any behavior that wasn't actually held) to
+  guarantee forwarding-hold pins are released at end-of-message.
+
+### Changed
+- **The web app, poller, RWT scheduler, and resend helper no longer build a
+  `GPIOController` or key relays directly.** They publish the broadcast-state
+  marker (now carrying the alert `identifier` so the GPIO activation audit log
+  still links to the originating alert) and let the GPIO subprocess do the
+  keying. This removes the cross-process pin contention and the gevent-worker
+  stall entirely.
+- **Operator-initiated manual relay control** (the GPIO Control page test
+  buttons) and **live pin-state display** now flow through Redis instead of a
+  web-process controller: `POST /api/gpio/activate|deactivate` publish a command
+  on the new `eas:gpio_commands` channel that the subprocess executes, and
+  `/api/gpio/status`, `/api/gpio/live-pin-states`, the `/admin/gpio` panel, and
+  the WebSocket GPIO push render from a pin-state snapshot the subprocess
+  publishes each heartbeat. When the GPIO service is down, manual control
+  returns `503` with an actionable message and the panel flags that relays
+  can't be controlled. New module `app_core/gpio_commands.py`.
+
 ## [2.119.3] - 2026-06-22 - Move copyright/ownership to EAS Station, LLC
 
 ### Changed

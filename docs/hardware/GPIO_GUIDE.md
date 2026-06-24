@@ -23,7 +23,18 @@ EAS Station™ uses GPIO-controlled relays to key transmitters, activate externa
 
 ### Overview
 
-The GPIO relay integration is driven by the alert pipeline (the broadcaster and the RWT scheduler) through a **behavior matrix**: you assign each pin one or more *lifecycle behaviors* (see [§5. GPIO Behaviors](#5-gpio-behaviors)) and the system keys those pins at the matching moment of an alert. When an EAS alert is broadcast, pins assigned a transmit-capable behavior close to key the transmitter, and optionally additional relays fire for auxiliary equipment, audio muting, or flashing beacons.
+The GPIO relay integration is driven by the alert pipeline through a **behavior matrix**: you assign each pin one or more *lifecycle behaviors* (see [§5. GPIO Behaviors](#5-gpio-behaviors)) and the system keys those pins at the matching moment of an alert. When an EAS alert is broadcast, pins assigned a transmit-capable behavior close to key the transmitter, and optionally additional relays fire for auxiliary equipment, audio muting, or flashing beacons.
+
+#### Who keys the relay
+
+The `eas-station-gpio` subprocess is the **single owner** of the physical relay lines. The kernel GPIO interface (`lgpio`) allows only one process to claim a line, so relay keying lives entirely in this one process — no other component (the web app, the unified poller, the RWT scheduler, the resend helper) ever touches the GPIO chip.
+
+Every broadcast producer signals an alert by publishing two Redis markers it already maintains for the on-air overlay and tower light:
+
+- `eas:incoming_alert` — set when an alert is received, before broadcast.
+- `eas:broadcast_active` — set for the broadcast window (carrying the event code, source, alert identifier, and duration), and cleared at end-of-message.
+
+The GPIO subprocess watches those markers: the **rising edge** of `eas:broadcast_active` holds the relay (via the behavior matrix) for the broadcast window, and the **falling edge** (or the marker's TTL, as a backstop) releases it. The relay is therefore asserted for exactly the broadcast length, regardless of which producer initiated it or whether a local audio player is configured. Manual relay control from the GPIO Control page is sent to the subprocess over the `eas:gpio_commands` Redis channel; the subprocess publishes a live pin-state snapshot the web UI reads back.
 
 ---
 
@@ -144,7 +155,7 @@ GPIO is configured entirely through the web UI and stored in the database. There
 |-------|------|---------|-------------|
 | `name` | string | `GPIO Pin N` | Friendly label shown in the UI and logs |
 | `active_high` | bool | `true` | `true` = relay closes on HIGH; set `false` for active-low HATs |
-| `hold_seconds` | float | `5.0` | Minimum time the pin stays active before it can be released (anti-chatter). Keep this small — it is **not** a broadcast-hold timer. The air chain is keyed for the full playout by the send worker, then force-released at end-of-message, so `hold_seconds` never extends a broadcast. (A large value only matters for very short manual toggles.) |
+| `hold_seconds` | float | `5.0` | Minimum time the pin stays active before it can be released (anti-chatter). Keep this small — it is **not** a broadcast-hold timer. The air chain is held for the full broadcast window by the GPIO subprocess (off the `eas:broadcast_active` marker) and force-released at end-of-message, so `hold_seconds` never extends a broadcast. (A large value only matters for very short manual toggles.) |
 | `watchdog_seconds` | float | `300.0` | Hard ceiling; the pin is force-released if it stays active longer (stuck-relay protection) |
 | `flash_enabled` | bool | `false` | Flash this pin when activated directly (manual/test). During alerts, assign the **Flash Beacon** behavior instead |
 | `flash_interval_ms` | int | `500` | Flash period, clamped to 50–5000 ms |

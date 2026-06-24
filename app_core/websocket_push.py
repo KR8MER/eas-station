@@ -691,40 +691,44 @@ def _emit_ipaws_status_update(app: 'Flask', socketio: 'SocketIO') -> None:
 def _emit_gpio_status_update(app: 'Flask', socketio: 'SocketIO') -> None:
     """Emit GPIO pin states.
 
-    Pins are configured via the database hardware settings (not a legacy
-    ``GPIOConfig`` table), so we build a transient controller from those configs
-    and emit ``controller.get_all_states()`` — the exact same shape the
-    ``/api/gpio/status`` polling fallback returns, so the front-end's
-    ``updatePinStates`` handler can consume either source interchangeably.
-
-    GPIO may not be available on all systems (e.g., non-Raspberry Pi); in that
-    case the configured pins are still reported (state ``inactive``/``error``).
+    The web process must not build a ``GPIOController`` — only the
+    eas-station-gpio subprocess can claim the physical lines.  That subprocess
+    publishes a live pin-state snapshot to Redis
+    (``app_core.gpio_commands.get_pin_states``); we emit that snapshot, falling
+    back to the configured pins (state ``unknown``) when the subprocess hasn't
+    reported yet.  The payload shape matches the ``/api/gpio/status`` fallback so
+    the front-end's ``updatePinStates`` handler can consume either source.
     """
     try:
-        from app_utils.gpio import GPIOController, load_gpio_pin_configs_from_db
         from app_core.hardware_settings import get_gpio_settings, get_oled_settings
-        from app_core.extensions import db
+        from app_core.gpio_commands import get_pin_states
+        from app_utils.gpio import load_gpio_pin_configs_from_db
 
         if not get_gpio_settings().get('enabled', False):
             return
 
-        # Reuse the web process's shared controller (built by the GPIO API) when
-        # present so configured pins are only set up once; otherwise build a
-        # throwaway controller just to report configured pins.
-        controller = getattr(app, 'gpio_controller', None)
-        if controller is None:
+        snapshot = get_pin_states()
+        if snapshot.get('available'):
+            pin_states = snapshot.get('pins', [])
+        else:
             oled_enabled = get_oled_settings().get('enabled', False)
             configs = load_gpio_pin_configs_from_db(oled_enabled=oled_enabled)
             if not configs:
                 return
-            controller = GPIOController(db_session=db.session, logger=logger)
-            for cfg in configs:
-                try:
-                    controller.add_pin(cfg)
-                except Exception:
-                    pass
-
-        pin_states = list(controller.get_all_states().values())
+            pin_states = [
+                {
+                    'pin': cfg.pin,
+                    'name': cfg.name,
+                    'state': 'unknown',
+                    'enabled': cfg.enabled,
+                    'active_high': cfg.active_high,
+                    'is_active': False,
+                    'flash_enabled': cfg.flash_enabled,
+                    'flash_interval_ms': cfg.flash_interval_ms,
+                    'flash_partner_pin': cfg.flash_partner_pin,
+                }
+                for cfg in configs
+            ]
 
         _safe_emit(socketio, 'gpio_status_update', {
             'pins': pin_states,

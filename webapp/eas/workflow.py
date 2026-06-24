@@ -67,13 +67,6 @@ from app_utils.eas import (
     set_broadcast_active,
     truncate_wav_to_max_seconds,
 )
-from app_utils.gpio import (
-    GPIOActivationType,
-    GPIOBehaviorManager,
-    GPIOController,
-    load_gpio_behavior_matrix_from_db,
-    load_gpio_pin_configs_from_db,
-)
 from app_utils.event_codes import EVENT_CODE_REGISTRY
 from app_utils.fips_codes import (
     get_extended_same_lookup,
@@ -1294,38 +1287,10 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             )
         playback_duration = _wav_duration_seconds(audio_data)
 
-        # Initialize GPIO controller (same pattern as EASBroadcaster)
-        from app_utils.eas import _get_oled_enabled_status
-
-        gpio_controller = None
-        gpio_behavior_manager = None
-        try:
-            oled_enabled = _get_oled_enabled_status()
-            gpio_configs = load_gpio_pin_configs_from_db(
-                workflow_logger, oled_enabled=oled_enabled,
-            )
-            if gpio_configs:
-                gpio_logger = workflow_logger.getChild('gpio')
-                controller = GPIOController(
-                    db_session=db.session,
-                    logger=gpio_logger,
-                )
-                for cfg in gpio_configs:
-                    controller.add_pin(cfg)
-                gpio_controller = controller
-
-                behavior_matrix = load_gpio_behavior_matrix_from_db(
-                    workflow_logger,
-                )
-                gpio_behavior_manager = GPIOBehaviorManager(
-                    controller=controller,
-                    pin_configs=gpio_configs,
-                    behavior_matrix=behavior_matrix,
-                    logger=gpio_logger.getChild('behavior'),
-                )
-                controller.behavior_manager = gpio_behavior_manager
-        except Exception as exc:
-            workflow_logger.warning('GPIO initialization failed: %s', exc)
+        # GPIO is NOT keyed here.  The eas-station-gpio subprocess owns the
+        # physical relay lines and keys them off the broadcast-state marker set
+        # below; the web process must not build a controller (it can't claim the
+        # pins, and importing lgpio in a gevent worker stalls the event loop).
 
         # Write composite audio to a temporary file for playback
         tmp_file = None
@@ -1351,43 +1316,11 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             alert_id = activation.identifier
             event_code = activation.event_code
 
-            # Activate GPIO relays
-            activated_any = False
-            manager_handled = False
-            if gpio_controller:
-                try:
-                    activation_reason = (
-                        f"Manual send ({event_code or 'unknown'})"
-                    )
-                    if gpio_behavior_manager:
-                        gpio_behavior_manager.trigger_incoming_alert(
-                            alert_id=alert_id, event_code=event_code,
-                        )
-                        manager_handled = gpio_behavior_manager.start_alert(
-                            alert_id=alert_id,
-                            event_code=event_code,
-                            reason=activation_reason,
-                        )
-                        activated_any = manager_handled
-                    if not activated_any:
-                        activation_results = gpio_controller.activate_all(
-                            activation_type=GPIOActivationType.AUTOMATIC,
-                            operator=getattr(g.current_user, 'username', None),
-                            alert_id=alert_id,
-                            reason=activation_reason,
-                        )
-                        activated_any = any(activation_results.values())
-                except Exception as exc:
-                    workflow_logger.warning('GPIO activation failed: %s', exc)
-                    activated_any = False
-                    manager_handled = False
-
-            send_result['gpio_activated'] = activated_any
-
-            # Set broadcast state as soon as the airchain is controlled — this
-            # fires the global countdown timer and stack light on every page,
-            # regardless of whether an audio player is configured (e.g. RWT on
-            # a headless encoder still takes the airchain via GPIO).
+            # Set broadcast state before playout — this fires the global
+            # countdown timer and stack light on every page AND is the rising
+            # edge the eas-station-gpio subprocess watches to key the relay
+            # (so a headless encoder still takes the airchain), regardless of
+            # whether a local audio player is configured.
             from app_utils.event_codes import EVENT_CODE_REGISTRY as _ECR
             _ei = _ECR.get(event_code or '', {})
             _elabel = (
@@ -1398,13 +1331,15 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                 label=_elabel,
                 duration_seconds=playback_duration,
                 source='manual',
+                identifier=alert_id or '',
             )
+            send_result['gpio_activated'] = True
 
-            # Play audio via configured player command. The GPIO airchain must
-            # stay asserted for the full composite duration regardless of
-            # whether the player actually blocks for that long — on hosts
-            # without an audio device the player can exit immediately, which
-            # would otherwise drop the relay before the encoder finishes.
+            # Play audio via configured player command. The broadcast marker must
+            # stay set for the full composite duration regardless of whether the
+            # player actually blocks for that long — on hosts without an audio
+            # device the player can exit immediately, which would otherwise drop
+            # the relay (released by the subprocess) before the encoder finishes.
             playout_start = time.monotonic()
             if audio_player_cmd:
                 try:
@@ -1440,23 +1375,9 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                 time.sleep(remaining_playout)
 
         finally:
-            # Release GPIO relays before clearing broadcast state so the
-            # on-air popup remains visible until the encoder has actually
-            # relinquished airchain control.
-            if gpio_controller and activated_any:
-                try:
-                    if manager_handled and gpio_behavior_manager:
-                        gpio_behavior_manager.end_alert(
-                            alert_id=alert_id,
-                            event_code=event_code,
-                        )
-                    else:
-                        # force=True: playout is finished, drop the air chain
-                        # immediately instead of waiting out each pin's
-                        # min-hold (hold_seconds) with the relay still keyed.
-                        gpio_controller.deactivate_all(force=True)
-                except Exception as exc:
-                    workflow_logger.warning('GPIO release failed: %s', exc)
+            # Falling edge: clearing the broadcast marker is what the
+            # eas-station-gpio subprocess watches to release the relay (it also
+            # self-releases on the marker TTL as a backstop).
             clear_broadcast_active()
 
             # Clean up temp file

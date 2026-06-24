@@ -51,10 +51,6 @@ from .eas_fsk import (
 )
 from .eas_tts import TTSEngine
 from .gpio import (
-    GPIOActivationType,
-    GPIOBehaviorManager,
-    GPIOController,
-    GPIOPinConfig,
     load_gpio_behavior_matrix_from_db,
     load_gpio_pin_configs_from_db,
 )
@@ -154,11 +150,17 @@ def set_broadcast_active(
     label: str,
     duration_seconds: float,
     source: str = 'manual',
+    identifier: str = '',
 ) -> None:
     """Record in Redis that an EAS broadcast is in progress.
 
     Called just before audio playback begins so all connected clients can
     display a live countdown timer regardless of which page they are on.
+
+    *identifier* is the alert identifier (e.g. ``RWT-AUTO-...`` or a CAP id).
+    It is carried in the marker so the GPIO subprocess — which now keys the
+    relay off this marker rather than each producer keying its own controller —
+    can record the originating alert in the GPIO activation audit log.
     """
     try:
         from app_core.redis_client import get_redis_client
@@ -172,6 +174,7 @@ def set_broadcast_active(
             'event_code': event_code or '',
             'label': label or event_code or 'EAS Alert',
             'source': source,
+            'identifier': identifier or '',
         })
         # TTL = duration + 60 s safety margin so stale entries self-expire
         ttl = max(60, int(duration_seconds) + 60)
@@ -3450,9 +3453,13 @@ class EASBroadcaster:
         self.location_settings = location_settings or {}
         self.enabled = bool(config.get('enabled'))
         self.audio_generator = EASAudioGenerator(config, logger, db_session=db_session)
-        self.gpio_controller: Optional[GPIOController] = None
-        self.gpio_pin_configs: List[GPIOPinConfig] = []
-        self.gpio_behavior_manager: Optional[GPIOBehaviorManager] = None
+
+        # GPIO is NOT keyed here.  The eas-station-gpio subprocess owns the
+        # physical relay lines (lgpio claims are exclusive per process) and keys
+        # them off the Redis broadcast-state marker this broadcaster publishes
+        # (set_broadcast_active / set_incoming_alert).  A GPIOController built in
+        # this process would only contend for the same lines and fall back to
+        # the no-op backend, so we no longer create one.
 
         if not self.enabled:
             self.logger.info('EAS broadcasting is disabled via configuration.')
@@ -3461,43 +3468,6 @@ class EASBroadcaster:
                 'EAS broadcasting enabled with output directory %s',
                 self.audio_generator.output_dir,
             )
-
-        if self.enabled:
-            oled_enabled = _get_oled_enabled_status()
-            gpio_configs = load_gpio_pin_configs_from_db(self.logger, oled_enabled=oled_enabled)
-            if gpio_configs:
-                try:
-                    gpio_logger = (
-                        self.logger.getChild('gpio')
-                        if hasattr(self.logger, 'getChild')
-                        else self.logger
-                    )
-                    controller = GPIOController(
-                        db_session=self.db_session,
-                        logger=gpio_logger,
-                    )
-                    for config_entry in gpio_configs:
-                        controller.add_pin(config_entry)
-
-                    self.gpio_controller = controller
-                    self.gpio_pin_configs = gpio_configs
-                    behavior_matrix = load_gpio_behavior_matrix_from_db(self.logger)
-                    self.gpio_behavior_manager = GPIOBehaviorManager(
-                        controller=controller,
-                        pin_configs=gpio_configs,
-                        behavior_matrix=behavior_matrix,
-                        logger=gpio_logger.getChild('behavior')
-                        if hasattr(gpio_logger, 'getChild')
-                        else gpio_logger,
-                    )
-                    controller.behavior_manager = self.gpio_behavior_manager
-                    self.logger.info(
-                        'Configured GPIO controller with %s pin(s)',
-                        len(gpio_configs),
-                    )
-                except Exception as exc:  # pragma: no cover - hardware setup
-                    self.logger.warning(f"GPIO controller unavailable: {exc}")
-                    self.gpio_controller = None
 
     def _play_audio(self, audio_path: str) -> None:
         cmd = self.config.get('audio_player_cmd')
@@ -3673,19 +3643,10 @@ class EASBroadcaster:
         forwarding_decision = str(payload.get('forwarding_decision', '') or '').lower()
         is_forwarded = forwarding_decision == 'forwarded' or bool(payload.get('forwarded', False))
 
-        # Signal hardware indicators (tower light) that an alert has arrived but
-        # broadcast has not started yet.  The hardware service polls this key and
-        # calls start_incoming_alert() on the tower light controller.
+        # Signal hardware indicators that an alert has arrived but broadcast has
+        # not started yet.  The eas-station-gpio subprocess reads this marker and
+        # pulses any INCOMING_ALERT pins / shows the pre-broadcast tower light.
         set_incoming_alert(event_code=event_code or '')
-
-        behavior_manager = self.gpio_behavior_manager
-        if behavior_manager:
-            behavior_manager.trigger_incoming_alert(
-                alert_id=str(alert_identifier) if alert_identifier else None,
-                event_code=event_code,
-            )
-            # FORWARDING_ALERT pins are held for the full broadcast duration via
-            # start_alert(forwarded=True) below instead of a short pulse here.
 
         # Create and persist database record BEFORE queue/immediate mode split
         # This ensures both modes have consistent database tracking
@@ -3742,37 +3703,24 @@ class EASBroadcaster:
             # If database persistence fails, we can't continue
             return result
 
-        # Play audio synchronously
-        controller = self.gpio_controller
-        behavior_manager = self.gpio_behavior_manager
-        activated_any = False
-        manager_handled = False
-        if controller:
-            try:  # pragma: no cover - hardware specific
-                activation_reason = f"Automatic alert playout ({event_code or 'unknown'})"
-                if behavior_manager:
-                    manager_handled = behavior_manager.start_alert(
-                        alert_id=str(alert_identifier) if alert_identifier else None,
-                        event_code=event_code,
-                        reason=activation_reason,
-                        forwarded=is_forwarded,
-                    )
-                    activated_any = activated_any or manager_handled
-
-                if not activated_any:
-                    activation_results = controller.activate_all(
-                        activation_type=GPIOActivationType.AUTOMATIC,
-                        operator=None,
-                        alert_id=str(alert_identifier) if alert_identifier else None,
-                        reason=activation_reason,
-                    )
-                    activated_any = any(activation_results.values())
-                    if not activated_any:
-                        self.logger.warning('GPIO controller configured but no pins activated')
-            except Exception as exc:
-                self.logger.warning(f"GPIO activation failed: {exc}")
-                activated_any = False
-                manager_handled = False
+        # Publish broadcast state to Redis *before* playout begins.  This both
+        # drives the browser countdown overlay and is the rising edge the
+        # eas-station-gpio subprocess watches to key the relay (transmitter PTT
+        # / audio mute / duration-of-alert holds + flash) — so the relay is
+        # asserted for the whole broadcast without this process touching GPIO.
+        _duration_hint = _wav_duration_seconds(audio_bytes) if audio_bytes else 0.0
+        _event_info = EVENT_CODE_REGISTRY.get(event_code or '', {})
+        _event_label = (
+            _event_info.get('name', event_code) if isinstance(_event_info, dict) else event_code
+        ) or 'EAS Alert'
+        _bcast_source = 'forwarded' if is_forwarded else 'auto'
+        set_broadcast_active(
+            event_code=event_code or '',
+            label=_event_label,
+            duration_seconds=_duration_hint,
+            source=_bcast_source,
+            identifier=str(alert_identifier) if alert_identifier else '',
+        )
 
         try:
             # Inject into Icecast FIRST so stream listeners hear the alert
@@ -3793,39 +3741,14 @@ class EASBroadcaster:
             except Exception as _inj_exc:
                 self.logger.warning("EAS stream injection failed (non-fatal): %s", _inj_exc)
 
-            # Publish broadcast state to Redis so all connected browser clients
-            # can display the global countdown timer overlay.
-            _duration_hint = _wav_duration_seconds(audio_bytes) if audio_bytes else 0.0
-            _event_info = EVENT_CODE_REGISTRY.get(event_code or '', {})
-            _event_label = (
-                _event_info.get('name', event_code) if isinstance(_event_info, dict) else event_code
-            ) or 'EAS Alert'
-            _bcast_source = 'forwarded' if is_forwarded else 'auto'
-            set_broadcast_active(
-                event_code=event_code or '',
-                label=_event_label,
-                duration_seconds=_duration_hint,
-                source=_bcast_source,
-            )
-
             # audio_bytes contains the complete broadcast sequence:
             # SAME header (3x) → attention tone → TTS narration → EOM.
             # All segments are in a single uninterrupted audio file, so no
             # gap can appear between the narration and the EOM burst.
             self._play_audio_or_bytes(audio_path, audio_bytes)
         finally:
-            if controller and activated_any:
-                try:  # pragma: no cover - hardware specific
-                    if manager_handled and behavior_manager:
-                        behavior_manager.end_alert(
-                            alert_id=str(alert_identifier) if alert_identifier else None,
-                            event_code=event_code,
-                            forwarded=is_forwarded,
-                        )
-                    elif activated_any:
-                        controller.deactivate_all()
-                except Exception as exc:
-                    self.logger.warning(f"GPIO release failed: {exc}")
+            # Falling edge: the GPIO subprocess releases the relay when this
+            # marker clears (and self-releases on the marker TTL as a backstop).
             clear_broadcast_active()
 
         return result
