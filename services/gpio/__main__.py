@@ -213,6 +213,76 @@ def _run_indicator_listener(monitor: "AlertIndicatorMonitor") -> None:
                     pass
 
 
+def _publish_pin_state_snapshot(redis_client) -> None:
+    """Publish the relay controller's live pin states for the web UI to read.
+
+    The web app no longer builds its own controller (it can't claim the pins),
+    so it renders the GPIO Control page from this snapshot instead.
+    """
+    if redis_client is None or _gpio_controller is None:
+        return
+    try:
+        from app_core.gpio_commands import publish_pin_states
+
+        states = list(_gpio_controller.get_all_states().values())
+        publish_pin_states(redis_client, states)
+    except Exception as exc:  # pragma: no cover - defensive
+        logging.getLogger(__name__).debug("pin-state publish failed: %s", exc)
+
+
+def _run_command_listener(flask_app) -> None:
+    """Execute manual GPIO commands published by the web UI.
+
+    Subscribes to the GPIO command channel and dispatches each command to the
+    single owned controller, then republishes the pin-state snapshot so the UI
+    reflects the change immediately.  Reconnects with backoff if Redis drops.
+    """
+    log = logging.getLogger(__name__)
+    from app_core.gpio_commands import GPIO_COMMAND_CHANNEL, dispatch_gpio_command
+
+    import json as _json
+
+    backoff = 1.0
+    while _running:
+        pubsub = None
+        try:
+            client = get_redis()
+            pubsub = client.pubsub(ignore_subscribe_messages=True)
+            pubsub.subscribe(GPIO_COMMAND_CHANNEL)
+            log.info(f"[{SUBSYSTEM}] subscribed to GPIO commands on '{GPIO_COMMAND_CHANNEL}'")
+            backoff = 1.0
+            while _running:
+                message = pubsub.get_message(timeout=1.0)
+                if message is None:
+                    continue
+                try:
+                    command = _json.loads(message.get("data") or "{}")
+                except (ValueError, TypeError) as exc:
+                    log.warning(f"[{SUBSYSTEM}] ignoring malformed GPIO command: {exc}")
+                    continue
+                try:
+                    # Activation logging needs an application/database context.
+                    with flask_app.app_context():
+                        dispatch_gpio_command(_gpio_controller, command, logger=log)
+                    _publish_pin_state_snapshot(client)
+                except Exception as exc:
+                    log.warning(f"[{SUBSYSTEM}] GPIO command execution failed: {exc}")
+        except Exception as exc:
+            if _running:
+                log.warning(
+                    f"[{SUBSYSTEM}] GPIO command listener disconnected ({exc}); "
+                    f"retrying in {backoff:.0f}s"
+                )
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 30.0)
+        finally:
+            if pubsub is not None:
+                try:
+                    pubsub.close()
+                except Exception:
+                    pass
+
+
 def main() -> None:
     global _gpio_controller, _neopixel_controller, _tower_light_controller
 
@@ -267,8 +337,15 @@ def main() -> None:
             tower_light_controller=_tower_light_controller,
             neopixel_controller=_neopixel_controller,
             active_alert_count_fn=_make_active_alert_counter(flask_app),
+            gpio_controller=_gpio_controller,
         )
-        if _tower_light_controller or _neopixel_controller:
+        # The monitor now also keys the relay off the broadcast-state marker, so
+        # it must run whenever a relay controller exists — not only when a tower
+        # light / NeoPixel is attached.
+        indicators_active = bool(
+            _tower_light_controller or _neopixel_controller or _gpio_controller
+        )
+        if indicators_active:
             listener_thread = threading.Thread(
                 target=_run_indicator_listener,
                 args=(indicator_monitor,),
@@ -278,12 +355,25 @@ def main() -> None:
             listener_thread.start()
             logger.info("✅ GPIO indicator event listener started")
 
+        # Manual GPIO control commands from the web UI (the GPIO Control page
+        # "test" buttons) arrive on a Redis channel because only this process
+        # owns the physical lines.
+        if _gpio_controller is not None:
+            command_thread = threading.Thread(
+                target=_run_command_listener,
+                args=(flask_app,),
+                daemon=True,
+                name="gpio-command-listener",
+            )
+            command_thread.start()
+            logger.info("✅ GPIO command listener started")
+
         last_heartbeat = 0.0
 
         while _running:
             now = time.time()
             try:
-                if redis_client and (_tower_light_controller or _neopixel_controller):
+                if redis_client and indicators_active:
                     # Safety-net poll; the listener handles the fast path.
                     indicator_monitor.refresh()
                 if now - last_heartbeat >= HEARTBEAT_INTERVAL_S:
@@ -293,6 +383,7 @@ def main() -> None:
                         neopixel_controller=_neopixel_controller,
                         tower_light_controller=_tower_light_controller,
                     )
+                    _publish_pin_state_snapshot(redis_client)
                     last_heartbeat = now
             except Exception as e:
                 logger.error(f"[{SUBSYSTEM}] error in alert indicator loop: {e}", exc_info=True)

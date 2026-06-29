@@ -38,7 +38,6 @@ from app_core.auth.roles import require_permission
 from app_core.extensions import db
 from app_core.models import GPIOActivationLog
 from app_utils.gpio import (
-    GPIOActivationType,
     GPIOBehavior,
     GPIO_BEHAVIOR_LABELS,
     load_gpio_behavior_matrix_from_db,
@@ -69,61 +68,39 @@ def register(app: Flask, logger) -> None:
         oled_enabled = _get_oled_enabled_status()
         return load_gpio_pin_configs_from_db(route_logger, oled_enabled=oled_enabled)
 
-    def _sync_gpio_configuration(controller):
-        """Keep in-memory controller pins aligned with persisted configuration."""
+    def _gpio_pins_snapshot():
+        """Return ``(pins, live)`` for the configured GPIO pins.
 
-        configs = _get_configured_gpio_pins()
-        configured_pins = {config.pin for config in configs}
-        current_states = controller.get_all_states()
-        loaded_pins = set(current_states.keys())
+        The web process must NOT build a GPIOController — only the
+        eas-station-gpio subprocess can claim the physical lines.  When that
+        subprocess is up it publishes a live pin-state snapshot to Redis
+        (``app_core.gpio_commands.get_pin_states``); we render from that.  When
+        it's down we still list the configured pins (state ``unknown``) so the
+        page isn't empty.  ``live`` is ``True`` when the snapshot came from the
+        running subprocess.
+        """
+        from app_core.gpio_commands import get_pin_states
 
-        # Remove stale pins that are no longer configured.
-        for pin in loaded_pins - configured_pins:
-            try:
-                controller.remove_pin(pin)
-                route_logger.info("Removed stale GPIO configuration for pin %s", pin)
-            except Exception as exc:  # pragma: no cover - hardware teardown
-                route_logger.error("Failed to remove stale GPIO pin %s: %s", pin, exc)
+        snapshot = get_pin_states()
+        if snapshot.get("available"):
+            return snapshot.get("pins", []), True
 
-        # Add newly configured pins.
-        for config in configs:
-            if config.pin in loaded_pins:
-                continue
-            try:
-                controller.add_pin(config)
-                route_logger.info(
-                    "Loaded GPIO configuration: pin %s (%s)", config.pin, config.name
-                )
-            except ValueError:
-                route_logger.warning("GPIO pin %s already configured; skipping", config.pin)
-            except Exception as exc:  # pragma: no cover - hardware setup
-                route_logger.error(
-                    "Failed to register GPIO pin %s (%s): %s",
-                    config.pin,
-                    config.name,
-                    exc,
-                )
-
-        behavior_manager = getattr(controller, "behavior_manager", None)
-        if behavior_manager:
-            behavior_manager.update_pin_configs(configs)
-            behavior_manager.update_behavior_matrix(
-                load_gpio_behavior_matrix_from_db(route_logger)
+        pins = []
+        for config in _get_configured_gpio_pins():
+            pins.append(
+                {
+                    "pin": config.pin,
+                    "name": config.name,
+                    "state": "unknown",
+                    "enabled": config.enabled,
+                    "active_high": config.active_high,
+                    "is_active": False,
+                    "flash_enabled": config.flash_enabled,
+                    "flash_interval_ms": config.flash_interval_ms,
+                    "flash_partner_pin": config.flash_partner_pin,
+                }
             )
-
-        return configs
-
-    def _get_gpio_controller():
-        """Get or create the global GPIO controller instance."""
-        if not hasattr(current_app, "gpio_controller"):
-            from app_utils.gpio import GPIOController
-
-            current_app.gpio_controller = GPIOController(
-                db_session=db.session, logger=route_logger
-            )
-
-        _sync_gpio_configuration(current_app.gpio_controller)
-        return current_app.gpio_controller
+        return pins, False
 
     def _build_pin_entry(pin_def, config_map, behavior_matrix):
         entry = {
@@ -174,10 +151,8 @@ def register(app: Flask, logger) -> None:
     def gpio_status():
         """Get current status of all configured GPIO pins with summary data for OLED."""
         try:
-            controller = _get_gpio_controller()
-            states = controller.get_all_states()
-            pins_list = list(states.values())
-            
+            pins_list, _live = _gpio_pins_snapshot()
+
             # Calculate summary data for OLED display
             active_pins = [p for p in pins_list if p.get('is_active', False)]
             active_count = len(active_pins)
@@ -248,20 +223,34 @@ def register(app: Flask, logger) -> None:
         """
         result: dict = {}
 
-        # --- Output pins from GPIOController ---
+        # --- Output pins from the GPIO subprocess's published snapshot ---
         try:
-            controller = _get_gpio_controller()
-            for pin, info in controller.get_all_states().items():
+            pins_list, live = _gpio_pins_snapshot()
+            for info in pins_list:
+                pin = info.get("pin")
+                if pin is None:
+                    continue
                 bcm = str(pin)
+                is_active = bool(info.get("is_active", False))
+                # Only report an electrical HIGH/LOW from a live subprocess
+                # reading; fallback (config-only) pins are UNKNOWN.  Translate
+                # logical active -> electrical level using the pin's polarity so
+                # active-low relays aren't inverted.
+                if not live or str(info.get("state", "")).lower() == "unknown":
+                    electrical_state = "UNKNOWN"
+                else:
+                    active_high = bool(info.get("active_high", True))
+                    electrical_high = is_active if active_high else not is_active
+                    electrical_state = "HIGH" if electrical_high else "LOW"
                 result[bcm] = {
                     "bcm": pin,
                     "source": "gpio_controller",
-                    "is_active": info.get("is_active", False),
-                    "state": "HIGH" if info.get("is_active") else "LOW",
+                    "is_active": is_active,
+                    "state": electrical_state,
                     "name": info.get("name", f"GPIO {pin}"),
                 }
         except Exception as exc:
-            route_logger.debug("live-pin-states: GPIOController unavailable: %s", exc)
+            route_logger.debug("live-pin-states: GPIO snapshot unavailable: %s", exc)
 
         # --- PPS input pin from GPS Redis key ---
         try:
@@ -313,47 +302,44 @@ def register(app: Flask, logger) -> None:
             }
         """
         try:
-            controller = _get_gpio_controller()
-            data = request.get_json() or {}
+            from app_core.gpio_commands import publish_gpio_command
 
+            data = request.get_json(silent=True) or {}
             reason = data.get("reason", "Manual activation via web UI")
-            activation_type_str = data.get("activation_type", "manual")
-
-            # Parse activation type
-            try:
-                activation_type = GPIOActivationType[activation_type_str.upper()]
-            except KeyError:
-                activation_type = GPIOActivationType.MANUAL
-
-            # Get current user
+            activation_type = data.get("activation_type", "manual")
             operator = _get_current_user()
 
-            # Activate the pin
-            success = controller.activate(
+            # The web process can't drive the pins directly — hand the command
+            # to the eas-station-gpio subprocess that owns them.
+            receivers = publish_gpio_command(
+                "activate",
                 pin=pin,
-                activation_type=activation_type,
                 operator=operator,
                 reason=reason,
+                activation_type=activation_type,
             )
 
-            if success:
+            if receivers > 0:
                 return jsonify(
                     {
                         "success": True,
-                        "message": f"Pin {pin} activated successfully",
+                        "message": f"Activation of pin {pin} requested",
                         "pin": pin,
                     }
                 )
-            else:
-                return (
-                    jsonify(
-                        {
-                            "success": False,
-                            "error": f"Failed to activate pin {pin}",
-                        }
-                    ),
-                    400,
-                )
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": (
+                            "GPIO is disabled or the GPIO service is not running — "
+                            "enable GPIO and start the eas-station-gpio service to "
+                            "control relays."
+                        ),
+                    }
+                ),
+                503,
+            )
 
         except Exception as exc:
             route_logger.error(f"Failed to activate GPIO pin {pin}: {exc}")
@@ -373,30 +359,34 @@ def register(app: Flask, logger) -> None:
             }
         """
         try:
-            controller = _get_gpio_controller()
-            data = request.get_json() or {}
+            from app_core.gpio_commands import publish_gpio_command
+
+            data = request.get_json(silent=True) or {}
             force = data.get("force", False)
 
-            success = controller.deactivate(pin=pin, force=force)
+            receivers = publish_gpio_command("deactivate", pin=pin, force=force)
 
-            if success:
+            if receivers > 0:
                 return jsonify(
                     {
                         "success": True,
-                        "message": f"Pin {pin} deactivated successfully",
+                        "message": f"Deactivation of pin {pin} requested",
                         "pin": pin,
                     }
                 )
-            else:
-                return (
-                    jsonify(
-                        {
-                            "success": False,
-                            "error": f"Failed to deactivate pin {pin}",
-                        }
-                    ),
-                    400,
-                )
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": (
+                            "GPIO is disabled or the GPIO service is not running — "
+                            "enable GPIO and start the eas-station-gpio service to "
+                            "control relays."
+                        ),
+                    }
+                ),
+                503,
+            )
 
         except Exception as exc:
             route_logger.error(f"Failed to deactivate GPIO pin {pin}: {exc}")
@@ -538,20 +528,25 @@ def register(app: Flask, logger) -> None:
     def gpio_control_panel():
         """Render the GPIO control panel page."""
         try:
-            controller = _get_gpio_controller()
-            states = controller.get_all_states()
+            snapshot_pins, live = _gpio_pins_snapshot()
             configured_pins = _get_configured_gpio_pins()
             configured_count = len(configured_pins)
 
-            # Build display payload that includes configured pins even if runtime
-            # controller has not loaded them yet (e.g., service restart pending).
-            pin_entries = []
-            state_map = {int(pin): info for pin, info in states.items()}
+            # The eas-station-gpio subprocess owns the pins and publishes their
+            # live state to Redis.  Merge that snapshot onto the configured pins
+            # so the panel shows configured pins even when the subprocess hasn't
+            # reported yet (e.g. service restart pending).
+            state_map = {
+                int(info["pin"]): info
+                for info in snapshot_pins
+                if info.get("pin") is not None
+            }
 
+            pin_entries = []
             for config in configured_pins:
                 runtime_state = state_map.pop(config.pin, None)
                 if runtime_state is not None:
-                    runtime_state['runtime_loaded'] = True
+                    runtime_state['runtime_loaded'] = live
                     pin_entries.append(runtime_state)
                     continue
 
@@ -570,11 +565,19 @@ def register(app: Flask, logger) -> None:
                     }
                 )
 
-            # Keep any controller-only pins visible for diagnostics.
+            # Keep any subprocess-only pins visible for diagnostics.
             for extra_pin in sorted(state_map.keys()):
                 info = state_map[extra_pin]
-                info['runtime_loaded'] = True
+                info['runtime_loaded'] = live
                 pin_entries.append(info)
+
+            environment_issues = []
+            if not live and configured_count:
+                environment_issues.append(
+                    "GPIO is disabled or the GPIO service (eas-station-gpio) is not "
+                    "reporting state. Relays cannot be controlled until GPIO is "
+                    "enabled and the service is running."
+                )
 
             # Get recent history (last 24 hours)
             cutoff = utc_now() - timedelta(hours=24)
@@ -592,7 +595,7 @@ def register(app: Flask, logger) -> None:
                 recent_logs=recent_logs,
                 current_user=_get_current_user(),
                 configured_pin_count=configured_count,
-                environment_issues=controller.get_environment_issues(),
+                environment_issues=environment_issues,
             )
 
         except Exception as exc:

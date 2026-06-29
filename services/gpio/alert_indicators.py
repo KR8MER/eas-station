@@ -177,6 +177,106 @@ def _redis_ok() -> bool:
         return False
 
 
+def _key_relay_on_edges(
+    gpio_controller,
+    broadcast_state: dict,
+    broadcast_active: bool,
+    broadcast_was_active: bool,
+    incoming_state: dict,
+    incoming_active: bool,
+    incoming_was_active: bool,
+) -> None:
+    """Key the relay (PTT / audio-mute / duration / flash) on broadcast edges.
+
+    The GPIO subprocess is the single owner of the physical relay lines, so it
+    keys them off the same Redis broadcast-state marker every producer already
+    publishes — rather than each producer building its own (contending,
+    no-op-falling-back) controller.  Edge-triggered to mirror the NeoPixel:
+    start on the rising edge of a broadcast, release on the falling edge.
+
+    The 300 s controller watchdog remains a backstop: if a falling edge is ever
+    missed (e.g. the marker TTL lapses without a clean clear) the relay still
+    drops automatically.
+    """
+    if gpio_controller is None:
+        return
+
+    behavior_manager = getattr(gpio_controller, "behavior_manager", None)
+
+    # Incoming alert just arrived -> short pre-broadcast pulse.
+    if incoming_active and not incoming_was_active and behavior_manager is not None:
+        try:
+            behavior_manager.trigger_incoming_alert(
+                alert_id=str(incoming_state.get("identifier") or "") or None,
+                event_code=str(incoming_state.get("event_code") or "") or None,
+            )
+        except Exception as exc:
+            logger.warning("GPIO incoming-alert pulse failed: %s", exc)
+
+    if broadcast_active and not broadcast_was_active:
+        identifier = str(broadcast_state.get("identifier") or "") or None
+        event_code = str(broadcast_state.get("event_code") or "") or None
+        source = str(broadcast_state.get("source") or "").lower()
+        forwarded = source == "forwarded"
+        reason = f"Broadcast playout ({event_code or source or 'alert'})"
+        handled = False
+        if behavior_manager is not None:
+            try:
+                handled = bool(
+                    behavior_manager.start_alert(
+                        alert_id=identifier,
+                        event_code=event_code,
+                        reason=reason,
+                        forwarded=forwarded,
+                    )
+                )
+            except Exception as exc:
+                logger.warning("GPIO start_alert failed: %s", exc)
+        if not handled:
+            # No behavior matrix configured (or it held nothing): fall back to
+            # keying every configured pin for the broadcast, matching the
+            # legacy producer behaviour.
+            try:
+                from app_utils.gpio import GPIOActivationType
+
+                gpio_controller.activate_all(
+                    activation_type=GPIOActivationType.AUTOMATIC,
+                    alert_id=identifier,
+                    reason=reason,
+                )
+            except Exception as exc:
+                logger.warning("GPIO activate_all failed: %s", exc)
+
+    elif not broadcast_active and broadcast_was_active:
+        identifier = str(broadcast_state.get("identifier") or "") or None
+        event_code = str(broadcast_state.get("event_code") or "") or None
+        released = False
+        if behavior_manager is not None:
+            try:
+                # Release with forwarded=True so FORWARDING_ALERT hold pins are
+                # always dropped.  The falling edge sees ``{"active": False}``
+                # (the marker no longer carries the source), so we can't tell
+                # whether the finished broadcast was forwarded — and end_alert is
+                # a no-op for any behavior that wasn't actually held, so
+                # releasing the superset is safe and prevents a forwarded-relay
+                # from lingering until the watchdog.
+                behavior_manager.end_alert(
+                    alert_id=identifier,
+                    event_code=event_code,
+                    forwarded=True,
+                )
+                released = True
+            except Exception as exc:
+                logger.warning("GPIO end_alert failed: %s", exc)
+        if not released:
+            try:
+                # force=True: the broadcast has ended, drop the air chain now
+                # rather than waiting out each pin's anti-chatter min-hold.
+                gpio_controller.deactivate_all(force=True)
+            except Exception as exc:
+                logger.warning("GPIO deactivate_all failed: %s", exc)
+
+
 def update_alert_indicators(
     broadcast_was_active: bool,
     incoming_was_active: bool,
@@ -184,6 +284,7 @@ def update_alert_indicators(
     neopixel_controller=None,
     tower_state_was: Optional[TowerState] = None,
     active_alert_count_fn: Optional[Callable[[], int]] = None,
+    gpio_controller=None,
 ) -> Tuple[bool, bool, Optional[TowerState]]:
     """Resolve and apply the indicator state for this refresh.
 
@@ -191,6 +292,10 @@ def update_alert_indicators(
     colour while a broadcast is active, standby otherwise). The tower
     light is driven by :func:`resolve_tower_state`; hardware is only
     written when the resolved state changes.
+
+    *gpio_controller*, when supplied, is the subprocess's single owned relay
+    controller.  Its relay pins are keyed off the broadcast-state edges here so
+    no other process needs to (or can) claim the same lines.
 
     *active_alert_count_fn*, when supplied, returns the number of unexpired
     alerts in the system.  It lets the tower light stay lit while an alert is
@@ -212,6 +317,7 @@ def update_alert_indicators(
         # State unreadable: keep the previous flags so the NeoPixel sees no
         # false edge, and let the fault state (below) inform the operator.
         broadcast_state = {}
+        incoming_state = {}
         broadcast_active = broadcast_was_active
         incoming_active = incoming_was_active
         redis_ok = False
@@ -223,6 +329,18 @@ def update_alert_indicators(
         except Exception as exc:
             logger.debug("active alert count lookup failed: %s", exc)
             active_alert_count = 0
+
+    # Relay (transmitter PTT / audio mute / duration / flash): keyed here in the
+    # single pin-owning subprocess, off the broadcast-state edges.
+    _key_relay_on_edges(
+        gpio_controller,
+        broadcast_state,
+        broadcast_active,
+        broadcast_was_active,
+        incoming_state,
+        incoming_active,
+        incoming_was_active,
+    )
 
     # NeoPixel: original two-state edge behaviour.
     if neopixel_controller:
@@ -295,10 +413,12 @@ class AlertIndicatorMonitor:
         tower_light_controller=None,
         neopixel_controller=None,
         active_alert_count_fn: Optional[Callable[[], int]] = None,
+        gpio_controller=None,
     ) -> None:
         self.tower_light_controller = tower_light_controller
         self.neopixel_controller = neopixel_controller
         self.active_alert_count_fn = active_alert_count_fn
+        self.gpio_controller = gpio_controller
         self._broadcast_was_active = False
         self._incoming_was_active = False
         self._tower_state: Optional[TowerState] = None
@@ -322,5 +442,6 @@ class AlertIndicatorMonitor:
                 neopixel_controller=self.neopixel_controller,
                 tower_state_was=self._tower_state,
                 active_alert_count_fn=self.active_alert_count_fn,
+                gpio_controller=self.gpio_controller,
             )
             return self._broadcast_was_active, self._incoming_was_active

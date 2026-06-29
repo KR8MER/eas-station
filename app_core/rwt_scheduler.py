@@ -40,7 +40,6 @@ from app_core.models import RWTScheduleConfig, ManualEASActivation, SystemLog
 from app_utils import utc_now
 from app_utils.eas import (
     EASAudioGenerator,
-    _get_oled_enabled_status,
     _wav_duration_seconds,
     build_same_header,
     clear_broadcast_active,
@@ -49,13 +48,6 @@ from app_utils.eas import (
     samples_to_wav_bytes,
     set_broadcast_active,
     truncate_wav_to_max_seconds,
-)
-from app_utils.gpio import (
-    GPIOActivationType,
-    GPIOBehaviorManager,
-    GPIOController,
-    load_gpio_behavior_matrix_from_db,
-    load_gpio_pin_configs_from_db,
 )
 
 logger = logging.getLogger(__name__)
@@ -151,12 +143,17 @@ def _drive_rwt_airchain(
     eas_config: Dict[str, Any],
     log: logging.Logger,
 ) -> bool:
-    """Activate GPIO and play the composite WAV for an automated RWT.
+    """Play the composite WAV for an automated RWT and hold the broadcast marker.
 
-    Returns True if at least one GPIO pin was activated.  Mirrors the
-    manual send path in webapp/eas/workflow.py: load pin configs, build a
-    controller + behavior manager, pulse INCOMING_ALERT, hold the
-    airchain for the full playback duration, then release.
+    GPIO is **not** keyed here.  The ``eas-station-gpio`` subprocess owns the
+    physical relay lines (lgpio claims are exclusive per process) and keys them
+    off the ``eas:broadcast_active`` marker this function maintains — so the
+    relay stays asserted for exactly the broadcast window without this process
+    ever touching the GPIO chip.  This also keeps the RWT scheduler (which runs
+    inside the gunicorn web process) from importing lgpio, whose native thread
+    stalls the gevent event loop.
+
+    Returns ``True`` once the playout window has been held.
     """
     if not composite_wav:
         log.warning("RWT %s has no composite audio; skipping airchain.",
@@ -171,84 +168,22 @@ def _drive_rwt_airchain(
         )
     playback_duration = _wav_duration_seconds(audio_data)
 
-    gpio_controller: Optional[GPIOController] = None
-    gpio_behavior_manager: Optional[GPIOBehaviorManager] = None
-    try:
-        oled_enabled = _get_oled_enabled_status()
-        gpio_configs = load_gpio_pin_configs_from_db(log, oled_enabled=oled_enabled)
-        if gpio_configs:
-            gpio_logger = log.getChild('gpio')
-            controller = GPIOController(db_session=db.session, logger=gpio_logger)
-            for cfg in gpio_configs:
-                controller.add_pin(cfg)
-            gpio_controller = controller
-            behavior_matrix = load_gpio_behavior_matrix_from_db(log)
-            gpio_behavior_manager = GPIOBehaviorManager(
-                controller=controller,
-                pin_configs=gpio_configs,
-                behavior_matrix=behavior_matrix,
-                logger=gpio_logger.getChild('behavior'),
-            )
-            controller.behavior_manager = gpio_behavior_manager
-    except Exception as exc:
-        log.warning("GPIO initialization failed for RWT %s: %s",
-                    activation_record.identifier, exc)
-
     alert_id = activation_record.identifier
     event_code = activation_record.event_code or 'RWT'
-    activation_reason = f"Automated RWT ({event_code})"
-    activated_any = False
-    manager_handled = False
     tmp_file = None
 
     try:
-        if gpio_controller:
-            try:
-                if gpio_behavior_manager:
-                    gpio_behavior_manager.trigger_incoming_alert(
-                        alert_id=alert_id, event_code=event_code,
-                    )
-                    manager_handled = gpio_behavior_manager.start_alert(
-                        alert_id=alert_id,
-                        event_code=event_code,
-                        reason=activation_reason,
-                    )
-                    activated_any = manager_handled
-                if not activated_any:
-                    activation_results = gpio_controller.activate_all(
-                        activation_type=GPIOActivationType.AUTOMATIC,
-                        operator='system',
-                        alert_id=alert_id,
-                        reason=activation_reason,
-                    )
-                    activated_any = any(activation_results.values())
-            except Exception as exc:
-                log.warning("GPIO activation failed for RWT %s: %s",
-                            alert_id, exc)
-                activated_any = False
-                manager_handled = False
-
-        # NOTE: the Redis broadcast-state marker that drives the global
-        # air-chain overlay is set *synchronously* by trigger_rwt_broadcast
-        # before this worker is dispatched, so the popup appears the moment the
-        # request returns rather than waiting for this thread to schedule past
-        # GPIO initialisation.  We only release it (clear_broadcast_active) in
-        # the finally block below once the relay is actually relinquished.
-        #
-        # That synchronous start_ts, however, predates the GPIO setup above —
-        # on a Pi the blocking GPIO C calls can take a second or more, so the
-        # countdown anchored to the request thread would reach 0:00 (and flip to
-        # "END OF MESSAGE") while the relay is still asserted and the audio is
-        # still playing, leaving the overlay stuck at 0:00 after the alert.
-        # Re-anchor the marker to the *actual* playout start now that GPIO is
-        # ready: the frontend re-syncs when start_ts shifts (templates/base.html
-        # ~L509), so the countdown finishes exactly when the relay is released
-        # in the finally block below and the overlay no longer lingers.
+        # Re-anchor the broadcast-state marker to the *actual* playout start.
+        # trigger_rwt_broadcast sets it synchronously so the air-chain overlay
+        # (and the GPIO subprocess's relay keying) react the instant the request
+        # returns; re-anchoring here keeps the countdown finishing exactly when
+        # we clear the marker below, so the overlay never lingers at 0:00.
         set_broadcast_active(
             event_code=event_code,
             label='Required Weekly Test',
             duration_seconds=playback_duration,
             source='automated_rwt',
+            identifier=alert_id,
         )
 
         audio_player_cmd = eas_config.get('audio_player_cmd')
@@ -266,8 +201,7 @@ def _drive_rwt_airchain(
                 # Bound the player to this broadcast's own length, not the
                 # global max.  A hung player (busy/blocked audio device,
                 # stalled network sink) must never keep this worker — and
-                # therefore the asserted air chain and the on-air overlay —
-                # blocked past the broadcast itself.
+                # therefore the on-air overlay — blocked past the broadcast.
                 subprocess.run(
                     command, check=False, timeout=float(playback_duration) + 30,
                 )
@@ -277,41 +211,31 @@ def _drive_rwt_airchain(
                 log.warning("Audio playback failed for RWT %s: %s",
                             alert_id, exc)
         else:
-            log.info("No audio player configured; holding GPIO for %.1fs "
-                     "while encoder plays RWT %s",
+            log.info("No audio player configured; holding broadcast marker for "
+                     "%.1fs while encoder plays RWT %s",
                      playback_duration, alert_id)
 
-        # Keep the relay asserted for the full composite duration regardless
+        # Hold the broadcast marker for the full composite duration regardless
         # of whether the player blocked — on hosts without an audio device the
-        # player can exit immediately, which would otherwise drop the airchain
-        # before the encoder finishes the SAME burst.
+        # player can exit immediately, which would otherwise drop the relay
+        # (released by the subprocess on the marker's falling edge) before the
+        # encoder finishes the SAME burst.
         remaining = playback_duration - (time.monotonic() - playout_start)
         if remaining > 0:
             time.sleep(remaining)
 
     finally:
-        if gpio_controller and activated_any:
-            try:
-                if manager_handled and gpio_behavior_manager:
-                    gpio_behavior_manager.end_alert(
-                        alert_id=alert_id, event_code=event_code,
-                    )
-                else:
-                    # force=True: RWT playout is finished, drop the air chain
-                    # immediately rather than waiting out each pin's min-hold
-                    # (hold_seconds) with the relay still keyed.
-                    gpio_controller.deactivate_all(force=True)
-            except Exception as exc:
-                log.warning("GPIO release failed for RWT %s: %s",
-                            alert_id, exc)
-        clear_broadcast_active()
+        # Clearing the marker is the falling edge the GPIO subprocess watches to
+        # release the relay.  Pass the identifier so an overlapping newer
+        # broadcast's marker is never erased by this RWT finishing.
+        clear_broadcast_active(identifier=alert_id)
         if tmp_file is not None:
             try:
                 os.unlink(tmp_file.name)
             except OSError:
                 pass
 
-    return activated_any
+    return True
 
 
 def _dispatch_rwt_airchain(
@@ -597,6 +521,7 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
                 label='Required Weekly Test',
                 duration_seconds=broadcast_duration,
                 source='automated_rwt',
+                identifier=identifier,
             )
 
         # Drive the airchain: hold GPIO and play the composite WAV for the
