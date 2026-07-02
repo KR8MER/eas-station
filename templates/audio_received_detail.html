@@ -74,6 +74,33 @@
                             <i class="fas fa-download me-1"></i>Download WAV
                         </a>
                     </div>
+                    {% set quality = (alert.full_alert_data or {}).get('narration_quality') %}
+                    {% set narration_decision = (alert.full_alert_data or {}).get('relay_narration_decision') %}
+                    {% if quality %}
+                    <div class="alert alert-{{ 'warning' if quality.degraded else 'success' }} d-flex align-items-start mt-3 mb-0">
+                        <i class="fas fa-{{ 'exclamation-triangle' if quality.degraded else 'check-circle' }} me-2 mt-1"></i>
+                        <div>
+                            {% if quality.degraded %}
+                            <strong>Off-air narration is degraded</strong> — gate-chopped audio detected in the
+                            received signal ({{ quality.gate_events_per_minute }} dropout events/min,
+                            {{ (quality.silence_fraction * 100) | round(0) | int }}% silence). The stutter was
+                            transmitted by the relaying station; this system recorded it faithfully.
+                            {% else %}
+                            <strong>Off-air narration quality: good</strong> — no gate-chopping detected
+                            ({{ quality.gate_events_per_minute }} dropout events/min).
+                            {% endif %}
+                            {% if narration_decision == 'tts_degraded_capture' %}
+                            <div class="small mt-1">Relayed with locally generated TTS narration instead of the degraded capture.</div>
+                            {% elif narration_decision == 'tts_forced' %}
+                            <div class="small mt-1">Relayed with locally generated TTS narration (Relay Narration Audio setting).</div>
+                            {% elif narration_decision == 'captured_degraded_no_tts' %}
+                            <div class="small mt-1">Degraded capture was relayed anyway — no TTS provider is configured. Configure one under Admin → TTS to enable clean substitution.</div>
+                            {% elif narration_decision == 'captured' %}
+                            <div class="small mt-1">Captured off-air narration was used for the relay.</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
             {% endif %}

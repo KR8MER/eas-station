@@ -1156,6 +1156,10 @@ function populateEasForm(settings) {
     if (endecFingerprintCheckbox) {
         endecFingerprintCheckbox.checked = settings.endec_fingerprint !== false;
     }
+    const relayNarrationSelect = document.getElementById('easRelayNarrationSource');
+    if (relayNarrationSelect) {
+        relayNarrationSelect.value = settings.relay_narration_source || 'auto';
+    }
     const preAlertChimeSelect = document.getElementById('easPreAlertChime');
     if (preAlertChimeSelect) {
         preAlertChimeSelect.value = settings.pre_alert_chime || 'none';
@@ -1364,6 +1368,7 @@ async function handleEasSettingsSubmit(e) {
         audio_player: document.getElementById('easAudioPlayer')?.value?.trim() || 'aplay',
         output_dir: document.getElementById('easOutputDir')?.value?.trim() || 'static/eas_messages',
         endec_fingerprint: document.getElementById('easEndecFingerprint')?.checked ?? true,
+        relay_narration_source: document.getElementById('easRelayNarrationSource')?.value || 'auto',
         pre_alert_chime: document.getElementById('easPreAlertChime')?.value || 'none',
         post_alert_chime: document.getElementById('easPostAlertChime')?.value || 'none',
         pre_alert_chime_duration: parseFloat(document.getElementById('easPreAlertChimeDuration')?.value) || 2.0,

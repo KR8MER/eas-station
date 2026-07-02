@@ -35,6 +35,7 @@ Architecture:
 
 import logging
 import threading
+import time
 import queue
 from typing import Dict, Optional, Callable
 import numpy as np
@@ -85,6 +86,13 @@ class BroadcastQueue:
         # Statistics
         self._published_chunks = 0
         self._dropped_chunks = 0
+        # Rate-limited drop logging: dropped audio is the root cause of
+        # "stuttering" complaints, so drops must be visible in the system
+        # logs at WARNING — but at most once per subscriber per interval so
+        # a chronically slow consumer can't flood the journal.
+        self._drop_log_interval_seconds = 30.0
+        self._last_drop_log: Dict[str, float] = {}
+        self._drops_since_log: Dict[str, int] = {}
 
         logger.info(f"Initialized BroadcastQueue '{name}' (max_queue_size={max_queue_size})")
 
@@ -173,10 +181,29 @@ class BroadcastQueue:
                     subscriber_queue.put_nowait(chunk_to_put)
                     delivered += 1
                     self._dropped_chunks += 1
-                    logger.debug(
-                        f"Subscriber '{subscriber_id}' queue full, dropped oldest chunk "
-                        f"(total dropped: {self._dropped_chunks})"
+                    # Dropped chunks = missing audio = audible stutter for
+                    # this subscriber.  Log at WARNING (rate-limited per
+                    # subscriber) so operators can see exactly which consumer
+                    # is falling behind instead of the drop being silent.
+                    self._drops_since_log[subscriber_id] = (
+                        self._drops_since_log.get(subscriber_id, 0) + 1
                     )
+                    now = time.monotonic()
+                    last = self._last_drop_log.get(subscriber_id, 0.0)
+                    if now - last >= self._drop_log_interval_seconds:
+                        logger.warning(
+                            "Audio chunks dropped for subscriber '%s' on '%s': "
+                            "%d in the last %.0fs (total dropped: %d). This "
+                            "subscriber is consuming slower than real time — "
+                            "its audio will stutter.",
+                            subscriber_id,
+                            self.name,
+                            self._drops_since_log.get(subscriber_id, 0),
+                            (now - last) if last > 0 else self._drop_log_interval_seconds,
+                            self._dropped_chunks,
+                        )
+                        self._last_drop_log[subscriber_id] = now
+                        self._drops_since_log[subscriber_id] = 0
                 except (queue.Empty, queue.Full):
                     logger.warning(f"Failed to deliver chunk to subscriber '{subscriber_id}'")
 

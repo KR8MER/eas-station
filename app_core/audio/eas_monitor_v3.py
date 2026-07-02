@@ -827,6 +827,32 @@ class UnifiedEASMonitorService:
                         attention_skip / self._target_sample_rate,
                     )
 
+                    # Assess the captured narration for gate-chopping (upstream
+                    # ENDEC/processor stutter).  The result is stored on the
+                    # alert so the forwarding path can substitute local TTS
+                    # (EASSettings.relay_narration_source) and so operators can
+                    # see the verdict on the received-alert detail page.
+                    try:
+                        from app_utils.audio_quality import assess_narration_quality
+                        quality = assess_narration_quality(
+                            narration, self._target_sample_rate
+                        )
+                        if quality is not None:
+                            alert_data['narration_quality'] = quality
+                            if quality['degraded']:
+                                logger.warning(
+                                    "Off-air narration from '%s' is gate-chopped: "
+                                    "%.1f dropout events/min, %.0f%% silence — the "
+                                    "stutter is present in the received signal",
+                                    source_name,
+                                    quality['gate_events_per_minute'],
+                                    quality['silence_fraction'] * 100,
+                                )
+                    except Exception as _quality_exc:
+                        logger.debug(
+                            "Narration quality assessment failed: %s", _quality_exc
+                        )
+
                 # Always relay with the standard EAS dual-tone (853+960 Hz, 8 s)
                 # regardless of what the originating station transmitted:
                 #   • NOAA sends 1050 Hz  → strip, replace with EAS dual-tone

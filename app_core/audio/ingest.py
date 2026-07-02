@@ -35,44 +35,13 @@ import wave
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from math import gcd
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-from scipy.signal import firwin, resample_poly
 from .broadcast_queue import BroadcastQueue
 
 logger = logging.getLogger(__name__)
-
-
-# Cache of FIR filter taps used by _resample_for_eas, keyed by (up, down).
-# scipy.signal.resample_poly designs a fresh kaiser FIR on every call when
-# window= is left at the default; for 44100 -> 16000 that's ~8800 taps via
-# firwin+kaiser, which py-spy showed at ~1.7 s OwnTime/30 s sampling under
-# real load. We pre-design once per (up, down) ratio and pass the taps as
-# window=. In practice audio sources only use a handful of rates (8/16/22.05/
-# 32/44.1/48/96 kHz) so the cache stays bounded without an LRU.
-_RESAMPLE_FILTER_CACHE: Dict[tuple, np.ndarray] = {}
-
-
-def _design_resample_filter(up: int, down: int) -> np.ndarray:
-    """Return scipy's default resample_poly FIR for the given up/down ratio.
-
-    Mirrors the design scipy uses internally when window=('kaiser', 5.0):
-    a 2*half_len+1 tap firwin lowpass with cutoff 1/max(up, down) and
-    half_len = 10 * max(up, down). Cached per (up, down) so the cost is
-    paid once instead of per chunk.
-    """
-    cached = _RESAMPLE_FILTER_CACHE.get((up, down))
-    if cached is not None:
-        return cached
-    max_rate = max(up, down)
-    half_len = 10 * max_rate
-    taps = firwin(2 * half_len + 1, 1.0 / max_rate, window=("kaiser", 5.0))
-    taps = taps.astype(np.float32)
-    _RESAMPLE_FILTER_CACHE[(up, down)] = taps
-    return taps
 
 
 class AudioSourceType(Enum):
@@ -251,6 +220,13 @@ class AudioSourceAdapter(ABC):
         # This ensures test signals exercise the full 24/7 pipeline rather than
         # bypassing the capture loop and going straight to the decoder.
         self._inject_pending: queue.Queue = queue.Queue(maxsize=10000)
+
+        # Stateful EAS resampler (see _resample_for_eas / eas_resampler.py).
+        # Carries filter history and remainder samples across chunks so the
+        # 16 kHz EAS stream has no chunk-boundary discontinuities.  Recreated
+        # whenever config.sample_rate changes.
+        self._eas_resampler = None
+        self._eas_resampler_rate: Optional[int] = None
         # Reconnection support
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
@@ -503,11 +479,26 @@ class AudioSourceAdapter(ABC):
 
         ARCHITECTURAL FIX: Resample BEFORE queueing to reduce memory and eliminate bottleneck.
 
+        CONTINUITY FIX: Resampling is STATEFUL across chunks.  The previous
+        implementation resampled each ~100 ms chunk independently, which
+        assumed zeros outside every chunk and stamped a filter-edge transient
+        onto every chunk boundary (~10 audible glitches/second on 44.1 kHz
+        sources) and, on the integer-decimation path, silently dropped
+        ``len % factor`` samples per chunk.  A per-source streaming resampler
+        (see app_core/audio/eas_resampler.py) now carries filter history and
+        remainder samples across chunks, so the concatenated 16 kHz stream is
+        identical to resampling the whole signal at once.
+
+        The resampler is recreated whenever ``config.sample_rate`` changes —
+        stream/file sources detect their real rate asynchronously via FFmpeg
+        stderr (see StreamSourceAdapter._stderr_pump), and stale state from
+        the wrong rate must not leak into the corrected stream.
+
         Args:
             audio_chunk: Audio at source sample rate (e.g., 48kHz)
 
         Returns:
-            Resampled audio at 16kHz, or None if error
+            Resampled audio at 16kHz, or None if error / nothing to emit yet
         """
         try:
             # Convert to mono if stereo
@@ -516,50 +507,33 @@ class AudioSourceAdapter(ABC):
             elif audio_chunk.ndim > 2:
                 audio_chunk = audio_chunk.flatten()
 
+            source_rate = int(self.config.sample_rate)
+
             # If already at 16kHz, pass through
-            if self.config.sample_rate == 16000:
+            if source_rate == 16000:
                 return audio_chunk.astype(np.float32)
 
-            source_rate = self.config.sample_rate
-            target_rate = 16000
+            if self._eas_resampler is None or self._eas_resampler_rate != source_rate:
+                from .eas_resampler import make_eas_resampler
+                self._eas_resampler = make_eas_resampler(source_rate, 16000)
+                self._eas_resampler_rate = source_rate
+                if self._eas_resampler is not None:
+                    logger.info(
+                        "EAS resampler for '%s': %d Hz → 16000 Hz (%s)",
+                        self.config.name,
+                        source_rate,
+                        type(self._eas_resampler).__name__,
+                    )
 
-            # Fast path: integer decimation (e.g. 48kHz → 16kHz = factor 3).
-            # Reshape + mean is ~5-10x faster than np.interp and provides basic
-            # anti-aliasing via averaging — sufficient for EAS SAME tones.
-            #
-            # IMPORTANT: Only use this for hardware-controlled sources (SDR, ALSA,
-            # PulseAudio) where config.sample_rate is enforced by the hardware and
-            # guaranteed to match the actual audio rate.
-            # Stream/file sources detect their real sample rate asynchronously via
-            # FFmpeg stderr (see StreamSourceAdapter._stderr_pump). Using the
-            # initially-configured rate before that detection completes produces
-            # audio at the wrong speed (e.g. 44.1 kHz stream decimated as if it
-            # were 48 kHz → 14.7 kHz equivalent, 8% too slow for the EAS decoder).
-            _hardware_source = self.config.source_type in (
-                AudioSourceType.SDR, AudioSourceType.ALSA, AudioSourceType.PULSE
-            )
-            if _hardware_source and source_rate % target_rate == 0:
-                factor = source_rate // target_rate
-                n = len(audio_chunk)
-                trimmed = audio_chunk[:n - (n % factor)] if n % factor else audio_chunk
-                return trimmed.reshape(-1, factor).mean(axis=1).astype(np.float32)
+            if self._eas_resampler is None:
+                return audio_chunk.astype(np.float32)
 
-            # Fallback: polyphase resampling for non-integer ratios (e.g. 44100 → 16000).
-            # resample_poly applies a properly anti-aliased FIR via FFT convolution,
-            # which is both faster than per-sample np.interp and avoids the aliasing
-            # artifacts plain linear interpolation produces above Nyquist/2.
-            #
-            # We pass the FIR taps via window= rather than letting scipy redesign
-            # them every call (~1.7 s/30 s of CPU per the py-spy profile). scipy
-            # mutates the array in-place (h *= up) so we pass a copy of the cached
-            # taps; copy of ~35 KB is microseconds vs. milliseconds of firwin work.
-            g = gcd(int(source_rate), int(target_rate))
-            up = int(target_rate) // g
-            down = int(source_rate) // g
-            taps = _design_resample_filter(up, down)
-            return resample_poly(
-                audio_chunk, up, down, window=taps.copy()
-            ).astype(np.float32)
+            resampled = self._eas_resampler.process(audio_chunk)
+            if resampled is None or len(resampled) == 0:
+                # Streaming resampler is still filling its filter context
+                # (a few ms at start-of-stream) — nothing to publish yet.
+                return None
+            return resampled
 
         except Exception as e:
             logger.error("Error resampling audio for EAS: %s", e)

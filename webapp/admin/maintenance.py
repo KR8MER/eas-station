@@ -1512,6 +1512,7 @@ def _ensure_eas_settings_record() -> EASSettings:
         "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS mdc1200_op_code_raw SMALLINT",
         "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS mdc1200_arg_raw SMALLINT",
         "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS mdc1200_target_unit_id INTEGER",
+        "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS relay_narration_source VARCHAR(16) NOT NULL DEFAULT 'auto'",
     ]
 
     def _query():
@@ -1603,6 +1604,12 @@ def admin_eas_settings():
         # Update station fingerprint toggle
         if "endec_fingerprint" in payload:
             settings.endec_fingerprint = bool(payload["endec_fingerprint"])
+
+        # Update relay narration source (OTA relay audio policy)
+        if "relay_narration_source" in payload:
+            _narration = str(payload["relay_narration_source"] or "auto").strip().lower()
+            if _narration in ("auto", "captured", "tts"):
+                settings.relay_narration_source = _narration
 
         # Update pre/post-alert chime profiles
         _ALLOWED_CHIMES = {"none", "bell", "beep", "three_tone", "qc2", "dtmf", "mdc1200"}

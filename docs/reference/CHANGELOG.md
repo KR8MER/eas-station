@@ -8,6 +8,58 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.121.0] - 2026-07-02 - Detect gate-chopped off-air narration and substitute local TTS on relay
+
+### Added
+- **Off-air narration quality detection** (`app_utils/audio_quality.py`). A
+  forensic investigation of two stuttering received-alert recordings (relays
+  from two independent stations, both fingerprinted as Sage Digital ENDECs)
+  proved the stutter exists in the received signal itself: the SAME header
+  bursts and attention tone in both recordings are phase-continuous and
+  sample-exact, while the voice narration alternates between full level and
+  near-digital silence with single-sample onsets — the signature of an
+  upstream record-input gate/AGC chopping word boundaries. An end-to-end test
+  of the local capture pipeline (broadcast queue → adapter → unified monitor →
+  ring slicing → WAV encode) reproduced a synthetic alert with max error
+  3×10⁻⁵ (16-bit quantization), confirming the recorder is transparent.
+  `assess_narration_quality()` detects the gate-chop signature (silence runs
+  followed by instant full-level onsets ≥ 4 events/min) without flagging
+  natural speech pauses; calibrated against the real degraded captures
+  (8–28 events/min) and clean TTS baselines (0 events/min).
+- **Relay Narration Audio setting** (`EASSettings.relay_narration_source`,
+  Admin → EAS Encoder Settings). Controls the narration used when relaying a
+  received (OTA) alert: `auto` (default — captured off-air audio unless it is
+  detected as degraded, then locally synthesised TTS), `captured` (legacy
+  behaviour), or `tts` (always local TTS). When no TTS provider is configured
+  the captured audio is always relayed — degraded narration beats silence.
+  Migration `20260702_relay_narration_source`.
+- **Quality verdict surfaced in the UI**: the received-alert detail page now
+  shows whether the captured narration was clean or gate-chopped, and which
+  narration source the relay actually used. The unified EAS monitor logs a
+  warning at capture time when a degraded narration is recorded.
+- Regression coverage in `tests/test_narration_quality.py` (8 tests).
+
+### Fixed
+- **The 16 kHz EAS ingest stream carried a filter-edge glitch at every
+  ~100 ms chunk boundary on non-16 kHz sources.** `_resample_for_eas()`
+  called `scipy.signal.resample_poly` on each capture chunk independently;
+  the resampler assumes zeros outside the block, stamping a transient of up
+  to ~13 % of signal amplitude onto every chunk edge (~10 events/second on
+  44.1 kHz sources) in the audio the SAME decoder and the alert recorder
+  consume. The integer-decimation fast path (48 kHz → 16 kHz) additionally
+  dropped `len % factor` samples on every chunk whose length was not
+  divisible by the factor (e.g. one sample per 4096-sample chunk — a click
+  plus ~10 samples/second of clock drift). Both paths are replaced by
+  stateful streaming resamplers (`app_core/audio/eas_resampler.py`) that
+  carry filter history and remainder samples across chunks; the streamed
+  output now matches a whole-signal resample to below −150 dB (float32
+  rounding). Regression coverage in `tests/test_eas_resampler.py` (6 tests).
+- **Dropped audio chunks were invisible.** `BroadcastQueue` logged
+  drop-oldest events at DEBUG, so a consumer falling behind real time (the
+  root cause of audible stutter on the live monitor/Icecast stream) never
+  surfaced in the system logs. Drops are now logged at WARNING, rate-limited
+  per subscriber, naming the exact subscriber that is consuming too slowly.
+
 ## [2.120.0] - 2026-06-24 - Centralize relay keying in the GPIO subprocess
 
 ### Fixed

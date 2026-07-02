@@ -785,6 +785,14 @@ class EASSettings(db.Model):
     forwarded_event_codes = db.Column(JSONB, nullable=False, default=list)
     # Event codes to auto-forward from CAP/OTA sources. Empty list = forward all.
 
+    relay_narration_source = db.Column(db.String(16), nullable=False, default='auto')
+    # Narration audio for relayed OTA alerts:
+    #   'auto'     — use the captured off-air narration unless it is detected as
+    #                gate-chopped/degraded, in which case synthesise local TTS
+    #   'captured' — always relay the captured off-air narration (legacy)
+    #   'tts'      — always synthesise local TTS narration
+    # Degradation detection: app_utils/audio_quality.assess_narration_quality.
+
     # ========================================================================
     # ENDEC Device Feeds (Sage-ENDEC-compatible serial/TCP output)
     # ========================================================================
@@ -844,6 +852,7 @@ class EASSettings(db.Model):
             "authorized_fips_codes": list(self.authorized_fips_codes or []),
             "authorized_event_codes": list(self.authorized_event_codes or []),
             "forwarded_event_codes": list(self.forwarded_event_codes or []),
+            "relay_narration_source": self.relay_narration_source or 'auto',
             "endec_feeds_enabled": bool(self.endec_feeds_enabled),
             "endec_feeds": list(self.endec_feeds or []),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,

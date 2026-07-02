@@ -688,6 +688,42 @@
                             </div>
                         </div>
 
+                        <!-- Relay Narration Quality -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="relayNarrationHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#relayNarrationCollapse">
+                                    <i class="fas fa-wave-square me-2"></i>Relay Narration Quality (OTA Alerts)
+                                </button>
+                            </h2>
+                            <div id="relayNarrationCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p>
+                                        When an over-the-air (OTA) alert is decoded, the system captures the voice
+                                        narration that follows the attention tone and can relay it during
+                                        auto-forwarding. Some upstream ENDECs and air-chain processors gate their
+                                        record input, transmitting narration that stutters — words chopped by
+                                        near-silence gaps with abrupt restarts. The system analyzes every captured
+                                        narration for this signature and shows the verdict on the received-alert
+                                        detail page.
+                                    </p>
+                                    <p>
+                                        The <strong>Relay Narration Audio</strong> setting (Admin → EAS Encoder
+                                        Settings) controls what goes to air when relaying:
+                                    </p>
+                                    <ul>
+                                        <li><strong>Auto (recommended)</strong> — relay the captured off-air narration unless it is detected as gate-chopped, in which case a clean narration is synthesized with the configured TTS provider.</li>
+                                        <li><strong>Captured off-air audio</strong> — always relay the captured narration exactly as received (legacy behavior).</li>
+                                        <li><strong>Always local TTS</strong> — always synthesize the narration locally.</li>
+                                    </ul>
+                                    <div class="alert alert-light">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        TTS substitution requires a configured TTS provider (Admin → TTS). Without
+                                        one, the captured audio is always relayed — degraded narration beats silence.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Text-to-Speech Normalization & Pronunciation -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="ttsNormHeading">

@@ -970,6 +970,15 @@
                                     </div>
                                     <small class="text-muted">Appends a distinctive trill after each SAME burst to identify this station</small>
                                 </div>
+                                <div class="col-md-4">
+                                    <label for="easRelayNarrationSource" class="form-label fw-bold">Relay Narration Audio</label>
+                                    <select class="form-select" id="easRelayNarrationSource" name="relay_narration_source">
+                                        <option value="auto" selected>Auto — captured unless degraded (recommended)</option>
+                                        <option value="captured">Captured off-air audio (legacy)</option>
+                                        <option value="tts">Always local TTS</option>
+                                    </select>
+                                    <small class="text-muted">Voice narration used when relaying received (OTA) alerts. Auto substitutes local TTS when the captured off-air audio is detected as gate-chopped/stuttering. Requires a configured TTS provider to substitute.</small>
+                                </div>
 
                                 <!-- Pre/Post-Alert Signaling -->
                                 <div class="col-12">
