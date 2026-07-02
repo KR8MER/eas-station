@@ -39,6 +39,27 @@ tracks releases under the 2.x series.
   warning at capture time when a degraded narration is recorded.
 - Regression coverage in `tests/test_narration_quality.py` (8 tests).
 
+### Fixed
+- **The 16 kHz EAS ingest stream carried a filter-edge glitch at every
+  ~100 ms chunk boundary on non-16 kHz sources.** `_resample_for_eas()`
+  called `scipy.signal.resample_poly` on each capture chunk independently;
+  the resampler assumes zeros outside the block, stamping a transient of up
+  to ~13 % of signal amplitude onto every chunk edge (~10 events/second on
+  44.1 kHz sources) in the audio the SAME decoder and the alert recorder
+  consume. The integer-decimation fast path (48 kHz → 16 kHz) additionally
+  dropped `len % factor` samples on every chunk whose length was not
+  divisible by the factor (e.g. one sample per 4096-sample chunk — a click
+  plus ~10 samples/second of clock drift). Both paths are replaced by
+  stateful streaming resamplers (`app_core/audio/eas_resampler.py`) that
+  carry filter history and remainder samples across chunks; the streamed
+  output now matches a whole-signal resample to below −150 dB (float32
+  rounding). Regression coverage in `tests/test_eas_resampler.py` (6 tests).
+- **Dropped audio chunks were invisible.** `BroadcastQueue` logged
+  drop-oldest events at DEBUG, so a consumer falling behind real time (the
+  root cause of audible stutter on the live monitor/Icecast stream) never
+  surfaced in the system logs. Drops are now logged at WARNING, rate-limited
+  per subscriber, naming the exact subscriber that is consuming too slowly.
+
 ## [2.120.0] - 2026-06-24 - Centralize relay keying in the GPIO subprocess
 
 ### Fixed
