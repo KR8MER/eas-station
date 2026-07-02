@@ -1010,8 +1010,80 @@ def auto_forward_ota_alert(
             # Attach OTA narration audio captured between attention tone and EOM so
             # build_files() can relay it instead of synthesising new TTS.
             # Alerts with a 1050 Hz or EBS attention tone will always have narration.
-            if relay_audio_wav:
+            #
+            # EASSettings.relay_narration_source controls which narration goes to air:
+            #   'captured' — always relay the captured off-air narration (legacy)
+            #   'tts'      — always synthesise local TTS narration
+            #   'auto'     — captured, unless it is detected as gate-chopped
+            #                (upstream ENDEC/processor stutter) in which case
+            #                local TTS is used so the relay stays intelligible.
+            # When TTS is not configured the captured audio is always kept —
+            # degraded narration beats no narration.
+            narration_source = 'auto'
+            try:
+                from app_core.models import EASSettings as _EASSettings
+                _settings_row = db_session.get(_EASSettings, 1)
+                if _settings_row is not None:
+                    narration_source = (
+                        getattr(_settings_row, 'relay_narration_source', None) or 'auto'
+                    ).strip().lower()
+            except Exception as _settings_exc:
+                log.debug(
+                    "Could not read relay_narration_source (defaulting to auto): %s",
+                    _settings_exc,
+                )
+
+            tts_available = bool((eas_config.get('tts_provider') or '').strip())
+            attach_captured = bool(relay_audio_wav)
+            narration_decision = 'captured' if attach_captured else 'tts_no_capture'
+
+            if attach_captured and narration_source == 'tts':
+                if tts_available:
+                    attach_captured = False
+                    narration_decision = 'tts_forced'
+                    log.info(
+                        "Relay narration source is 'tts' — synthesising local TTS "
+                        "instead of relaying captured off-air narration"
+                    )
+                else:
+                    narration_decision = 'captured_tts_unavailable'
+                    log.warning(
+                        "Relay narration source is 'tts' but no TTS provider is "
+                        "configured — relaying captured off-air narration instead"
+                    )
+            elif attach_captured and narration_source == 'auto':
+                quality = alert_dict.get('narration_quality')
+                if quality is None:
+                    try:
+                        from app_utils.audio_quality import assess_wav_bytes
+                        quality = assess_wav_bytes(relay_audio_wav)
+                        if quality is not None:
+                            alert_dict['narration_quality'] = quality
+                    except Exception as _quality_exc:
+                        log.debug("Narration quality assessment failed: %s", _quality_exc)
+                if quality and quality.get('degraded'):
+                    if tts_available:
+                        attach_captured = False
+                        narration_decision = 'tts_degraded_capture'
+                        log.warning(
+                            "Captured off-air narration is gate-chopped "
+                            "(%.1f dropout events/min) — relaying with local TTS "
+                            "narration instead",
+                            quality.get('gate_events_per_minute', 0.0),
+                        )
+                    else:
+                        narration_decision = 'captured_degraded_no_tts'
+                        log.warning(
+                            "Captured off-air narration is gate-chopped "
+                            "(%.1f dropout events/min) but no TTS provider is "
+                            "configured — relaying the degraded audio",
+                            quality.get('gate_events_per_minute', 0.0),
+                        )
+
+            if attach_captured and relay_audio_wav:
                 payload['relay_audio_wav_bytes'] = relay_audio_wav
+            alert_dict['relay_narration_decision'] = narration_decision
+            result['relay_narration_decision'] = narration_decision
 
             # Relay always uses the EAS dual-tone (853+960 Hz, 8 s).  Both the NOAA
             # 1050 Hz tone and any EBS dual-tone from the originating station are
