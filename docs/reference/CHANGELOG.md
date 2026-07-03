@@ -8,6 +8,30 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.122.0] - 2026-07-03 - Multi-select and exclusion filtering for received alerts
+
+### Added
+- **Multi-select Audio Source and Event Type filters** on the Received Alerts
+  page (`/audio/received`). Both filters are now checkbox dropdowns that accept
+  several values at once (`?source=A&source=B`), and each carries an
+  **Include / Exclude** mode toggle so a noisy source can be filtered *out* of
+  the list, or weekly test events (RWT/RMT) hidden entirely
+  (`?event=RWT&event=RMT&event_mode=exclude`). Rows with no event code survive
+  an event exclusion filter. Each dropdown option shows its alert count so
+  operators can see which sources/events dominate the list.
+- **Clickable statistics cards**: the Total / Forwarded / Ignored / Errors
+  cards now link to the correspondingly filtered list.
+- Filter parsing, query building, and chip/pagination query-string helpers
+  extracted to `webapp/admin/audio/received_filters.py` with regression
+  coverage in `tests/test_received_alert_filters.py` (12 tests).
+- Help page documents the new filtering workflow.
+
+### Fixed
+- Filter chips and pagination links are now built with proper URL encoding;
+  previously a search term containing `&`, `#`, or spaces produced broken
+  chip-removal and pagination URLs. Removing the last value of an excluded
+  filter also removes its orphaned mode marker from the URL.
+
 ## [2.121.0] - 2026-07-02 - Detect gate-chopped off-air narration and substitute local TTS on relay
 
 ### Added
