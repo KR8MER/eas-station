@@ -59,6 +59,22 @@ tracks releases under the 2.x series.
   root cause of audible stutter on the live monitor/Icecast stream) never
   surfaced in the system logs. Drops are now logged at WARNING, rate-limited
   per subscriber, naming the exact subscriber that is consuming too slowly.
+- **Live listen streams stuttered by construction under any timing jitter.**
+  The web WAV stream (`/api/audio/stream/<source>`) and both EAS decoder
+  MP3 feeds wrote a 50–100 ms block of zeros on EVERY queue-read timeout —
+  and the decoder feeds' 100 ms timeout raced the ~100 ms producer cadence,
+  so a chunk arriving even a few milliseconds late was replaced with an
+  injected silence block spliced into the middle of continuous audio, with
+  the real chunk playing after the gap. Under normal scheduling/network
+  jitter this produced audible stuttering several times per second on the
+  Listen feature and pushed the stream progressively behind real time until
+  the subscription queue overflowed and real audio was dropped too. All
+  three streams now use a keep-alive gate
+  (`app_core/audio/stream_keepalive.py`): transient jitter emits nothing
+  (the browser/ffmpeg simply waits for the late chunk), and paced comfort
+  silence is emitted only after a source has been genuinely quiet for
+  1.5–2 s, keeping the connection alive when a source is down. Regression
+  coverage in `tests/test_stream_keepalive.py` (5 tests).
 
 ## [2.120.0] - 2026-06-24 - Centralize relay keying in the GPIO subprocess
 
