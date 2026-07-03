@@ -59,6 +59,26 @@ tracks releases under the 2.x series.
   root cause of audible stutter on the live monitor/Icecast stream) never
   surfaced in the system logs. Drops are now logged at WARNING, rate-limited
   per subscriber, naming the exact subscriber that is consuming too slowly.
+- **Recorded alerts were shredded once the unified monitor fell behind —
+  the stored WAV itself stuttered.** The monitor loop read exactly ONE
+  100 ms chunk per source per cycle, while every source that momentarily
+  produced nothing (a stream reconnecting, an SDR service restart, a
+  configured-but-idle input) blocked the cycle for its full 0.1 s read
+  timeout. One stalled sibling capped every active source at exactly
+  real-time consumption (zero margin); two stalls or any decode/GC overhead
+  put active sources permanently behind — and there was **no catch-up
+  mechanism**, so the backlog grew monotonically until the 10 000-chunk
+  subscription queue engaged drop-oldest *permanently*. From that point a
+  slice of every source's audio was silently discarded and every recorded
+  alert came out fragmented with ~100 ms holes. A service restart cleared
+  the queues (appearing to fix it) before the system silently degraded
+  again. The loop now drains a source's entire backlog when one is waiting
+  (bounded at 50 chunks/cycle so one source cannot starve others), recovers
+  from any stall faster than real time, reports `queue_backlog_chunks`
+  per source in the monitor status API, and logs a rate-limited warning
+  whenever a backlog persists. Regression coverage in
+  `tests/test_eas_monitor_catchup.py` (2 tests — the stalled-siblings
+  scenario fails against the old one-chunk-per-cycle loop).
 - **Live listen streams stuttered by construction under any timing jitter.**
   The web WAV stream (`/api/audio/stream/<source>`) and both EAS decoder
   MP3 feeds wrote a 50–100 ms block of zeros on EVERY queue-read timeout —
