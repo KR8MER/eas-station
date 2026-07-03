@@ -22,15 +22,20 @@ from __future__ import annotations
 """Received EAS alerts monitoring and display routes."""
 
 import io
-import math
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
 
-from flask import render_template, request, url_for, jsonify, send_file, abort
-from sqlalchemy import or_, desc
+from flask import render_template, request, jsonify, send_file, abort
+from sqlalchemy import desc, func
 
 from app_core.extensions import db
-from app_core.models import ReceivedEASAlert, EASMessage
+from app_core.models import ReceivedEASAlert
+from webapp.admin.audio.received_filters import (
+    DEFAULT_PER_PAGE,
+    apply_filters,
+    build_filter_chips,
+    build_pager_qs,
+    filter_params,
+    parse_filters,
+)
 
 
 def register_received_alerts_routes(app, logger) -> None:
@@ -43,76 +48,13 @@ def register_received_alerts_routes(app, logger) -> None:
             # Validate pagination parameters
             page = request.args.get('page', 1, type=int)
             page = max(1, page)  # Ensure page is at least 1
-            per_page = request.args.get('per_page', 25, type=int)
+            per_page = request.args.get('per_page', DEFAULT_PER_PAGE, type=int)
             per_page = min(max(per_page, 10), 100)  # Clamp between 10 and 100
 
-            # Filters
-            search = request.args.get('search', '').strip()
-            source_filter = request.args.get('source', '').strip()
-            alert_source_filter = request.args.get('alert_source', '').strip()
-            event_filter = request.args.get('event', '').strip()
-            decision_filter = request.args.get('decision', '').strip()
-            originator_filter = request.args.get('originator', '').strip()
-            date_from = request.args.get('date_from', '').strip()
-            date_to = request.args.get('date_to', '').strip()
-            min_confidence_raw = request.args.get('min_confidence', '').strip()
-
-            # Build query
-            base_query = ReceivedEASAlert.query
-
-            if search:
-                search_term = f'%{search}%'
-                base_query = base_query.filter(
-                    or_(
-                        ReceivedEASAlert.event_code.ilike(search_term),
-                        ReceivedEASAlert.event_name.ilike(search_term),
-                        ReceivedEASAlert.raw_same_header.ilike(search_term),
-                        ReceivedEASAlert.originator_name.ilike(search_term),
-                        ReceivedEASAlert.callsign.ilike(search_term),
-                    )
-                )
-
-            if source_filter:
-                base_query = base_query.filter(ReceivedEASAlert.source_name == source_filter)
-
-            if alert_source_filter:
-                base_query = base_query.filter(ReceivedEASAlert.alert_source == alert_source_filter)
-
-            if event_filter:
-                base_query = base_query.filter(ReceivedEASAlert.event_code == event_filter)
-
-            if decision_filter:
-                base_query = base_query.filter(ReceivedEASAlert.forwarding_decision == decision_filter)
-
-            if originator_filter:
-                base_query = base_query.filter(ReceivedEASAlert.originator_code == originator_filter)
-
-            # Date range: inputs are YYYY-MM-DD local dates. Treat as inclusive day.
-            if date_from:
-                try:
-                    df = datetime.strptime(date_from, '%Y-%m-%d').replace(tzinfo=timezone.utc)
-                    base_query = base_query.filter(ReceivedEASAlert.received_at >= df)
-                except ValueError:
-                    date_from = ''
-            if date_to:
-                try:
-                    dt = datetime.strptime(date_to, '%Y-%m-%d').replace(tzinfo=timezone.utc)
-                    # Include the entire selected end day
-                    dt_end = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
-                    base_query = base_query.filter(ReceivedEASAlert.received_at <= dt_end)
-                except ValueError:
-                    date_to = ''
-
-            min_confidence = None
-            if min_confidence_raw:
-                try:
-                    min_confidence = float(min_confidence_raw)
-                    if 0.0 <= min_confidence <= 1.0:
-                        base_query = base_query.filter(ReceivedEASAlert.decode_confidence >= min_confidence)
-                    else:
-                        min_confidence = None
-                except ValueError:
-                    min_confidence = None
+            # Parse and apply filters (multi-value source/event with
+            # include/exclude modes; see received_filters.py).
+            filters = parse_filters(request.args)
+            base_query = apply_filters(ReceivedEASAlert.query, filters)
 
             # Order by most recent first
             query = base_query.order_by(desc(ReceivedEASAlert.received_at))
@@ -121,12 +63,19 @@ def register_received_alerts_routes(app, logger) -> None:
             pagination = query.paginate(page=page, per_page=per_page, error_out=False)
             alerts = pagination.items
 
-            # Get unique values for filters
-            sources = db.session.query(ReceivedEASAlert.source_name).distinct().order_by(ReceivedEASAlert.source_name).all()
-            sources = [s[0] for s in sources if s[0]]
+            # Get unique values for filters (with per-value alert counts so
+            # the dropdowns show how much each choice matters)
+            source_rows = db.session.query(
+                ReceivedEASAlert.source_name, func.count(ReceivedEASAlert.id)
+            ).group_by(ReceivedEASAlert.source_name).order_by(ReceivedEASAlert.source_name).all()
+            sources = [(row[0], row[1]) for row in source_rows if row[0]]
 
-            events = db.session.query(ReceivedEASAlert.event_code, ReceivedEASAlert.event_name).distinct().order_by(ReceivedEASAlert.event_code).all()
-            events = [(e[0], e[1] or e[0]) for e in events if e[0]]
+            event_rows = db.session.query(
+                ReceivedEASAlert.event_code,
+                func.max(ReceivedEASAlert.event_name),
+                func.count(ReceivedEASAlert.id),
+            ).group_by(ReceivedEASAlert.event_code).order_by(ReceivedEASAlert.event_code).all()
+            events = [(row[0], row[1] or row[0], row[2]) for row in event_rows if row[0]]
 
             originators = db.session.query(
                 ReceivedEASAlert.originator_code, ReceivedEASAlert.originator_name
@@ -149,15 +98,10 @@ def register_received_alerts_routes(app, logger) -> None:
                 pagination=pagination,
                 page=page,
                 per_page=per_page,
-                search=search,
-                source_filter=source_filter,
-                alert_source_filter=alert_source_filter,
-                event_filter=event_filter,
-                decision_filter=decision_filter,
-                originator_filter=originator_filter,
-                date_from=date_from,
-                date_to=date_to,
-                min_confidence=min_confidence,
+                filters=filters,
+                filter_chips=build_filter_chips(filters, per_page),
+                has_filters=bool(filter_params(filters)),
+                pager_qs=build_pager_qs(filters, per_page),
                 sources=sources,
                 events=events,
                 originators=originators,

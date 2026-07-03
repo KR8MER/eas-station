@@ -491,6 +491,28 @@
 
                                     <hr class="my-3">
 
+                                    <h6><i class="fas fa-filter me-2"></i>Filtering the Received Alerts List</h6>
+                                    <p>
+                                        The <a href="/audio/received"><strong>Received Alerts</strong></a> page
+                                        (<code>Monitor → Radio Monitoring → Received Alerts</code>) supports
+                                        multi-select filtering with include/exclude modes:
+                                    </p>
+                                    <ul>
+                                        <li><strong>Audio Source &amp; Event Type</strong> are checkbox dropdowns —
+                                            tick several values at once, and flip the <em>Include / Exclude</em>
+                                            toggle to hide a noisy source or filter weekly tests
+                                            (<code>RWT</code>/<code>RMT</code>) out of the list entirely. Each
+                                            option shows how many alerts it accounts for.</li>
+                                        <li><strong>Active filter chips</strong> above the table show every applied
+                                            value; click a chip's ✕ to remove just that value.</li>
+                                        <li><strong>Statistics cards</strong> (Total / Forwarded / Ignored / Errors)
+                                            are clickable shortcuts that filter by forwarding decision.</li>
+                                        <li>Filters combine and are carried through pagination, so a filtered view
+                                            can be bookmarked or shared as a URL.</li>
+                                    </ul>
+
+                                    <hr class="my-3">
+
                                     <h6><i class="fas fa-trash-alt me-2"></i>Purging Received Alerts &amp; Audio</h6>
                                     <p>
                                         Busy monitoring sources can record thousands of received alerts, and the raw

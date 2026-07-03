@@ -2,22 +2,6 @@
 
 {% block title %}Received Audio Alerts - EAS Station™{% endblock %}
 
-{# Build a dict of currently-active filters so we can preserve them across
-   pagination links and offer one-click removal chips. Empty values are
-   stripped so they don't pollute URLs. #}
-{% set _active_filters = {
-    'search': search,
-    'source': source_filter,
-    'alert_source': alert_source_filter,
-    'event': event_filter,
-    'decision': decision_filter,
-    'originator': originator_filter,
-    'date_from': date_from,
-    'date_to': date_to,
-    'min_confidence': (min_confidence|string if min_confidence is not none else ''),
-    'per_page': (per_page|string if per_page and per_page != 25 else ''),
-} %}
-
 {% block content %}
 <div class="page-header">
     <div class="container-fluid">
@@ -42,39 +26,47 @@
 </div>
 <div class="container-fluid">
 
-            <!-- Statistics Cards -->
+            <!-- Statistics Cards (click to filter by decision) -->
             <div class="row mb-4 g-3">
                 <div class="col-6 col-md-3">
-                    <div class="card bg-info-gradient text-white">
-                        <div class="card-body text-center">
-                            <h3 class="mb-0">{{ stats.total }}</h3>
-                            <small>Total Received</small>
+                    <a href="/audio/received" class="text-decoration-none d-block" title="Show all received alerts">
+                        <div class="card bg-info-gradient text-white">
+                            <div class="card-body text-center">
+                                <h3 class="mb-0">{{ stats.total }}</h3>
+                                <small>Total Received</small>
+                            </div>
                         </div>
-                    </div>
+                    </a>
                 </div>
                 <div class="col-6 col-md-3">
-                    <div class="card bg-success-gradient text-white">
-                        <div class="card-body text-center">
-                            <h3 class="mb-0">{{ stats.forwarded }}</h3>
-                            <small>Forwarded</small>
+                    <a href="/audio/received?decision=forwarded" class="text-decoration-none d-block" title="Show only forwarded alerts">
+                        <div class="card bg-success-gradient text-white">
+                            <div class="card-body text-center">
+                                <h3 class="mb-0">{{ stats.forwarded }}</h3>
+                                <small>Forwarded</small>
+                            </div>
                         </div>
-                    </div>
+                    </a>
                 </div>
                 <div class="col-6 col-md-3">
-                    <div class="card stat-card text-white">
-                        <div class="card-body text-center">
-                            <h3 class="mb-0">{{ stats.ignored }}</h3>
-                            <small>Ignored</small>
+                    <a href="/audio/received?decision=ignored" class="text-decoration-none d-block" title="Show only ignored alerts">
+                        <div class="card stat-card text-white">
+                            <div class="card-body text-center">
+                                <h3 class="mb-0">{{ stats.ignored }}</h3>
+                                <small>Ignored</small>
+                            </div>
                         </div>
-                    </div>
+                    </a>
                 </div>
                 <div class="col-6 col-md-3">
-                    <div class="card bg-danger-gradient text-white">
-                        <div class="card-body text-center">
-                            <h3 class="mb-0">{{ stats.error }}</h3>
-                            <small>Errors</small>
+                    <a href="/audio/received?decision=error" class="text-decoration-none d-block" title="Show only alerts with forwarding errors">
+                        <div class="card bg-danger-gradient text-white">
+                            <div class="card-body text-center">
+                                <h3 class="mb-0">{{ stats.error }}</h3>
+                                <small>Errors</small>
+                            </div>
                         </div>
-                    </div>
+                    </a>
                 </div>
             </div>
 
@@ -90,7 +82,7 @@
                     <h5 class="mb-0">
                         <i class="fas fa-filter"></i> Filters
                     </h5>
-                    {% if _active_filters.values()|select|list %}
+                    {% if has_filters %}
                     <a href="/audio/received" class="btn btn-sm btn-outline-secondary">
                         <i class="fas fa-times"></i> Clear All
                     </a>
@@ -100,40 +92,72 @@
                     <form method="GET" class="row g-3 align-items-end">
                         <div class="col-12 col-md-6 col-lg-4">
                             <label for="search" class="form-label">Search</label>
-                            <input type="text" class="form-control" id="search" name="search" value="{{ search }}" placeholder="Search event, header, or callsign">
+                            <input type="text" class="form-control" id="search" name="search" value="{{ filters.search }}" placeholder="Search event, header, or callsign">
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
-                            <label for="source" class="form-label">Audio Source</label>
-                            <select class="form-select" id="source" name="source">
-                                <option value="">All Sources</option>
-                                {% for source in sources %}
-                                <option value="{{ source }}" {% if source_filter == source %}selected{% endif %}>{{ source }}</option>
-                                {% endfor %}
-                            </select>
+                            <label class="form-label" id="source-multiselect-label">Audio Source</label>
+                            <div class="dropdown eas-multiselect" data-noun="Sources">
+                                <button type="button" class="form-select text-start text-truncate" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-labelledby="source-multiselect-label">All Sources</button>
+                                <div class="dropdown-menu p-2 w-100 shadow" style="min-width: 240px; max-height: 300px; overflow-y: auto;">
+                                    <div class="btn-group btn-group-sm w-100 mb-2" role="group" aria-label="Source filter mode">
+                                        <input type="radio" class="btn-check" name="source_mode" value="include" id="source-mode-include" autocomplete="off" {% if filters.source_mode != 'exclude' %}checked{% endif %}>
+                                        <label class="btn btn-outline-success" for="source-mode-include"><i class="fas fa-check"></i> Include</label>
+                                        <input type="radio" class="btn-check" name="source_mode" value="exclude" id="source-mode-exclude" autocomplete="off" {% if filters.source_mode == 'exclude' %}checked{% endif %}>
+                                        <label class="btn btn-outline-danger" for="source-mode-exclude"><i class="fas fa-ban"></i> Exclude</label>
+                                    </div>
+                                    {% for source, count in sources %}
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="source" value="{{ source }}" id="source-opt-{{ loop.index }}" {% if source in filters.sources %}checked{% endif %}>
+                                        <label class="form-check-label d-flex justify-content-between gap-2 w-100" for="source-opt-{{ loop.index }}">
+                                            <span class="text-break-anywhere">{{ source }}</span>
+                                            <span class="text-muted small">{{ count }}</span>
+                                        </label>
+                                    </div>
+                                    {% else %}
+                                    <div class="text-muted small px-1">No sources recorded yet.</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label for="alert_source" class="form-label">Ingest Path</label>
                             <select class="form-select" id="alert_source" name="alert_source">
                                 <option value="">All Paths</option>
-                                <option value="EAS-RF" {% if alert_source_filter == 'EAS-RF' %}selected{% endif %}>RF (Over the Air)</option>
-                                <option value="EAS-STREAM" {% if alert_source_filter == 'EAS-STREAM' %}selected{% endif %}>Stream (Internet)</option>
+                                <option value="EAS-RF" {% if filters.alert_source == 'EAS-RF' %}selected{% endif %}>RF (Over the Air)</option>
+                                <option value="EAS-STREAM" {% if filters.alert_source == 'EAS-STREAM' %}selected{% endif %}>Stream (Internet)</option>
                             </select>
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
-                            <label for="event" class="form-label">Event Type</label>
-                            <select class="form-select" id="event" name="event">
-                                <option value="">All Events</option>
-                                {% for code, name in events %}
-                                <option value="{{ code }}" {% if event_filter == code %}selected{% endif %}>{{ code }} - {{ name }}</option>
-                                {% endfor %}
-                            </select>
+                            <label class="form-label" id="event-multiselect-label">Event Type</label>
+                            <div class="dropdown eas-multiselect" data-noun="Events">
+                                <button type="button" class="form-select text-start text-truncate" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-labelledby="event-multiselect-label">All Events</button>
+                                <div class="dropdown-menu p-2 w-100 shadow" style="min-width: 280px; max-height: 300px; overflow-y: auto;">
+                                    <div class="btn-group btn-group-sm w-100 mb-2" role="group" aria-label="Event filter mode">
+                                        <input type="radio" class="btn-check" name="event_mode" value="include" id="event-mode-include" autocomplete="off" {% if filters.event_mode != 'exclude' %}checked{% endif %}>
+                                        <label class="btn btn-outline-success" for="event-mode-include"><i class="fas fa-check"></i> Include</label>
+                                        <input type="radio" class="btn-check" name="event_mode" value="exclude" id="event-mode-exclude" autocomplete="off" {% if filters.event_mode == 'exclude' %}checked{% endif %}>
+                                        <label class="btn btn-outline-danger" for="event-mode-exclude"><i class="fas fa-ban"></i> Exclude</label>
+                                    </div>
+                                    {% for code, name, count in events %}
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="event" value="{{ code }}" id="event-opt-{{ loop.index }}" {% if code in filters.events %}checked{% endif %}>
+                                        <label class="form-check-label d-flex justify-content-between gap-2 w-100" for="event-opt-{{ loop.index }}">
+                                            <span class="text-break-anywhere">{{ code }}{% if name and name != code %} - {{ name }}{% endif %}</span>
+                                            <span class="text-muted small">{{ count }}</span>
+                                        </label>
+                                    </div>
+                                    {% else %}
+                                    <div class="text-muted small px-1">No events recorded yet.</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label for="originator" class="form-label">Originator</label>
                             <select class="form-select" id="originator" name="originator">
                                 <option value="">All Originators</option>
                                 {% for code, name in originators %}
-                                <option value="{{ code }}" {% if originator_filter == code %}selected{% endif %}>{{ code }}{% if name and name != code %} - {{ name }}{% endif %}</option>
+                                <option value="{{ code }}" {% if filters.originator == code %}selected{% endif %}>{{ code }}{% if name and name != code %} - {{ name }}{% endif %}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -142,7 +166,7 @@
                             <select class="form-select" id="decision" name="decision">
                                 <option value="">All Decisions</option>
                                 {% for dec in decisions %}
-                                <option value="{{ dec }}" {% if decision_filter == dec %}selected{% endif %}>{{ dec|title }}</option>
+                                <option value="{{ dec }}" {% if filters.decision == dec %}selected{% endif %}>{{ dec|title }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -150,21 +174,21 @@
                             <label for="date_from" class="form-label">
                                 <i class="fas fa-calendar-alt"></i> From Date
                             </label>
-                            <input type="date" class="form-control" id="date_from" name="date_from" value="{{ date_from or '' }}">
+                            <input type="date" class="form-control" id="date_from" name="date_from" value="{{ filters.date_from or '' }}">
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label for="date_to" class="form-label">
                                 <i class="fas fa-calendar-check"></i> To Date
                             </label>
-                            <input type="date" class="form-control" id="date_to" name="date_to" value="{{ date_to or '' }}">
+                            <input type="date" class="form-control" id="date_to" name="date_to" value="{{ filters.date_to or '' }}">
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
                             <label for="min_confidence" class="form-label">Min Confidence</label>
                             <select class="form-select" id="min_confidence" name="min_confidence">
                                 <option value="">Any</option>
-                                <option value="0.75" {% if min_confidence == 0.75 %}selected{% endif %}>≥ 75% (High)</option>
-                                <option value="0.50" {% if min_confidence == 0.5 %}selected{% endif %}>≥ 50% (Medium)</option>
-                                <option value="0.25" {% if min_confidence == 0.25 %}selected{% endif %}>≥ 25% (Low)</option>
+                                <option value="0.75" {% if filters.min_confidence == 0.75 %}selected{% endif %}>≥ 75% (High)</option>
+                                <option value="0.50" {% if filters.min_confidence == 0.5 %}selected{% endif %}>≥ 50% (Medium)</option>
+                                <option value="0.25" {% if filters.min_confidence == 0.25 %}selected{% endif %}>≥ 25% (Low)</option>
                             </select>
                         </div>
                         <div class="col-6 col-md-4 col-lg-2">
@@ -193,33 +217,15 @@
                     </h5>
                 </div>
 
-                {# Active filter chips — give the user a quick way to see and
-                   drop individual filters. #}
-                {% set _chip_labels = {
-                    'search': 'Search',
-                    'source': 'Source',
-                    'alert_source': 'Path',
-                    'event': 'Event',
-                    'decision': 'Decision',
-                    'originator': 'Originator',
-                    'date_from': 'From',
-                    'date_to': 'To',
-                    'min_confidence': 'Min confidence',
-                    'per_page': 'Per page',
-                } %}
-                {% set _chip_active = [] %}
-                {% for k, v in _active_filters.items() %}{% if v %}{% set _ = _chip_active.append(k) %}{% endif %}{% endfor %}
-                {% if _chip_active %}
+                {# Active filter chips — quick view of applied filters with
+                   one-click removal of individual values. #}
+                {% if filter_chips %}
                 <div class="eas-table-toolbar">
                     <small class="text-muted me-1"><i class="fas fa-filter"></i> Active:</small>
-                    {% for k in _chip_active %}
-                    {% set _v = _active_filters[k] %}
+                    {% for chip in filter_chips %}
                     <span class="filter-chip">
-                        <span><strong>{{ _chip_labels[k] }}:</strong> {{ _v }}</span>
-                        {# Build remove-link by reconstructing the query string without this key. #}
-                        {% set _qs = [] %}
-                        {% for k2, v2 in _active_filters.items() %}{% if v2 and k2 != k %}{% set _ = _qs.append(k2 ~ '=' ~ v2) %}{% endif %}{% endfor %}
-                        <a href="?{{ _qs|join('&') }}" title="Remove this filter" aria-label="Remove {{ _chip_labels[k] }} filter">
+                        <span><strong>{{ chip.label }}:</strong> {{ chip.value }}</span>
+                        <a href="?{{ chip.remove_qs }}" title="Remove this filter" aria-label="Remove {{ chip.label }} {{ chip.value }} filter">
                             <i class="fas fa-times-circle"></i>
                         </a>
                     </span>
@@ -325,17 +331,19 @@
                     <div class="text-center py-5 text-muted">
                         <i class="fas fa-inbox fa-3x mb-3"></i>
                         <p>No received alerts found matching your criteria.</p>
+                        {% if has_filters %}
+                        <a href="/audio/received" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-times"></i> Clear filters
+                        </a>
+                        {% endif %}
                     </div>
                     {% endif %}
                 </div>
 
                 <!-- Pagination -->
                 {% if pagination.pages > 1 %}
-                {# Carry every active filter through pagination links. #}
-                {% set _pager_qs = [] %}
-                {% for k, v in _active_filters.items() %}{% if v %}{% set _ = _pager_qs.append(k ~ '=' ~ v) %}{% endif %}{% endfor %}
-                {% set _pager_base = '?per_page=' ~ per_page %}
-                {% if _pager_qs %}{% set _pager_base = _pager_base ~ '&' ~ _pager_qs|join('&') %}{% endif %}
+                {# pager_qs carries every active filter (URL-encoded) plus per_page. #}
+                {% set _pager_base = '?' ~ pager_qs %}
                 <div class="card-footer">
                     <nav aria-label="Alert pagination">
                         <ul class="pagination justify-content-center mb-0 flex-wrap">
@@ -375,4 +383,30 @@
                 {% endif %}
             </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Keep each multi-select dropdown button labelled with what is selected:
+// "All Sources", "ERN-LUC, WXL51", "3 selected", or "Excluding: RWT, RMT".
+document.querySelectorAll('.eas-multiselect').forEach(function (box) {
+    const button = box.querySelector('[data-bs-toggle="dropdown"]');
+    const noun = box.dataset.noun || 'items';
+
+    function update() {
+        const checked = Array.from(box.querySelectorAll('input[type="checkbox"]:checked'));
+        const excludeRadio = box.querySelector('input[type="radio"][value="exclude"]');
+        if (checked.length === 0) {
+            button.textContent = 'All ' + noun;
+            return;
+        }
+        const values = checked.map(function (cb) { return cb.value; });
+        const summary = values.length <= 2 ? values.join(', ') : values.length + ' selected';
+        button.textContent = (excludeRadio && excludeRadio.checked ? 'Excluding: ' : '') + summary;
+    }
+
+    box.addEventListener('change', update);
+    update();
+});
+</script>
 {% endblock %}
