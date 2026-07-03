@@ -73,6 +73,7 @@ EVENT_CODE_REGISTRY: Dict[str, Dict[str, object]] = {
     'LSW': _entry('Lake Effect Snow Warning', default_product='WRN'),
     'NIC': _entry('National Information Center', default_product='ADV'),
     'NMN': _entry('Network Message Notification', default_product='ADV'),
+    'MEP': _entry('Missing Endangered Person', default_product='ADV'),
     'NPT': _entry('National Periodic Test', default_product='TEST'),
     'NUW': _entry('Nuclear Power Plant Warning', default_product='WRN'),
     'RHW': _entry('Radiological Hazard Warning', default_product='WRN'),
