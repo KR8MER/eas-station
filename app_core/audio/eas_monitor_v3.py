@@ -369,6 +369,20 @@ class SourceWatcher:
             logger.error(f"Error reading audio from '{self.source_name}': {e}")
             return None
 
+    def has_pending_audio(self, num_samples: int) -> bool:
+        """True when another read_audio() would return promptly (backlog waiting)."""
+        try:
+            return self._adapter.has_pending_audio(num_samples)
+        except Exception:
+            return False
+
+    def backlog_chunks(self) -> int:
+        """Approximate number of unread chunks queued for this source."""
+        try:
+            return int(self._adapter.get_stats().get('queue_size', 0))
+        except Exception:
+            return 0
+
     def process_samples(self, samples: np.ndarray) -> None:
         """Feed audio samples into this source's dedicated SAME decoder."""
         self._decoder.process_samples(samples)
@@ -440,6 +454,16 @@ class UnifiedEASMonitorService:
         # Source watchers: {source_name: SourceWatcher}
         self._watchers: Dict[str, SourceWatcher] = {}
         self._watchers_lock = threading.Lock()
+
+        # Catch-up drain bounds (see _monitor_loop).  Up to 50 chunks (5 s of
+        # audio) are consumed from a backlogged source per cycle so the
+        # monitor recovers from stalls instead of falling permanently behind;
+        # the bound keeps one deeply-backlogged source from starving others.
+        self._max_chunks_per_cycle = 50
+        # Warn (rate-limited) when a source's subscription queue stays deeper
+        # than this many chunks after a drain pass.
+        self._backlog_warn_chunks = 50
+        self._last_backlog_warning: Dict[str, float] = {}
         
         # Health tracking
         self._health_tracker = HealthTracker(audio_timeout_seconds=5.0)
@@ -927,14 +951,33 @@ class UnifiedEASMonitorService:
                     time.sleep(0.1)
                     continue
                 
-                # Poll each source watcher
+                # Poll each source watcher.
+                #
+                # RECORDING-STUTTER FIX (catch-up drain): the loop used to read
+                # exactly ONE 100 ms chunk per source per cycle.  Any source
+                # that momentarily produced nothing (a stream reconnecting, an
+                # SDR service restarting, a configured-but-idle input) made its
+                # read_audio() block for the full 0.1 s timeout EVERY cycle, so
+                # one stalled sibling capped every active source's drain rate
+                # at exactly real time — zero margin — and with two stalls or
+                # any decode/GC overhead the active sources fell behind with NO
+                # way to ever catch up.  The backlog grew until the
+                # 10000-chunk subscription queue engaged drop-oldest
+                # permanently, at which point a slice of every source's audio
+                # was discarded and every recorded alert came out shredded
+                # into fragments with ~100 ms holes.  Draining the entire
+                # backlog when a source has one (bounded per cycle so one
+                # source cannot starve the others) lets the monitor recover
+                # from any stall instead of degrading forever.
                 any_audio_processed = False
                 for source_name, watcher in watchers_snapshot:
                     try:
-                        # Try to read audio from this source
-                        samples = watcher.read_audio(self._chunk_size)
+                        chunks_read = 0
+                        while chunks_read < self._max_chunks_per_cycle:
+                            samples = watcher.read_audio(self._chunk_size)
+                            if samples is None or len(samples) == 0:
+                                break
 
-                        if samples is not None and len(samples) > 0:
                             # Update per-source ring buffer BEFORE decoding so the
                             # audio is available if the decoder fires an alert callback
                             # synchronously during process_samples().
@@ -970,9 +1013,36 @@ class UnifiedEASMonitorService:
                             )
 
                             any_audio_processed = True
-                        else:
+                            chunks_read += 1
+
+                            # Only keep reading while a backlog is actually
+                            # waiting — never block on the timeout for a
+                            # second chunk that hasn't been produced yet.
+                            if not watcher.has_pending_audio(self._chunk_size):
+                                break
+
+                        if chunks_read == 0:
                             # No audio available from this source
                             self._health_tracker.update_no_audio(source_name)
+                        else:
+                            # Surface sustained backlogs: a queue that stays deep
+                            # means the monitor is consuming slower than real time
+                            # (CPU starvation or a chronically stalled sibling) and
+                            # recordings are at risk once the queue limit is hit.
+                            backlog = watcher.backlog_chunks()
+                            if backlog >= self._backlog_warn_chunks:
+                                now_mono = time.monotonic()
+                                last = self._last_backlog_warning.get(source_name, 0.0)
+                                if now_mono - last >= 60.0:
+                                    logger.warning(
+                                        "EAS monitor backlog for '%s': %d chunks "
+                                        "(~%.1f s) queued behind real time — "
+                                        "catching up at %d chunks/cycle",
+                                        source_name, backlog,
+                                        backlog * self._chunk_duration_ms / 1000.0,
+                                        self._max_chunks_per_cycle,
+                                    )
+                                    self._last_backlog_warning[source_name] = now_mono
 
                     except Exception as e:
                         logger.error(
@@ -1103,6 +1173,7 @@ class UnifiedEASMonitorService:
                         "decoder_synced": dec_stats.get('synced', False),
                         "decoder_in_message": dec_stats.get('in_message', False),
                         "decoder_bytes_decoded": dec_stats.get('bytes_decoded', 0),
+                        "queue_backlog_chunks": watcher.backlog_chunks(),
                     }
 
         # Return status in MultiMonitorManager-compatible format

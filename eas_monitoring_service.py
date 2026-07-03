@@ -1363,9 +1363,23 @@ def main():
                         wav_header.write(struct.pack('<I', 0xFFFFFFFF))
                         yield wav_header.getvalue()
 
-                        # Stream audio chunks
-                        silence_duration = 0.05
-                        silence_samples = int(stream_sample_rate * stream_channels * silence_duration)
+                        # Stream audio chunks.
+                        #
+                        # STUTTER FIX: the old loop yielded a 50 ms block of zeros on
+                        # EVERY 200 ms queue timeout and every None chunk.  Chunks
+                        # arrive at ~100 ms cadence, so ordinary scheduling/network
+                        # jitter spliced silence into the middle of continuous audio
+                        # several times a minute (audible stutter) while the real
+                        # chunk played AFTER the injected gap — and every injection
+                        # pushed the stream permanently further behind live.  Now
+                        # transient jitter emits nothing (the browser just waits a
+                        # few ms); keep-alive silence is emitted only when the
+                        # source has been genuinely quiet for several seconds.
+                        from app_core.audio.stream_keepalive import KeepAliveGate
+                        keepalive = KeepAliveGate(quiet_seconds=2.0)
+                        # Keep-alive silence is paced to the 200 ms read timeout so
+                        # a dead source streams silence at roughly real time.
+                        keepalive_samples = int(stream_sample_rate * stream_channels * 0.2)
 
                         logger.debug(f"Web stream '{subscriber_id}' started, subscribed to broadcast queue")
 
@@ -1374,10 +1388,6 @@ def main():
                                 # Read from subscription queue (non-competitive)
                                 audio_chunk = subscription_queue.get(timeout=0.2)
                                 if audio_chunk is None:
-                                    # Yield silence to keep stream alive
-                                    silence_chunk = np.zeros(silence_samples, dtype=np.int16)
-                                    yield silence_chunk.tobytes()
-                                    time.sleep(silence_duration)  # Sleep for the silence duration (~50ms)
                                     continue
 
                                 if not isinstance(audio_chunk, np.ndarray):
@@ -1396,17 +1406,17 @@ def main():
 
                                 # Convert to int16 PCM (no resampling - use native sample rate)
                                 pcm_data = (np.clip(audio_chunk, -1.0, 1.0) * 32767).astype(np.int16)
+                                keepalive.audio_received()
                                 yield pcm_data.tobytes()
 
                             except queue_module.Empty:
-                                # No audio available — the queue.get timeout (200ms) already
-                                # throttled this path, just yield silence and continue.
-                                silence_chunk = np.zeros(silence_samples, dtype=np.int16)
-                                yield silence_chunk.tobytes()
+                                # Late chunk (jitter): emit nothing — never splice
+                                # silence into continuous audio.  Only a source that
+                                # has been quiet for seconds gets keep-alive silence.
+                                if keepalive.should_emit_silence():
+                                    yield np.zeros(keepalive_samples, dtype=np.int16).tobytes()
                             except Exception as e:
                                 logger.debug(f"Error in stream generator: {e}")
-                                silence_chunk = np.zeros(silence_samples, dtype=np.int16)
-                                yield silence_chunk.tobytes()
                                 time.sleep(0.05)
                     finally:
                         # Unsubscribe when client disconnects
@@ -1590,19 +1600,32 @@ def main():
                             return chunk.astype(np.float32)
 
                         # Writer thread: mixed PCM from all broadcast queues → ffmpeg stdin
+                        #
+                        # STUTTER FIX: the old loop wrote 100 ms of zeros on every
+                        # queue timeout, with the timeout (0.1 s) racing the ~100 ms
+                        # producer cadence.  A chunk arriving a few ms late became
+                        # an injected silence block spliced into continuous audio —
+                        # audible stutter, several times per second under jitter —
+                        # while the real chunk played after the gap and the stream
+                        # drifted ever further behind live.  Transient jitter now
+                        # emits nothing (ffmpeg simply waits); keep-alive silence is
+                        # only written when every source has been quiet for seconds.
+                        from app_core.audio.stream_keepalive import KeepAliveGate
+
                         def _feed_ffmpeg():
+                            keepalive = KeepAliveGate(quiet_seconds=1.5)
                             try:
                                 while _running and ffmpeg_proc.poll() is None:
                                     try:
                                         chunks = []
 
                                         if subscription_items:
-                                            # Block on the first queue to drive timing
-                                            # (chunks arrive ~every 100 ms per source;
-                                            # timeout matches silence_duration above).
+                                            # Block on the first queue to drive timing;
+                                            # generous timeout so late chunks are waited
+                                            # for instead of replaced with silence.
                                             _, first_q = subscription_items[0]
                                             try:
-                                                raw = first_q.get(timeout=0.1)  # must equal silence_duration
+                                                raw = first_q.get(timeout=0.25)
                                                 if raw is not None and len(raw) > 0:
                                                     chunks.append(_to_mono_float32(raw))
                                             except queue_module.Empty:
@@ -1618,8 +1641,11 @@ def main():
                                                     pass
 
                                         if not chunks:
-                                            ffmpeg_proc.stdin.write(silence_pcm)
+                                            if keepalive.should_emit_silence():
+                                                ffmpeg_proc.stdin.write(silence_pcm)
                                             continue
+
+                                        keepalive.audio_received()
 
                                         # Mix sources: average to prevent clipping.
                                         # All sources produce equal-sized 100ms chunks (1600 samples
@@ -1852,17 +1878,26 @@ def main():
                                 chunk = chunk.flatten()
                             return (np.clip(chunk, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
 
+                        # STUTTER FIX: identical policy to the mixed decoder stream —
+                        # never replace a late chunk with silence (that splices an
+                        # audible 100 ms gap into continuous audio and pushes the
+                        # stream behind live); only emit keep-alive silence once the
+                        # source has been genuinely quiet for seconds.
+                        from app_core.audio.stream_keepalive import KeepAliveGate
+
                         def _feed_ffmpeg():
+                            keepalive = KeepAliveGate(quiet_seconds=1.5)
                             try:
                                 while _running and ffmpeg_proc.poll() is None:
                                     try:
-                                        raw = sub_q.get(timeout=0.1)
+                                        raw = sub_q.get(timeout=0.25)
                                         if raw is None or len(raw) == 0:
-                                            ffmpeg_proc.stdin.write(silence_pcm)
-                                        else:
-                                            ffmpeg_proc.stdin.write(_to_mono_int16(raw))
+                                            continue
+                                        ffmpeg_proc.stdin.write(_to_mono_int16(raw))
+                                        keepalive.audio_received()
                                     except queue_module.Empty:
-                                        ffmpeg_proc.stdin.write(silence_pcm)
+                                        if keepalive.should_emit_silence():
+                                            ffmpeg_proc.stdin.write(silence_pcm)
                                     except (BrokenPipeError, OSError):
                                         break
                                     except Exception as exc:

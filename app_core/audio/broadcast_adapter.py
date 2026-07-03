@@ -362,6 +362,19 @@ class BroadcastAudioAdapter:
             # Return copy of recent audio without consuming from buffer
             return buffer[:available_samples].copy()
 
+    def has_pending_audio(self, num_samples: int) -> bool:
+        """True when a read_audio(num_samples) call would return promptly.
+
+        Used by the unified EAS monitor's catch-up drain: after a stall the
+        subscription queue holds a backlog of chunks, and the monitor keeps
+        reading while this returns True so the backlog is consumed faster
+        than real time instead of growing without bound.  Checks the
+        internal buffer and the subscription queue without blocking.
+        """
+        if self._chunk_total_samples >= num_samples:
+            return True
+        return not self._subscriber_queue.empty()
+
     def get_active_source(self) -> Optional[str]:
         """Get name of currently active audio source."""
         # Broadcast queues don't track source name - return broadcast name
