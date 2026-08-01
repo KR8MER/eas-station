@@ -152,27 +152,21 @@
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <div>
-                <h1 class="page-title mb-0"><i class="fas fa-microphone me-2"></i>Audio Sources</h1>
-                <p class="page-subtitle mb-0">Manage live audio inputs for EAS monitoring</p>
-            </div>
-            <div class="page-header-actions">
-                <button type="button" class="btn btn-outline-light" onclick="showAddSourceModal()">
-                    <i class="fas fa-plus me-1"></i>Add Source
-                </button>
-                <button type="button" class="btn btn-outline-light" onclick="discoverDevices()">
-                    <i class="fas fa-search me-1"></i>Discover Devices
-                </button>
-                <a href="/" class="btn btn-outline-light">
-                    <i class="fas fa-map me-1"></i>Back to Map
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
+{% set header_icon = 'fas fa-microphone' %}
+{% set header_title = 'Audio Sources' %}
+{% set header_subtitle = 'Manage live audio inputs for EAS monitoring' %}
+{% set header_actions %}
+    <button type="button" class="btn btn-outline-light" onclick="showAddSourceModal()">
+        <i class="fas fa-plus me-1"></i>Add Source
+    </button>
+    <button type="button" class="btn btn-outline-light" onclick="discoverDevices()">
+        <i class="fas fa-search me-1"></i>Discover Devices
+    </button>
+    <a href="/" class="btn btn-outline-light">
+        <i class="fas fa-map me-1"></i>Back to Map
+    </a>
+{% endset %}
+{% include 'components/page_header.html' %}
 <div class="container-fluid">
 
             <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">

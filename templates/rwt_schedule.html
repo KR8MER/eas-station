@@ -3,16 +3,10 @@
 {% block title %}Weekly Test Automation - EAS Station™{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <div>
-                <h1 class="page-title mb-0"><i class="fas fa-calendar-alt me-2"></i>Weekly Test Automation</h1>
-                <p class="page-subtitle mb-0">Schedule and manage required weekly test broadcasts</p>
-            </div>
-        </div>
-    </div>
-</div>
+{% set header_icon = 'fas fa-calendar-alt' %}
+{% set header_title = 'Weekly Test Automation' %}
+{% set header_subtitle = 'Schedule and manage required weekly test broadcasts' %}
+{% include 'components/page_header.html' %}
 <div class="container mt-4">
     <div class="row mb-4">
         <div class="col-12 col-xl-10 col-xxl-9">

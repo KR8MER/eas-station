@@ -2,24 +2,18 @@
 {% block title %}IPAWS Poller Debug{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <div>
-                <h1 class="page-title mb-0"><i class="fas fa-bug me-2"></i>IPAWS Poller Debug Console</h1>
-                <p class="page-subtitle mb-0">Review captured IPAWS poll cycles, filtered alerts, and raw CAP data</p>
-            </div>
-            <div class="page-header-actions">
-                <a href="/debug/ipaws/export.xlsx" class="btn btn-outline-light">
-                    <i class="fas fa-file-excel me-1"></i>Export Excel
-                </a>
-                <a href="/debug/ipaws/export.pdf" target="_blank" class="btn btn-outline-light">
-                    <i class="fas fa-file-pdf me-1"></i>Export PDF
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
+{% set header_icon = 'fas fa-bug' %}
+{% set header_title = 'IPAWS Poller Debug Console' %}
+{% set header_subtitle = 'Review captured IPAWS poll cycles, filtered alerts, and raw CAP data' %}
+{% set header_actions %}
+    <a href="/debug/ipaws/export.xlsx" class="btn btn-outline-light">
+        <i class="fas fa-file-excel me-1"></i>Export Excel
+    </a>
+    <a href="/debug/ipaws/export.pdf" target="_blank" class="btn btn-outline-light">
+        <i class="fas fa-file-pdf me-1"></i>Export PDF
+    </a>
+{% endset %}
+{% include 'components/page_header.html' %}
 <div class="container py-4">
     <p class="text-muted small mb-3">Displaying most recent debug runs (timezone: {{ timezone_name }}).</p>
     {% if not debug_runs %}

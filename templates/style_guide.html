@@ -5,23 +5,15 @@
 {% block content %}
 <div class="container-fluid">
     <!-- Page Header -->
-    <div class="page-header">
-        <div class="container-fluid">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                <div>
-                    <h1 class="page-title mb-0">
-                        <i class="fas fa-palette me-2"></i>Design System Style Guide
-                    </h1>
-                    <p class="page-subtitle mb-0">Unified component library and usage guidelines</p>
-                </div>
-                <div class="page-header-actions">
-                    <a href="/" class="btn btn-outline-light">
-                        <i class="fas fa-gauge-high me-1"></i>Dashboard
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
+    {% set header_icon = 'fas fa-palette' %}
+    {% set header_title = 'Design System Style Guide' %}
+    {% set header_subtitle = 'Unified component library and usage guidelines' %}
+    {% set header_actions %}
+        <a href="/" class="btn btn-outline-light">
+            <i class="fas fa-gauge-high me-1"></i>Dashboard
+        </a>
+    {% endset %}
+    {% include 'components/page_header.html' %}
 
     <!-- Table of Contents -->
     <div class="card mb-4">
@@ -82,44 +74,33 @@
                 <h5 class="mb-0">Usage Template</h5>
             </div>
             <div class="card-body">
-                <pre class="bg-dark text-light p-3 rounded"><code>&lt;div class="page-header"&gt;
-    &lt;div class="container-fluid"&gt;
-        &lt;div class="d-flex justify-content-between align-items-center flex-wrap gap-3"&gt;
-            &lt;div&gt;
-                &lt;h1 class="page-title mb-0"&gt;
-                    &lt;i class="fas fa-icon-name me-2"&gt;&lt;/i&gt;Page Title
-                &lt;/h1&gt;
-                &lt;p class="page-subtitle mb-0"&gt;Brief description of the page&lt;/p&gt;
-            &lt;/div&gt;
-            &lt;div class="page-header-actions"&gt;
-                &lt;a href="/path" class="btn btn-outline-light"&gt;
-                    &lt;i class="fas fa-icon me-1"&gt;&lt;/i&gt;Action
-                &lt;/a&gt;
-            &lt;/div&gt;
-        &lt;/div&gt;
-    &lt;/div&gt;
-&lt;/div&gt;</code></pre>
+                <p class="text-muted mb-2">
+                    Never hand-roll the header markup — set the <code>header_*</code>
+                    variables and include the shared component
+                    (<code>templates/components/page_header.html</code>):
+                </p>
+                <pre class="bg-dark text-light p-3 rounded"><code>{&#37; set header_icon = 'fas fa-icon-name' &#37;}
+{&#37; set header_title = 'Page Title' &#37;}
+{&#37; set header_subtitle = 'Brief description of the page' &#37;}
+{&#37; set header_actions &#37;}
+    &lt;a href="/path" class="btn btn-outline-light"&gt;
+        &lt;i class="fas fa-icon me-1"&gt;&lt;/i&gt;Action
+    &lt;/a&gt;
+{&#37; endset &#37;}
+{&#37; include 'components/page_header.html' &#37;}</code></pre>
                 <h6 class="mt-3">Example:</h6>
-                <div class="page-header">
-                    <div class="container-fluid">
-                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                            <div>
-                                <h1 class="page-title mb-0">
-                                    <i class="fas fa-bell me-2"></i>Example Page
-                                </h1>
-                                <p class="page-subtitle mb-0">This is what every page header should look like</p>
-                            </div>
-                            <div class="page-header-actions">
-                                <button class="btn btn-success">
-                                    <i class="fas fa-plus me-1"></i>Create New
-                                </button>
-                                <a href="#" class="btn btn-outline-light">
-                                    <i class="fas fa-cog me-1"></i>Settings
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                {% set header_icon = 'fas fa-bell' %}
+                {% set header_title = 'Example Page' %}
+                {% set header_subtitle = 'This is what every page header should look like' %}
+                {% set header_actions %}
+                    <button class="btn btn-success">
+                        <i class="fas fa-plus me-1"></i>Create New
+                    </button>
+                    <a href="#" class="btn btn-outline-light">
+                        <i class="fas fa-cog me-1"></i>Settings
+                    </a>
+                {% endset %}
+                {% include 'components/page_header.html' %}
             </div>
         </div>
     </section>

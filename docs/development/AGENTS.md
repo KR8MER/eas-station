@@ -574,6 +574,7 @@ Every time you add a `{% block … %}` to a child template, cross-check the name
 |---------|------------|-------|--------|
 | **Base Template** | `templates/base.html` | 163 | ✅ All pages extend this |
 | **Navbar** | `templates/components/navbar.html` | 420+ | ✅ Included in base.html (renamed from navbar_new.html) |
+| **Page Header** | `templates/components/page_header.html` | ~55 | ✅ Every page's header — set `header_*` vars and include it |
 | **Footer** | Inline in `templates/base.html` | 103-144 | ✅ Inline in base template |
 | **System Banner** | Inline in `templates/base.html` | 72-81 | ✅ Inline in base template |
 | **Flash Messages** | Inline in `templates/base.html` | 84-95 | ✅ Inline in base template |
@@ -585,7 +586,7 @@ Every time you add a `{% block … %}` to a child template, cross-check the name
 | `templates/base.html` | ✅ Active base template | Extend this for new pages |
 | `templates/components/navbar.html` | ✅ Active navbar | Add navigation links here |
 | `components/footer.html` | ❌ Was deleted (not included) | Already removed |
-| `components/page_header.html` | ⚠️ Macro component, wrong location | Move to templates/components/ if used |
+| `templates/partials/page_header.html` | ❌ Deleted duplicate | Use `templates/components/page_header.html` instead |
 
 #### When Making Changes to Page Elements
 
@@ -608,6 +609,18 @@ Every time you add a `{% block … %}` to a child template, cross-check the name
 **Creating New Pages:**
 - ✅ Always extend `base.html`
 - ✅ Use `{% block content %}` for page content
+- ✅ Start the page with the standard header — set the `header_*` variables and
+  `{% include 'components/page_header.html' %}`; NEVER hand-roll a
+  `<div class="page-header">` (see `/style-guide` for the pattern):
+  ```jinja
+  {% set header_icon = 'fas fa-bell' %}
+  {% set header_title = 'Page Title' %}
+  {% set header_subtitle = 'One-line description' %}
+  {% set header_actions %}
+      <a href="/path" class="btn btn-outline-light"><i class="fas fa-icon me-1"></i>Action</a>
+  {% endset %}
+  {% include 'components/page_header.html' %}
+  ```
 - ✅ Add navigation link to `templates/components/navbar.html`
 - ❌ Never create alternate base templates — extend `base.html`
 
@@ -1962,3 +1975,4 @@ Only suggest deployment/cache fixes if:
 - 2026-03-23: Added "Address All Issues — Never Hyperfocus" section (Core Principle #5) after agent hyperfocused on a single new requirement while ignoring three original issues in the same problem statement. Section mandates reading the full problem statement first, enumerating every distinct issue, building a complete checklist before writing code, and never abandoning original issues when a new requirement arrives mid-session.
 - 2026-03-26: Added "Alembic Migration Rules" section to Database Guidelines after an agent used a filename prefix instead of the actual revision ID as `down_revision`, creating a divergent migration head. New section covers: revision ID vs. filename distinction, finding the current head, migration file checklist, the idempotent template, chain-validation script, and merge-migration syntax. The same head-check script was added to the Pre-Commit Checklist so it runs automatically before every commit. The "Create Database Migration" step in the Configuration System section was also updated with the critical warning.
 - 2026-03-26: Documented the six valid `{% block %}` names defined in `base.html` after an agent wrote `{% block extra_js %}` (non-existent) instead of `{% block scripts %}`, causing Jinja2 to silently discard the entire JavaScript section of the TTS Pronunciation Dictionary page, making all save/edit/delete operations non-functional. Added a block-name reference table and explicit ❌/✅ example to the Template Standards section. Extended the pre-commit template-validation script to also flag unknown block names in child templates (`VALID_BASE_BLOCKS` check), producing a clear error message suggesting `scripts` when `extra_js` is found. Removed a stray duplicate of the validation script that had accumulated below the Pre-Commit Checklist.
+- 2026-08-01: Standardized page headers across the whole UI. `templates/components/page_header.html` is now the single canonical header component — pages set `header_icon`/`header_title`/`header_subtitle`/`header_actions` and include it. Converted 27 templates that hand-rolled `.page-header` markup, deleted the unused duplicate `templates/partials/page_header.html`, promoted the dashboard's header action-button polish into global `styles.css` (frosted icon tile, pill buttons with hover lift), and updated the Style Guide and the "Creating New Pages" checklist to require the component.

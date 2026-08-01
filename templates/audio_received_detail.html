@@ -3,26 +3,20 @@
 {% block title %}Received Alert Detail - EAS Station™{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <div>
-                <h1 class="page-title mb-0"><i class="fas fa-radio me-2"></i>Received Alert Detail</h1>
-                <p class="page-subtitle mb-0">#{{ alert.id }} &mdash; {{ alert.received_at | format_local_datetime if alert.received_at else 'Unknown time' }}</p>
-            </div>
-            <div class="page-header-actions">
-                {% if alert.generated_message %}
-                <a href="{{ url_for('audio_detail', message_id=alert.generated_message.id) }}" class="btn btn-outline-light">
-                    <i class="fas fa-broadcast-tower me-1"></i>View Broadcast
-                </a>
-                {% endif %}
-                <a href="{{ url_for('received_audio_alerts') }}" class="btn btn-outline-light">
-                    <i class="fas fa-list me-1"></i>Back to List
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
+{% set header_icon = 'fas fa-radio' %}
+{% set header_title = 'Received Alert Detail' %}
+{% set header_subtitle %}#{{ alert.id }} &mdash; {{ alert.received_at | format_local_datetime if alert.received_at else 'Unknown time' }}{% endset %}
+{% set header_actions %}
+    {% if alert.generated_message %}
+    <a href="{{ url_for('audio_detail', message_id=alert.generated_message.id) }}" class="btn btn-outline-light">
+        <i class="fas fa-broadcast-tower me-1"></i>View Broadcast
+    </a>
+    {% endif %}
+    <a href="{{ url_for('received_audio_alerts') }}" class="btn btn-outline-light">
+        <i class="fas fa-list me-1"></i>Back to List
+    </a>
+{% endset %}
+{% include 'components/page_header.html' %}
 <div class="container-fluid">
 
     <div class="row g-4">

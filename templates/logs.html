@@ -3,16 +3,10 @@
 {% block title %}EAS Station™ - Logs & Reports{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <div>
-                <h1 class="page-title mb-0"><i class="fas fa-file-alt me-2"></i>Logs &amp; Reports</h1>
-                <p class="page-subtitle mb-0">Unified hub for system logs, audit trail, compliance entries, and FCC reports — filter and export every category as CSV or PDF.</p>
-            </div>
-        </div>
-    </div>
-</div>
+{% set header_icon = 'fas fa-file-alt' %}
+{% set header_title %}Logs &amp; Reports{% endset %}
+{% set header_subtitle = 'Unified hub for system logs, audit trail, compliance entries, and FCC reports — filter and export every category as CSV or PDF.' %}
+{% include 'components/page_header.html' %}
 <div class="container-fluid">
 <div class="row">
     <div class="col-12">

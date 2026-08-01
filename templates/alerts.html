@@ -18,37 +18,21 @@ tr.alert-superseded:hover {
 <div class="container-fluid">
     {% set audio_map = audio_map or {} %}
     
-    {# Standard Page Header #}
-    {% set page_actions = [
-        {'label': 'Export Excel', 'url': '#', 'icon': 'fas fa-file-excel', 'class': 'btn-success', 'onclick': 'exportCurrentAlerts()'},
-        {'label': 'Export PDF', 'url': '#', 'icon': 'fas fa-file-pdf', 'class': 'btn-outline-secondary', 'onclick': 'exportAlertsPDF()'},
-        {'label': 'Dashboard', 'url': '/', 'icon': 'fas fa-gauge-high', 'class': 'btn-outline-light'},
-        {'label': 'Admin', 'url': '/admin', 'icon': 'fas fa-cog', 'class': 'btn-outline-light'}
-    ] %}
-    
-    <div class="page-header">
-        <div class="container-fluid">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                <div>
-                    <h1 class="page-title mb-0">
-                        <i class="fas fa-bell me-2"></i>Alert History
-                    </h1>
-                    <p class="page-subtitle mb-0">View and manage emergency alerts from all sources</p>
-                </div>
-                <div class="page-header-actions">
-                    <button onclick="exportCurrentAlerts()" class="btn btn-success" title="Export current filtered alerts to Excel">
-                        <i class="fas fa-file-excel me-1"></i>Excel
-                    </button>
-                    <button onclick="exportAlertsPDF()" class="btn btn-outline-light" title="Export current filtered alerts to PDF">
-                        <i class="fas fa-file-pdf me-1"></i>PDF
-                    </button>
-                    <a href="/" class="btn btn-outline-light">
-                        <i class="fas fa-gauge-high me-1"></i>Dashboard
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
+    {% set header_icon = 'fas fa-bell' %}
+    {% set header_title = 'Alert History' %}
+    {% set header_subtitle = 'View and manage emergency alerts from all sources' %}
+    {% set header_actions %}
+        <button onclick="exportCurrentAlerts()" class="btn btn-success" title="Export current filtered alerts to Excel">
+            <i class="fas fa-file-excel me-1"></i>Excel
+        </button>
+        <button onclick="exportAlertsPDF()" class="btn btn-outline-light" title="Export current filtered alerts to PDF">
+            <i class="fas fa-file-pdf me-1"></i>PDF
+        </button>
+        <a href="/" class="btn btn-outline-light">
+            <i class="fas fa-gauge-high me-1"></i>Dashboard
+        </a>
+    {% endset %}
+    {% include 'components/page_header.html' %}
 
             <!-- Summary Statistics -->
             <div class="row mb-4">

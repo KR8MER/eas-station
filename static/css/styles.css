@@ -2163,10 +2163,87 @@ small,
     z-index: 2;
 }
 
+/* Standard header action buttons — compact pills with a hover lift.
+   (Promoted from per-page CSS on the dashboard so every page matches.) */
+.page-header-actions .btn,
+.page-header-gradient .page-header-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    transition: transform 0.2s ease, box-shadow 0.2s ease,
+                background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.page-header-actions .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22);
+}
+
+/* Frosted-glass treatment for the default outline-light header buttons */
+.page-header .page-header-actions .btn-outline-light,
+.page-header-gradient .page-header-actions .btn-outline-light {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.35);
+    color: #ffffff;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+.page-header .page-header-actions .btn-outline-light:hover,
+.page-header-gradient .page-header-actions .btn-outline-light:hover {
+    background: rgba(255, 255, 255, 0.24);
+    border-color: rgba(255, 255, 255, 0.6);
+    color: #ffffff;
+}
+
 /* Header content wrapper for better z-index control */
-.page-header .header-content {
+.page-header .header-content,
+.page-header-gradient .header-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    min-width: 0;
     position: relative;
     z-index: 2;
+}
+
+.page-header .header-content .header-text,
+.page-header-gradient .header-content .header-text {
+    min-width: 0;
+}
+
+/* Frosted icon tile rendered by components/page_header.html */
+.page-header-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.25rem;
+    height: 3.25rem;
+    flex-shrink: 0;
+    font-size: 1.3rem;
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: var(--radius-lg);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25),
+                0 8px 20px rgba(0, 0, 0, 0.18);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+@media (max-width: 575.98px) {
+    .page-header-icon {
+        width: 2.6rem;
+        height: 2.6rem;
+        font-size: 1.05rem;
+        border-radius: var(--radius-md, 1rem);
+    }
 }
 
 .page-header .header-icon {

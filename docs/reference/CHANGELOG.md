@@ -8,6 +8,30 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.123.0] - 2026-08-01 - Standardized page headers across the entire UI
+
+### Changed
+- **Every page now renders its header through one shared component**
+  (`templates/components/page_header.html`). Twenty-seven templates that
+  hand-rolled near-identical `.page-header` markup (Dashboard, Alerts,
+  Audio Archive, GPIO pages, Logs, Settings, Docs, Diagnostics, and more)
+  were converted to set `header_icon` / `header_title` / `header_subtitle`
+  / `header_actions` variables and include the component, so future header
+  changes happen in exactly one file. The unused duplicate
+  `templates/partials/page_header.html` was removed.
+- **Modernized header visuals for all pages and themes.** The component
+  renders the page icon in a frosted-glass tile beside the title, and
+  header action buttons are now unified pill-shaped controls with a
+  glassy outline-light treatment and hover lift — promoted from
+  page-specific CSS on the dashboard into `static/css/styles.css` so all
+  20 themes and every page get the same look.
+- **Live Display Preview** no longer overrides the global `.page-header`
+  styling with its own local gradient; it now uses the standard header
+  like every other page.
+- **Style Guide** (`/style-guide`) now documents the component-include
+  pattern as the required way to build page headers instead of showing
+  hand-rolled markup.
+
 ## [2.122.2] - 2026-08-01 - Installer resilience on Debian 13/Ubuntu and alembic_version repair
 
 ### Fixed
