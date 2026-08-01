@@ -4175,6 +4175,66 @@ html:has(.modal.show) {
     margin-bottom: 1.5rem;
 }
 
+/* Status Badge - Unified Design
+   (promoted from identical per-page CSS on the Certbot, Tailscale, and
+   Icecast admin pages; page-level overrides still win the cascade) */
+.status-badge {
+    display: inline-block;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.success {
+    background: color-mix(in srgb, var(--success-color) 20%, var(--surface-color));
+    color: var(--success-color);
+}
+
+.status-badge.danger {
+    background: color-mix(in srgb, var(--danger-color) 20%, var(--surface-color));
+    color: var(--danger-color);
+}
+
+.status-badge.warning {
+    background: color-mix(in srgb, var(--warning-color) 20%, var(--surface-color));
+    color: var(--warning-color);
+}
+
+.status-badge.info {
+    background: color-mix(in srgb, var(--info-color) 20%, var(--surface-color));
+    color: var(--info-color);
+}
+
+.status-badge.secondary {
+    background: var(--border-color);
+    color: var(--text-color);
+}
+
+/* Inline spinner - Unified Design
+   (promoted from identical per-page CSS on the Network and Zigbee admin
+   pages; uses the global `spin` keyframes defined below) */
+.spinner {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid rgba(0, 0, 0, 0.1);
+    border-left-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+/* SNR quality scale - shared color ramp for signal-strength meters
+   (promoted from identical per-page CSS on Hardware Settings and
+   System Health; s0 = no signal ... s5 = excellent) */
+.snr-s0 { background: #484f58; }
+.snr-s1 { background: #f85149; }
+.snr-s2 { background: #f97316; }
+.snr-s3 { background: #d29922; }
+.snr-s4 { background: #84cc16; }
+.snr-s5 { background: #3fb950; }
+
 /* Border Utilities */
 .border { border: 1px solid var(--border-color); }
 .border-0 { border: 0; }

@@ -57,6 +57,18 @@ tracks releases under the 2.x series.
 - **Style Guide is now reachable.** `templates/style_guide.html` had no
   route; it is now served at `/style-guide` and linked from the Site
   Navigation page under Help & Documentation.
+- **Per-page CSS consolidation.** Byte-identical rule blocks that were
+  copy-pasted across admin pages moved into `styles.css` as shared
+  utilities: the `.status-badge` pill system (was duplicated in Certbot,
+  Tailscale, and Icecast), the inline `.spinner` (Network, Zigbee), and
+  the `.snr-s0`–`.snr-s5` signal-quality color scale (Hardware
+  Settings, System Health). Pages with intentionally different badge
+  designs (Network, System Health) neutralize the shared defaults
+  explicitly so their appearance is unchanged. Also deleted three
+  unused component templates (`status_badge.html` — which emitted
+  classes no stylesheet defines — `metric_card.html`, and
+  `stat_card.html`) and stale `.page-header` overrides left in Live
+  Display Preview.
 
 ### Fixed
 - **Hero banner titles were unreadable in light themes.** The global

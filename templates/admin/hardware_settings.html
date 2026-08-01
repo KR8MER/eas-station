@@ -271,13 +271,8 @@
             margin-right: 3px;
             animation: gpsPulse 1.4s ease-in-out infinite;
         }
-        /* SNR color helper classes */
-        .snr-s0 { background: #484f58; }   /* no signal  */
-        .snr-s1 { background: #f85149; }   /* < 15 dBHz  */
-        .snr-s2 { background: #f97316; }   /* 15–24      */
-        .snr-s3 { background: #d29922; }   /* 25–34      */
-        .snr-s4 { background: #84cc16; }   /* 35–44      */
-        .snr-s5 { background: #3fb950; }   /* ≥ 45       */
+        /* SNR color helper classes (.snr-s0 … .snr-s5) come from the shared
+           scale in static/css/styles.css */
         /* SNR legend dots */
         .snr-legend { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; color: var(--text-muted); font-size: 0.68rem; }
         .snr-legend span { display: inline-flex; align-items: center; gap: 3px; }
