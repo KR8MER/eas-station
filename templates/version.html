@@ -4,29 +4,16 @@
 {% block extra_css %}
 <style>
     /* Version page specific styles */
-    .version-hero {
-        background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-        color: white;
-        padding: 3rem 0;
-        margin-bottom: 2rem;
-        border-radius: var(--radius-lg, 0.5rem);
-        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-    }
-
-    .version-badge {
-        display: inline-block;
-        font-size: 3rem;
-        font-weight: 700;
-        margin-bottom: 1rem;
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    }
-
     .git-info-card {
         background: rgba(255, 255, 255, 0.1);
         backdrop-filter: blur(10px);
         border-radius: var(--radius-md, 0.375rem);
         padding: 1.5rem;
         margin-top: 1.5rem;
+        /* Fill the hero's centered flex column instead of shrink-to-fit */
+        width: 100%;
+        max-width: 680px;
+        text-align: left;
     }
 
     .git-info-item {
@@ -303,47 +290,39 @@
 {% block content %}
 <div class="container-fluid">
     <!-- Hero Section -->
-    <div class="version-hero text-center">
-        <div class="container">
-            {% with logo_classes='img-fluid mb-4 mx-auto', logo_style='max-width: 400px;' %}
-                {% include 'partials/logo_wordmark.html' %}
-            {% endwith %}
-
-            <div class="version-badge">
-                Version {{ version_info.version }}
+    {% set hero_title %}Version {{ version_info.version }}{% endset %}
+    {% set hero_lead %}Professional Emergency Alert System &mdash; {{ version_info.description }}{% endset %}
+    {% set hero_extra %}
+        <!-- Git Info Card -->
+        <div class="git-info-card">
+            <h5 class="mb-3"><i class="fab fa-git-alt me-2"></i>Build Information</h5>
+            <div class="git-info-item">
+                <span class="git-info-label">Commit:</span>
+                <span class="git-info-value">
+                    <a href="https://github.com/KR8MER/eas-station/commit/{{ git_info.commit_hash_full }}"
+                       target="_blank"
+                       class="text-white text-decoration-none">
+                        {{ git_info.commit_hash }}
+                    </a>
+                </span>
             </div>
-
-            <p class="lead mb-0">Professional Emergency Alert System</p>
-            <p class="mb-4">{{ version_info.description }}</p>
-
-            <!-- Git Info Card -->
-            <div class="git-info-card">
-                <h5 class="mb-3"><i class="fab fa-git-alt me-2"></i>Build Information</h5>
-                <div class="git-info-item">
-                    <span class="git-info-label">Commit:</span>
-                    <span class="git-info-value">
-                        <a href="https://github.com/KR8MER/eas-station/commit/{{ git_info.commit_hash_full }}"
-                           target="_blank"
-                           class="text-white text-decoration-none">
-                            {{ git_info.commit_hash }}
-                        </a>
-                    </span>
-                </div>
-                <div class="git-info-item">
-                    <span class="git-info-label">Branch:</span>
-                    <span class="git-info-value">{{ git_info.branch }}</span>
-                </div>
-                <div class="git-info-item">
-                    <span class="git-info-label">Date:</span>
-                    <span class="git-info-value">{{ git_info.commit_date }}</span>
-                </div>
-                <div class="git-info-item">
-                    <span class="git-info-label">Message:</span>
-                    <span class="git-info-value">{{ git_info.commit_message }}</span>
-                </div>
+            <div class="git-info-item">
+                <span class="git-info-label">Branch:</span>
+                <span class="git-info-value">{{ git_info.branch }}</span>
+            </div>
+            <div class="git-info-item">
+                <span class="git-info-label">Date:</span>
+                <span class="git-info-value">{{ git_info.commit_date }}</span>
+            </div>
+            <div class="git-info-item">
+                <span class="git-info-label">Message:</span>
+                <span class="git-info-value">{{ git_info.commit_message }}</span>
             </div>
         </div>
-    </div>
+    {% endset %}
+    {% with hero_logo=true, hero_title=hero_title, hero_lead=hero_lead, hero_extra=hero_extra %}
+        {% include 'partials/hero.html' %}
+    {% endwith %}
 
     <div class="container">
         <!-- Tabs -->

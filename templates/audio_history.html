@@ -3,32 +3,26 @@
 {% block title %}Audio Archive - EAS Station™{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <div>
-                <h1 class="page-title mb-0"><i class="fas fa-headphones me-2"></i>Audio Archive</h1>
-                <p class="page-subtitle mb-0">Browse and manage EAS broadcast recordings</p>
-            </div>
-            <div class="page-header-actions">
-                <button type="button" class="btn btn-outline-light" onclick="exportAudioArchive()" title="Export visible audio records to Excel">
-                    <i class="fas fa-file-export me-1"></i>Export to Excel
-                </button>
-                {% if current_user %}
-                <button type="button" class="btn btn-outline-light" onclick="showPurgeModal()" title="Purge old audio messages">
-                    <i class="fas fa-trash-alt me-1"></i>Purge Old Messages
-                </button>
-                {% endif %}
-                <a href="/" class="btn btn-outline-light">
-                    <i class="fas fa-map me-1"></i>Back to Map
-                </a>
-                <a href="/admin" class="btn btn-outline-light">
-                    <i class="fas fa-cog me-1"></i>Admin
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
+{% set header_icon = 'fas fa-headphones' %}
+{% set header_title = 'Audio Archive' %}
+{% set header_subtitle = 'Browse and manage EAS broadcast recordings' %}
+{% set header_actions %}
+    <button type="button" class="btn btn-outline-light" onclick="exportAudioArchive()" title="Export visible audio records to Excel">
+        <i class="fas fa-file-export me-1"></i>Export to Excel
+    </button>
+    {% if current_user %}
+    <button type="button" class="btn btn-outline-light" onclick="showPurgeModal()" title="Purge old audio messages">
+        <i class="fas fa-trash-alt me-1"></i>Purge Old Messages
+    </button>
+    {% endif %}
+    <a href="/" class="btn btn-outline-light">
+        <i class="fas fa-map me-1"></i>Back to Map
+    </a>
+    <a href="/admin" class="btn btn-outline-light">
+        <i class="fas fa-cog me-1"></i>Admin
+    </a>
+{% endset %}
+{% include 'components/page_header.html' %}
 <div class="container-fluid">
 
             {% if not eas_enabled %}

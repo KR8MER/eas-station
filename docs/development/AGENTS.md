@@ -126,17 +126,20 @@ When implementing ANY new feature:
 **Required Web UI Access For:**
 
 1. **System Management**
-   - ✅ View system logs (via `/system-logs` - uses journalctl backend)
+   - ✅ View system logs (via `/logs?type=services` - uses journalctl backend)
    - ✅ Restart services (via Admin → Services - uses systemd backend)
    - ✅ View service status (via Dashboard/Monitoring)
    - ✅ Update configuration (via Admin → Environment/Settings)
    - ✅ Backup/Restore system (via Admin → Backup)
 
 2. **Log Viewing**
-   - ✅ **Already Implemented**: `webapp/routes_logs.py` provides systemd journal access
+   - ✅ **Already Implemented**: the unified Logs hub at `/logs` — the
+     **Service Logs (systemd)** tab (`/logs?type=services`) reads the journal
+     via `get_systemd_logs()`; `webapp/routes_logs.py` additionally exposes
+     JSON endpoints under `/api/logs/*`
    - ✅ Users can view logs for all services via web UI
-   - ✅ Filter by priority (error, warning, info, debug)
-   - ✅ Filter by time range
+   - ✅ Filter by service, level, date range, and free-text search
+   - ✅ Export any category as CSV or PDF
    - ❌ **NEVER** require users to run `journalctl`, `tail -f`, or `docker logs`
 
 3. **Configuration Management**
@@ -478,6 +481,7 @@ def downgrade() -> None:
 - **Use theme variables** - Reference CSS variables: `var(--primary-color)`, `var(--text-color)`, `var(--bg-color)`
 - **Support all themes** - EAS Station™ has multiple built-in themes (Cosmo, Dark, Coffee, Spring, and color-based themes)
 - **Test in multiple themes** - Always test in both light (Cosmo) and dark themes at minimum
+- **Run the contrast audit when touching colours** - `python3 scripts/diagnostics/check_theme_contrast.py` checks text/background contrast for key surfaces across all 20 themes and exits non-zero on a regression. Beware the trap it was written for: a `background:` shorthand carrying a gradient sets background-*image*, which a later `background-color` cannot override — the gradient keeps painting on top and can leave dark text on a dark surface.
 - **Be responsive** - Use Bootstrap 5 grid classes for mobile support
 - **Mobile-friendly is required** - Every page MUST render without horizontal scrolling at viewport widths ≥320px. Specifically:
   - **Wrap every `<table>` in `<div class="table-responsive">`** — including JS-injected tables built from template strings. The global mobile safety-net CSS in `static/css/styles.css` provides a fallback, but explicit wrappers are required.
@@ -574,6 +578,7 @@ Every time you add a `{% block … %}` to a child template, cross-check the name
 |---------|------------|-------|--------|
 | **Base Template** | `templates/base.html` | 163 | ✅ All pages extend this |
 | **Navbar** | `templates/components/navbar.html` | 420+ | ✅ Included in base.html (renamed from navbar_new.html) |
+| **Page Header** | `templates/components/page_header.html` | ~55 | ✅ Every page's header — set `header_*` vars and include it |
 | **Footer** | Inline in `templates/base.html` | 103-144 | ✅ Inline in base template |
 | **System Banner** | Inline in `templates/base.html` | 72-81 | ✅ Inline in base template |
 | **Flash Messages** | Inline in `templates/base.html` | 84-95 | ✅ Inline in base template |
@@ -585,7 +590,7 @@ Every time you add a `{% block … %}` to a child template, cross-check the name
 | `templates/base.html` | ✅ Active base template | Extend this for new pages |
 | `templates/components/navbar.html` | ✅ Active navbar | Add navigation links here |
 | `components/footer.html` | ❌ Was deleted (not included) | Already removed |
-| `components/page_header.html` | ⚠️ Macro component, wrong location | Move to templates/components/ if used |
+| `templates/partials/page_header.html` | ❌ Deleted duplicate | Use `templates/components/page_header.html` instead |
 
 #### When Making Changes to Page Elements
 
@@ -608,6 +613,18 @@ Every time you add a `{% block … %}` to a child template, cross-check the name
 **Creating New Pages:**
 - ✅ Always extend `base.html`
 - ✅ Use `{% block content %}` for page content
+- ✅ Start the page with the standard header — set the `header_*` variables and
+  `{% include 'components/page_header.html' %}`; NEVER hand-roll a
+  `<div class="page-header">` (see `/style-guide` for the pattern):
+  ```jinja
+  {% set header_icon = 'fas fa-bell' %}
+  {% set header_title = 'Page Title' %}
+  {% set header_subtitle = 'One-line description' %}
+  {% set header_actions %}
+      <a href="/path" class="btn btn-outline-light"><i class="fas fa-icon me-1"></i>Action</a>
+  {% endset %}
+  {% include 'components/page_header.html' %}
+  ```
 - ✅ Add navigation link to `templates/components/navbar.html`
 - ❌ Never create alternate base templates — extend `base.html`
 
@@ -1962,3 +1979,4 @@ Only suggest deployment/cache fixes if:
 - 2026-03-23: Added "Address All Issues — Never Hyperfocus" section (Core Principle #5) after agent hyperfocused on a single new requirement while ignoring three original issues in the same problem statement. Section mandates reading the full problem statement first, enumerating every distinct issue, building a complete checklist before writing code, and never abandoning original issues when a new requirement arrives mid-session.
 - 2026-03-26: Added "Alembic Migration Rules" section to Database Guidelines after an agent used a filename prefix instead of the actual revision ID as `down_revision`, creating a divergent migration head. New section covers: revision ID vs. filename distinction, finding the current head, migration file checklist, the idempotent template, chain-validation script, and merge-migration syntax. The same head-check script was added to the Pre-Commit Checklist so it runs automatically before every commit. The "Create Database Migration" step in the Configuration System section was also updated with the critical warning.
 - 2026-03-26: Documented the six valid `{% block %}` names defined in `base.html` after an agent wrote `{% block extra_js %}` (non-existent) instead of `{% block scripts %}`, causing Jinja2 to silently discard the entire JavaScript section of the TTS Pronunciation Dictionary page, making all save/edit/delete operations non-functional. Added a block-name reference table and explicit ❌/✅ example to the Template Standards section. Extended the pre-commit template-validation script to also flag unknown block names in child templates (`VALID_BASE_BLOCKS` check), producing a clear error message suggesting `scripts` when `extra_js` is found. Removed a stray duplicate of the validation script that had accumulated below the Pre-Commit Checklist.
+- 2026-08-01: Standardized page headers across the whole UI. `templates/components/page_header.html` is now the single canonical header component — pages set `header_icon`/`header_title`/`header_subtitle`/`header_actions` and include it. Converted 27 templates that hand-rolled `.page-header` markup, deleted the unused duplicate `templates/partials/page_header.html`, promoted the dashboard's header action-button polish into global `styles.css` (frosted icon tile, pill buttons with hover lift), and updated the Style Guide and the "Creating New Pages" checklist to require the component. Hero pages were standardized in the same pass: About/Attribution/Support now use `partials/hero.html` (new optional `hero_extra` slot) instead of hand-rolled `.about-hero` markup, the Admin panel moved to the standard gradient page header, dead `.about-hero*`/`.about-chip*` CSS aliases were removed, and a light-theme contrast bug (global `h1` color overriding the hero's white title) was fixed. A follow-up pass converted all 32 `templates/admin/*` pages plus the Security Center off the third `admin-page-header` system (dead CSS removed from `admin.css`), standardized Help/Privacy/SMS-Policy/Version on the hero component, deleted six orphaned templates, registered the missing `/style-guide` route, and added Yellow-theme dark-ink overrides for the standard page header. A CSS consolidation pass then promoted copy-pasted per-page rules into `styles.css` as shared utilities (`.status-badge` variants, inline `.spinner`, `.snr-s0`–`.snr-s5` scale) and deleted three more unused component templates (`status_badge`, `metric_card`, `stat_card`).

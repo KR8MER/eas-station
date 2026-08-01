@@ -7,12 +7,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-tools"></i> Audio/SDR Config Fix</h1>
-        <p class="mb-0">Diagnose and fix common audio and SDR configuration issues</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-tools' %}
+{% set header_title = 'Audio/SDR Config Fix' %}
+{% set header_subtitle = 'Diagnose and fix common audio and SDR configuration issues' %}
+{% include 'components/page_header.html' %}
 
 <div class="container-fluid mt-4">
     <div class="row">

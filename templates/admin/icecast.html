@@ -5,34 +5,6 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 <style>
-    .status-badge {
-        display: inline-block;
-        padding: 0.375rem 0.75rem;
-        border-radius: 0.25rem;
-        font-size: 0.875rem;
-        font-weight: 600;
-        text-transform: uppercase;
-    }
-
-    .status-badge.success {
-        background: color-mix(in srgb, var(--success-color) 20%, var(--surface-color));
-        color: var(--success-color);
-    }
-
-    .status-badge.danger {
-        background: color-mix(in srgb, var(--danger-color) 20%, var(--surface-color));
-        color: var(--danger-color);
-    }
-
-    .status-badge.warning {
-        background: color-mix(in srgb, var(--warning-color) 20%, var(--surface-color));
-        color: var(--warning-color);
-    }
-
-    .status-badge.secondary {
-        background: var(--border-color);
-        color: var(--text-color);
-    }
 
     .stat-item {
         padding: 1rem;
@@ -79,12 +51,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-broadcast-tower"></i> Icecast Streaming</h1>
-        <p class="mb-0">Configure Icecast streaming server for live audio monitoring</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-broadcast-tower' %}
+{% set header_title = 'Icecast Streaming' %}
+{% set header_subtitle = 'Configure Icecast streaming server for live audio monitoring' %}
+{% include 'components/page_header.html' %}
 
 <div class="admin-container">
     <!-- Server Status Indicator -->

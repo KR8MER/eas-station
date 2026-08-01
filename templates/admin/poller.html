@@ -7,12 +7,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-satellite-dish"></i> Alert Poller Settings</h1>
-        <p class="mb-0">Configure CAP alert polling behavior and feed sources</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-satellite-dish' %}
+{% set header_title = 'Alert Poller Settings' %}
+{% set header_subtitle = 'Configure CAP alert polling behavior and feed sources' %}
+{% include 'components/page_header.html' %}
 
 <div class="container-fluid">
     <div class="row">

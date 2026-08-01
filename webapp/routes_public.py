@@ -849,6 +849,18 @@ def register(app: Flask, logger) -> None:
                 "<h1>Help</h1><p>Refer to docs/guides/HELP.md in the repository for the full operations guide.</p>"
             )
 
+    @app.route("/style-guide")
+    def style_guide_page():
+        """Design-system reference: the standard page header, cards, and components."""
+        try:
+            return render_template("style_guide.html")
+        except Exception as exc:  # pragma: no cover - fallback content
+            route_logger.error("Error rendering style guide page: %s", exc)
+            return (
+                "<h1>Style Guide</h1><p>See templates/style_guide.html and "
+                "docs/frontend/COMPONENT_LIBRARY.md in the repository.</p>"
+            )
+
     @app.route("/attribution")
     def attribution_page():
         """Dedicated page crediting open-source dependencies, data sources, and licensing."""
@@ -1703,6 +1715,103 @@ def register(app: Flask, logger) -> None:
             except Exception as e:
                 db.session.rollback()
                 route_logger.warning("Failed to load received EAS alerts: %s", e)
+
+            # Polling Debug records
+            try:
+                for record in PollDebugRecord.query.order_by(PollDebugRecord.created_at.desc()).limit(logs_per_category).all():
+                    identifier = record.alert_identifier or record.alert_event or 'Unknown alert'
+                    if not record.parse_success:
+                        level = 'ERROR'
+                    elif record.is_relevant:
+                        level = 'INFO'
+                    else:
+                        level = 'WARNING'
+                    all_logs.append({
+                        'timestamp': record.created_at,
+                        'level': level,
+                        'module': f"Polling Debug ({record.data_source or 'unknown'})",
+                        'message': (
+                            f"Run {record.poll_run_id}: {identifier} | "
+                            f"Status {(record.poll_status or 'UNKNOWN').upper()} | "
+                            f"Relevant: {'yes' if record.is_relevant else 'no'}"
+                        ),
+                        'details': {
+                            'poll_run_id': record.poll_run_id,
+                            'data_source': record.data_source,
+                            'relevance_reason': record.relevance_reason,
+                            'parse_error': record.parse_error,
+                        },
+                        'category': 'Polling Debug'
+                    })
+            except Exception as e:
+                db.session.rollback()
+                route_logger.warning("Failed to load polling debug records: %s", e)
+
+            # Audio Metrics
+            try:
+                for log in AudioSourceMetrics.query.order_by(AudioSourceMetrics.timestamp.desc()).limit(logs_per_category).all():
+                    all_logs.append({
+                        'timestamp': log.timestamp,
+                        'level': 'WARNING' if log.silence_detected or log.clipping_detected else 'INFO',
+                        'module': f'Audio Metrics: {log.source_name}',
+                        'message': (
+                            f"Peak: {log.peak_level_db:.1f}dB | RMS: {log.rms_level_db:.1f}dB | "
+                            f"SR: {log.sample_rate}Hz"
+                        ),
+                        'details': {
+                            'source_type': log.source_type,
+                            'silence': log.silence_detected,
+                            'clipping': log.clipping_detected,
+                        },
+                        'category': 'Audio Metrics'
+                    })
+            except Exception as e:
+                db.session.rollback()
+                route_logger.warning("Failed to load audio metrics: %s", e)
+
+            # Audio Health
+            try:
+                for log in AudioHealthStatus.query.order_by(AudioHealthStatus.timestamp.desc()).limit(logs_per_category).all():
+                    all_logs.append({
+                        'timestamp': log.timestamp,
+                        'level': 'ERROR' if log.error_detected else 'WARNING' if not log.is_healthy else 'INFO',
+                        'module': f'Audio Health: {log.source_name}',
+                        'message': (
+                            f"Health Score: {log.health_score:.1f}/100 | Active: {log.is_active} | "
+                            f"Uptime: {log.uptime_seconds:.1f}s"
+                        ),
+                        'details': {
+                            'healthy': log.is_healthy,
+                            'silence_detected': log.silence_detected,
+                        },
+                        'category': 'Audio Health'
+                    })
+            except Exception as e:
+                db.session.rollback()
+                route_logger.warning("Failed to load audio health status: %s", e)
+
+            # Decoded EAS Audio
+            try:
+                for log in EASDecodedAudio.query.order_by(EASDecodedAudio.created_at.desc()).limit(logs_per_category).all():
+                    all_logs.append({
+                        'timestamp': log.created_at,
+                        'level': 'INFO',
+                        'module': 'EAS Audio Decoder',
+                        'message': (
+                            f"File: {log.original_filename or 'Unknown'} | "
+                            f"SAME Headers: {len(log.same_headers or [])} | "
+                            f"Type: {log.content_type or 'N/A'}"
+                        ),
+                        'details': {
+                            'id': log.id,
+                            'original_filename': log.original_filename,
+                            'same_headers': log.same_headers or [],
+                        },
+                        'category': 'Decoded Audio'
+                    })
+            except Exception as e:
+                db.session.rollback()
+                route_logger.warning("Failed to load decoded EAS audio: %s", e)
 
             # Service Logs (systemd) - fetch recent logs without date restriction
             try:

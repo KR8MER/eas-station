@@ -275,12 +275,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-cog"></i> Environment Settings</h1>
-        <p class="mb-0">Manage bootstrap environment variables for database-free configuration</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-cog' %}
+{% set header_title = 'Environment Settings' %}
+{% set header_subtitle = 'Manage bootstrap environment variables for database-free configuration' %}
+{% include 'components/page_header.html' %}
 
 <div class="admin-container wide env-page">
     <!-- Action Buttons & Search -->

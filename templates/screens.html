@@ -445,27 +445,21 @@
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <div>
-                <h1 class="page-title mb-0"><i class="fas fa-display me-2"></i>Custom Display Screens</h1>
-                <p class="page-subtitle mb-0">Curate playlists for every display type and push updates with confidence</p>
-            </div>
-            <div class="page-header-actions">
-                <button class="btn btn-outline-light" onclick="showCreateRotationModal()">
-                    <i class="fas fa-sync me-1"></i>New Rotation
-                </button>
-                <a href="/screens/new" class="btn btn-outline-light">
-                    <i class="fas fa-paint-brush me-1"></i>Create Screen
-                </a>
-                <button class="btn btn-outline-light btn-sm" onclick="showCreateScreenModal()" title="Advanced: Create screen with JSON">
-                    <i class="fas fa-code"></i>
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+{% set header_icon = 'fas fa-display' %}
+{% set header_title = 'Custom Display Screens' %}
+{% set header_subtitle = 'Curate playlists for every display type and push updates with confidence' %}
+{% set header_actions %}
+    <button class="btn btn-outline-light" onclick="showCreateRotationModal()">
+        <i class="fas fa-sync me-1"></i>New Rotation
+    </button>
+    <a href="/screens/new" class="btn btn-outline-light">
+        <i class="fas fa-paint-brush me-1"></i>Create Screen
+    </a>
+    <button class="btn btn-outline-light btn-sm" onclick="showCreateScreenModal()" title="Advanced: Create screen with JSON">
+        <i class="fas fa-code"></i>
+    </button>
+{% endset %}
+{% include 'components/page_header.html' %}
 <div class="container-fluid mt-4 screens-page">
 
     <div class="row g-3 mb-4">

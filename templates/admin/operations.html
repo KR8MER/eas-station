@@ -28,12 +28,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-cogs"></i> Admin Operations</h1>
-        <p class="mb-0">System maintenance, backups, and database management</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-cogs' %}
+{% set header_title = 'Admin Operations' %}
+{% set header_subtitle = 'System maintenance, backups, and database management' %}
+{% include 'components/page_header.html' %}
 
 <div class="container">
     <!-- Database Health -->

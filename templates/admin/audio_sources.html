@@ -7,12 +7,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header header-success">
-    <div class="container">
-        <h1><i class="fas fa-microphone"></i> Audio Ingestion</h1>
-        <p class="mb-0">Monitor and manage audio input sources for the EAS system</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-microphone' %}
+{% set header_title = 'Audio Ingestion' %}
+{% set header_subtitle = 'Monitor and manage audio input sources for the EAS system' %}
+{% include 'components/page_header.html' %}
 
 <div class="container py-4">
     <div class="d-flex justify-content-end mb-4">

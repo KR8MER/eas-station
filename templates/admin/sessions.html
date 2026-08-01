@@ -7,12 +7,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header header-danger">
-    <div class="container">
-        <h1><i class="fas fa-user-clock"></i> Active Sessions</h1>
-        <p class="mb-0">Monitor and manage active administrator login sessions</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-user-clock' %}
+{% set header_title = 'Active Sessions' %}
+{% set header_subtitle = 'Monitor and manage active administrator login sessions' %}
+{% include 'components/page_header.html' %}
 
 <div class="container-fluid">
     <div class="d-flex justify-content-end gap-2 mb-3">

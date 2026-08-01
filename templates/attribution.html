@@ -47,21 +47,19 @@
         <div class="col-12 col-lg-10 col-xl-9">
 
             <!-- Hero -->
-            <section class="about-hero">
-                <div class="about-hero-inner">
-                    {% with logo_classes='about-hero-logo', logo_style='' %}
-                        {% include 'partials/logo_wordmark.html' %}
-                    {% endwith %}
-                    <h1 class="about-hero-title">Built on the shoulders of open source.</h1>
-                    <p class="about-hero-lead">EAS Station™ is assembled from dozens of open-source libraries, public government data feeds, and community standards. This page credits every one of them — and explains how EAS Station™ itself is licensed.</p>
-                    <div class="about-chip-row">
-                        <span class="about-chip"><i class="fas fa-scale-balanced"></i> Dual-Licensed</span>
-                        <span class="about-chip"><i class="fas fa-cubes"></i> 60+ Dependencies</span>
-                        <span class="about-chip"><i class="fas fa-database"></i> Public Data</span>
-                        <span class="about-chip"><i class="fas fa-heart"></i> Community Built</span>
-                    </div>
-                </div>
-            </section>
+            {% with
+                hero_logo=true,
+                hero_title='Built on the shoulders of open source.',
+                hero_lead='EAS Station™ is assembled from dozens of open-source libraries, public government data feeds, and community standards. This page credits every one of them — and explains how EAS Station™ itself is licensed.',
+                hero_chips=[
+                    {'icon': 'fas fa-scale-balanced', 'label': 'Dual-Licensed'},
+                    {'icon': 'fas fa-cubes',          'label': '60+ Dependencies'},
+                    {'icon': 'fas fa-database',       'label': 'Public Data'},
+                    {'icon': 'fas fa-heart',          'label': 'Community Built'},
+                ]
+            %}
+                {% include 'partials/hero.html' %}
+            {% endwith %}
 
             <!-- EAS Station's own license & attribution -->
             <section class="about-card" aria-labelledby="license-heading">

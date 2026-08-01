@@ -271,13 +271,8 @@
             margin-right: 3px;
             animation: gpsPulse 1.4s ease-in-out infinite;
         }
-        /* SNR color helper classes */
-        .snr-s0 { background: #484f58; }   /* no signal  */
-        .snr-s1 { background: #f85149; }   /* < 15 dBHz  */
-        .snr-s2 { background: #f97316; }   /* 15–24      */
-        .snr-s3 { background: #d29922; }   /* 25–34      */
-        .snr-s4 { background: #84cc16; }   /* 35–44      */
-        .snr-s5 { background: #3fb950; }   /* ≥ 45       */
+        /* SNR color helper classes (.snr-s0 … .snr-s5) come from the shared
+           scale in static/css/styles.css */
         /* SNR legend dots */
         .snr-legend { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; color: var(--text-muted); font-size: 0.68rem; }
         .snr-legend span { display: inline-flex; align-items: center; gap: 3px; }
@@ -481,12 +476,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container-fluid">
-        <h1><i class="fas fa-cogs"></i> Hardware Settings</h1>
-        <p class="mb-0">Configure GPIO, displays, and other hardware peripherals</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-cogs' %}
+{% set header_title = 'Hardware Settings' %}
+{% set header_subtitle = 'Configure GPIO, displays, and other hardware peripherals' %}
+{% include 'components/page_header.html' %}
 
 <div class="container-fluid">
     <div class="d-flex justify-content-end mb-3">

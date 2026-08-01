@@ -99,6 +99,11 @@
         }
         .status-badge {
             font-size: 0.8em;
+            /* These badges are Bootstrap .badge pills; keep Bootstrap's
+               sizing and casing over the shared .status-badge defaults. */
+            padding: 0.35em 0.65em;
+            font-weight: 700;
+            text-transform: none;
         }
         /* Quick stats card icon accent */
         .quick-stat-icon {
@@ -493,8 +498,6 @@
         .gps-snr-fill  { display: block; height: 100%; border-radius: 3px; }
         .snr-legend    { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; font-size: 0.7rem; color: var(--text-muted); }
         .snr-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
-        .snr-s5 { background: #3fb950; } .snr-s4 { background: #84cc16; } .snr-s3 { background: #d29922; }
-        .snr-s2 { background: #f97316; } .snr-s1 { background: #f85149; } .snr-s0 { background: #484f58; }
         .gps-timecode { font-family: 'Courier New', monospace; font-size: 0.95rem; font-weight: 700;
                         color: #3fb950; letter-spacing: 0.04em; }
         .gps-timecode-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;

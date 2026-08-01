@@ -140,28 +140,6 @@
         color: var(--text-color);
     }
 
-    .page-header {
-        background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-        color: white;
-        padding: 30px;
-        border-radius: 12px;
-        margin-bottom: 30px;
-        box-shadow: var(--shadow-md);
-        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-    }
-
-    .page-header h1 {
-        margin: 0;
-        font-size: 2rem;
-        font-weight: 600;
-    }
-
-    .page-header p {
-        margin: 10px 0 0 0;
-        opacity: 0.9;
-        font-size: 1.1rem;
-    }
-
     @media (max-width: 575.98px) {
         .display-header {
             flex-direction: column;
@@ -177,45 +155,32 @@
             text-align: center;
         }
 
-        .page-header {
-            padding: 18px;
-        }
-
-        .page-header h1 {
-            font-size: 1.4rem;
-        }
-
-        .page-header p {
-            font-size: 0.95rem;
-        }
     }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4">
-    <div class="page-header">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-            <div style="flex: 1 1 240px; min-width: 0;">
-                <h1><i class="fas fa-tv"></i> Live Display Preview</h1>
-                <p>Real-time visualization of all display outputs with proper colors and animations</p>
+    {% set header_icon = 'fas fa-tv' %}
+    {% set header_title = 'Live Display Preview' %}
+    {% set header_subtitle = 'Real-time visualization of all display outputs with proper colors and animations' %}
+    {% set header_actions %}
+        <div class="text-end">
+            <button id="refresh-btn" class="btn btn-outline-light" onclick="manualRefresh()" title="Refresh now">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+            <div style="margin-top: 8px; font-size: 0.85rem; opacity: 0.9;">
+                <span id="last-update">Last update: Never</span>
             </div>
-            <div class="page-header-controls" style="text-align: right;">
-                <button id="refresh-btn" class="btn btn-light" onclick="manualRefresh()" title="Refresh now">
-                    <i class="fas fa-sync-alt"></i> Refresh
-                </button>
-                <div style="margin-top: 8px; font-size: 0.85rem; opacity: 0.9;">
-                    <span id="last-update">Last update: Never</span>
-                </div>
-                <div style="margin-top: 4px;">
-                    <label style="font-size: 0.85rem; opacity: 0.9; cursor: pointer;">
-                        <input type="checkbox" id="auto-refresh-toggle" checked onchange="toggleAutoRefresh()">
-                        Auto-refresh (1s)
-                    </label>
-                </div>
+            <div style="margin-top: 4px;">
+                <label style="font-size: 0.85rem; opacity: 0.9; cursor: pointer;">
+                    <input type="checkbox" id="auto-refresh-toggle" checked onchange="toggleAutoRefresh()">
+                    Auto-refresh (1s)
+                </label>
             </div>
         </div>
-    </div>
+    {% endset %}
+    {% include 'components/page_header.html' %}
 
     <div class="row">
         <!-- OLED Display (128x64 Monochrome) -->

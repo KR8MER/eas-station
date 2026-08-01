@@ -210,16 +210,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <div>
-                <h1 class="page-title mb-0"><i class="fas fa-shield-alt me-2"></i>Security Settings</h1>
-                <p class="page-subtitle mb-0">Manage your account security and two-factor authentication</p>
-            </div>
-        </div>
-    </div>
-</div>
+{% set header_icon = 'fas fa-shield-alt' %}
+{% set header_title = 'Security Settings' %}
+{% set header_subtitle = 'Manage your account security and two-factor authentication' %}
+{% include 'components/page_header.html' %}
 <div class="container">
     {% if current_user %}
     <div class="row mb-4">

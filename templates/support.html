@@ -55,22 +55,24 @@
     <div class="row justify-content-center">
         <div class="col-12 col-lg-10 col-xl-9">
             <!-- Hero -->
-            <section class="about-hero">
-                <div class="about-hero-inner">
-                    {% with logo_classes='about-hero-logo', logo_style='' %}
-                        {% include 'partials/logo_wordmark.html' %}
-                    {% endwith %}
-                    <h1 class="about-hero-title">Support EAS Station™</h1>
-                    <p class="about-hero-lead">EAS Station™ is free and open-source software, built and maintained in the open. If it&rsquo;s useful to you &mdash; in the lab, the shack, or the classroom &mdash; a one-time or monthly contribution keeps development moving.</p>
-                    <div class="support-cta">
-                        <a href="https://ko-fi.com/easstation" target="_blank" rel="noopener"
-                           class="support-kofi-btn" aria-label="Support EAS Station on Ko-fi">
-                            <img src="{{ url_for('static', filename='img/kofi.svg') }}" alt="">
-                            Support on Ko-fi
-                        </a>
-                    </div>
+            {% set hero_lead %}EAS Station™ is free and open-source software, built and maintained in the open. If it&rsquo;s useful to you &mdash; in the lab, the shack, or the classroom &mdash; a one-time or monthly contribution keeps development moving.{% endset %}
+            {% set hero_extra %}
+                <div class="support-cta">
+                    <a href="https://ko-fi.com/easstation" target="_blank" rel="noopener"
+                       class="support-kofi-btn" aria-label="Support EAS Station on Ko-fi">
+                        <img src="{{ url_for('static', filename='img/kofi.svg') }}" alt="">
+                        Support on Ko-fi
+                    </a>
                 </div>
-            </section>
+            {% endset %}
+            {% with
+                hero_logo=true,
+                hero_title='Support EAS Station™',
+                hero_lead=hero_lead,
+                hero_extra=hero_extra
+            %}
+                {% include 'partials/hero.html' %}
+            {% endwith %}
 
             <!-- Where it goes -->
             <section class="about-card">

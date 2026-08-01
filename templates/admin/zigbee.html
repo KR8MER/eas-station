@@ -44,15 +44,6 @@
     .duration-btn  { min-width: 60px; }
     .duration-btn.active { background: var(--primary-color); color: #fff; border-color: var(--primary-color); }
 
-    .spinner {
-        display: inline-block;
-        width: 1rem;
-        height: 1rem;
-        border: 2px solid rgba(0, 0, 0, 0.1);
-        border-left-color: var(--primary-color);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-    }
 
     .diagnostic-check {
         padding: 0.75rem 1rem;
@@ -232,12 +223,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header header-secondary">
-    <div class="container">
-        <h1><i class="fas fa-broadcast-tower"></i> Zigbee Monitoring</h1>
-        <p class="mb-0">Monitor Zigbee coordinator status and connected devices</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-broadcast-tower' %}
+{% set header_title = 'Zigbee Monitoring' %}
+{% set header_subtitle = 'Monitor Zigbee coordinator status and connected devices' %}
+{% include 'components/page_header.html' %}
 
 <div class="admin-container">
     <!-- Coordinator Status -->

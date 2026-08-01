@@ -8,6 +8,123 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.123.1] - 2026-08-01 - Table header contrast, logs coverage, and a theme-contrast audit
+
+### Fixed
+- **Table headers rendered dark text on a dark gradient in every theme.**
+  `.table thead th` set a `background:` shorthand carrying a vibrant
+  gradient; a later "TABLE READABILITY FIXES" rule set `color` to dark ink
+  and `background-color` to a light tint — but `background-color` cannot
+  override a gradient, because the gradient is a background-*image* and
+  keeps painting on top. The result was near-black text on dark navy across
+  all 39 plain-Bootstrap tables (18 of them on System Health alone). The
+  gradient is removed so the readable tint actually shows; the rule now
+  carries a comment explaining why it must not come back. A stale
+  `[data-theme="lightning"]` dark-ink override, which existed only to
+  compensate for that gradient, was removed with it.
+- **`.eas-table` headers fell below WCAG AA in the dark theme** (4.04:1,
+  where 4.5:1 is required at that font size). The header colour is now
+  mixed toward `--text-color` instead of using `--text-secondary` alone.
+- **ENDEC Device Feeds had an unwrapped `<table>`**, violating the
+  repository's own mobile rule; it is now inside `.table-responsive`. No
+  unwrapped tables remain outside email templates.
+- **"All Logs" silently omitted half the log categories.** The unified view
+  aggregated 8 of the 20 individual categories, so Polling Debug, Audio
+  Metrics, Audio Health, and Decoded EAS Audio were invisible to anyone who
+  did not know to click their specific tab. All four are now included
+  (Audit and Compliance remain deliberately separate as distinct legal
+  record categories). Every one of the 21 log tabs was verified to map to a
+  real handler branch, with no orphan branches in the other direction.
+- **Documentation pointed at a `/system-logs` page that does not exist.**
+  The journal is reachable through the Logs hub's **Service Logs (systemd)**
+  tab (`/logs?type=services`); the CLI-free-operations guidance now says so.
+
+### Added
+- **`scripts/diagnostics/check_theme_contrast.py`** — audits text/background
+  contrast for key surfaces across all 20 themes and exits non-zero on a
+  strict-surface regression. It measures the backdrop from real screenshots
+  with the glyphs masked out, so gradients and `color-mix()`/`color(srgb …)`
+  values are handled correctly, and it applies WCAG's large-text threshold
+  where it applies. Gradient surfaces that rely on `text-shadow` are
+  reported as advisory rather than failing, since the WCAG formula models
+  neither the shadow nor a gradient. This check reproduces the table-header
+  bug above and caught a regression introduced while fixing it.
+
+## [2.123.0] - 2026-08-01 - Standardized page headers across the entire UI
+
+### Changed
+- **Every page now renders its header through one shared component**
+  (`templates/components/page_header.html`). Twenty-seven templates that
+  hand-rolled near-identical `.page-header` markup (Dashboard, Alerts,
+  Audio Archive, GPIO pages, Logs, Settings, Docs, Diagnostics, and more)
+  were converted to set `header_icon` / `header_title` / `header_subtitle`
+  / `header_actions` variables and include the component, so future header
+  changes happen in exactly one file. The unused duplicate
+  `templates/partials/page_header.html` was removed.
+- **Modernized header visuals for all pages and themes.** The component
+  renders the page icon in a frosted-glass tile beside the title, and
+  header action buttons are now unified pill-shaped controls with a
+  glassy outline-light treatment and hover lift — promoted from
+  page-specific CSS on the dashboard into `static/css/styles.css` so all
+  20 themes and every page get the same look.
+- **Live Display Preview** no longer overrides the global `.page-header`
+  styling with its own local gradient; it now uses the standard header
+  like every other page.
+- **Style Guide** (`/style-guide`) now documents the component-include
+  pattern as the required way to build page headers instead of showing
+  hand-rolled markup.
+- **Hero pages standardized too.** About, Attribution, and Support
+  hand-rolled their `.about-hero` banner markup; they now render through
+  the shared `partials/hero.html` component (which gained a `hero_extra`
+  slot for content like the Support page's Ko-fi call-to-action). The
+  Admin panel — an operational page — moved from the marketing-style hero
+  to the standard gradient page header so it matches the rest of the
+  operator UI. The now-unused `.about-hero*` / `.about-chip*` CSS alias
+  selectors were removed from `styles.css`.
+
+- **Admin section (32 pages) standardized.** Every `templates/admin/*`
+  page plus the Security Center used a third header system
+  (`admin-page-header` with per-page color variants, styled in
+  `admin.css`); all now render through the shared page-header component,
+  and ~95 lines of dead header CSS were removed from `admin.css`.
+- **Remaining stragglers standardized.** Help, Privacy, SMS Policy, and
+  Version now use the shared hero component (Version's build-info card
+  moved into the hero's `hero_extra` slot); the old per-page
+  `version-hero` CSS was removed.
+- **Orphaned templates deleted.** `alerts_new.html`,
+  `audio_sources.html` (superseded by `admin/audio_sources.html`),
+  `system_logs.html` (superseded by the unified Logs hub),
+  `theme_test.html`, `components/form-example.html`, and
+  `partials/common_head.html` were referenced by no route or include.
+- **Style Guide is now reachable.** `templates/style_guide.html` had no
+  route; it is now served at `/style-guide` and linked from the Site
+  Navigation page under Help & Documentation.
+- **Per-page CSS consolidation.** Byte-identical rule blocks that were
+  copy-pasted across admin pages moved into `styles.css` as shared
+  utilities: the `.status-badge` pill system (was duplicated in Certbot,
+  Tailscale, and Icecast), the inline `.spinner` (Network, Zigbee), and
+  the `.snr-s0`–`.snr-s5` signal-quality color scale (Hardware
+  Settings, System Health). Pages with intentionally different badge
+  designs (Network, System Health) neutralize the shared defaults
+  explicitly so their appearance is unchanged. Also deleted three
+  unused component templates (`status_badge.html` — which emitted
+  classes no stylesheet defines — `metric_card.html`, and
+  `stat_card.html`) and stale `.page-header` overrides left in Live
+  Display Preview.
+
+### Fixed
+- **Hero banner titles were unreadable in light themes.** The global
+  `h1 { color: var(--text-color) }` typography rule overrode the hero's
+  white text, rendering titles near-black on the purple gradient on
+  About, Attribution, and Support in every light theme.
+  `.eas-hero-title` now sets white explicitly.
+- **Page headers were unreadable in the Yellow theme.** The standard
+  header's white text sat on the theme's amber → yellow gradient with
+  failing contrast (admin pages previously carried their own dark-ink
+  override in `admin.css`, but main pages never did). `styles.css` now
+  applies the same dark ink to `.page-header` text, the icon tile, and
+  outline-light action buttons for both the Yellow and Lightning themes.
+
 ## [2.122.2] - 2026-08-01 - Installer resilience on Debian 13/Ubuntu and alembic_version repair
 
 ### Fixed

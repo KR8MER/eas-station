@@ -21,12 +21,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header header-secondary">
-    <div class="container">
-        <h1><i class="fas fa-map"></i> County Boundaries</h1>
-        <p class="mb-0">Manage US Census county boundary data for IPAWS alert coverage maps</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-map' %}
+{% set header_title = 'County Boundaries' %}
+{% set header_subtitle = 'Manage US Census county boundary data for IPAWS alert coverage maps' %}
+{% include 'components/page_header.html' %}
 
 <div class="container-fluid mt-4">
 

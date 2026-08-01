@@ -376,30 +376,24 @@
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <div>
-                <h1 class="page-title mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Alert Details</h1>
-                <p class="page-subtitle mb-0">{{ alert.event }}</p>
-            </div>
-            <div class="page-header-actions">
-                <a href="/alerts" class="btn btn-outline-light">
-                    <i class="fas fa-arrow-left me-1"></i>Back to Alerts
-                </a>
-                {% if alert.identifier %}
-                <a href="/alerts/{{ alert.identifier }}/trail" class="btn btn-outline-light"
-                   title="Full event trail: ingest → forward → broadcast → logs">
-                    <i class="fas fa-route me-1"></i>View Trail
-                </a>
-                {% endif %}
-                <a href="/" class="btn btn-outline-light">
-                    <i class="fas fa-map me-1"></i>View on Map
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
+{% set header_icon = 'fas fa-exclamation-triangle' %}
+{% set header_title = 'Alert Details' %}
+{% set header_subtitle %}{{ alert.event }}{% endset %}
+{% set header_actions %}
+    <a href="/alerts" class="btn btn-outline-light">
+        <i class="fas fa-arrow-left me-1"></i>Back to Alerts
+    </a>
+    {% if alert.identifier %}
+    <a href="/alerts/{{ alert.identifier }}/trail" class="btn btn-outline-light"
+       title="Full event trail: ingest → forward → broadcast → logs">
+        <i class="fas fa-route me-1"></i>View Trail
+    </a>
+    {% endif %}
+    <a href="/" class="btn btn-outline-light">
+        <i class="fas fa-map me-1"></i>View on Map
+    </a>
+{% endset %}
+{% include 'components/page_header.html' %}
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">

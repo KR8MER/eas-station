@@ -103,6 +103,8 @@
         border-radius: 0.25rem;
         font-size: 0.875rem;
         font-weight: 500;
+        /* this page's badges are sentence-case; undo the shared uppercase */
+        text-transform: none;
     }
 
     .status-badge.connected {
@@ -145,19 +147,7 @@
         font-family: 'Courier New', monospace;
     }
 
-    .spinner {
-        display: inline-block;
-        width: 1rem;
-        height: 1rem;
-        border: 2px solid rgba(0, 0, 0, 0.1);
-        border-left-color: var(--primary-color);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-    }
 
-    @keyframes spin {
-        to { transform: rotate(360deg); }
-    }
 
     .empty-state {
         text-align: center;
@@ -284,12 +274,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-network-wired"></i> Network Configuration</h1>
-        <p class="mb-0">Professional network management and monitoring</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-network-wired' %}
+{% set header_title = 'Network Configuration' %}
+{% set header_subtitle = 'Professional network management and monitoring' %}
+{% include 'components/page_header.html' %}
 
 <div class="admin-container wide">
     <!-- Navigation Tabs -->

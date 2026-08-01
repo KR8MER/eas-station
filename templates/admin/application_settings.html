@@ -7,12 +7,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-sliders-h"></i> Application Settings</h1>
-        <p class="mb-0">Configure logging, file storage, and other application-level settings</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-sliders-h' %}
+{% set header_title = 'Application Settings' %}
+{% set header_subtitle = 'Configure logging, file storage, and other application-level settings' %}
+{% include 'components/page_header.html' %}
 
 <div class="container-fluid">
     <div class="row">

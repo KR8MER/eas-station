@@ -7,12 +7,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header header-success">
-    <div class="container">
-        <h1><i class="fas fa-broadcast-tower"></i> SDR Receivers</h1>
-        <p class="mb-0">Manage USB SDR front-ends for SAME captures and monitoring</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-broadcast-tower' %}
+{% set header_title = 'SDR Receivers' %}
+{% set header_subtitle = 'Manage USB SDR front-ends for SAME captures and monitoring' %}
+{% include 'components/page_header.html' %}
 
 <div class="container py-4">
     <div class="d-flex justify-content-end mb-4">

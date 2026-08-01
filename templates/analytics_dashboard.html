@@ -49,21 +49,15 @@
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <div>
-                <h1 class="page-title mb-0"><i class="fas fa-chart-line me-2"></i>Analytics Dashboard</h1>
-                <p class="page-subtitle mb-0">System trends and anomaly detection</p>
-            </div>
-            <div class="page-header-actions">
-                <a href="/stats" class="btn btn-outline-light">
-                    <i class="fas fa-chart-bar me-1"></i>Alert Statistics
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
+{% set header_icon = 'fas fa-chart-line' %}
+{% set header_title = 'Analytics Dashboard' %}
+{% set header_subtitle = 'System trends and anomaly detection' %}
+{% set header_actions %}
+    <a href="/stats" class="btn btn-outline-light">
+        <i class="fas fa-chart-bar me-1"></i>Alert Statistics
+    </a>
+{% endset %}
+{% include 'components/page_header.html' %}
 <div class="container-fluid mt-4">
     <!-- Key Metrics -->
     <div class="row">

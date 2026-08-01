@@ -10,12 +10,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-user-shield"></i> Role-Based Access Control</h1>
-        <p class="mb-0">Manage roles, permissions, and user access</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-user-shield' %}
+{% set header_title = 'Role-Based Access Control' %}
+{% set header_subtitle = 'Manage roles, permissions, and user access' %}
+{% include 'components/page_header.html' %}
 
 <div class="container">
     <!-- Permission Tree Documentation Link -->

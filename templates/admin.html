@@ -8,21 +8,11 @@
 
 {% block content %}
 <div class="container-fluid py-3">
-{% with
-    hero_title='Admin Control Panel',
-    hero_lead='EAS Station™ — Administrative Dashboard',
-    hero_chips=[
-        {'icon': 'fas fa-database',        'label': 'Data'},
-        {'icon': 'fas fa-cog',             'label': 'System'},
-        {'icon': 'fas fa-broadcast-tower', 'label': 'Broadcast'},
-        {'icon': 'fas fa-server',          'label': 'Services'},
-        {'icon': 'fas fa-microchip',       'label': 'Hardware'},
-        {'icon': 'fas fa-shield-alt',      'label': 'Security'},
-        {'icon': 'fas fa-tools',           'label': 'Operations'},
-    ]
-%}
-    {% include 'partials/hero.html' %}
-{% endwith %}
+{% set header_variant = 'gradient' %}
+{% set header_icon = 'fas fa-sliders' %}
+{% set header_title = 'Admin Control Panel' %}
+{% set header_subtitle = 'EAS Station™ — Administrative Dashboard' %}
+{% include 'components/page_header.html' %}
 
         <!-- System Overview -->
         <section class="eas-card mb-4">

@@ -3,50 +3,44 @@
 {% block title %}Audio Detail - {{ event_name }}{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <div>
-                <h1 class="page-title mb-0"><i class="fas fa-broadcast-tower me-2"></i>EAS Broadcast Record</h1>
-                <p class="page-subtitle mb-0">#{{ message.id }} &mdash; {{ message.created_at | format_local_datetime(false) if message.created_at else 'Unknown time' }}</p>
-            </div>
-            <div class="page-header-actions">
-                {% if audio_url %}
-                <a class="btn btn-outline-light" href="{{ audio_url }}?download=1" rel="noopener">
-                    <i class="fas fa-download me-1"></i>Download Composite
-                </a>
-                {% endif %}
-                {% if text_url %}
-                <a class="btn btn-outline-light" href="{{ text_url }}" target="_blank" rel="noopener">
-                    <i class="fas fa-file-alt me-1"></i>Summary JSON
-                </a>
-                {% endif %}
-                <a href="{{ url_for('audio_detail_pdf', message_id=message.id) }}" target="_blank" class="btn btn-outline-light">
-                    <i class="fas fa-file-pdf me-1"></i>PDF
-                </a>
-                {% if alert %}
-                <a class="btn btn-outline-light" href="{{ url_for('api.alert_detail', alert_id=alert.id) }}">
-                    <i class="fas fa-bullhorn me-1"></i>Alert
-                </a>
-                {% endif %}
-                <a class="btn btn-outline-light" href="{{ url_for('audio_history') }}">
-                    <i class="fas fa-list me-1"></i>Archive
-                </a>
-                {% if current_user %}
-                {% if message.audio_data %}
-                <button type="button" class="btn btn-outline-light" onclick="resendAudioMessage()" id="resendBtn"
-                        title="Re-broadcast this alert now — activates GPIO relays and plays the audio on air">
-                    <i class="fas fa-redo me-1"></i>Resend on Air
-                </button>
-                {% endif %}
-                <button type="button" class="btn btn-outline-light" onclick="deleteAudioMessage()">
-                    <i class="fas fa-trash me-1"></i>Delete
-                </button>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
+{% set header_icon = 'fas fa-broadcast-tower' %}
+{% set header_title = 'EAS Broadcast Record' %}
+{% set header_subtitle %}#{{ message.id }} &mdash; {{ message.created_at | format_local_datetime(false) if message.created_at else 'Unknown time' }}{% endset %}
+{% set header_actions %}
+    {% if audio_url %}
+    <a class="btn btn-outline-light" href="{{ audio_url }}?download=1" rel="noopener">
+        <i class="fas fa-download me-1"></i>Download Composite
+    </a>
+    {% endif %}
+    {% if text_url %}
+    <a class="btn btn-outline-light" href="{{ text_url }}" target="_blank" rel="noopener">
+        <i class="fas fa-file-alt me-1"></i>Summary JSON
+    </a>
+    {% endif %}
+    <a href="{{ url_for('audio_detail_pdf', message_id=message.id) }}" target="_blank" class="btn btn-outline-light">
+        <i class="fas fa-file-pdf me-1"></i>PDF
+    </a>
+    {% if alert %}
+    <a class="btn btn-outline-light" href="{{ url_for('api.alert_detail', alert_id=alert.id) }}">
+        <i class="fas fa-bullhorn me-1"></i>Alert
+    </a>
+    {% endif %}
+    <a class="btn btn-outline-light" href="{{ url_for('audio_history') }}">
+        <i class="fas fa-list me-1"></i>Archive
+    </a>
+    {% if current_user %}
+    {% if message.audio_data %}
+    <button type="button" class="btn btn-outline-light" onclick="resendAudioMessage()" id="resendBtn"
+            title="Re-broadcast this alert now — activates GPIO relays and plays the audio on air">
+        <i class="fas fa-redo me-1"></i>Resend on Air
+    </button>
+    {% endif %}
+    <button type="button" class="btn btn-outline-light" onclick="deleteAudioMessage()">
+        <i class="fas fa-trash me-1"></i>Delete
+    </button>
+    {% endif %}
+{% endset %}
+{% include 'components/page_header.html' %}
 <div class="container-fluid">
 
     {# ── FCC §11.31 Compliance panel ──────────────────────────────────────── #}

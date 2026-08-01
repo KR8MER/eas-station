@@ -521,77 +521,6 @@ code {
     max-width: 1400px;
 }
 
-/* Admin sub-page header (gradient banner) */
-.admin-page-header {
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-soft));
-    color: white;
-    padding: 2rem 0;
-    margin-bottom: 2rem;
-    box-shadow: var(--shadow-lg),
-                0 0 30px rgba(0, 0, 0, 0.1);
-    position: relative;
-    overflow: hidden;
-}
-
-/* Animated rainbow accent line at top */
-.admin-page-header::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg,
-        var(--vibrant-blue),
-        var(--vibrant-purple),
-        var(--vibrant-pink),
-        var(--vibrant-orange),
-        var(--vibrant-blue));
-    background-size: 200% 100%;
-    animation: gradientShift 8s linear infinite;
-}
-
-/* Subtle radial glow overlay */
-.admin-page-header::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: -10%;
-    width: 50%;
-    height: 100%;
-    background: radial-gradient(ellipse at center,
-        rgba(255, 255, 255, 0.12),
-        transparent 70%);
-    pointer-events: none;
-}
-
-.admin-page-header h1 {
-    color: white;
-    margin: 0;
-}
-
-.admin-page-header p {
-    color: rgba(255, 255, 255, 0.85);
-    margin: 0.25rem 0 0;
-}
-
-/* Color variants for the page header */
-.admin-page-header.header-danger {
-    background: linear-gradient(135deg, var(--danger-color), color-mix(in srgb, var(--danger-color) 85%, black));
-}
-
-.admin-page-header.header-success {
-    background: linear-gradient(135deg, var(--success-color), color-mix(in srgb, var(--success-color) 80%, var(--info-color)));
-}
-
-.admin-page-header.header-secondary {
-    background: linear-gradient(135deg, var(--secondary-color), var(--secondary-dark, var(--primary-dark)));
-}
-
-.admin-page-header.header-purple {
-    background: linear-gradient(135deg, var(--vibrant-indigo, #5856D6), var(--secondary-color, #7c3aed));
-}
-
 /* Settings-style header (no gradient, plain layout) */
 .admin-settings-header {
     margin-bottom: 2rem;
@@ -952,14 +881,6 @@ code {
 }
 
 @media (max-width: 768px) {
-    .admin-page-header {
-        padding: 1.5rem 0;
-    }
-
-    .admin-page-header h1 {
-        font-size: 1.5rem;
-    }
-
     .admin-tabs {
         gap: 0;
     }
@@ -1056,11 +977,6 @@ code {
 [data-theme="lightning"] .admin-header h2,
 [data-theme="lightning"] .admin-header p,
 [data-theme="lightning"] .admin-header *,
-[data-theme="lightning"] .admin-page-header,
-[data-theme="lightning"] .admin-page-header h1,
-[data-theme="lightning"] .admin-page-header h2,
-[data-theme="lightning"] .admin-page-header p,
-[data-theme="lightning"] .admin-page-header *,
 [data-theme="lightning"] .stat-card,
 [data-theme="lightning"] .stat-card *,
 [data-theme="lightning"] .modal-header,
@@ -1068,8 +984,6 @@ code {
 [data-theme="lightning"] .admin-count-badge,
 [data-theme="yellow"] .admin-header,
 [data-theme="yellow"] .admin-header *,
-[data-theme="yellow"] .admin-page-header,
-[data-theme="yellow"] .admin-page-header *,
 [data-theme="yellow"] .stat-card,
 [data-theme="yellow"] .stat-card *,
 [data-theme="yellow"] .modal-header,
@@ -1077,14 +991,6 @@ code {
 [data-theme="yellow"] .admin-count-badge {
     color: #0d1b2a !important;
     text-shadow: none;
-}
-
-/* Restore the admin-page-header subtitle to a softer dark ink (was
-   rgba(white, 0.85) in the default rule). Pure black is too heavy for the
-   subtitle's smaller font size on the bright gradient. */
-[data-theme="lightning"] .admin-page-header p,
-[data-theme="yellow"] .admin-page-header p {
-    color: rgba(13, 27, 42, 0.78) !important;
 }
 
 /* ── GPIO workspace sub-navigation ──────────────────────────────────────────

@@ -39,31 +39,6 @@
         position: relative;
     }
 
-    .page-header-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        position: relative;
-        z-index: 1;
-    }
-
-    .page-header-actions .btn {
-        border-radius: var(--radius-sm);
-        padding: 0.4rem 0.8rem;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        font-weight: 600;
-        font-size: 0.85rem;
-        box-shadow: 0 4px 8px rgba(12, 20, 38, 0.15);
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    .page-header-actions .btn:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 6px 12px rgba(12, 20, 38, 0.2);
-    }
-
     .sticky-card {
         position: sticky;
         top: 96px;
@@ -477,28 +452,18 @@
     {% set custom_subtitle = (branding_settings.dashboard_subtitle if branding_settings is defined and branding_settings else '') %}
     {% set header_title = custom_headline if custom_headline else 'Emergency Alert Dashboard' %}
     {% set header_subtitle = custom_subtitle if custom_subtitle else (county_name ~ (', ' ~ state_code if state_code else '')) %}
-    <div class="page-header">
-        <div class="container-fluid">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                <div>
-                    <h1 class="page-title mb-0">
-                        <i class="fas fa-gauge-high me-2"></i>{{ header_title }}
-                    </h1>
-                    <p class="page-subtitle mb-0">{{ header_subtitle }}</p>
-                </div>
-                <div class="page-header-actions">
-                    <button class="btn btn-outline-light" onclick="refreshData({ includeBoundaries: true, reason: 'Manual refresh' })">
-                        <i class="fas fa-sync-alt" id="refresh-icon"></i>
-                        <span>Refresh</span>
-                    </button>
-                    <a href="/alerts" class="btn btn-outline-light">
-                        <i class="fas fa-history"></i>
-                        <span>Alerts</span>
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
+    {% set header_icon = 'fas fa-gauge-high' %}
+    {% set header_actions %}
+        <button class="btn btn-outline-light" onclick="refreshData({ includeBoundaries: true, reason: 'Manual refresh' })">
+            <i class="fas fa-sync-alt" id="refresh-icon"></i>
+            <span>Refresh</span>
+        </button>
+        <a href="/alerts" class="btn btn-outline-light">
+            <i class="fas fa-history"></i>
+            <span>Alerts</span>
+        </a>
+    {% endset %}
+    {% include 'components/page_header.html' %}
 
     <div class="row g-4 align-items-start">
         <div class="col-lg-4 col-xxl-3 order-2 order-lg-1">
