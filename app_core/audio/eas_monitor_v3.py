@@ -601,9 +601,12 @@ class UnifiedEASMonitorService:
         from app_core.audio.ingest import AudioSourceStatus
         
         try:
-            # Get currently running sources from audio controller
+            # Get currently running sources from audio controller.
+            # get_all_sources() takes a registry-lock-guarded snapshot; the
+            # lock is only ever held for dict operations (never for blocking
+            # source start/stop), so this cannot stall the monitor thread.
             running_sources = {}
-            for source_name, source_adapter in self.audio_controller._sources.items():
+            for source_name, source_adapter in self.audio_controller.get_all_sources().items():
                 if source_adapter.status == AudioSourceStatus.RUNNING:
                     running_sources[source_name] = source_adapter
             

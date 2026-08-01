@@ -496,32 +496,65 @@ def initialize_audio_controller(app):
 
         logger.info(f"Loaded {len(_audio_controller.get_all_sources())} audio source configurations")
 
-        # Start auto-start sources
+        # Start auto-start sources IN PARALLEL.  Starting a stream source can
+        # block for 10-30 s on URL resolution / FFmpeg connection when the
+        # remote end is dead or the network is down.  The old serial loop let
+        # ONE dead source delay startup — and therefore decoding and metrics
+        # for every healthy source — by that long per broken source.
         auto_start_sources = [db_config for db_config in saved_configs if db_config.enabled and db_config.auto_start]
         if auto_start_sources:
-            logger.info(f"Auto-starting {len(auto_start_sources)} enabled source(s)...")
-            for db_config in auto_start_sources:
+            logger.info(f"Auto-starting {len(auto_start_sources)} enabled source(s) in parallel...")
+
+            def _auto_start_one(source_name: str) -> None:
                 try:
-                    # Extract receiver info for SDR sources
-                    if db_config.source_type == 'sdr':
-                        config_params = db_config.config_params or {}
-                        device_params = config_params.get('device_params', {})
-                        receiver_id = device_params.get('receiver_id', 'unknown')
-                        receiver_name = device_params.get('receiver_display_name', 'unknown')
-                        logger.info(
-                            f"Auto-starting source: '{db_config.name}' "
-                            f"(type: {db_config.source_type}, receiver: {receiver_name}, id: {receiver_id})"
-                        )
-                    else:
-                        logger.info(f"Auto-starting source: '{db_config.name}' (type: {db_config.source_type})")
-                    
-                    result = _audio_controller.start_source(db_config.name)
+                    with app.app_context():
+                        result = _audio_controller.start_source(source_name)
                     if result:
-                        logger.info(f"✅ Successfully started '{db_config.name}'")
+                        logger.info(f"✅ Successfully started '{source_name}'")
                     else:
-                        logger.warning(f"⚠️ Failed to start '{db_config.name}' (start returned False)")
+                        logger.warning(f"⚠️ Failed to start '{source_name}' (start returned False)")
                 except Exception as e:
-                    logger.error(f"❌ Exception auto-starting '{db_config.name}': {e}", exc_info=True)
+                    logger.error(f"❌ Exception auto-starting '{source_name}': {e}", exc_info=True)
+
+            start_threads = []
+            for db_config in auto_start_sources:
+                # Extract receiver info for SDR sources
+                if db_config.source_type == 'sdr':
+                    config_params = db_config.config_params or {}
+                    device_params = config_params.get('device_params', {})
+                    receiver_id = device_params.get('receiver_id', 'unknown')
+                    receiver_name = device_params.get('receiver_display_name', 'unknown')
+                    logger.info(
+                        f"Auto-starting source: '{db_config.name}' "
+                        f"(type: {db_config.source_type}, receiver: {receiver_name}, id: {receiver_id})"
+                    )
+                else:
+                    logger.info(f"Auto-starting source: '{db_config.name}' (type: {db_config.source_type})")
+
+                thread = threading.Thread(
+                    target=_auto_start_one,
+                    args=(db_config.name,),
+                    daemon=True,
+                    name=f"auto-start-{db_config.name}",
+                )
+                thread.start()
+                start_threads.append(thread)
+
+            # Wait briefly so fast sources are RUNNING before the Icecast
+            # wiring below, but never let a dead source block service startup:
+            # sources that finish late are picked up by the auto-streaming
+            # monitor, the EAS monitor's discovery, and the Redis publisher
+            # monitor, all of which poll for newly-RUNNING sources.
+            deadline = time.time() + 10.0
+            for thread in start_threads:
+                thread.join(timeout=max(0.0, deadline - time.time()))
+            still_starting = [t.name for t in start_threads if t.is_alive()]
+            if still_starting:
+                logger.warning(
+                    "Sources still starting in background: %s — continuing startup "
+                    "without waiting (they will be picked up once RUNNING)",
+                    ', '.join(still_starting),
+                )
         else:
             logger.info("No sources configured for auto-start")
 
@@ -826,6 +859,92 @@ def _redis_publisher_monitor_loop(audio_controller, stop_event) -> None:
             pass
     _redis_eas_publishers.clear()
     logger.info("Redis EAS audio publisher monitor stopped")
+
+
+def _source_watchdog_loop(app, audio_controller, stop_event, interval_seconds: float = 30.0) -> None:
+    """Background watchdog: restart ERROR sources and auto-start STOPPED sources.
+
+    Runs in its OWN thread so stopping/starting a stalled capture can never
+    block the metrics-publishing loop.  (The previous inline implementation
+    ran this inside the main loop: one blocked restart froze metrics
+    publishing, the Redis ``eas:metrics`` key expired, and the entire UI
+    reported the audio service — and all decoding — as unavailable.)
+
+    Individual restarts are dispatched through the controller's per-source
+    recovery threads (``spawn_recovery``), so one blocked source cannot delay
+    recovery of the others either.
+    """
+    from app_core.audio.ingest import AudioSourceStatus
+
+    logger.info("Source watchdog started (interval: %.0fs)", interval_seconds)
+
+    while not stop_event.wait(interval_seconds):
+        try:
+            # Look up which sources should be running.  This query MUST run
+            # inside a Flask app context — the previous inline implementation
+            # ran it without one, so Flask-SQLAlchemy raised on every cycle,
+            # the exception was silently swallowed, auto_start_names stayed
+            # empty forever, and STOPPED auto-start sources were never
+            # restarted.
+            auto_start_names = set()
+            try:
+                from app_core.models import AudioSourceConfigDB
+                with app.app_context():
+                    auto_start_names = {
+                        cfg.name
+                        for cfg in AudioSourceConfigDB.query.all()
+                        if cfg.enabled and cfg.auto_start
+                    }
+            except Exception as exc:
+                logger.warning("Source watchdog: could not load auto-start config: %s", exc)
+
+            for source_name, source_adapter in audio_controller.get_all_sources().items():
+                try:
+                    if source_adapter.status == AudioSourceStatus.ERROR:
+                        if source_adapter.is_quarantined():
+                            continue
+                        logger.warning(
+                            f"Source watchdog: '{source_name}' is in ERROR state – "
+                            f"attempting automatic restart"
+                        )
+
+                        def _recover(adapter=source_adapter, name=source_name):
+                            adapter.stop()
+                            time.sleep(0.5)
+                            if adapter.start():
+                                logger.info(f"Source watchdog: ✅ restarted '{name}' successfully")
+                            else:
+                                logger.warning(f"Source watchdog: ⚠️ restart of '{name}' returned False")
+
+                        audio_controller.spawn_recovery(source_name, _recover, "watchdog ERROR restart")
+
+                    elif (
+                        source_adapter.status == AudioSourceStatus.STOPPED
+                        and source_name in auto_start_names
+                    ):
+                        logger.warning(
+                            f"Source watchdog: '{source_name}' is STOPPED but has "
+                            f"auto_start=True – restarting"
+                        )
+
+                        def _autostart(adapter=source_adapter, name=source_name):
+                            if adapter.start():
+                                logger.info(f"Source watchdog: ✅ auto-restarted '{name}'")
+                            else:
+                                logger.warning(f"Source watchdog: ⚠️ auto-restart of '{name}' returned False")
+
+                        audio_controller.spawn_recovery(source_name, _autostart, "watchdog auto-start")
+
+                except Exception as exc:
+                    logger.error(
+                        f"Source watchdog: ❌ error evaluating '{source_name}': {exc}",
+                        exc_info=True,
+                    )
+
+        except Exception as exc:
+            logger.error("Source watchdog loop error: %s", exc, exc_info=True)
+
+    logger.info("Source watchdog stopped")
 
 
 def initialize_eas_monitor(app, audio_controller):
@@ -1995,14 +2114,33 @@ def main():
         logger.info(f"   - HTTP streaming: {'ACTIVE' if streaming_server_thread else 'DISABLED'} (port {streaming_port})")
         logger.info("=" * 80)
 
+        # Source watchdog: restart ERROR sources and auto-start STOPPED sources.
+        # Network streams drop after consecutive errors; SDR sources lose lock.
+        # Runs in its OWN thread (see _source_watchdog_loop) so that a stalled
+        # capture being stopped/restarted can NEVER block the metrics loop
+        # below — a blocked metrics loop lets the Redis key expire and the
+        # whole UI (and EAS Continuous Monitor status) reports the audio
+        # service as unavailable.
+        _watchdog_stop = threading.Event()
+        if audio_controller:
+            _watchdog_thread = threading.Thread(
+                target=_source_watchdog_loop,
+                args=(app, audio_controller, _watchdog_stop),
+                daemon=True,
+                name="SourceWatchdog",
+            )
+            _watchdog_thread.start()
+            logger.info("✅ Source watchdog thread started")
+
         # Main loop: publish metrics at 4 Hz so VU meters, RSSI and RBDS/RDS
         # updates reach the UI as fast as a car radio refreshes its display.
         # The WebSocket push worker already polls Redis at 4 Hz, so anything
-        # slower than this becomes the end-to-end bottleneck.
+        # slower than this becomes the end-to-end bottleneck.  Nothing in this
+        # loop is allowed to block on source stop/start work: stalled-capture
+        # recovery lives in the watchdog thread and the controller's
+        # per-source recovery threads.
         last_metrics_time = 0
-        last_source_watchdog_time = 0
         metrics_interval = 0.25
-        source_watchdog_interval = 30.0  # Check source health every 30 seconds
 
         while _running:
             try:
@@ -2010,71 +2148,6 @@ def main():
 
                 # Process pending commands from webapp (non-blocking)
                 process_commands()
-
-                # Source watchdog: restart ERROR sources and auto-start STOPPED sources.
-                # Network streams drop after consecutive errors; SDR sources lose lock.
-                # This watchdog ensures everything that *should* be running stays running
-                # without any operator intervention.
-                if current_time - last_source_watchdog_time >= source_watchdog_interval:
-                    if audio_controller:
-                        from app_core.audio.ingest import AudioSourceStatus
-                        from app_core.models import AudioSourceConfigDB
-                        try:
-                            auto_start_names = {
-                                cfg.name
-                                for cfg in AudioSourceConfigDB.query.all()
-                                if cfg.enabled and cfg.auto_start
-                            }
-                        except Exception:
-                            auto_start_names = set()
-
-                        for source_name, source_adapter in audio_controller.get_all_sources().items():
-                            if source_adapter.status == AudioSourceStatus.ERROR:
-                                logger.warning(
-                                    f"Source watchdog: '{source_name}' is in ERROR state – "
-                                    f"attempting automatic restart"
-                                )
-                                try:
-                                    source_adapter.stop()
-                                    time.sleep(0.5)
-                                    result = audio_controller.start_source(source_name)
-                                    if result:
-                                        logger.info(
-                                            f"Source watchdog: ✅ restarted '{source_name}' successfully"
-                                        )
-                                    else:
-                                        logger.warning(
-                                            f"Source watchdog: ⚠️ restart of '{source_name}' returned False"
-                                        )
-                                except Exception as exc:
-                                    logger.error(
-                                        f"Source watchdog: ❌ exception restarting '{source_name}': {exc}",
-                                        exc_info=True,
-                                    )
-                            elif (
-                                source_adapter.status == AudioSourceStatus.STOPPED
-                                and source_name in auto_start_names
-                            ):
-                                logger.warning(
-                                    f"Source watchdog: '{source_name}' is STOPPED but has "
-                                    f"auto_start=True – restarting"
-                                )
-                                try:
-                                    result = audio_controller.start_source(source_name)
-                                    if result:
-                                        logger.info(
-                                            f"Source watchdog: ✅ auto-restarted '{source_name}'"
-                                        )
-                                    else:
-                                        logger.warning(
-                                            f"Source watchdog: ⚠️ auto-restart of '{source_name}' returned False"
-                                        )
-                                except Exception as exc:
-                                    logger.error(
-                                        f"Source watchdog: ❌ exception auto-restarting '{source_name}': {exc}",
-                                        exc_info=True,
-                                    )
-                    last_source_watchdog_time = current_time
 
                 # Publish metrics periodically
                 if current_time - last_metrics_time >= metrics_interval:
@@ -2110,6 +2183,9 @@ def main():
                 time.sleep(5)
 
         logger.info("Shutting down audio service...")
+
+        # Stop the source watchdog thread
+        _watchdog_stop.set()
 
         # Stop command subscriber
         if command_subscriber:

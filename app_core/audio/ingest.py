@@ -743,6 +743,15 @@ class AudioIngestController:
         # raw_header matches an entry here are known-synthetic and get confidence=1.0.
         self._synthetic_headers: set = set()
         self._synthetic_headers_lock = threading.Lock()
+        # Per-source recovery threads.  Restarting a stalled source involves
+        # blocking work (capture-thread joins, process termination, URL
+        # resolution, network connections) that can take tens of seconds.
+        # Running it inline in the shared health-monitor thread let ONE
+        # stalled capture delay stall detection and recovery for every other
+        # source.  Each recovery therefore runs in its own daemon thread,
+        # with at most one in flight per source.
+        self._recovery_threads: Dict[str, threading.Thread] = {}
+        self._recovery_lock = threading.Lock()
 
         if enable_monitor:
             self._monitor_thread = threading.Thread(
@@ -775,44 +784,107 @@ class AudioIngestController:
             self._sources[source.config.name] = source
             logger.info(f"Added audio source: {source.config.name}")
 
+    # NOTE on locking: ``self._lock`` guards ONLY the source registry.
+    # ``adapter.start()`` / ``adapter.stop()`` perform blocking work (thread
+    # joins, process termination, URL resolution, network connections) that
+    # can take tens of seconds — holding the registry lock across those calls
+    # froze every other consumer of the controller (metrics publishing,
+    # status queries, EAS-monitor source discovery, Redis command handling)
+    # whenever a single stalled capture was being stopped or restarted.
+
     def remove_source(self, name: str) -> None:
         """Remove an audio source from the controller."""
         with self._lock:
-            if name in self._sources:
-                source = self._sources[name]
-                source.stop()
-                del self._sources[name]
-                if self._active_source == name:
-                    self._active_source = None
-                logger.info(f"Removed audio source: {name}")
+            source = self._sources.pop(name, None)
+            if self._active_source == name:
+                self._active_source = None
+        if source is not None:
+            source.stop()
+            logger.info(f"Removed audio source: {name}")
 
     def start_source(self, name: str) -> bool:
-        """Start a specific audio source."""
+        """Start a specific audio source (blocking work runs outside the lock)."""
         with self._lock:
-            if name not in self._sources:
-                logger.error(f"Audio source not found: {name}")
-                return False
-
-            return self._sources[name].start()
+            adapter = self._sources.get(name)
+        if adapter is None:
+            logger.error(f"Audio source not found: {name}")
+            return False
+        return adapter.start()
 
     def stop_source(self, name: str) -> None:
-        """Stop a specific audio source."""
+        """Stop a specific audio source (blocking work runs outside the lock)."""
         with self._lock:
-            if name in self._sources:
-                self._sources[name].stop()
+            adapter = self._sources.get(name)
+        if adapter is not None:
+            adapter.stop()
 
     def start_all(self) -> None:
         """Start all enabled audio sources."""
         with self._lock:
-            for source in self._sources.values():
-                if source.config.enabled:
-                    source.start()
+            sources = list(self._sources.values())
+        for source in sources:
+            if source.config.enabled:
+                source.start()
 
     def stop_all(self) -> None:
         """Stop all audio sources."""
         with self._lock:
-            for source in self._sources.values():
-                source.stop()
+            sources = list(self._sources.values())
+        for source in sources:
+            source.stop()
+
+    def recovery_in_flight(self, name: str) -> bool:
+        """True when a background recovery thread is currently running for a source."""
+        with self._recovery_lock:
+            thread = self._recovery_threads.get(name)
+            return bool(thread and thread.is_alive())
+
+    def spawn_recovery(self, name: str, action, reason: str) -> bool:
+        """Run a blocking recovery action for one source in a dedicated thread.
+
+        ``action`` is a zero-argument callable (typically wrapping
+        ``adapter.restart(...)`` or a stop/start sequence).  At most one
+        recovery per source is in flight at a time: returns True when a new
+        recovery thread was started, False when one is already running.
+
+        This is what keeps a stalled capture isolated: the blocking stop/
+        start work happens here, off the shared health-monitor thread and
+        off the metrics loop, so other sources keep decoding and the service
+        keeps publishing metrics no matter how long one recovery takes.
+        """
+        with self._recovery_lock:
+            existing = self._recovery_threads.get(name)
+            if existing and existing.is_alive():
+                logger.debug(
+                    "%s: recovery already in flight — skipping duplicate (%s)",
+                    name,
+                    reason,
+                )
+                return False
+
+            def _run() -> None:
+                try:
+                    if self._flask_app is not None:
+                        with self._flask_app.app_context():
+                            action()
+                    else:
+                        action()
+                except Exception as exc:
+                    logger.error(
+                        "%s: recovery (%s) raised: %s", name, reason, exc, exc_info=True
+                    )
+                finally:
+                    with self._recovery_lock:
+                        self._recovery_threads.pop(name, None)
+
+            thread = threading.Thread(
+                target=_run,
+                name=f"audio-recovery-{name}",
+                daemon=True,
+            )
+            self._recovery_threads[name] = thread
+            thread.start()
+            return True
 
     def get_active_sample_rate(self) -> Optional[int]:
         """Return the current active source sample rate (or first configured rate)."""
@@ -1149,6 +1221,12 @@ class AudioIngestController:
         if adapter.is_quarantined():
             return
 
+        # A background recovery (restart or escalation) is already running
+        # for this source.  Skip evaluation so the stall counter doesn't
+        # double-fire against a source that is mid-restart.
+        if self.recovery_in_flight(name):
+            return
+
         status = adapter.status
 
         if status == AudioSourceStatus.RUNNING:
@@ -1182,22 +1260,33 @@ class AudioIngestController:
                         stalls,
                         diagnostics,
                     )
-                    try:
-                        adapter.stop()
-                    except Exception as exc:
-                        logger.error("%s: error stopping stalled source: %s", name, exc, exc_info=True)
-                    adapter.status = AudioSourceStatus.ERROR
-                    adapter.error_message = f"no audio samples after {stalls} restarts ({diagnostics})"
-                    adapter._last_error = adapter.error_message
-                    adapter._quarantined_until = time.time() + adapter._quarantine_seconds
-                    self._fire_source_alert(
-                        adapter.config.name,
-                        "error",
-                        adapter.error_message,
-                    )
+
+                    def _escalate(adapter=adapter, name=name, stalls=stalls, diagnostics=diagnostics):
+                        try:
+                            adapter.stop()
+                        except Exception as exc:
+                            logger.error("%s: error stopping stalled source: %s", name, exc, exc_info=True)
+                        adapter.status = AudioSourceStatus.ERROR
+                        adapter.error_message = f"no audio samples after {stalls} restarts ({diagnostics})"
+                        adapter._last_error = adapter.error_message
+                        adapter._quarantined_until = time.time() + adapter._quarantine_seconds
+                        self._fire_source_alert(
+                            adapter.config.name,
+                            "error",
+                            adapter.error_message,
+                        )
+
+                    self.spawn_recovery(name, _escalate, "stall escalation")
                     self._consecutive_stalls[name] = 0
                 else:
-                    adapter.restart("stalled capture (no audio samples)")
+                    # Blocking stop/start runs in a per-source recovery thread
+                    # so one stalled capture cannot delay stall detection or
+                    # recovery for any other source.
+                    self.spawn_recovery(
+                        name,
+                        lambda adapter=adapter: adapter.restart("stalled capture (no audio samples)"),
+                        "stalled capture",
+                    )
             else:
                 # Only treat the tick as "healthy" — and reset the stall
                 # counter — when ``_last_metrics_update`` reflects an actual
@@ -1214,7 +1303,11 @@ class AudioIngestController:
 
         if status in (AudioSourceStatus.ERROR, AudioSourceStatus.DISCONNECTED):
             self._fire_source_alert(adapter.config.name, status.value, adapter.error_message or f"source in {status.value} state")
-            adapter.restart(f"status={status.value}")
+            self.spawn_recovery(
+                name,
+                lambda adapter=adapter, status=status: adapter.restart(f"status={status.value}"),
+                f"status={status.value}",
+            )
 
     def _fire_source_alert(self, source_name: str, event_type: str, message: str) -> None:
         """Invoke the registered source alert callback (non-blocking, best-effort)."""

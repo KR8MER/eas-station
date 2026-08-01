@@ -8,6 +8,49 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.122.1] - 2026-08-01 - Stalled captures can no longer stall the entire audio service
+
+### Fixed
+- **A stalled capture could freeze the whole audio service** (all sources
+  showing STOPPED, EAS Continuous Monitor "Unavailable", "Audio service
+  metrics are unavailable" banner). Four compounding causes, all fixed:
+  - `AudioIngestController.start_source()/stop_source()/remove_source()/
+    start_all()/stop_all()` held the controller registry lock while running
+    blocking adapter start/stop work (capture-thread joins, FFmpeg process
+    termination, stream URL resolution — tens of seconds on a dead source).
+    Every consumer of the controller — metrics publishing, status queries,
+    EAS-monitor source discovery, Redis command handling — froze behind
+    that lock. The lock now guards only the source registry; blocking work
+    runs outside it.
+  - The health monitor restarted stalled sources **serially in its single
+    shared thread**, so one stalled capture's slow restart delayed stall
+    detection and recovery for every other source. Restarts and stall
+    escalation now run in per-source background recovery threads
+    (`spawn_recovery`), with at most one recovery in flight per source.
+  - The 30-second source watchdog in `eas_monitoring_service.py` ran
+    **inline in the metrics-publishing loop**: a blocked restart stopped
+    metrics publishing, the Redis `eas:metrics` key (120 s TTL) expired,
+    and the entire UI reported the audio service as down. The watchdog now
+    runs in its own thread and dispatches restarts through the per-source
+    recovery threads.
+  - The watchdog's auto-start lookup queried `AudioSourceConfigDB`
+    **without a Flask app context**, so it raised on every cycle, the
+    exception was silently swallowed, and STOPPED sources with
+    `auto_start=True` were never restarted. The query now runs inside
+    `app.app_context()`.
+- **Startup auto-start is now parallel**: sources start in concurrent
+  threads with a bounded 10 s wait, so a single dead stream URL no longer
+  delays service startup (and therefore decoding and metrics for every
+  healthy source) by 10–30 s per broken source. Late starters are picked up
+  by the auto-streaming, EAS-monitor, and Redis-publisher discovery loops.
+- `UnifiedEASMonitorService._discover_sources()` now uses the controller's
+  lock-guarded `get_all_sources()` snapshot instead of reading the internal
+  source dict while other threads mutate it.
+- Regression coverage in `tests/test_stalled_capture_isolation.py`
+  (8 tests): lock-free status queries during blocking start/stop, parallel
+  per-source recovery, single-recovery-in-flight guarantee, and
+  service-level guards keeping the watchdog out of the metrics loop.
+
 ## [2.122.0] - 2026-07-03 - Multi-select and exclusion filtering for received alerts
 
 ### Added
