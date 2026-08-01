@@ -1063,8 +1063,10 @@ echo ""
 # Disable exit-on-error temporarily for package installation to provide better error messages
 set +e
 
-# Build base package list as array for safe expansion
-BASE_PACKAGES=(
+# Packages the application cannot run without. If any of these fail to
+# install, the installation aborts. Package names in this list must exist on
+# every supported release (Debian 12/13, Ubuntu 22.04/24.04, Raspberry Pi OS).
+REQUIRED_PACKAGES=(
     python3
     python3-pip
     python3-venv
@@ -1087,17 +1089,30 @@ BASE_PACKAGES=(
     postgresql
     postgresql-contrib
     postgis
-    postgresql-17-postgis-3
     redis-server
     nginx
+    ffmpeg
+    ca-certificates
+    git
+    curl
+    wget
+    rsync
+)
+
+# Feature packages installed best-effort. Availability and naming of these
+# varies between Debian/Ubuntu releases (e.g. SDR and audio libraries), so a
+# missing package here must NOT abort the installation — the matching feature
+# simply degrades gracefully and the summary at the end lists what was skipped.
+# NOTE: the versioned PostGIS package (postgresql-XX-postgis-3) is resolved
+# dynamically below instead of being hardcoded, because the default PostgreSQL
+# major version differs per release (Ubuntu 24.04 ships 16, Debian 13 ships 17).
+OPTIONAL_PACKAGES=(
     certbot
     python3-certbot-nginx
-    ffmpeg
     espeak
     libespeak-ng1
     icecast2
     fail2ban
-    ca-certificates
     libusb-1.0-0
     libusb-1.0-0-dev
     usbutils
@@ -1109,10 +1124,9 @@ BASE_PACKAGES=(
     soapysdr-module-airspy
     airspy
     libairspy0
-    git
-    curl
-    wget
-    rsync
+    libasound2-dev
+    alsa-utils
+    portaudio19-dev
 )
 
 # Add GPIO packages only if hardware is present
@@ -1120,16 +1134,16 @@ BASE_PACKAGES=(
 # python3-smbus: Python bindings for SMBus/I2C communication
 # python3-lgpio: Raspberry Pi 5-compatible GPIO library (replaces deprecated RPi.GPIO)
 if [ "$HAS_GPIO" = true ]; then
-    BASE_PACKAGES+=(
+    OPTIONAL_PACKAGES+=(
         i2c-tools
         python3-smbus
         python3-lgpio
     )
 fi
 
-# Install all packages with a real progress bar driven by APT::Status-Fd.
+# Install required packages with a real progress bar driven by APT::Status-Fd.
 # Falls back to plain apt-get install when not run from a TTY.
-ui_apt_install "${BASE_PACKAGES[@]}"
+ui_apt_install "${REQUIRED_PACKAGES[@]}"
 
 APT_EXIT_CODE=$?
 
@@ -1157,7 +1171,60 @@ if [ $APT_EXIT_CODE -ne 0 ]; then
     exit 1
 fi
 
-echo_success "✓ System dependencies installed successfully"
+echo_success "✓ Required system dependencies installed successfully"
+
+# Install the versioned PostGIS package matching the PostgreSQL major version
+# the distro actually installed (postgis metapackage usually pulls it in
+# already; this is a safety net that avoids hardcoding a version that may not
+# exist on this release).
+set +e
+PG_MAJOR=$(psql -V 2>/dev/null | grep -oP '[0-9]+' | head -1)
+if [ -n "$PG_MAJOR" ]; then
+    if apt-cache show "postgresql-${PG_MAJOR}-postgis-3" >/dev/null 2>&1; then
+        DEBIAN_FRONTEND=noninteractive apt-get install -y "postgresql-${PG_MAJOR}-postgis-3" >/dev/null 2>&1 \
+            && echo_success "✓ PostGIS support for PostgreSQL ${PG_MAJOR} installed" \
+            || echo_warning "Could not install postgresql-${PG_MAJOR}-postgis-3 (PostGIS may already be provided by the 'postgis' package)"
+    else
+        echo_warning "Package postgresql-${PG_MAJOR}-postgis-3 not found in this distro's repositories"
+        echo_info "Relying on the 'postgis' metapackage for PostGIS support"
+    fi
+fi
+set -e
+
+# Install optional feature packages best-effort: first check availability so a
+# package that doesn't exist on this release doesn't fail the batch, then fall
+# back to per-package installs if the batch fails for another reason.
+echo_progress "Installing optional feature packages (SDR, audio, TTS, streaming)..."
+set +e
+AVAILABLE_OPTIONAL=()
+SKIPPED_OPTIONAL=()
+for pkg in "${OPTIONAL_PACKAGES[@]}"; do
+    if apt-cache show "$pkg" >/dev/null 2>&1; then
+        AVAILABLE_OPTIONAL+=("$pkg")
+    else
+        SKIPPED_OPTIONAL+=("$pkg")
+    fi
+done
+
+if [ ${#AVAILABLE_OPTIONAL[@]} -gt 0 ]; then
+    ui_apt_install "${AVAILABLE_OPTIONAL[@]}"
+    if [ $? -ne 0 ]; then
+        echo_warning "Batch install of optional packages failed - retrying individually..."
+        for pkg in "${AVAILABLE_OPTIONAL[@]}"; do
+            if ! DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg" >/dev/null 2>&1; then
+                SKIPPED_OPTIONAL+=("$pkg")
+            fi
+        done
+    fi
+fi
+set -e
+
+if [ ${#SKIPPED_OPTIONAL[@]} -gt 0 ]; then
+    echo_warning "⚠️  Optional packages not available on this OS release (skipped): ${SKIPPED_OPTIONAL[*]}"
+    echo_info "  Related features will be disabled but the installation will continue."
+else
+    echo_success "✓ All optional feature packages installed"
+fi
 
 # Verify SDR package installation (especially critical for Airspy and Python 3.13)
 echo_progress "Verifying SDR package installation..."
@@ -1368,6 +1435,22 @@ if ! sudo -u "$SERVICE_USER" "$VENV_DIR/bin/pip" install -r "$INSTALL_DIR/requir
 fi
 echo ""
 echo_success "✓ Python dependencies installed successfully"
+
+# Optional audio capture bindings: pyalsaaudio (ALSA source adapter) and
+# pyaudio (PulseAudio source adapter). These compile against libasound2-dev /
+# portaudio19-dev, which are installed best-effort above — so install them
+# best-effort too. Without them the matching audio source adapters are simply
+# disabled at runtime ("ALSA not available" / "PyAudio not available").
+echo_progress "Installing optional audio capture bindings (pyalsaaudio, pyaudio)..."
+set +e
+for audio_pkg in pyalsaaudio pyaudio; do
+    if sudo -u "$SERVICE_USER" "$VENV_DIR/bin/pip" install "$audio_pkg" >/dev/null 2>&1; then
+        echo_success "✓ $audio_pkg installed (audio capture adapter enabled)"
+    else
+        echo_warning "⚠️  Could not install $audio_pkg - the matching audio source adapter will be disabled"
+    fi
+done
+set -e
 
 # Create separate venv for SDR service with system site-packages
 # This allows the SDR service to access python3-soapysdr from apt without PYTHONPATH hacks
@@ -2095,6 +2178,24 @@ with app.app_context():
                 echo ""
                 echo_warning "Schema created but settings tables may be empty"
                 echo_info "Configure via web UI at /admin/hardware and /settings/audio"
+
+                # db.create_all() builds the schema that the CURRENT code
+                # expects — i.e. the schema at the alembic head — but it never
+                # writes the alembic_version table. Without stamping, every
+                # future update.sh run tries to replay ALL migrations from
+                # scratch against existing tables and fails, and the schema
+                # health check reports "Could not query alembic_version".
+                echo_progress "Recording migration state (alembic stamp head)..."
+                set +e
+                sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR' && '$VENV_DIR/bin/alembic' stamp head"
+                STAMP_EXIT=$?
+                set -e
+                if [ $STAMP_EXIT -eq 0 ]; then
+                    echo_success "✓ Database stamped at current migration head"
+                else
+                    echo_warning "Could not stamp migration head (exit code: $STAMP_EXIT)"
+                    echo_info "Run manually later: sudo -u $SERVICE_USER bash -c 'cd $INSTALL_DIR && $VENV_DIR/bin/alembic stamp head'"
+                fi
             else
                 echo_error "Database initialization failed completely (exit code: $INIT_EXIT)"
                 echo_info "Output: $INIT_OUTPUT"
@@ -2134,11 +2235,34 @@ else
     echo ""
     
     if [ -f "$INSTALL_DIR/alembic.ini" ]; then
+        # Repair path: if application tables exist but alembic_version does
+        # not, the database was initialized with the db.create_all() fallback
+        # by an earlier install (which builds the head schema without
+        # recording it). Running "upgrade head" in that state replays every
+        # migration from scratch and fails on the first CREATE TABLE. Stamp
+        # the head first so the upgrade below becomes a no-op.
+        set +e
+        ALEMBIC_TABLE_EXISTS=$(sudo -u postgres psql -d alerts -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'alembic_version';" 2>/dev/null)
+        set -e
+        if [ "$ALEMBIC_TABLE_EXISTS" = "0" ]; then
+            echo_warning "Tables exist but alembic_version is missing (create_all fallback detected)"
+            echo_progress "Repairing migration state: stamping current head..."
+            set +e
+            sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR' && '$VENV_DIR/bin/alembic' stamp head"
+            STAMP_EXIT=$?
+            set -e
+            if [ $STAMP_EXIT -eq 0 ]; then
+                echo_success "✓ Migration state repaired (stamped at head)"
+            else
+                echo_warning "Could not stamp migration head (exit code: $STAMP_EXIT) - migrations may fail below"
+            fi
+        fi
+
         echo_progress "Running Alembic migrations..."
         echo_info "This may take a few moments. Output will be shown below:"
         echo_info "Press Ctrl+C to cancel if needed (changes will be rolled back)"
         echo ""
-        
+
         # Disable exit-on-error for migrations
         set +e
         # Run Alembic directly (no output capture) so user sees real-time feedback

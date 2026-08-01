@@ -92,6 +92,8 @@ licenses at the time of writing; consult each project for authoritative terms.
 | **audioop-lts** | `audioop` replacement for Python 3.13+ | Python-2.0 |
 | **pyttsx3** | Offline text-to-speech engine | Mozilla/BSD |
 | **SoapySDR** (system binding) | SDR receiver abstraction | Boost-1.0 |
+| **pyalsaaudio** (optional) | ALSA capture bindings for the ALSA audio source adapter | PSF-2.0 |
+| **PyAudio** (optional) | PortAudio capture bindings for the PulseAudio source adapter | MIT |
 
 ### Hardware Integration
 
@@ -136,6 +138,8 @@ licenses at the time of writing; consult each project for authoritative terms.
 | **espeak-ng** | Offline speech backend for pyttsx3 | GPL-3.0 |
 | **Postfix** | Optional local mail server | IPL-1.0 / EPL-2.0 |
 | **fail2ban** | Host-level intrusion banning (Security Center → fail2ban) | GPL-2.0+ |
+| **ALSA** (libasound2-dev, alsa-utils) | Sound-card capture layer for the ALSA source adapter | LGPL-2.1 |
+| **PortAudio** (portaudio19-dev) | Cross-platform audio I/O backing PyAudio | MIT |
 
 ---
 
