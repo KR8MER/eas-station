@@ -597,7 +597,11 @@ else
 fi
 echo ""
 
-# Build base package list as array for safe expansion
+# Build base package list as array for safe expansion.
+# Availability of some of these (SDR, audio, TTS libraries) varies between
+# Debian/Ubuntu releases, so installation is best-effort: packages missing
+# from this OS release are skipped with a warning instead of aborting the
+# whole update (matches install.sh behavior).
 BASE_PACKAGES=(
     python3-dev
     build-essential
@@ -626,6 +630,9 @@ BASE_PACKAGES=(
     soapysdr-module-rtlsdr
     soapysdr-module-airspy
     libairspy0
+    libasound2-dev
+    alsa-utils
+    portaudio19-dev
 )
 
 # Add GPIO packages only if hardware is present
@@ -640,14 +647,41 @@ if [ "$HAS_GPIO" = true ]; then
     )
 fi
 
-# Install all required system dependencies (matches install.sh)
-# This ensures new dependencies added in updates are installed
+# Filter out packages that don't exist on this OS release, then install the
+# rest in one transaction. If the batch still fails (e.g. a transient dpkg
+# conflict), retry per-package so one bad package can't block the update.
+set +e
+AVAILABLE_PACKAGES=()
+SKIPPED_PACKAGES=()
+for pkg in "${BASE_PACKAGES[@]}"; do
+    if apt-cache show "$pkg" >/dev/null 2>&1; then
+        AVAILABLE_PACKAGES+=("$pkg")
+    else
+        SKIPPED_PACKAGES+=("$pkg")
+    fi
+done
+
 # Use DEBIAN_FRONTEND=noninteractive to prevent prompts from package configuration
 # Show output (no -qq) so user can see progress and diagnose any issues
 # Array expansion is safe and prevents command injection
-DEBIAN_FRONTEND=noninteractive apt-get install -y "${BASE_PACKAGES[@]}"
+if [ ${#AVAILABLE_PACKAGES[@]} -gt 0 ]; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y "${AVAILABLE_PACKAGES[@]}"
+    if [ $? -ne 0 ]; then
+        echo_warning "Batch package install failed - retrying individually..."
+        for pkg in "${AVAILABLE_PACKAGES[@]}"; do
+            if ! DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg" >/dev/null 2>&1; then
+                SKIPPED_PACKAGES+=("$pkg")
+            fi
+        done
+    fi
+fi
+set -e
 
 echo ""
+if [ ${#SKIPPED_PACKAGES[@]} -gt 0 ]; then
+    echo_warning "⚠️  Packages not available on this OS release (skipped): ${SKIPPED_PACKAGES[*]}"
+    echo_info "  Related optional features may be disabled."
+fi
 echo_success "System dependencies up to date"
 
 # Update Python dependencies
@@ -661,6 +695,21 @@ if [ -f "$INSTALL_DIR/venv/bin/pip" ]; then
     sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/pip" install --upgrade -r "$INSTALL_DIR/requirements.txt"
     echo ""
     echo_success "Main venv dependencies updated"
+
+    # Optional audio capture bindings: pyalsaaudio (ALSA source adapter) and
+    # pyaudio (PulseAudio source adapter). They compile against libasound2-dev
+    # / portaudio19-dev (installed best-effort above), so install them
+    # best-effort too — without them the matching adapters stay disabled.
+    echo_progress "Installing optional audio capture bindings (pyalsaaudio, pyaudio)..."
+    set +e
+    for audio_pkg in pyalsaaudio pyaudio; do
+        if sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/pip" install "$audio_pkg" >/dev/null 2>&1; then
+            echo_success "✓ $audio_pkg installed (audio capture adapter enabled)"
+        else
+            echo_warning "⚠️  Could not install $audio_pkg - the matching audio source adapter stays disabled"
+        fi
+    done
+    set -e
 else
     echo_warning "Main virtual environment not found - skipping dependency update"
     echo_info "You may need to recreate the virtual environment"
@@ -993,6 +1042,39 @@ if [ -f "$INSTALL_DIR/venv/bin/alembic" ]; then
         echo_info "Target head(s):    $TARGET_HEADS"
     fi
     echo ""
+
+    # Repair path: a database initialized by install.sh's db.create_all()
+    # fallback has all the application tables but no alembic_version row.
+    # In that state "upgrade head" replays every migration from scratch and
+    # fails on the first CREATE TABLE ("relation already exists"). Detect the
+    # fingerprint (app tables present, no recorded revision), stamp the head,
+    # and run create_all once more so any tables added since the original
+    # install exist too (additive only — it never drops or moves data).
+    if [ -z "$CURRENT_REV" ] || [ "$CURRENT_REV" = "none" ]; then
+        set +e
+        APP_TABLE_COUNT=$(sudo -u postgres psql -d alerts -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' AND table_name NOT IN ('alembic_version', 'spatial_ref_sys');" 2>/dev/null)
+        set -e
+        if [ -n "$APP_TABLE_COUNT" ] && [ "$APP_TABLE_COUNT" -gt 0 ] 2>/dev/null; then
+            echo_warning "Tables exist but no migration revision is recorded (create_all fallback detected)"
+            echo_progress "Repairing migration state: stamping current head..."
+            set +e
+            sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR' && '$INSTALL_DIR/venv/bin/alembic' stamp head"
+            STAMP_EXIT=$?
+            if [ $STAMP_EXIT -eq 0 ]; then
+                echo_success "✓ Migration state repaired (stamped at head)"
+                echo_progress "Creating any tables added since the original install..."
+                sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/python" -c "
+from app import app, db
+with app.app_context():
+    db.create_all()
+    print('✓ Missing tables created (existing tables untouched)')
+" || echo_warning "create_all pass failed - run scripts/database/check_schema.py to verify the schema"
+            else
+                echo_warning "Could not stamp migration head (exit code: $STAMP_EXIT) - migrations may fail below"
+            fi
+            set -e
+        fi
+    fi
 
     # Disable exit-on-error for migrations
     set +e

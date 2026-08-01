@@ -135,7 +135,20 @@ def check_alembic(conn) -> int:
             )
     except Exception as exc:
         _err(f"Could not query alembic_version: {exc}")
+        _warn(
+            "If application tables exist but alembic_version is missing, the "
+            "database was initialized with the db.create_all() fallback. "
+            "Repair with: cd /opt/eas-station && venv/bin/alembic stamp head"
+        )
         errors += 1
+        # A failed query poisons the transaction (psycopg2
+        # InFailedSqlTransaction) — every later check on this connection
+        # would fail with "current transaction is aborted" unless we roll
+        # back here.
+        try:
+            conn.rollback()
+        except Exception:
+            pass
     return errors
 
 

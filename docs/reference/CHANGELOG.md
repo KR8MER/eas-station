@@ -8,6 +8,47 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.122.2] - 2026-08-01 - Installer resilience on Debian 13/Ubuntu and alembic_version repair
+
+### Fixed
+- **install.sh no longer aborts when a distro-specific package is missing**
+  (GitHub issue #2330). The package list was installed as one apt transaction
+  that included the hardcoded `postgresql-17-postgis-3`, so on releases whose
+  default PostgreSQL differs (e.g. Ubuntu 24.04 ships 16) or that lack an SDR/
+  audio package, apt failed wholesale and the install died with "unfindable"
+  dependency errors. Packages are now split into a required core set (hard
+  failure) and best-effort feature packages (SDR, Airspy, espeak, Icecast,
+  fail2ban, certbot, audio libraries) that are availability-checked first and
+  skipped with a warning when this OS release doesn't carry them. The
+  versioned PostGIS package is resolved from the installed PostgreSQL major
+  version instead of being hardcoded. `update.sh` applies the same
+  availability filtering and per-package retry.
+- **Databases initialized by the `db.create_all()` fallback are no longer
+  permanently stuck without an `alembic_version` table.** When Alembic failed
+  during a fresh install, the fallback built the full schema but never
+  recorded the migration head, so every later `alembic upgrade head` replayed
+  all migrations from scratch and failed on the first `CREATE TABLE`, and the
+  schema health check reported "Could not query alembic_version". The install
+  fallback now runs `alembic stamp head` after a successful `create_all()`,
+  and both `install.sh` (existing-database path) and `update.sh` detect the
+  tables-present/no-revision fingerprint on already-affected systems, stamp
+  the head, and (in `update.sh`) run an additive `create_all()` pass so tables
+  added since the original install exist.
+- **`scripts/database/check_schema.py` no longer cascades into
+  `InFailedSqlTransaction` errors.** A failed `alembic_version` query poisoned
+  the shared connection so every subsequent check reported "current
+  transaction is aborted" instead of real results. The connection is now
+  rolled back after the failure, and the report includes the
+  `alembic stamp head` repair hint.
+- **ALSA and PulseAudio source adapters are no longer silently unavailable on
+  bare-metal installs.** `pyalsaaudio` and `pyaudio` were never installed (nor
+  were their system build dependencies), so every startup logged "ALSA not
+  available" / "PyAudio not available" and sound-card capture sources could
+  not be used. `install.sh` and `update.sh` now install `libasound2-dev`,
+  `alsa-utils`, and `portaudio19-dev` (best-effort) and then install
+  `pyalsaaudio` and `pyaudio` into the main venv best-effort, keeping
+  graceful degradation on systems without sound hardware.
+
 ## [2.122.1] - 2026-08-01 - Stalled captures can no longer stall the entire audio service
 
 ### Fixed
