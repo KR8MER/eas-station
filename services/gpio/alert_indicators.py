@@ -185,6 +185,7 @@ def _key_relay_on_edges(
     incoming_state: dict,
     incoming_active: bool,
     incoming_was_active: bool,
+    relay_state: Optional[dict] = None,
 ) -> None:
     """Key the relay (PTT / audio-mute / duration / flash) on broadcast edges.
 
@@ -194,12 +195,23 @@ def _key_relay_on_edges(
     no-op-falling-back) controller.  Edge-triggered to mirror the NeoPixel:
     start on the rising edge of a broadcast, release on the falling edge.
 
+    *relay_state* is caller-owned scratch state carried between edges.  It
+    records which path keyed the rising edge so the falling edge can mirror it:
+    a rising edge that fell back to ``activate_all`` must be released with
+    ``deactivate_all``, because ``end_alert`` only drops pins the behavior
+    manager is actually holding.  Without that pairing the fallback left every
+    pin energised until the 300 s watchdog fired — the "relay held for the full
+    watchdog instead of the broadcast length" failure.
+
     The 300 s controller watchdog remains a backstop: if a falling edge is ever
     missed (e.g. the marker TTL lapses without a clean clear) the relay still
     drops automatically.
     """
     if gpio_controller is None:
         return
+
+    if relay_state is None:
+        relay_state = {}
 
     behavior_manager = getattr(gpio_controller, "behavior_manager", None)
 
@@ -246,11 +258,23 @@ def _key_relay_on_edges(
                 )
             except Exception as exc:
                 logger.warning("GPIO activate_all failed: %s", exc)
+        # Remember which path keyed this broadcast so the falling edge can
+        # release through the matching one.
+        relay_state["managed"] = handled
 
     elif not broadcast_active and broadcast_was_active:
         identifier = str(broadcast_state.get("identifier") or "") or None
         event_code = str(broadcast_state.get("event_code") or "") or None
-        released = False
+        # ``None`` when we never saw the rising edge (the subprocess started
+        # mid-broadcast, or the marker appeared before this process was
+        # listening).  We then can't tell which path keyed the relay, so we run
+        # the blanket release too — leaving a transmitter keyed is far worse
+        # than issuing a redundant deactivate, which is a no-op on an idle pin.
+        managed = relay_state.pop("managed", None)
+
+        # Always run through the manager when there is one, even if the rising
+        # edge fell back: it keeps the manager's hold/flash bookkeeping in step
+        # with the hardware, and is a no-op for anything it isn't holding.
         if behavior_manager is not None:
             try:
                 # Release with forwarded=True so FORWARDING_ALERT hold pins are
@@ -265,10 +289,10 @@ def _key_relay_on_edges(
                     event_code=event_code,
                     forwarded=True,
                 )
-                released = True
             except Exception as exc:
                 logger.warning("GPIO end_alert failed: %s", exc)
-        if not released:
+
+        if managed is not True:
             try:
                 # force=True: the broadcast has ended, drop the air chain now
                 # rather than waiting out each pin's anti-chatter min-hold.
@@ -285,6 +309,7 @@ def update_alert_indicators(
     tower_state_was: Optional[TowerState] = None,
     active_alert_count_fn: Optional[Callable[[], int]] = None,
     gpio_controller=None,
+    relay_state: Optional[dict] = None,
 ) -> Tuple[bool, bool, Optional[TowerState]]:
     """Resolve and apply the indicator state for this refresh.
 
@@ -295,7 +320,10 @@ def update_alert_indicators(
 
     *gpio_controller*, when supplied, is the subprocess's single owned relay
     controller.  Its relay pins are keyed off the broadcast-state edges here so
-    no other process needs to (or can) claim the same lines.
+    no other process needs to (or can) claim the same lines.  *relay_state* is
+    the caller-owned dict that carries relay bookkeeping between edges (see
+    :func:`_key_relay_on_edges`); omitting it means each falling edge releases
+    through both paths, which is safe but noisier.
 
     *active_alert_count_fn*, when supplied, returns the number of unexpired
     alerts in the system.  It lets the tower light stay lit while an alert is
@@ -340,6 +368,7 @@ def update_alert_indicators(
         incoming_state,
         incoming_active,
         incoming_was_active,
+        relay_state=relay_state,
     )
 
     # NeoPixel: original two-state edge behaviour.
@@ -422,6 +451,9 @@ class AlertIndicatorMonitor:
         self._broadcast_was_active = False
         self._incoming_was_active = False
         self._tower_state: Optional[TowerState] = None
+        #: Relay bookkeeping carried between broadcast edges (which keying path
+        #: the rising edge used).  Guarded by the same lock as the edge flags.
+        self._relay_state: dict = {}
         self._lock = threading.Lock()
 
     def refresh(self) -> Tuple[bool, bool]:
@@ -443,5 +475,6 @@ class AlertIndicatorMonitor:
                 tower_state_was=self._tower_state,
                 active_alert_count_fn=self.active_alert_count_fn,
                 gpio_controller=self.gpio_controller,
+                relay_state=self._relay_state,
             )
             return self._broadcast_was_active, self._incoming_was_active

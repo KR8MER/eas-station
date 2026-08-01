@@ -26,8 +26,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def initialize_gpio_controller(db_session=None):
+def initialize_gpio_controller(db_session=None, db_app=None):
     """Initialize GPIO controller for relay/transmitter control.
+
+    *db_app* is the Flask application owning *db_session*.  Relay keying runs
+    on background threads (indicator loop, watchdogs, behavior holds) that have
+    no application context of their own, and Flask-SQLAlchemy scopes its session
+    to that context — without the app the controller cannot write its audit
+    trail from those threads.
 
     Returns the constructed ``GPIOController`` (with its behaviour
     manager wired up) or ``None`` when GPIO is disabled / no pins are
@@ -69,6 +75,7 @@ def initialize_gpio_controller(db_session=None):
         # Create GPIO controller with database session for audit logging
         controller = GPIOController(
             db_session=db_session,
+            db_app=db_app,
             logger=logger,
         )
 

@@ -53,6 +53,7 @@ from app_core.models import (
 )
 from app_core.system_health import get_system_health
 from app_utils import format_bytes, format_uptime, utc_now
+from app_utils.gpio_logs import gpio_log_level, gpio_log_message
 from webapp import documentation
 from app_utils.pdf_generator import generate_pdf_document
 from webapp.routes_logs import get_systemd_logs
@@ -1642,12 +1643,14 @@ def register(app: Flask, logger) -> None:
                 for log in GPIOActivationLog.query.order_by(GPIOActivationLog.activated_at.desc()).limit(logs_per_category).all():
                     all_logs.append({
                         'timestamp': log.activated_at,
-                        'level': 'INFO',
+                        'level': gpio_log_level(log),
                         'module': f'GPIO Pin {log.pin}',
-                        'message': f"Type: {log.activation_type} | Operator: {log.operator or 'System'} | Duration: {log.duration_seconds or 'Active'}s",
+                        'message': gpio_log_message(log),
                         'details': {
                             'pin': log.pin,
                             'activation_type': log.activation_type,
+                            'success': log.success,
+                            'error_message': log.error_message,
                         },
                         'category': 'GPIO'
                     })
@@ -2074,12 +2077,9 @@ def register(app: Flask, logger) -> None:
             logs_data = [
                 {
                     'timestamp': log.activated_at,
-                    'level': 'INFO',
+                    'level': gpio_log_level(log),
                     'module': f'GPIO Pin {log.pin}',
-                    'message': (
-                        f"Type: {log.activation_type} | Operator: {log.operator or 'System'} | "
-                        f"Duration: {log.duration_seconds or 'Active'}s"
-                    ),
+                    'message': gpio_log_message(log),
                     # GPIOActivationLog uses the legacy ``alert_id`` field
                     # but the UI shows it under the canonical name.
                     'alert_identifier': log.alert_id,
@@ -2095,6 +2095,8 @@ def register(app: Flask, logger) -> None:
                         'duration': log.duration_seconds,
                         'alert_id': log.alert_id,
                         'reason': log.reason,
+                        'success': log.success,
+                        'error_message': log.error_message,
                     },
                 }
                 for log in logs_result

@@ -159,10 +159,15 @@
                                         <br>
                                         <small>{{ log.reason }}</small>
                                     {% endif %}
-                                    {% if log.duration_seconds %}
+                                    {% if log.duration_seconds is not none %}
                                         <br>
                                         <small class="text-success">
                                             <i class="fas fa-clock"></i> Duration: {{ "%.2f"|format(log.duration_seconds) }}s
+                                        </small>
+                                    {% elif log.success %}
+                                        <br>
+                                        <small class="text-warning">
+                                            <i class="fas fa-bolt"></i> Still active (no release recorded)
                                         </small>
                                     {% endif %}
                                     {% if not log.success and log.error_message %}

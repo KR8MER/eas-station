@@ -30,6 +30,7 @@ This module provides reliable, auditable control over GPIO pins with features in
 - Thread-safe operations
 """
 
+import contextlib
 import json
 import os
 import re
@@ -556,6 +557,12 @@ class GPIOActivationEvent:
     reason: Optional[str] = None  # Human-readable reason
     success: bool = True
     error_message: Optional[str] = None
+    #: Primary key of the ``gpio_activation_logs`` row this event was persisted
+    #: to.  Set when the row is written at activation time so the matching
+    #: deactivation updates that row (filling in the duration) instead of
+    #: inserting a second one.  Not part of :meth:`to_dict` — it is storage
+    #: bookkeeping, not audit content.
+    record_id: Optional[int] = None
 
     def to_dict(self) -> Dict:
         """Convert to dictionary for JSON storage."""
@@ -624,14 +631,18 @@ class GPIOController:
         controller.deactivate(pin=17)
     """
 
-    def __init__(self, db_session=None, logger=None):
+    def __init__(self, db_session=None, logger=None, db_app=None):
         """Initialize GPIO controller.
 
         Args:
             db_session: SQLAlchemy session for audit logging (optional)
             logger: Logger instance for diagnostics (optional)
+            db_app: Flask application owning *db_session* (optional).  Required
+                when the controller is driven from background threads — see
+                :meth:`_db_context`.
         """
         self.db_session = db_session
+        self.db_app = db_app
         self.logger = logger
         self._pins: Dict[int, GPIOPinConfig] = {}
         self._states: Dict[int, GPIOState] = {}
@@ -1002,6 +1013,13 @@ class GPIOController:
                     success=True,
                 )
                 self._current_events[pin] = event
+
+                # Persist immediately rather than waiting for the release, so an
+                # activation that is still on air — or one that never gets
+                # released because the process died mid-broadcast — still shows
+                # up in the audit trail.  The release updates this same row with
+                # the duration (the Logs view renders "Active" until then).
+                self._save_activation_event(event)
 
                 # Start watchdog timer
                 self._start_watchdog(pin, config.watchdog_seconds)
@@ -1402,11 +1420,53 @@ class GPIOController:
             if self.logger:
                 self.logger.debug(f"Stopped flash pattern on GPIO pin {pin}")
 
+    @contextlib.contextmanager
+    def _db_context(self):
+        """Run a database operation inside a Flask application context.
+
+        Relay keying lives in the ``eas-station-gpio`` subprocess and is driven
+        entirely from background threads: the alert-indicator poll loop and its
+        Redis pub/sub listener, the per-pin watchdog timers, and the behavior
+        manager's hold / pulse / flash threads.  None of those run inside an
+        application context.  Flask-SQLAlchemy 3.x scopes ``db.session`` to the
+        active application context, so every ``session.add()`` from one of those
+        threads raises ``RuntimeError: Working outside of application context``
+        and the activation is silently dropped from the audit trail — which is
+        why the Logs -> GPIO view stopped receiving entries once keying moved
+        into the subprocess.
+
+        Pushing a context here (only when the caller has not already done so)
+        gives those threads a real session.  Without ``db_app`` — e.g. a plain
+        SQLAlchemy session in tests — this is a no-op.
+        """
+        if self.db_app is None:
+            yield
+            return
+
+        try:
+            from flask import has_app_context
+        except ImportError:  # pragma: no cover - Flask always present in-app
+            yield
+            return
+
+        if has_app_context():
+            yield
+            return
+
+        with self.db_app.app_context():
+            yield
+
     def _save_activation_event(self, event: GPIOActivationEvent) -> None:
-        """Save activation event to database for audit trail.
+        """Write (or update) the audit-trail row for an activation event.
+
+        Called twice for a normal activation: once when the pin is energised —
+        so an in-flight or never-released activation is visible immediately
+        rather than only appearing when the relay finally drops — and again on
+        release to fill in ``deactivated_at`` / ``duration_seconds`` on that same
+        row.  ``event.record_id`` carries the row identity between the two calls.
 
         Args:
-            event: Activation event to save
+            event: Activation event to persist
         """
         if self.db_session is None:
             return
@@ -1414,21 +1474,27 @@ class GPIOController:
         try:
             from app_core.models import GPIOActivationLog
 
-            log_entry = GPIOActivationLog(
-                pin=event.pin,
-                activation_type=event.activation_type.value,
-                activated_at=event.activated_at,
-                deactivated_at=event.deactivated_at,
-                duration_seconds=event.duration_seconds,
-                operator=event.operator,
-                alert_id=event.alert_id,
-                reason=event.reason,
-                success=event.success,
-                error_message=event.error_message,
-            )
+            with self._db_context():
+                log_entry = None
+                if event.record_id is not None:
+                    log_entry = self.db_session.get(GPIOActivationLog, event.record_id)
 
-            self.db_session.add(log_entry)
-            self.db_session.commit()
+                if log_entry is None:
+                    log_entry = GPIOActivationLog(pin=event.pin)
+                    self.db_session.add(log_entry)
+
+                log_entry.activation_type = event.activation_type.value
+                log_entry.activated_at = event.activated_at
+                log_entry.deactivated_at = event.deactivated_at
+                log_entry.duration_seconds = event.duration_seconds
+                log_entry.operator = event.operator
+                log_entry.alert_id = event.alert_id
+                log_entry.reason = event.reason
+                log_entry.success = event.success
+                log_entry.error_message = event.error_message
+
+                self.db_session.commit()
+                event.record_id = log_entry.id
 
             if self.logger:
                 self.logger.debug(f"Saved GPIO activation log for pin {event.pin}")
@@ -1436,8 +1502,11 @@ class GPIOController:
         except Exception as exc:
             if self.logger:
                 self.logger.error(f"Failed to save GPIO activation log: {exc}")
-            if self.db_session:
-                self.db_session.rollback()
+            try:
+                with self._db_context():
+                    self.db_session.rollback()
+            except Exception:  # pragma: no cover - rollback is best effort
+                pass
 
     def cleanup(self) -> None:
         """Cleanup all GPIO pins and stop watchdogs."""
@@ -2046,6 +2115,18 @@ class GPIOBehaviorManager:
             reason=activation_reason,
             flash=False,
         )
+        if not success:
+            # ``activate()`` refuses a pin that is already ACTIVE, which happens
+            # routinely: a second hold behavior assigned to the same pin, or a
+            # still-running INCOMING_ALERT pulse the broadcast overlapped.  The
+            # relay is energised either way, so adopt it into the hold map —
+            # otherwise _release_hold() sees no hold to release at
+            # end-of-broadcast and the pin stays keyed until the watchdog fires.
+            try:
+                success = self.controller.get_state(pin) == GPIOState.ACTIVE
+            except Exception:  # pragma: no cover - hardware specific
+                success = False
+
         if success:
             with self._lock:
                 self._hold_map.setdefault(pin, set()).add(behavior)
@@ -2137,6 +2218,14 @@ class GPIOBehaviorManager:
             return
 
         time.sleep(max(0.1, duration))
+
+        with self._lock:
+            if self._hold_map.get(pin) or pin in self._flash_pins:
+                # A broadcast starting during this pulse adopted the pin as a
+                # hold (or handed it to the flash engine).  Releasing here would
+                # un-key the transmitter mid-alert; the owning behavior drops it
+                # at end-of-broadcast instead.
+                return
 
         try:
             self.controller.deactivate(pin, force=True)
