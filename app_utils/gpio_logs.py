@@ -35,8 +35,8 @@ in ``app_utils.gpio`` (and, with it, gpiozero / lgpio).
 from typing import Any, Optional
 
 __all__ = [
-    "gpio_log_level",
     "gpio_log_duration",
+    "gpio_log_level",
     "gpio_log_message",
 ]
 
@@ -55,10 +55,13 @@ def gpio_log_duration(log: Any) -> str:
     ``"Active"`` while the relay is still energised (the row is written when the
     pin fires and updated when it releases), otherwise seconds rounded to a
     tenth — the raw float carries meaningless microsecond precision.
+
+    A *failed* activation also has no duration, but the relay never moved, so it
+    must not be reported as active — those rows read ``"N/A"``.
     """
     duration: Optional[float] = getattr(log, "duration_seconds", None)
     if duration is None:
-        return "Active"
+        return "Active" if getattr(log, "success", True) else "N/A"
     try:
         return f"{float(duration):.1f}s"
     except (TypeError, ValueError):

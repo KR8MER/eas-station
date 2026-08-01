@@ -29,7 +29,10 @@ tracks releases under the 2.x series.
   left no record at all. The row is now written when the pin fires and updated
   in place on release (the Logs view already rendered `Active` for a row
   without a duration), so an in-flight or never-released activation is
-  visible.
+  visible. The write happens *after* the watchdog and flash threads start:
+  it commits synchronously under the controller-wide lock, so a slow or hung
+  database must not be able to delay a pin's safety timer or block another
+  pin's forced release.
 - **A relay keyed through the `activate_all` fallback was never released,
   and stayed energised until its 300 s watchdog fired.** When a behavior
   matrix exists but holds nothing for a given broadcast, the rising edge falls
@@ -55,7 +58,9 @@ tracks releases under the 2.x series.
   row written when the hardware is unavailable and the relay never moved
   looked like a normal activation. Level now follows the row's `success`
   flag, the message carries the reason and the error, and durations are
-  rounded to a tenth of a second instead of showing raw microsecond floats.
+  rounded to a tenth of a second instead of showing raw microsecond floats. A
+  failed row reads `Duration: N/A` rather than `Active` — it has no duration
+  because the relay never moved, not because it is still on air.
 
 ### Added
 - **`app_utils/gpio_logs.py`** — shared level/message/duration formatting for

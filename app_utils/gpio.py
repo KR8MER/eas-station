@@ -1014,14 +1014,14 @@ class GPIOController:
                 )
                 self._current_events[pin] = event
 
-                # Persist immediately rather than waiting for the release, so an
-                # activation that is still on air — or one that never gets
-                # released because the process died mid-broadcast — still shows
-                # up in the audit trail.  The release updates this same row with
-                # the duration (the Logs view renders "Active" until then).
-                self._save_activation_event(event)
-
-                # Start watchdog timer
+                # Start watchdog timer.  This must come before the audit write
+                # below: the relay is already physically ON, and the watchdog is
+                # the backstop that eventually drops it if no release arrives.
+                # ``_save_activation_event`` commits synchronously while holding
+                # the controller-wide lock, so a slow or hung database would
+                # otherwise delay this pin's safety timer *and* block every
+                # other pin's activate/deactivate — including watchdog-driven
+                # forced releases.  Starting a thread does not block.
                 self._start_watchdog(pin, config.watchdog_seconds)
 
                 # Start flash pattern.  ``flash`` overrides the pin's configured
@@ -1031,6 +1031,13 @@ class GPIOController:
                 should_flash = config.flash_enabled if flash is None else flash
                 if should_flash:
                     self._start_flash(pin, force=True)
+
+                # Persist immediately rather than waiting for the release, so an
+                # activation that is still on air — or one that never gets
+                # released because the process died mid-broadcast — still shows
+                # up in the audit trail.  The release updates this same row with
+                # the duration (the Logs view renders "Active" until then).
+                self._save_activation_event(event)
 
                 if self.logger:
                     self.logger.info(
@@ -1505,8 +1512,15 @@ class GPIOController:
             try:
                 with self._db_context():
                     self.db_session.rollback()
-            except Exception:  # pragma: no cover - rollback is best effort
-                pass
+            except Exception as rollback_exc:  # pragma: no cover - best effort
+                # Never let a failed rollback mask the original error above, but
+                # don't discard it silently either — a session left in an
+                # unknown state is exactly the kind of invisible audit failure
+                # this method exists to avoid.
+                if self.logger:
+                    self.logger.debug(
+                        f"GPIO activation log rollback failed: {rollback_exc}"
+                    )
 
     def cleanup(self) -> None:
         """Cleanup all GPIO pins and stop watchdogs."""

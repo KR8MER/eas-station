@@ -145,7 +145,6 @@ def test_activation_is_audited_from_a_thread_without_app_context(audit_db, monke
     of application context``, the exception was swallowed, and the activation
     never reached ``gpio_activation_logs`` — the Logs -> GPIO view went silent.
     """
-    app, _db, _model = audit_db
     controller = _make_controller(audit_db, monkeypatch)
 
     results = {}
@@ -162,6 +161,9 @@ def test_activation_is_audited_from_a_thread_without_app_context(audit_db, monke
     worker.start()
     worker.join(timeout=10)
 
+    # Assert liveness first: a timed-out or crashed worker would otherwise
+    # surface as a bare KeyError below, hiding the real cause.
+    assert not worker.is_alive(), "activation thread did not finish"
     assert results["activated"] is True
 
     rows = _rows(audit_db)
@@ -277,7 +279,16 @@ def test_pulse_does_not_release_a_pin_a_hold_adopted(monkeypatch):
     controller = _StubController()
     manager = _manager(controller, {17: {GPIOBehavior.INCOMING_ALERT}})
 
-    def _broadcast_starts_during_the_pulse(_seconds):
+    # ``gpio.time`` is the stdlib module, so the patch below is process-wide.
+    # Scope the stub to this thread and delegate everything else to the real
+    # sleep, so a concurrently running test can never pick it up.
+    real_sleep = gpio.time.sleep
+    test_thread = threading.get_ident()
+
+    def _broadcast_starts_during_the_pulse(seconds):
+        if threading.get_ident() != test_thread:
+            real_sleep(seconds)
+            return
         # The alert went to air while the incoming pulse was still running, so
         # the broadcast hold adopted the already-energised pin.
         manager._hold_map[17] = {GPIOBehavior.TRANSMITTER_PTT}
@@ -431,3 +442,10 @@ def test_successful_activation_renders_as_info_with_a_rounded_duration():
 
 def test_in_flight_activation_renders_as_active():
     assert gpio_log_duration(_Row(duration_seconds=None)) == "Active"
+
+
+def test_failed_activation_is_never_reported_as_active():
+    """A failed activation also has no duration — but the relay never moved."""
+    row = _Row(duration_seconds=None, success=False, error_message="no hardware")
+    assert gpio_log_duration(row) == "N/A"
+    assert "Duration: Active" not in gpio_log_message(row)
