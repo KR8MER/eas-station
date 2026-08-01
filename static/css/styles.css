@@ -7683,8 +7683,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 .eas-page, .about-page { position: relative; }
 
 /* ---- Hero banner --------------------------------------------------------- */
-.eas-hero,
-.about-hero {
+.eas-hero {
     padding: 3rem 2.5rem 2.75rem;
     margin-bottom: 1.75rem;
     border-radius: var(--radius-2xl);
@@ -7699,8 +7698,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
                 0 0 0 1px rgba(255, 255, 255, 0.12) inset,
                 0 0 48px color-mix(in srgb, var(--vibrant-purple) 35%, transparent);
 }
-.eas-hero::before,
-.about-hero::before {
+.eas-hero::before {
     content: "";
     position: absolute; inset: -40% -20% auto auto;
     width: 70%; height: 180%;
@@ -7709,8 +7707,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     animation: headerGlow 9s ease-in-out infinite;
     pointer-events: none;
 }
-.eas-hero::after,
-.about-hero::after {
+.eas-hero::after {
     content: "";
     position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
     background: linear-gradient(90deg,
@@ -7720,14 +7717,12 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     background-size: 300% 100%;
     animation: gradientShift 8s linear infinite;
 }
-.eas-hero-inner,
-.about-hero-inner {
+.eas-hero-inner {
     position: relative; z-index: 2;
     display: flex; flex-direction: column; align-items: center; text-align: center;
     gap: 1rem;
 }
-.eas-hero-logo,
-.about-hero-logo {
+.eas-hero-logo {
     max-width: 680px;
     width: 100%;
     padding: 1.25rem 1.75rem;
@@ -7738,15 +7733,17 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28),
                 0 0 0 1px rgba(255, 255, 255, 0.18) inset;
 }
-.eas-hero-title,
-.about-hero-title {
+.eas-hero-title {
     font-size: clamp(1.9rem, 3.2vw, 2.6rem);
     font-weight: 800; letter-spacing: -0.02em;
     margin: 0;
+    /* Explicit white: the global `h1 { color: var(--text-color) }` rule
+       otherwise overrides the hero's inherited white and renders the title
+       near-black on the gradient in light themes. */
+    color: #ffffff;
     text-shadow: 0 2px 12px rgba(0,0,0,0.25);
 }
-.eas-hero-lead,
-.about-hero-lead {
+.eas-hero-lead {
     font-size: 1.05rem; font-weight: 500;
     color: rgba(255,255,255,0.92);
     max-width: 720px; margin: 0 auto;
@@ -7754,13 +7751,11 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 }
 
 /* ---- Chip row (pill metadata) ------------------------------------------- */
-.eas-chip-row,
-.about-chip-row {
+.eas-chip-row {
     display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center;
     margin-top: 0.5rem;
 }
-.eas-chip,
-.about-chip {
+.eas-chip {
     display: inline-flex; align-items: center; gap: 0.4rem;
     padding: 0.35rem 0.85rem;
     border-radius: 999px;
@@ -7770,8 +7765,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
     color: #fff;
 }
-.eas-chip i,
-.about-chip i { opacity: 0.9; }
+.eas-chip i { opacity: 0.9; }
 
 /* ---- Section cards ------------------------------------------------------ */
 .eas-card,

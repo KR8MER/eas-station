@@ -31,6 +31,21 @@ tracks releases under the 2.x series.
 - **Style Guide** (`/style-guide`) now documents the component-include
   pattern as the required way to build page headers instead of showing
   hand-rolled markup.
+- **Hero pages standardized too.** About, Attribution, and Support
+  hand-rolled their `.about-hero` banner markup; they now render through
+  the shared `partials/hero.html` component (which gained a `hero_extra`
+  slot for content like the Support page's Ko-fi call-to-action). The
+  Admin panel — an operational page — moved from the marketing-style hero
+  to the standard gradient page header so it matches the rest of the
+  operator UI. The now-unused `.about-hero*` / `.about-chip*` CSS alias
+  selectors were removed from `styles.css`.
+
+### Fixed
+- **Hero banner titles were unreadable in light themes.** The global
+  `h1 { color: var(--text-color) }` typography rule overrode the hero's
+  white text, rendering titles near-black on the purple gradient on
+  About, Attribution, and Support in every light theme.
+  `.eas-hero-title` now sets white explicitly.
 
 ## [2.122.2] - 2026-08-01 - Installer resilience on Debian 13/Ubuntu and alembic_version repair
 

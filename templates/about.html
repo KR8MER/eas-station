@@ -30,22 +30,20 @@
     <div class="row justify-content-center">
         <div class="col-12 col-lg-10 col-xl-9">
             <!-- Hero -->
-            <section class="about-hero">
-                <div class="about-hero-inner">
-                    {% with logo_classes='about-hero-logo', logo_style='' %}
-                        {% include 'partials/logo_wordmark.html' %}
-                    {% endwith %}
-                    <h1 class="about-hero-title">Software-defined emergency alerting, engineered like a broadcast appliance.</h1>
-                    <p class="about-hero-lead">EAS Station™ is an open-source, Raspberry Pi-class replacement for commercial EAS encoder/decoders — integrating CAP ingest, SAME audio synthesis, SDR verification, and multi-channel distribution into one disciplined stack.</p>
-                    <div class="about-chip-row">
-                        <span class="about-chip"><i class="fas fa-flask"></i> Research Platform</span>
-                        <span class="about-chip"><i class="fas fa-code-branch"></i> Open Source</span>
-                        <span class="about-chip"><i class="fas fa-microchip"></i> Pi &amp; SDR</span>
-                        <span class="about-chip"><i class="fas fa-satellite-dish"></i> Stratum 1 Time</span>
-                        <span class="about-chip"><i class="fas fa-shield-halved"></i> Non-Commercial</span>
-                    </div>
-                </div>
-            </section>
+            {% with
+                hero_logo=true,
+                hero_title='Software-defined emergency alerting, engineered like a broadcast appliance.',
+                hero_lead='EAS Station™ is an open-source, Raspberry Pi-class replacement for commercial EAS encoder/decoders — integrating CAP ingest, SAME audio synthesis, SDR verification, and multi-channel distribution into one disciplined stack.',
+                hero_chips=[
+                    {'icon': 'fas fa-flask',          'label': 'Research Platform'},
+                    {'icon': 'fas fa-code-branch',    'label': 'Open Source'},
+                    {'icon': 'fas fa-microchip',      'label': 'Pi & SDR'},
+                    {'icon': 'fas fa-satellite-dish', 'label': 'Stratum 1 Time'},
+                    {'icon': 'fas fa-shield-halved',  'label': 'Non-Commercial'},
+                ]
+            %}
+                {% include 'partials/hero.html' %}
+            {% endwith %}
 
             <!-- Compliance & Safety -->
             <section class="about-card" aria-labelledby="compliance-heading">

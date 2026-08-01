@@ -25,6 +25,11 @@
                       centered above the title. Defaults to false.
         hero_chips    Iterable of {'icon': 'fa-...', 'label': 'Text'} dicts
                       rendered as pill chips beneath the lead.
+        hero_extra    Pre-rendered HTML emitted after the chips (e.g. a
+                      call-to-action button row). Build with a
+                      {% set hero_extra %} capture block; emitted with
+                      |safe, so only pass trusted markup — never raw
+                      user input.
         hero_class    Extra class(es) appended to `.eas-hero`.
 
     The gradient / glow / animation are defined in static/css/styles.css
@@ -47,6 +52,9 @@
             {% with chips=hero_chips %}
                 {% include 'partials/chip_row.html' %}
             {% endwith %}
+        {% endif %}
+        {% if hero_extra %}
+            {{ hero_extra | safe }}
         {% endif %}
     </div>
 </section>
