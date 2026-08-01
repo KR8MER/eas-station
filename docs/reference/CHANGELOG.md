@@ -8,6 +8,48 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.123.1] - 2026-08-01 - Table header contrast, logs coverage, and a theme-contrast audit
+
+### Fixed
+- **Table headers rendered dark text on a dark gradient in every theme.**
+  `.table thead th` set a `background:` shorthand carrying a vibrant
+  gradient; a later "TABLE READABILITY FIXES" rule set `color` to dark ink
+  and `background-color` to a light tint — but `background-color` cannot
+  override a gradient, because the gradient is a background-*image* and
+  keeps painting on top. The result was near-black text on dark navy across
+  all 39 plain-Bootstrap tables (18 of them on System Health alone). The
+  gradient is removed so the readable tint actually shows; the rule now
+  carries a comment explaining why it must not come back. A stale
+  `[data-theme="lightning"]` dark-ink override, which existed only to
+  compensate for that gradient, was removed with it.
+- **`.eas-table` headers fell below WCAG AA in the dark theme** (4.04:1,
+  where 4.5:1 is required at that font size). The header colour is now
+  mixed toward `--text-color` instead of using `--text-secondary` alone.
+- **ENDEC Device Feeds had an unwrapped `<table>`**, violating the
+  repository's own mobile rule; it is now inside `.table-responsive`. No
+  unwrapped tables remain outside email templates.
+- **"All Logs" silently omitted half the log categories.** The unified view
+  aggregated 8 of the 20 individual categories, so Polling Debug, Audio
+  Metrics, Audio Health, and Decoded EAS Audio were invisible to anyone who
+  did not know to click their specific tab. All four are now included
+  (Audit and Compliance remain deliberately separate as distinct legal
+  record categories). Every one of the 21 log tabs was verified to map to a
+  real handler branch, with no orphan branches in the other direction.
+- **Documentation pointed at a `/system-logs` page that does not exist.**
+  The journal is reachable through the Logs hub's **Service Logs (systemd)**
+  tab (`/logs?type=services`); the CLI-free-operations guidance now says so.
+
+### Added
+- **`scripts/diagnostics/check_theme_contrast.py`** — audits text/background
+  contrast for key surfaces across all 20 themes and exits non-zero on a
+  strict-surface regression. It measures the backdrop from real screenshots
+  with the glyphs masked out, so gradients and `color-mix()`/`color(srgb …)`
+  values are handled correctly, and it applies WCAG's large-text threshold
+  where it applies. Gradient surfaces that rely on `text-shadow` are
+  reported as advisory rather than failing, since the WCAG formula models
+  neither the shadow nor a gradient. This check reproduces the table-header
+  bug above and caught a regression introduced while fixing it.
+
 ## [2.123.0] - 2026-08-01 - Standardized page headers across the entire UI
 
 ### Changed

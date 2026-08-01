@@ -126,17 +126,20 @@ When implementing ANY new feature:
 **Required Web UI Access For:**
 
 1. **System Management**
-   - ✅ View system logs (via `/system-logs` - uses journalctl backend)
+   - ✅ View system logs (via `/logs?type=services` - uses journalctl backend)
    - ✅ Restart services (via Admin → Services - uses systemd backend)
    - ✅ View service status (via Dashboard/Monitoring)
    - ✅ Update configuration (via Admin → Environment/Settings)
    - ✅ Backup/Restore system (via Admin → Backup)
 
 2. **Log Viewing**
-   - ✅ **Already Implemented**: `webapp/routes_logs.py` provides systemd journal access
+   - ✅ **Already Implemented**: the unified Logs hub at `/logs` — the
+     **Service Logs (systemd)** tab (`/logs?type=services`) reads the journal
+     via `get_systemd_logs()`; `webapp/routes_logs.py` additionally exposes
+     JSON endpoints under `/api/logs/*`
    - ✅ Users can view logs for all services via web UI
-   - ✅ Filter by priority (error, warning, info, debug)
-   - ✅ Filter by time range
+   - ✅ Filter by service, level, date range, and free-text search
+   - ✅ Export any category as CSV or PDF
    - ❌ **NEVER** require users to run `journalctl`, `tail -f`, or `docker logs`
 
 3. **Configuration Management**
@@ -478,6 +481,7 @@ def downgrade() -> None:
 - **Use theme variables** - Reference CSS variables: `var(--primary-color)`, `var(--text-color)`, `var(--bg-color)`
 - **Support all themes** - EAS Station™ has multiple built-in themes (Cosmo, Dark, Coffee, Spring, and color-based themes)
 - **Test in multiple themes** - Always test in both light (Cosmo) and dark themes at minimum
+- **Run the contrast audit when touching colours** - `python3 scripts/diagnostics/check_theme_contrast.py` checks text/background contrast for key surfaces across all 20 themes and exits non-zero on a regression. Beware the trap it was written for: a `background:` shorthand carrying a gradient sets background-*image*, which a later `background-color` cannot override — the gradient keeps painting on top and can leave dark text on a dark surface.
 - **Be responsive** - Use Bootstrap 5 grid classes for mobile support
 - **Mobile-friendly is required** - Every page MUST render without horizontal scrolling at viewport widths ≥320px. Specifically:
   - **Wrap every `<table>` in `<div class="table-responsive">`** — including JS-injected tables built from template strings. The global mobile safety-net CSS in `static/css/styles.css` provides a fallback, but explicit wrappers are required.

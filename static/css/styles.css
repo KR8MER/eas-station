@@ -900,10 +900,12 @@
     text-shadow: none;
 }
 
-[data-theme="lightning"] .table thead th {
-    color: #0d1b2a;
-    text-shadow: none;
-}
+/* NOTE: a `[data-theme="lightning"] .table thead th { color: #0d1b2a }` rule
+   used to live here. It was correct while `.table thead th` painted a bright
+   yellow→cyan gradient, but that gradient was removed (it rendered dark text
+   on a dark gradient in every other theme). The header now uses the themed
+   `--surface-color`/`--text-color` tint, which is already readable in
+   lightning — forcing dark ink here made it 1.8:1. Do not reinstate. */
 
 [data-theme="lightning"] .btn-primary {
     color: #0d1b2a;
@@ -3695,12 +3697,14 @@ textarea:focus {
     overflow: hidden;
 }
 
+/* Colour (background + text) is owned by the "TABLE READABILITY FIXES"
+   rule further down this file — this rule sets layout/typography only.
+   Do NOT reintroduce a `background:` gradient here: `background` is a
+   shorthand that sets background-image, and the readability rule below
+   only sets `background-color`, which cannot override an image. A
+   gradient here therefore paints *over* the readable tint and leaves
+   dark text on a dark gradient. */
 .table thead th {
-    background: linear-gradient(135deg,
-        var(--primary-color) 0%,
-        color-mix(in srgb, var(--primary-color) 88%, var(--secondary-color)) 50%,
-        var(--secondary-color) 100%);
-    color: white;
     padding: 1rem 1.25rem;
     font-weight: var(--font-weight-semibold);
     text-align: left;
@@ -8839,7 +8843,11 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     text-transform: uppercase;
     letter-spacing: 0.04em;
     font-weight: 600;
-    color: var(--text-secondary, var(--text-muted));
+    /* Mixed toward --text-color rather than plain --text-secondary: at this
+       size (0.78rem) WCAG AA needs 4.5:1, and --text-secondary alone lands
+       at 4.04 against the header tint in the dark theme. The uppercase +
+       letterspacing still reads as a header without relying on dimness. */
+    color: color-mix(in srgb, var(--text-color) 80%, var(--text-secondary, var(--text-muted)));
     background: color-mix(in srgb, var(--surface-color) 90%, var(--border-color));
     border-bottom: 2px solid var(--border-color);
     padding: 0.65rem 0.75rem;
