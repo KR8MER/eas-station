@@ -7,12 +7,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-bell"></i> Notification Settings</h1>
-        <p class="mb-0">Configure email and SMS delivery for EAS alert broadcasts</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-bell' %}
+{% set header_title = 'Notification Settings' %}
+{% set header_subtitle = 'Configure email and SMS delivery for EAS alert broadcasts' %}
+{% include 'components/page_header.html' %}
 
 <div class="container-fluid">
     <div class="row">

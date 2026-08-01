@@ -14,12 +14,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-spell-check"></i> TTS Pronunciation Dictionary</h1>
-        <p class="mb-0">Define word substitutions applied to all TTS narration text before synthesis</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-spell-check' %}
+{% set header_title = 'TTS Pronunciation Dictionary' %}
+{% set header_subtitle = 'Define word substitutions applied to all TTS narration text before synthesis' %}
+{% include 'components/page_header.html' %}
 
 <div class="admin-container" style="max-width: 1100px">
 

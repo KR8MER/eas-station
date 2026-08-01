@@ -849,6 +849,18 @@ def register(app: Flask, logger) -> None:
                 "<h1>Help</h1><p>Refer to docs/guides/HELP.md in the repository for the full operations guide.</p>"
             )
 
+    @app.route("/style-guide")
+    def style_guide_page():
+        """Design-system reference: the standard page header, cards, and components."""
+        try:
+            return render_template("style_guide.html")
+        except Exception as exc:  # pragma: no cover - fallback content
+            route_logger.error("Error rendering style guide page: %s", exc)
+            return (
+                "<h1>Style Guide</h1><p>See templates/style_guide.html and "
+                "docs/frontend/COMPONENT_LIBRARY.md in the repository.</p>"
+            )
+
     @app.route("/attribution")
     def attribution_page():
         """Dedicated page crediting open-source dependencies, data sources, and licensing."""

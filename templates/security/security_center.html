@@ -102,12 +102,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header header-danger">
-    <div class="container">
-        <h1><i class="bi bi-shield-lock"></i> Security Center</h1>
-        <p class="lead mb-0">One Global Ban List, enforced by multiple security layers</p>
-    </div>
-</div>
+{% set header_icon = 'bi bi-shield-lock' %}
+{% set header_title = 'Security Center' %}
+{% set header_subtitle = 'One Global Ban List, enforced by multiple security layers' %}
+{% include 'components/page_header.html' %}
 
 <div class="container-fluid">
     <!-- Tab navigation -->

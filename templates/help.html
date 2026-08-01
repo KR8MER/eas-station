@@ -5,20 +5,17 @@
     <div class="row justify-content-center">
         <div class="col-12 col-lg-10 col-xl-9">
             <!-- Header -->
-            <div class="card shadow-sm mb-4 border-0">
-                <div class="card-body p-4 p-md-5 text-center">
-                    {% with logo_classes='img-fluid mb-3 mx-auto', logo_style='max-width: 500px;' %}
-                        {% include 'partials/logo_wordmark.html' %}
-                    {% endwith %}
-                    <i class="fas fa-life-ring fa-3x text-gradient mb-3 d-block"></i>
-                    <h1 class="display-5 fw-bold mb-3 text-gradient">Help & Operations Guide</h1>
-                    <p class="lead text-muted">Complete documentation for operating and maintaining your EAS Station™</p>
-                    <div class="alert alert-warning d-flex align-items-start mt-4 text-start" role="alert">
-                        <i class="fas fa-triangle-exclamation fa-lg me-3"></i>
-                        <div>
-                            <strong>Safety Reminder:</strong> This guide supports an experimental build of EAS Station™. The platform is verified against reference projects such as multimon-ng, but it is <em>not</em> FCC-approved and must only be used in controlled lab environments. Never depend on it for live emergency alerting or public safety workflows.
-                        </div>
-                    </div>
+            {% with
+                hero_logo=true,
+                hero_title='Help & Operations Guide',
+                hero_lead='Complete documentation for operating and maintaining your EAS Station™'
+            %}
+                {% include 'partials/hero.html' %}
+            {% endwith %}
+            <div class="alert alert-warning d-flex align-items-start mb-4 text-start" role="alert">
+                <i class="fas fa-triangle-exclamation fa-lg me-3"></i>
+                <div>
+                    <strong>Safety Reminder:</strong> This guide supports an experimental build of EAS Station™. The platform is verified against reference projects such as multimon-ng, but it is <em>not</em> FCC-approved and must only be used in controlled lab environments. Never depend on it for live emergency alerting or public safety workflows.
                 </div>
             </div>
 

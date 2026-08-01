@@ -40,12 +40,36 @@ tracks releases under the 2.x series.
   operator UI. The now-unused `.about-hero*` / `.about-chip*` CSS alias
   selectors were removed from `styles.css`.
 
+- **Admin section (32 pages) standardized.** Every `templates/admin/*`
+  page plus the Security Center used a third header system
+  (`admin-page-header` with per-page color variants, styled in
+  `admin.css`); all now render through the shared page-header component,
+  and ~95 lines of dead header CSS were removed from `admin.css`.
+- **Remaining stragglers standardized.** Help, Privacy, SMS Policy, and
+  Version now use the shared hero component (Version's build-info card
+  moved into the hero's `hero_extra` slot); the old per-page
+  `version-hero` CSS was removed.
+- **Orphaned templates deleted.** `alerts_new.html`,
+  `audio_sources.html` (superseded by `admin/audio_sources.html`),
+  `system_logs.html` (superseded by the unified Logs hub),
+  `theme_test.html`, `components/form-example.html`, and
+  `partials/common_head.html` were referenced by no route or include.
+- **Style Guide is now reachable.** `templates/style_guide.html` had no
+  route; it is now served at `/style-guide` and linked from the Site
+  Navigation page under Help & Documentation.
+
 ### Fixed
 - **Hero banner titles were unreadable in light themes.** The global
   `h1 { color: var(--text-color) }` typography rule overrode the hero's
   white text, rendering titles near-black on the purple gradient on
   About, Attribution, and Support in every light theme.
   `.eas-hero-title` now sets white explicitly.
+- **Page headers were unreadable in the Yellow theme.** The standard
+  header's white text sat on the theme's amber → yellow gradient with
+  failing contrast (admin pages previously carried their own dark-ink
+  override in `admin.css`, but main pages never did). `styles.css` now
+  applies the same dark ink to `.page-header` text, the icon tile, and
+  outline-light action buttons for both the Yellow and Lightning themes.
 
 ## [2.122.2] - 2026-08-01 - Installer resilience on Debian 13/Ubuntu and alembic_version repair
 

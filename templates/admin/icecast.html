@@ -79,12 +79,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-broadcast-tower"></i> Icecast Streaming</h1>
-        <p class="mb-0">Configure Icecast streaming server for live audio monitoring</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-broadcast-tower' %}
+{% set header_title = 'Icecast Streaming' %}
+{% set header_subtitle = 'Configure Icecast streaming server for live audio monitoring' %}
+{% include 'components/page_header.html' %}
 
 <div class="admin-container">
     <!-- Server Status Indicator -->

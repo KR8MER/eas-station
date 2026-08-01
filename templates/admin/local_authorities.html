@@ -10,12 +10,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-building-shield"></i> Local Authority Management</h1>
-        <p class="mb-0">Manage local authorities authorized to issue EAS alerts for their political subdivisions</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-building-shield' %}
+{% set header_title = 'Local Authority Management' %}
+{% set header_subtitle = 'Manage local authorities authorized to issue EAS alerts for their political subdivisions' %}
+{% include 'components/page_header.html' %}
 
 <div class="container">
     <!-- Navigation breadcrumb -->

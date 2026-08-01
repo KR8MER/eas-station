@@ -7,12 +7,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header header-secondary">
-    <div class="container">
-        <h1><i class="fas fa-map-marked-alt"></i> NOAA Zone Catalog</h1>
-        <p class="mb-0">Manage the NOAA National Weather Service zone catalog database</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-map-marked-alt' %}
+{% set header_title = 'NOAA Zone Catalog' %}
+{% set header_subtitle = 'Manage the NOAA National Weather Service zone catalog database' %}
+{% include 'components/page_header.html' %}
 
 <div class="container-fluid mt-4">
     <div class="row">

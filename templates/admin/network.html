@@ -284,12 +284,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-network-wired"></i> Network Configuration</h1>
-        <p class="mb-0">Professional network management and monitoring</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-network-wired' %}
+{% set header_title = 'Network Configuration' %}
+{% set header_subtitle = 'Professional network management and monitoring' %}
+{% include 'components/page_header.html' %}
 
 <div class="admin-container wide">
     <!-- Navigation Tabs -->

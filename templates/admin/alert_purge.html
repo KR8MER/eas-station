@@ -27,12 +27,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-trash-alt"></i> Alert Purge</h1>
-        <p class="mb-0">Remove received alerts and their captured audio &mdash; manually or on a schedule</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-trash-alt' %}
+{% set header_title = 'Alert Purge' %}
+{% set header_subtitle %}Remove received alerts and their captured audio &mdash; manually or on a schedule{% endset %}
+{% include 'components/page_header.html' %}
 
 <div class="container-fluid">
     <!-- Storage overview -->

@@ -230,12 +230,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-rss"></i> Alert Feeds</h1>
-        <p class="mb-0">Configure NOAA Weather and FEMA IPAWS alert feeds</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-rss' %}
+{% set header_title = 'Alert Feeds' %}
+{% set header_subtitle = 'Configure NOAA Weather and FEMA IPAWS alert feeds' %}
+{% include 'components/page_header.html' %}
 
 <div class="admin-container">
     <div id="alertContainer"></div>

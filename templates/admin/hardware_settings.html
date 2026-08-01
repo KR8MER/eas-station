@@ -481,12 +481,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container-fluid">
-        <h1><i class="fas fa-cogs"></i> Hardware Settings</h1>
-        <p class="mb-0">Configure GPIO, displays, and other hardware peripherals</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-cogs' %}
+{% set header_title = 'Hardware Settings' %}
+{% set header_subtitle = 'Configure GPIO, displays, and other hardware peripherals' %}
+{% include 'components/page_header.html' %}
 
 <div class="container-fluid">
     <div class="d-flex justify-content-end mb-3">

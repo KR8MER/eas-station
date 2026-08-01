@@ -121,12 +121,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-lock"></i> SSL Certificate Management</h1>
-        <p class="mb-0">Configure Let's Encrypt SSL certificates for secure HTTPS access</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-lock' %}
+{% set header_title = 'SSL Certificate Management' %}
+{% set header_subtitle %}Configure Let's Encrypt SSL certificates for secure HTTPS access{% endset %}
+{% include 'components/page_header.html' %}
 
 <div class="admin-container">
     <div class="admin-tabs">

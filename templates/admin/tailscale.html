@@ -169,12 +169,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-shield-alt"></i> Tailscale VPN</h1>
-        <p class="mb-0">Configure Tailscale for secure remote access to your EAS Station™</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-shield-alt' %}
+{% set header_title = 'Tailscale VPN' %}
+{% set header_subtitle = 'Configure Tailscale for secure remote access to your EAS Station™' %}
+{% include 'components/page_header.html' %}
 
 <div class="admin-container">
     <div class="admin-tabs">

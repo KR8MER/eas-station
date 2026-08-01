@@ -1263,6 +1263,49 @@
     text-shadow: none;
 }
 
+/* Yellow Theme - Page header readability
+   Same problem as lightning: the amber (#f9a825) → yellow (#ffeb3b)
+   gradient is too bright for white text. Use the same dark ink. */
+[data-theme="yellow"] .page-header {
+    color: #0d1b2a;
+}
+
+[data-theme="yellow"] .page-header h1,
+[data-theme="yellow"] .page-header h2,
+[data-theme="yellow"] .page-header .page-title {
+    color: #0d1b2a;
+    text-shadow: 0 1px 3px rgba(255, 255, 255, 0.25);
+}
+
+[data-theme="yellow"] .page-header .page-subtitle {
+    color: rgba(13, 27, 42, 0.85);
+    text-shadow: none;
+}
+
+/* Lightning + Yellow - header icon tile and outline-light action buttons
+   also need dark ink on the bright gradients. */
+[data-theme="lightning"] .page-header .page-header-icon,
+[data-theme="yellow"] .page-header .page-header-icon {
+    color: #0d1b2a;
+    background: rgba(13, 27, 42, 0.08);
+    border-color: rgba(13, 27, 42, 0.25);
+    text-shadow: none;
+}
+
+[data-theme="lightning"] .page-header .page-header-actions .btn-outline-light,
+[data-theme="yellow"] .page-header .page-header-actions .btn-outline-light {
+    color: #0d1b2a;
+    background: rgba(13, 27, 42, 0.08);
+    border-color: rgba(13, 27, 42, 0.35);
+}
+
+[data-theme="lightning"] .page-header .page-header-actions .btn-outline-light:hover,
+[data-theme="yellow"] .page-header .page-header-actions .btn-outline-light:hover {
+    color: #0d1b2a;
+    background: rgba(13, 27, 42, 0.16);
+    border-color: rgba(13, 27, 42, 0.55);
+}
+
 /* Lightning Theme - Form check / switch readability
    .form-check-input:checked sets background to --primary-color (yellow).
    The standard Bootstrap checkmark and radio SVGs use a white stroke/fill

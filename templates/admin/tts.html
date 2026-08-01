@@ -7,12 +7,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header">
-    <div class="container">
-        <h1><i class="fas fa-volume-up"></i> Text-to-Speech</h1>
-        <p class="mb-0">Configure the TTS provider for emergency alert audio generation</p>
-    </div>
-</div>
+{% set header_icon = 'fas fa-volume-up' %}
+{% set header_title = 'Text-to-Speech' %}
+{% set header_subtitle = 'Configure the TTS provider for emergency alert audio generation' %}
+{% include 'components/page_header.html' %}
 
 <div class="admin-container" style="max-width: 1000px">
     <form id="ttsSettingsForm">
