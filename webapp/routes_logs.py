@@ -25,6 +25,7 @@ import os
 from typing import Dict, List, Any
 from app_core.config import get_all_log_services, get_eas_services
 from app_core.cache import cache
+from app_utils.gpio_logs import gpio_log_level, gpio_log_message
 
 logger = logging.getLogger(__name__)
 
@@ -312,9 +313,9 @@ def get_recent_logs():
             logs.append({
                 'id': f'gpio_{log.id}',
                 'timestamp': log.activated_at.isoformat() if log.activated_at else None,
-                'level': 'INFO',
+                'level': gpio_log_level(log),
                 'module': f'gpio:pin{log.pin}',
-                'message': f"{log.activation_type} - Duration: {log.duration_seconds or 'active'}s",
+                'message': gpio_log_message(log),
                 'category': 'gpio',
                 # GPIOActivationLog stores the correlation ID in its legacy
                 # ``alert_id`` column rather than ``alert_identifier``.
@@ -323,6 +324,8 @@ def get_recent_logs():
                     'pin': log.pin,
                     'activation_type': log.activation_type,
                     'operator': log.operator,
+                    'success': log.success,
+                    'error_message': log.error_message,
                 },
             })
 

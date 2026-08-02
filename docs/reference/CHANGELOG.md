@@ -8,6 +8,70 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.123.2] - 2026-08-01 - GPIO activation logging and relay release pairing
+
+### Fixed
+- **The GPIO activation log stopped recording anything once relay keying
+  moved into the `eas-station-gpio` subprocess.** That subprocess keys relays
+  entirely from background threads — the alert-indicator poll loop, its Redis
+  pub/sub listener, the per-pin watchdog timers, and the behavior manager's
+  hold / pulse / flash threads — none of which run inside a Flask application
+  context. Flask-SQLAlchemy 3.x scopes `db.session` to the active application
+  context, so every `session.add()` from those threads raised
+  `RuntimeError: Working outside of application context`. `_save_activation_event()`
+  swallowed the exception, so the failure was silent and **Logs → GPIO showed
+  no new entries at all** while alerts continued to broadcast normally. Only
+  the manual-command path (which already wrapped itself in a context) still
+  wrote rows. `GPIOController` now takes the owning Flask app and pushes a
+  context around its audit writes when the calling thread has none.
+- **An activation was only written to the audit trail when the relay
+  released.** A relay still on air — or one whose process died mid-broadcast —
+  left no record at all. The row is now written when the pin fires and updated
+  in place on release (the Logs view already rendered `Active` for a row
+  without a duration), so an in-flight or never-released activation is
+  visible. The write happens *after* the watchdog and flash threads start:
+  it commits synchronously under the controller-wide lock, so a slow or hung
+  database must not be able to delay a pin's safety timer or block another
+  pin's forced release.
+- **A relay keyed through the `activate_all` fallback was never released,
+  and stayed energised until its 300 s watchdog fired.** When a behavior
+  matrix exists but holds nothing for a given broadcast, the rising edge falls
+  back to keying every configured pin — but the falling edge called only
+  `end_alert()`, which releases just the pins the behavior manager is
+  tracking. The keying path is now recorded across the edge and released
+  through the matching one; a falling edge with no known rising edge (the
+  subprocess started mid-broadcast) releases through both, since leaving a
+  transmitter keyed is the worse failure.
+- **A hold on an already-energised pin was dropped on the floor**, leaving
+  that relay keyed until the watchdog. `activate()` refuses a pin that is
+  already `ACTIVE`, which happens routinely — a second hold behavior assigned
+  to the same pin, or a still-running `INCOMING_ALERT` pulse the broadcast
+  overlapped — and the behavior manager treated that refusal as failure and
+  never recorded the hold, so `end_alert()` had nothing to release. Holds now
+  adopt an already-active pin.
+- **A finishing `INCOMING_ALERT` pulse could un-key a transmitter mid-alert.**
+  The 3 s pulse thread deactivated its pin unconditionally, even when a
+  broadcast hold had since adopted it. The pulse now defers to the owning
+  hold.
+- **Failed GPIO activations were indistinguishable from successful ones in
+  the Logs hub.** All three render sites hard-coded `level: 'INFO'`, so the
+  row written when the hardware is unavailable and the relay never moved
+  looked like a normal activation. Level now follows the row's `success`
+  flag, the message carries the reason and the error, and durations are
+  rounded to a tenth of a second instead of showing raw microsecond floats. A
+  failed row reads `Duration: N/A` rather than `Active` — it has no duration
+  because the relay never moved, not because it is still on air.
+
+### Added
+- **`app_utils/gpio_logs.py`** — shared level/message/duration formatting for
+  `GPIOActivationLog` rows, used by the unified All Logs view, the GPIO log
+  category, and the `/api/logs/*` JSON feed. Free of hardware imports so the
+  web layer does not pull in gpiozero / lgpio.
+- **`tests/test_gpio_activation_logging.py`** — 11 tests covering audit writes
+  from a thread with no application context, activate/release row pairing,
+  failed-activation auditing, hold adoption, the pulse/hold handover, the
+  rising/falling edge release pairing, and the Logs-hub formatting.
+
 ## [2.123.1] - 2026-08-01 - Table header contrast, logs coverage, and a theme-contrast audit
 
 ### Fixed

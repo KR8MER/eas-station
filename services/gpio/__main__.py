@@ -310,7 +310,9 @@ def main() -> None:
 
         with flask_app.app_context():
             logger.info("Initializing GPIO controller...")
-            _gpio_controller = initialize_gpio_controller(db_session=db.session)
+            _gpio_controller = initialize_gpio_controller(
+                db_session=db.session, db_app=flask_app
+            )
             logger.info("Initializing NeoPixel controller...")
             _neopixel_controller = initialize_neopixel_controller()
             logger.info("Initializing USB tower light controller...")

@@ -165,13 +165,37 @@ GPIO is configured entirely through the web UI and stored in the database. There
 
 ### GPIO Activation Log
 
-Every relay activation and deactivation is recorded in the `gpio_activation_log` database table. View the log at **Admin → Hardware → GPIO Statistics**.
+Every relay activation is recorded in the `gpio_activation_logs` database table.
+View it at **Admin → Hardware → GPIO Statistics**, or under **Logs → GPIO** in
+the Logs hub.
 
 The log includes:
 - Timestamp
 - Relay channel
 - Duration (seconds the relay was active)
 - Triggering event (alert ID or manual activation)
+- Whether the activation succeeded, and the error if it did not
+
+**One row per activation, written twice.** The row is created the moment the pin
+is energised and updated in place when it releases. A relay that is still on air
+therefore shows `Duration: Active` rather than being absent from the log until
+it drops — and an activation that never releases (the process died
+mid-broadcast) still leaves a record.
+
+**Failed activations appear as `ERROR`.** If the relay could not be keyed — most
+commonly `GPIO hardware not available for pin N`, meaning the line could not be
+claimed — the row records `success = false` with the error message, and the Logs
+hub renders it at `ERROR` level. If an alert broadcast produced no GPIO rows at
+all, the subprocess never saw the broadcast marker; check
+`journalctl -u eas-station-gpio` (or **Logs → Service Logs**) for the keying
+decisions.
+
+> **Note for developers:** relay keying runs on background threads inside the
+> GPIO subprocess, none of which have a Flask application context of their own.
+> `GPIOController` is constructed with the owning Flask app (`db_app=`) and
+> pushes a context around its audit writes. Constructing a controller with a
+> `db_session` but no `db_app` means activations from those threads cannot be
+> logged.
 
 ---
 
@@ -237,6 +261,15 @@ On shutdown the GPIO subprocess drives every pin LOW and releases it through thr
 #### Preventing Stuck Relays
 
 Each pin has a **watchdog** (`watchdog_seconds`, default 300 s). If a pin stays active longer than its watchdog — e.g. a broadcast hangs — the controller force-releases it and marks its state `watchdog_timeout`. This is the last-resort safety net; configure per-pin watchdog and `hold_seconds` values in the pin map (see Configuration above).
+
+**Reading watchdog releases as a symptom.** The watchdog should essentially
+never fire in normal operation — a broadcast releases the relay at
+end-of-message. A run of activations in the GPIO log whose durations all sit
+just above `watchdog_seconds` (301 s, 302 s, …) means the relay was keyed but
+the release path did not run: the transmitter stayed keyed for five minutes on
+every alert. Check that the broadcast's falling edge is reaching the subprocess
+(`eas:broadcast_active` being cleared) and that the pins carrying the alert are
+actually assigned a hold behavior in the matrix.
 
 ---
 
