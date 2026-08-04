@@ -262,17 +262,6 @@
         border-radius: var(--radius-md);
         border: 1px dashed var(--border-color);
     }
-
-    .spinner {
-        border: 3px solid var(--border-color);
-        border-top: 3px solid var(--primary-color);
-        border-radius: 50%;
-        width: 44px;
-        height: 44px;
-        animation: spin 1s linear infinite;
-        margin-bottom: 15px;
-    }
-
     @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
@@ -621,7 +610,7 @@
                 <div class="card-body">
                     <div id="map">
                         <div class="loading-message">
-                            <div class="spinner"></div>
+                            <div class="spinner spinner-lg"></div>
                             <div><strong>Loading Interactive Map...</strong></div>
                             <div class="text-muted">Initializing Leaflet map for {{ county_name }}{% if state_code %}, {{ state_code }}{% endif %}</div>
                         </div>
@@ -1729,7 +1718,7 @@ async function inspectBoundaries() {
                             font-weight: bold;
                             display: block;
                         }
-                        .stat-label {
+                        .stat-box .stat-label {
                             font-size: 0.9em;
                             opacity: 0.9;
                         }

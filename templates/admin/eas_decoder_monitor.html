@@ -322,11 +322,6 @@ async function injectTestSignal() {
 
 let _activeStreamId = null;  // which stream is currently playing, '__mixed__' or source name
 
-function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, c => (
-        {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
-    ));
-}
 
 async function loadStreamSources() {
     const statusEl = document.getElementById('stream-sources-status');

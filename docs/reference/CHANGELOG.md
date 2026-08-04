@@ -8,6 +8,79 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.125.0] - 2026-08-04 - Front-end consistency: one escapeHtml, one page header
+
+### Added
+- `tests/test_frontend_consistency.py` — static guards so the duplication
+  cleaned up below cannot silently return. Covers: only one `escapeHtml` and
+  one `showToast` definition; the shared implementation must escape quotes and
+  be published as a global; no page may redefine a `styles.css`-owned class or
+  a Bootstrap class unscoped; no page may hand-roll `.page-header` markup.
+- `tests/css_collisions_allowlist.txt` — the 33 CSS classes currently defined
+  unscoped by two or more pages, recorded as a shrinking backlog. New
+  collisions fail CI; existing ones are listed with the files that clash. The
+  largest cluster is `.gps-*`, copy-pasted across the GPS dashboard, Hardware
+  Settings and System Health and since diverged.
+- `.spinner-lg`, `.empty-state-plain`, `.status-badge-plain`,
+  `.status-badge.connected` / `.disconnected` in `static/css/styles.css` — the
+  page-local variants that previously overrode the shared rules, expressed as
+  modifiers so both treatments can coexist.
+
+### Fixed
+- **`escapeHtml` had 16 behaviourally different implementations across 22
+  templates, plus 6 more in `static/js`.** Several used the detached-`<div>`
+  `textContent` round-trip, which escapes `&`, `<` and `>` but leaves `"` and
+  `'` intact — unsafe wherever the result is interpolated into a quoted HTML
+  attribute, which happened in 13 places (`onclick="editProfile('${...}')"`,
+  `placeholder="${...}"`, and similar on the Stream Profiles and Environment
+  admin pages). There is now a single implementation in
+  `static/js/core/utils.js` that escapes all five characters. It is published
+  as `window.escapeHtml`; it was previously reachable only as
+  `EASUtils.escapeHtml`, which is precisely why every page grew its own copy.
+  The two `escapeHtmlAdmin` aliases now forward to it instead of carrying
+  their own bodies.
+- **`showToast` was redefined in 8 templates and one module**, despite being
+  documented in AGENTS.md as a global to reuse; the local copies shadowed it.
+  The VFD Display Control page had also drifted onto a different calling
+  convention — `showToast(message, isSuccess)` taking a boolean rather than a
+  type string — so its 13 call sites were converted to `'success'` / `'error'`.
+- **The August 2026 CSS consolidation was additive but never subtractive.**
+  `.spinner`, `.status-badge` and `.empty-state` were promoted into
+  `styles.css`, but the inline copies were left in place, so the page-local
+  rules kept winning the cascade and the shared versions did nothing. The
+  duplicates are gone; genuine variants became modifiers. Two overrides on
+  System Health (`.table`, `.alert`) were byte-for-byte what `styles.css`
+  already applied and were simply deleted.
+- **Bootstrap primitives were being restyled per page.** The Environment
+  settings page redefined `.form-control` unscoped, so form fields rendered in
+  a monospace face there and nowhere else; it is now scoped to that page's own
+  `.env-page` wrapper.
+- `.stat-label` was defined unscoped by three pages with three different
+  treatments. Each is now scoped under the wrapper it already lives in
+  (`.stat-box`, `.stat-item`, `.stat-card`) — a specificity change only.
+
+### Changed
+- **Every page header now comes from `components/page_header.html`.** Four
+  systems previously coexisted: the shared component (59 pages), the shared
+  hero (8), a hand-rolled `.page-header` on System Health, a bespoke
+  `.workflow-hero` on the Broadcast Builder, and ~13 pages with no standard
+  header at all that opened with a bare `<h1>` — themselves inconsistent
+  (`mb-4`, `h3 mb-1`, `editor-title`, or unclassed), so heading size and
+  spacing visibly changed as you moved around the UI. Converted: LED Sign
+  Control, VFD Display Control, Alert Statistics (which had a fifth system,
+  `.stats-page-header`), Alert Trail, Audio System Health, Audio Pipeline Test
+  Suite, Documentation Search, RBAC Permission Tree, search results, System
+  Health and the Broadcast Builder Console. Adoption is now 70 pages on the
+  standard header and 7 on the hero, with zero hand-rolled headers.
+  System Health's live platform pills and the Broadcast Builder's station-facts
+  strip ride in the component's actions slot, preserving their element IDs and
+  behaviour.
+- The empty-state icon on the Screens page was harmonised from 4rem/0.35
+  opacity to the 3rem/0.5 used by the other two pages sharing that treatment.
+- Deleted `templates/privacy.html`. The `/privacy` route renders
+  `PRIVACY_POLICY.md` through `_render_policy_page()`, so the template had been
+  unreachable.
+
 ## [2.124.0] - 2026-08-04 - CI runs the test suite; latent NameError crashes fixed
 
 ### Added

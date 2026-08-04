@@ -139,7 +139,7 @@
         line-height: 1.1;
     }
 
-    .stat-label {
+    .stat-card .stat-label {
         font-size: 1rem;
         font-weight: 600;
         color: var(--text-color);
@@ -252,22 +252,6 @@
         flex-direction: column;
         gap: 1rem;
     }
-
-    .spinner {
-        width: 40px;
-        height: 40px;
-        border: 3px solid var(--glass-border);
-        border-top-color: transparent;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-        background: var(--gradient-primary);
-        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-        -webkit-mask-composite: xor;
-        mask-composite: exclude;
-        padding: 3px;
-    }
-
     @keyframes spin {
         to { transform: rotate(360deg); }
     }

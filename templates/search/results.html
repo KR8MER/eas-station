@@ -3,11 +3,10 @@
 
 {% block content %}
 <div class="container py-4" style="max-width: 720px;">
-    <h1 class="h4 mb-3">
-        <i class="fas fa-magnifying-glass text-primary"></i>
-        Multiple matches for <code>{{ query }}</code>
-    </h1>
-    <p class="text-muted">Pick the alert you meant.</p>
+    {% set header_icon = 'fas fa-magnifying-glass' %}
+    {% set header_title = 'Multiple matches' %}
+    {% set header_subtitle %}Pick the alert you meant for <code>{{ query }}</code>.{% endset %}
+    {% include 'components/page_header.html' %}
 
     <div class="list-group mb-3">
         {% for match in matches %}

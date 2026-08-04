@@ -553,12 +553,5 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Simple toast notification fallback
-function showToast(message, type) {
-    if (typeof window.showToast === 'function') {
-        window.showToast(message, type);
-    } else {
-        alert(message);
-    }
-}
 </script>
 {% endblock %}

@@ -715,9 +715,6 @@ async function installTailscale() {
 
 // Toast helper (uses showToast from base template if available)
 if (typeof showToast === 'undefined') {
-    function showToast(message, type) {
-        alert((type === 'error' ? 'Error: ' : '') + message);
-    }
 }
 
 // Auto-load status on page load

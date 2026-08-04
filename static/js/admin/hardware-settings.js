@@ -1193,15 +1193,6 @@ document.addEventListener('DOMContentLoaded', function() {
         error:   'fa-circle-xmark',
     };
 
-    function escapeHtml(s) {
-        if (s === null || s === undefined) return '';
-        return String(s)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
 
     function renderActions(actions) {
         if (!actions || !actions.length) {

@@ -1,16 +1,14 @@
+{% set header_icon = 'fas fa-chart-bar' %}
+{% set header_title = 'Alert Statistics' %}
+{% set header_subtitle = 'Comprehensive analytics and insights' %}
+{% set header_actions %}
+    <a href="/analytics" class="btn btn-outline-light">
+        <i class="fas fa-chart-line me-1"></i>Advanced Analytics
+    </a>
+{% endset %}
+{% include 'components/page_header.html' %}
+
 <div class="container-fluid mt-3" id="statisticsDashboardRoot">
-    <!-- Page Header -->
-    <div class="stats-page-header">
-        <h1>
-            <i class="fas fa-chart-bar"></i> Alert Statistics
-            <small>Comprehensive analytics and insights</small>
-        </h1>
-        <div class="header-actions">
-            <a href="/analytics" class="btn">
-                <i class="fas fa-chart-line"></i> Advanced Analytics
-            </a>
-        </div>
-    </div>
 
     <!-- Sticky section quick-nav (populated by JS) -->
     <nav id="statsQuickNav" class="stats-quicknav" aria-label="Jump to section"></nav>
@@ -190,7 +188,7 @@
             </div>
             <div id="forwardingFunnelChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -263,7 +261,7 @@
             </div>
             <div id="alertTypesChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading chart...</div>
                 </div>
             </div>
@@ -275,7 +273,7 @@
             </div>
             <div id="severityChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading chart...</div>
                 </div>
             </div>
@@ -295,7 +293,7 @@
             </div>
             <div id="temporalHeatmapChart" style="height: 200px;">
                 <div class="loading-message" style="height: 160px;">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading heatmap...</div>
                 </div>
             </div>
@@ -307,7 +305,7 @@
             </div>
             <div id="hourlyLineChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -322,7 +320,7 @@
             </div>
             <div id="calendarHeatmap">
                 <div class="loading-message" style="height:160px;">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading calendar...</div>
                 </div>
             </div>
@@ -336,7 +334,7 @@
             </div>
             <div id="dayOfWeekChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -348,7 +346,7 @@
             </div>
             <div id="monthlyChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -362,7 +360,7 @@
             </div>
             <div id="statusChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -374,7 +372,7 @@
             </div>
             <div id="severityProfileChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -390,7 +388,7 @@
             </div>
             <div id="urgencyChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -401,7 +399,7 @@
             </div>
             <div id="certaintyChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -422,7 +420,7 @@
             </div>
             <div id="recentActivityChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -439,7 +437,7 @@
             </div>
             <div id="yearlyTrendChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -459,7 +457,7 @@
             </div>
             <div id="severityOverTimeChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -471,7 +469,7 @@
             </div>
             <div id="cumulativeAlertsChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -485,7 +483,7 @@
             </div>
             <div id="topEventsTrendChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -497,7 +495,7 @@
             </div>
             <div id="hourSeverityChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -511,7 +509,7 @@
             </div>
             <div id="leadTimeHistogramChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -523,7 +521,7 @@
             </div>
             <div id="yoyComparisonChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -543,7 +541,7 @@
             </div>
             <div id="affectedAreasChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -556,7 +554,7 @@
             </div>
             <div id="boundaryTypesChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -616,7 +614,7 @@
             </div>
             <div id="reliabilityGauge">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -630,7 +628,7 @@
             </div>
             <div id="durationChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -652,7 +650,7 @@
             </div>
             <div id="messageTypeChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -666,7 +664,7 @@
             </div>
             <div id="pollingTrendChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -723,7 +721,7 @@
             </div>
             <div id="relayActivationsChart">
                 <div class="loading-message">
-                    <div class="spinner"></div>
+                    <div class="spinner spinner-lg"></div>
                     <div>Loading...</div>
                 </div>
             </div>
@@ -817,7 +815,7 @@
 <!-- PDF generation overlay -->
 <div id="pdfExportOverlay" class="pdf-export-overlay" hidden>
     <div class="pdf-export-card">
-        <div class="spinner"></div>
+        <div class="spinner spinner-lg"></div>
         <div class="pdf-export-text">Generating PDF report…</div>
         <div class="pdf-export-subtext" id="pdfExportStatus">Preparing charts</div>
     </div>

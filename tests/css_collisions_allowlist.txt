@@ -1,0 +1,119 @@
+# Cross-page CSS class collisions — shrinking backlog
+#
+# Each class below is defined UNSCOPED (a bare `.foo { }` rule) inside the
+# page-local <style> block of two or more templates. Whichever page you are on
+# wins, so the same class name means different things in different places. That
+# is the mechanism by which this UI drifts apart.
+#
+# tests/test_frontend_consistency.py fails on any collision NOT listed here, so
+# new ones cannot be introduced. Entries here are pre-existing and are meant to
+# be removed over time by either:
+#   * scoping the rule under the page's own wrapper (e.g. `.gps-page .gps-chip`), or
+#   * promoting the shared design into static/css/styles.css and expressing the
+#     per-page difference as a modifier class.
+#
+# Do NOT add to this file to silence a collision you just introduced.
+#
+# The `.gps-*` block is the largest cluster: the GPS live panel was copy-pasted
+# across the GPS dashboard, Hardware Settings and System Health, and the three
+# copies have since diverged (no two rules are byte-identical).
+
+
+# templates/admin/certbot.html, templates/admin/icecast.html
+.btn-test
+
+# templates/analytics_dashboard.html, templates/stats/_styles.html
+.chart-container
+
+# templates/admin/zigbee.html, templates/diagnostics.html
+.check-icon
+
+# templates/admin/zigbee.html, templates/alert_detail.html
+.detail-label
+
+# templates/admin/network.html, templates/error.html
+.error-message
+
+# templates/admin/gps_dashboard.html, templates/admin/hardware_settings.html
+.gps-const-chip
+
+# templates/admin/hardware_settings.html, templates/system_health.html
+.gps-live-body
+
+# templates/admin/gps_dashboard.html, templates/admin/hardware_settings.html
+.gps-live-dot
+
+# templates/admin/gps_dashboard.html, templates/admin/hardware_settings.html
+.gps-nmea-controls
+
+# templates/admin/hardware_settings.html, templates/system_health.html
+.gps-sat-col
+
+# templates/admin/hardware_settings.html, templates/system_health.html
+.gps-sat-table
+
+# templates/admin/hardware_settings.html, templates/system_health.html
+.gps-sky-col
+
+# templates/admin/hardware_settings.html, templates/system_health.html
+.gps-snr-fill
+
+# templates/admin/hardware_settings.html, templates/system_health.html
+.gps-snr-track
+
+# templates/index.html, templates/stats/_styles.html
+.loading-message
+
+# templates/audio_monitoring.html, templates/system_health.html
+.metric-label
+
+# templates/analytics_dashboard.html, templates/audio_monitoring.html, templates/system_health.html
+.metric-value
+
+# templates/index.html, templates/partials/doc_page_styles.html
+.page-shell
+
+# templates/alert_detail.html, templates/index.html
+.popup-detail
+
+# templates/alert_detail.html, templates/index.html
+.popup-title
+
+# templates/led_control.html, templates/screens.html
+.preview-line
+
+# templates/led_control.html, templates/screens.html
+.priority-badge
+
+# templates/admin/hardware_settings.html, templates/system_health.html
+.snr-dot
+
+# templates/admin/hardware_settings.html, templates/system_health.html
+.snr-legend
+
+# templates/admin/certbot.html, templates/admin/tailscale.html
+.spinner-border
+
+# templates/audio/health_dashboard.html, templates/index.html
+.stat-box
+
+# templates/admin/icecast.html, templates/admin/intersections.html, templates/admin/operations.html
+.stat-item
+
+# templates/admin/intersections.html, templates/index.html, templates/stats/_styles.html
+.stat-number
+
+# templates/admin/alert_feeds.html, templates/admin/tailscale.html
+.status-grid
+
+# templates/admin/alert_feeds.html, templates/admin/tailscale.html
+.status-item
+
+# templates/admin/alert_feeds.html, templates/admin/tailscale.html
+.status-label
+
+# templates/admin/alert_feeds.html, templates/admin/tailscale.html
+.status-value
+
+# templates/led_control.html, templates/version.html
+.tab-content

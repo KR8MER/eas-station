@@ -135,15 +135,6 @@
 let currentDays = 7;
 
 // Helper function to escape HTML to prevent XSS attacks
-function escapeHtml(unsafe) {
-    if (!unsafe) return '';
-    return String(unsafe)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
 
 document.addEventListener('DOMContentLoaded', function() {
     loadStatistics(7);

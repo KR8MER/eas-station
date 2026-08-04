@@ -96,16 +96,7 @@
         .section-icon {
             color: var(--primary-color);
             margin-right: 8px;
-        }
-        .status-badge {
-            font-size: 0.8em;
-            /* These badges are Bootstrap .badge pills; keep Bootstrap's
-               sizing and casing over the shared .status-badge defaults. */
-            padding: 0.35em 0.65em;
-            font-weight: 700;
-            text-transform: none;
-        }
-        /* Quick stats card icon accent */
+        }        /* Quick stats card icon accent */
         .quick-stat-icon {
             width: 48px;
             height: 48px;
@@ -214,22 +205,14 @@
             font-family: 'Roboto Mono', 'SFMono-Regular', 'Courier New', monospace;
             font-size: 0.75rem;
             font-weight: 400;
-        }
-        .table {
-            color: var(--text-color);
-        }
-        .table-hover tbody tr:hover {
+        }        .table-hover tbody tr:hover {
             background-color: var(--bg-color);
         }
         .health-card h5,
         .health-card h6 {
             font-weight: 700;
             letter-spacing: 0.01em;
-        }
-        .alert {
-            border-radius: var(--radius-md);
-        }
-        .badge-showcase { 
+        }        .badge-showcase { 
             display: flex;
             flex-wrap: wrap;
             gap: 0.5rem;
@@ -676,36 +659,22 @@
         /* App-bar style header — keeps the .page-header gradient hero
            but adopts the gps-dash chrome (title / pills / live-dot /
            controls all inline on a single row). */
-        .system-health-root .health-dash-header {
-            padding-top: 14px;
-            padding-bottom: 14px;
-        }
-        .system-health-root .health-dash-header .header-flex {
+        /* The title/icon/subtitle now come from the shared
+           components/page_header.html, so this page no longer styles them.
+           What remains is the pill strip that rides in the component's
+           actions slot. */
+        .system-health-root .health-dash-pills {
             display: flex; flex-wrap: wrap;
             gap: 10px 14px; align-items: center;
         }
-        .system-health-root .health-dash-header .title {
-            font-size: 1.0rem; font-weight: 700;
-            letter-spacing: 0.10em; text-transform: uppercase;
-            display: inline-flex; align-items: center; gap: 10px;
-            color: #fff;
-        }
-        .system-health-root .health-dash-header .title i { font-size: 1.1rem; }
-        .system-health-root .health-dash-header .subtitle {
-            color: rgba(255,255,255,0.82);
-            font-size: 0.78rem;
-            margin: 0; padding-left: 4px;
-        }
-        .system-health-root .health-dash-header .node {
-            color: rgba(255,255,255,0.78);
-            font-family: var(--font-mono, ui-monospace, monospace);
-            font-size: 0.82rem;
-        }
-        .system-health-root .health-dash-header .spacer { flex: 1 1 auto; }
-        .system-health-root .health-dash-header select.form-select-sm { width: auto; }
-        .system-health-root .health-dash-header .distro-logo {
+        .system-health-root .health-dash-pills select.form-select-sm { width: auto; }
+        .system-health-root .health-dash-pills .distro-logo {
             height: 36px; width: auto; margin: 0;
             filter: brightness(1.1) drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+        }
+        /* The hostname sits in the component's subtitle slot. */
+        .system-health-root .page-header .page-subtitle {
+            font-family: var(--font-mono, ui-monospace, monospace);
         }
 
         /* Pills (platform, kernel, etc.) — sit inside the gradient
@@ -919,22 +888,21 @@
 {% block content %}
 <div class="system-health-root">
 {# ============================================================
-   APPLIANCE-STYLE HEADER — title, host id, platform pills, live
-   data heartbeat, and the units toggle. Mirrors the GNSS / Time
-   appliance dashboard so the System Health page reads as part
-   of the same operator UI rather than a standalone Bootstrap
-   admin page.
+   APPLIANCE-STYLE HEADER — the shared page-header component
+   carries the title/icon/subtitle; the live platform pills, data
+   heartbeat and units toggle ride in the component's actions
+   slot. Previously this page hand-rolled its own .page-header
+   markup, which is why its title rendered at a different size
+   from every other page.
    ============================================================ #}
-<div class="page-header health-dash-header" role="region" aria-label="System health header">
-    <div class="container-fluid">
-        <div class="header-flex">
+{% set header_icon = 'fas fa-heartbeat' %}
+{% set header_title = 'System Health Monitor' %}
+{% set header_subtitle %}Host: <span id="health-host-name">{{ system.hostname or '—' }}</span>{% endset %}
+{% set header_actions %}
+        <div class="health-dash-pills">
             {% if distro_logo_url %}
             <img src="{{ distro_logo_url }}" alt="Distribution Logo" class="distro-logo" onerror="this.style.display='none'">
             {% endif %}
-            <span class="title">
-                <i class="fas fa-heartbeat"></i> System Health Monitor
-            </span>
-            <span class="node">Host:&nbsp;<span id="health-host-name">{{ system.hostname or '—' }}</span></span>
             {% if system.os_pretty_name or system.distribution %}
             <span class="health-pill ok" id="health-platform-pill" title="Operating system"><i class="fas fa-server"></i>
                 {{ system.os_pretty_name or system.distribution }}
@@ -951,7 +919,6 @@
             </span>
             {% endif %}
             <span class="health-live-dot" id="health-live-dot" title="Last data received"></span>
-            <span class="spacer"></span>
             <details class="eas-units-disclosure" id="sys-health-units-disclosure">
                 <summary class="btn btn-sm btn-outline-light" title="Display units (lat/lon, altitude, speed, distance)">
                     <i class="fas fa-ruler"></i> Units
@@ -959,8 +926,9 @@
                 <div class="eas-units-popover" id="sys-health-units-panel"></div>
             </details>
         </div>
-    </div>
-</div>
+{% endset %}
+{% include 'components/page_header.html' %}
+
 <div class="container-fluid mt-3">
     {% if shields_badges %}
     <div class="badge-showcase mb-3">
@@ -1738,7 +1706,7 @@
                                             <small class="text-muted d-block">{{ service.sub_state }}</small>
                                             {% endif %}
                                         </div>
-                                        <span class="badge bg-{{ badge_class }} status-badge">{{ status_label }}</span>
+                                        <span class="badge bg-{{ badge_class }} status-badge status-badge-plain">{{ status_label }}</span>
                                     </div>
                                 {% endfor %}
                             {% endif %}
@@ -1759,7 +1727,7 @@
                                     {% endif %}
                                     <div class="d-flex justify-content-between align-items-center mb-1">
                                         <span class="metric-label">{{ service.display_name or service.name }}</span>
-                                        <span class="badge bg-{{ badge_class }} status-badge">{{ status_label }}</span>
+                                        <span class="badge bg-{{ badge_class }} status-badge status-badge-plain">{{ status_label }}</span>
                                     </div>
                                 {% endfor %}
                             {% endif %}
@@ -1947,11 +1915,11 @@
                                         </td>
                                         <td>
                                             {% if status_up is sameas(true) %}
-                                                <span class="badge bg-success status-badge">UP</span>
+                                                <span class="badge bg-success status-badge status-badge-plain">UP</span>
                                             {% elif status_up is sameas(false) %}
-                                                <span class="badge bg-secondary status-badge">DOWN</span>
+                                                <span class="badge bg-secondary status-badge status-badge-plain">DOWN</span>
                                             {% else %}
-                                                <span class="badge bg-secondary status-badge">Unknown</span>
+                                                <span class="badge bg-secondary status-badge status-badge-plain">Unknown</span>
                                             {% endif %}
                                         </td>
                                     </tr>
@@ -1969,7 +1937,7 @@
                                     <div class="d-flex justify-content-between align-items-center">
                                         <span class="metric-label">{{ interface.name or 'Unknown' }}</span>
                                         {% set status_class = 'success' if interface.is_up else 'secondary' %}
-                                        <span class="badge bg-{{ status_class }} status-badge">{{ 'UP' if interface.is_up else 'DOWN' }}</span>
+                                        <span class="badge bg-{{ status_class }} status-badge status-badge-plain">{{ 'UP' if interface.is_up else 'DOWN' }}</span>
                                     </div>
                                     {% if interface.addresses %}
                                         {% for addr in interface.addresses[:2] %}
@@ -2121,7 +2089,7 @@
                                                 {% if device.model %}<div class="text-muted" style="font-size: 0.85rem;">{{ device.model }}</div>{% endif %}
                                                 {% if device.serial %}<div class="text-muted" style="font-size: 0.8rem;">S/N: {{ device.serial }}</div>{% endif %}
                                             </div>
-                                            <span class="badge bg-{{ badge_class }} smart-status-badge px-3 py-2" style="font-size: 0.9rem;">{{ status_label }}</span>
+                                            <span class="badge bg-{{ badge_class }} smart-status-badge status-badge-plain px-3 py-2" style="font-size: 0.9rem;">{{ status_label }}</span>
                                         </div>
 
                                         {% if device.error %}
@@ -2832,17 +2800,6 @@
         const numberFormatter = new Intl.NumberFormat();
         let lastUpdatedTime = null;
 
-        function escapeHtml(value) {
-            if (value === null || value === undefined) {
-                return '';
-            }
-            return String(value)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;');
-        }
 
         function toNumber(value, fallback = 0) {
             const numberValue = Number(value);
@@ -3620,7 +3577,7 @@
                                 ${d.model ? `<div class="text-muted" style="font-size:0.85rem">${escapeHtml(d.model)}</div>` : ''}
                                 ${d.serial ? `<div class="text-muted" style="font-size:0.8rem">S/N: ${escapeHtml(d.serial)}</div>` : ''}
                             </div>
-                            <span class="badge bg-${badgeClass} smart-status-badge px-3 py-2" style="font-size:0.9rem">${statusLabel}</span>
+                            <span class="badge bg-${badgeClass} smart-status-badge status-badge-plain px-3 py-2" style="font-size:0.9rem">${statusLabel}</span>
                         </div>
                         ${errorAlert}
                         <div class="row">
@@ -3812,7 +3769,7 @@
                             <span class="metric-label">${escapeHtml(displayName)}</span>
                             ${subState}
                         </div>
-                        <span class="badge bg-${badge} status-badge">${escapeHtml(label)}</span>
+                        <span class="badge bg-${badge} status-badge status-badge-plain">${escapeHtml(label)}</span>
                     </div>
                 `;
             };
@@ -3924,7 +3881,7 @@
                     return `
                         <tr>
                             <td><strong>${escapeHtml(displayName)}</strong></td>
-                            <td><span class="badge bg-${badge} status-badge">${escapeHtml(label)}</span></td>
+                            <td><span class="badge bg-${badge} status-badge status-badge-plain">${escapeHtml(label)}</span></td>
                             <td><span class="metric-value">${escapeHtml(subState)}</span></td>
                             <td><span class="badge bg-info">${escapeHtml(category)}</span></td>
                         </tr>
@@ -4143,11 +4100,11 @@
                     status = ifaceInfo.is_up;
                 }
 
-                let statusBadge = '<span class="badge bg-secondary status-badge">Unknown</span>';
+                let statusBadge = '<span class="badge bg-secondary status-badge status-badge-plain">Unknown</span>';
                 if (status === true) {
-                    statusBadge = '<span class="badge bg-success status-badge">UP</span>';
+                    statusBadge = '<span class="badge bg-success status-badge status-badge-plain">UP</span>';
                 } else if (status === false) {
-                    statusBadge = '<span class="badge bg-secondary status-badge">DOWN</span>';
+                    statusBadge = '<span class="badge bg-secondary status-badge status-badge-plain">DOWN</span>';
                 }
 
                 return `
@@ -4184,7 +4141,7 @@
                     <div class="mb-2">
                         <div class="d-flex justify-content-between align-items-center">
                             <span class="metric-label">${name}</span>
-                            <span class="badge bg-${statusClass} status-badge">${iface.is_up ? 'UP' : 'DOWN'}</span>
+                            <span class="badge bg-${statusClass} status-badge status-badge-plain">${iface.is_up ? 'UP' : 'DOWN'}</span>
                         </div>
                         ${addressLines}
                     </div>

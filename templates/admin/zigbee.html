@@ -162,19 +162,6 @@
     .detail-value {
         font-family: 'Courier New', monospace;
     }
-
-    .empty-state {
-        text-align: center;
-        padding: 3rem 1rem;
-        color: var(--text-secondary);
-    }
-
-    .empty-state i {
-        font-size: 3rem;
-        margin-bottom: 1rem;
-        opacity: 0.5;
-    }
-
     .config-table {
         width: 100%;
         font-size: 0.875rem;
@@ -296,12 +283,6 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/core/api.js') }}"></script>
 <script>
-function escapeHtml(value) {
-    const s = (value == null) ? '' : String(value);
-    return s.replace(/[&<>"']/g, ch => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    }[ch]));
-}
 
 const ZigbeeMonitor = {
     refreshInterval: null,
@@ -505,7 +486,7 @@ const ZigbeeMonitor = {
         } catch (error) {
             console.error('Failed to load devices:', error);
             document.getElementById('devices-list').innerHTML = `
-                <li class="empty-state">
+                <li class="empty-state empty-state-plain">
                     <i class="fas fa-exclamation-triangle"></i>
                     <p>Failed to load devices</p>
                 </li>
@@ -521,7 +502,7 @@ const ZigbeeMonitor = {
 
         if (!devices || devices.length === 0) {
             list.innerHTML = `
-                <li class="empty-state">
+                <li class="empty-state empty-state-plain">
                     <i class="fas fa-network-wired"></i>
                     <p>No devices discovered yet</p>
                     <small>Devices will appear here once they join the Zigbee network</small>

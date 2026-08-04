@@ -139,17 +139,43 @@
     }
 
     /**
-     * Escape HTML special characters to prevent XSS
-     * @param {string} text - Text to escape
-     * @returns {string} Escaped text
+     * Escape HTML special characters to prevent XSS.
+     *
+     * This is THE canonical implementation for the whole application — do not
+     * define a local copy in a template or another module. It is published as
+     * `window.escapeHtml` (as well as `EASUtils.escapeHtml`) precisely so that
+     * inline template scripts can call it directly.
+     *
+     * All five characters are escaped, including both quote styles. That
+     * matters: the previous implementation built a detached <div>, assigned
+     * textContent and read back innerHTML, which escapes `&`, `<` and `>` but
+     * leaves `"` and `'` untouched. That is safe for text nodes but NOT for
+     * attribute values, and this helper is routinely interpolated into
+     * attributes, e.g.
+     *
+     *     onclick="editProfile('${escapeHtml(name)}')"
+     *     placeholder="${escapeHtml(fieldDef.placeholder)}"
+     *
+     * where an unescaped quote closes the attribute early.
+     *
+     * @param {*} value - Value to escape; null/undefined become ''
+     * @returns {string} Escaped text, safe in both text and quoted-attribute contexts
      */
-    function escapeHtml(text) {
-        if (text === null || text === undefined) {
+    var HTML_ESCAPES = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    };
+
+    function escapeHtml(value) {
+        if (value === null || value === undefined) {
             return '';
         }
-        const div = document.createElement('div');
-        div.textContent = String(text);
-        return div.innerHTML;
+        return String(value).replace(/[&<>"']/g, function (ch) {
+            return HTML_ESCAPES[ch];
+        });
     }
 
     /**
@@ -217,6 +243,10 @@
     // Export functions to window
     window.exportToExcel = exportToExcel;
     window.printPage = printPage;
+    // Published as a bare global on purpose. It was previously reachable only
+    // as EASUtils.escapeHtml, which is why 22 templates each grew their own
+    // local copy — 16 behaviourally different implementations between them.
+    window.escapeHtml = escapeHtml;
     window.EASUtils = {
         updateCurrentTime: updateCurrentTime,
         exportToExcel: exportToExcel,

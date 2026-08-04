@@ -204,15 +204,6 @@
 
 <script>
 // Helper function to escape HTML
-function escapeHtml(unsafe) {
-    if (!unsafe) return '';
-    return String(unsafe)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
 
 // Format timestamps
 function formatTimestamp(timestamp) {

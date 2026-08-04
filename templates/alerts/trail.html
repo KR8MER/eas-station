@@ -13,28 +13,26 @@
         </ol>
     </nav>
 
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 gap-2">
-        <div>
-            <h1 class="h3 mb-1"><i class="fas fa-route text-primary"></i> Alert Trail</h1>
-            <p class="text-muted mb-0 small">
-                Every event keyed to correlation ID
-                <code class="text-body">{{ identifier }}</code>
-                · Timezone: <span class="badge bg-secondary">{{ timezone_name }}</span>
-            </p>
-        </div>
-        <div class="btn-group btn-group-sm" role="group">
-            {% if payload.alert %}
-            <a href="{{ url_for('api.alert_detail', alert_id=payload.alert.id) }}"
-               class="btn btn-outline-primary">
-                <i class="fas fa-eye"></i> Open alert detail
-            </a>
-            {% endif %}
-            <a href="{{ url_for('logs', type='all', alert=identifier) }}"
-               class="btn btn-outline-secondary">
-                <i class="fas fa-file-lines"></i> Filter raw logs
-            </a>
-        </div>
-    </div>
+    {% set header_icon = 'fas fa-route' %}
+    {% set header_title = 'Alert Trail' %}
+    {% set header_subtitle %}
+        Every event keyed to correlation ID
+        <code class="text-body">{{ identifier }}</code>
+        · Timezone: {{ timezone_name }}
+    {% endset %}
+    {% set header_actions %}
+        {% if payload.alert %}
+        <a href="{{ url_for('api.alert_detail', alert_id=payload.alert.id) }}"
+           class="btn btn-outline-light">
+            <i class="fas fa-eye me-1"></i>Open alert detail
+        </a>
+        {% endif %}
+        <a href="{{ url_for('logs', type='all', alert=identifier) }}"
+           class="btn btn-outline-light">
+            <i class="fas fa-file-lines me-1"></i>Filter raw logs
+        </a>
+    {% endset %}
+    {% include 'components/page_header.html' %}
 
     {% if not has_any_signal %}
     <!-- Empty state ─────────────────────────────────────────────── -->

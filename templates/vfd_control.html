@@ -3,13 +3,17 @@
 {% block title %}VFD Display Control{% endblock %}
 
 {% block content %}
+{% set header_icon = 'fas fa-tv' %}
+{% set header_title = 'VFD Display Control' %}
+{% set header_subtitle = 'Send text and images to the Noritake vacuum-fluorescent display' %}
+{% set header_actions %}
+    <span class="status-badge status-badge-plain {% if vfd_available %}success{% else %}secondary{% endif %}">
+        {% if vfd_available %}Connected{% else %}Disconnected{% endif %}
+    </span>
+{% endset %}
+{% include 'components/page_header.html' %}
+
 <div class="container-fluid mt-4">
-    <h1 class="mb-4">
-        <i class="fas fa-tv"></i> VFD Display Control
-        <span class="badge {% if vfd_available %}badge-success{% else %}badge-secondary{% endif %}">
-            {% if vfd_available %}Connected{% else %}Disconnected{% endif %}
-        </span>
-    </h1>
 
     {% if not vfd_available %}
     <div class="alert alert-warning">
@@ -350,12 +354,6 @@ if (typeof jQuery === 'undefined') {
 
 <script>
 // Toast helper
-function showToast(message, isSuccess = true) {
-    const toast = $('#statusToast');
-    $('#toastBody').text(message);
-    toast.find('.toast-header').removeClass('bg-success bg-danger').addClass(isSuccess ? 'bg-success' : 'bg-danger');
-    toast.toast('show');
-}
 
 // Text form submission
 $('#textForm').on('submit', function(e) {
@@ -365,7 +363,7 @@ $('#textForm').on('submit', function(e) {
     const y = parseInt($('#textY').val());
 
     if (!text) {
-        showToast('Please enter text to display', false);
+        showToast('Please enter text to display', 'error');
         return;
     }
 
@@ -376,13 +374,13 @@ $('#textForm').on('submit', function(e) {
         data: JSON.stringify({ text, x, y }),
         success: function(response) {
             if (response.success) {
-                showToast(response.message, true);
+                showToast(response.message, 'success');
             } else {
-                showToast(response.error || 'Error displaying text', false);
+                showToast(response.error || 'Error displaying text', 'error');
             }
         },
         error: function() {
-            showToast('Failed to communicate with VFD', false);
+            showToast('Failed to communicate with VFD', 'error');
         }
     });
 });
@@ -394,7 +392,7 @@ $('#imageForm').on('submit', function(e) {
     const fileInput = $('#imageFile')[0];
 
     if (!fileInput.files.length) {
-        showToast('Please select an image file', false);
+        showToast('Please select an image file', 'error');
         return;
     }
 
@@ -410,13 +408,13 @@ $('#imageForm').on('submit', function(e) {
         contentType: false,
         success: function(response) {
             if (response.success) {
-                showToast(response.message, true);
+                showToast(response.message, 'success');
             } else {
-                showToast(response.error || 'Error displaying image', false);
+                showToast(response.error || 'Error displaying image', 'error');
             }
         },
         error: function() {
-            showToast('Failed to upload image', false);
+            showToast('Failed to upload image', 'error');
         }
     });
 });
@@ -435,7 +433,7 @@ $('#lineForm').on('submit', function(e) {
             y2: parseInt($('#lineY2').val())
         }),
         success: function(response) {
-            showToast(response.success ? response.message : response.error, response.success);
+            showToast(response.success ? response.message : response.error, response.success ? 'success' : 'error');
         }
     });
 });
@@ -455,7 +453,7 @@ $('#rectangleForm').on('submit', function(e) {
             filled: $('#rectFilled').is(':checked')
         }),
         success: function(response) {
-            showToast(response.success ? response.message : response.error, response.success);
+            showToast(response.success ? response.message : response.error, response.success ? 'success' : 'error');
         }
     });
 });
@@ -475,7 +473,7 @@ $('#progressForm').on('submit', function(e) {
             progress: parseInt($('#progressValue').val()) / 100.0
         }),
         success: function(response) {
-            showToast(response.success ? response.message : response.error, response.success);
+            showToast(response.success ? response.message : response.error, response.success ? 'success' : 'error');
         }
     });
 });
@@ -496,7 +494,7 @@ $('#brightnessSlider').on('change', function() {
         contentType: 'application/json',
         data: JSON.stringify({ level }),
         success: function(response) {
-            showToast(response.success ? response.message : response.error, response.success);
+            showToast(response.success ? response.message : response.error, response.success ? 'success' : 'error');
         }
     });
 });
@@ -512,7 +510,7 @@ $('#clearButton').on('click', function() {
             url: '/api/vfd/clear',
             method: 'POST',
             success: function(response) {
-                showToast(response.success ? response.message : response.error, response.success);
+                showToast(response.success ? response.message : response.error, response.success ? 'success' : 'error');
             }
         });
     }
