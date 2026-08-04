@@ -196,6 +196,94 @@ class EASMessage(db.Model):
             "metadata": dict(self.metadata_payload or {}),
         }
 
+    # ------------------------------------------------------------------
+    # List views must not load whole EASMessage rows.
+    #
+    # ``to_dict`` reports each audio blob only as a "is it populated?"
+    # boolean, but reading ``self.audio_data is not None`` on an ORM
+    # instance transfers the entire blob from the database first. With six
+    # LargeBinary columns of roughly a megabyte each, a 500-row listing
+    # moves gigabytes to compute a handful of booleans -- enough to get the
+    # worker OOM-killed, which reaches the browser as a 502 gateway error.
+    #
+    # ``summary_query`` pushes those NULL tests into SQL, and
+    # ``summary_to_dict`` rebuilds the exact same dict from the resulting
+    # row. Use this pair anywhere more than one message is listed; reserve
+    # ``to_dict`` for single-row views that genuinely need the audio.
+    # ------------------------------------------------------------------
+
+    #: Every LargeBinary column on this model.
+    AUDIO_BLOB_COLUMNS = (
+        "audio_data",
+        "eom_audio_data",
+        "same_audio_data",
+        "attention_audio_data",
+        "tts_audio_data",
+        "buffer_audio_data",
+    )
+
+    @classmethod
+    def without_audio(cls):
+        """Query this model with all six audio blobs deferred.
+
+        Use this when a view needs whole ORM instances (to render many
+        attributes, or to hand to code that expects a model object) but
+        never reads the audio. Where only ``to_dict``-shaped data is
+        needed, prefer ``summary_query`` -- it also skips the blobs *and*
+        answers the has-audio questions in SQL.
+        """
+        from sqlalchemy.orm import defer
+
+        return cls.query.options(
+            *(defer(getattr(cls, name)) for name in cls.AUDIO_BLOB_COLUMNS)
+        )
+
+    @classmethod
+    def summary_query(cls):
+        """Return a query selecting everything ``to_dict`` needs, minus blobs."""
+        return cls.query.with_entities(
+            cls.id,
+            cls.cap_alert_id,
+            cls.alert_identifier,
+            cls.same_header,
+            cls.audio_filename,
+            cls.text_filename,
+            cls.tts_warning,
+            cls.tts_provider,
+            cls.text_payload,
+            cls.metadata_payload,
+            cls.created_at,
+            cls.audio_data.isnot(None).label("has_audio_blob"),
+            cls.eom_audio_data.isnot(None).label("has_eom_blob"),
+            cls.same_audio_data.isnot(None).label("has_same_audio"),
+            cls.attention_audio_data.isnot(None).label("has_attention_audio"),
+            cls.tts_audio_data.isnot(None).label("has_tts_audio"),
+            cls.buffer_audio_data.isnot(None).label("has_buffer_audio"),
+        )
+
+    @staticmethod
+    def summary_to_dict(row) -> Dict[str, Any]:
+        """Build the ``to_dict`` payload from a ``summary_query`` row."""
+        return {
+            "id": row.id,
+            "cap_alert_id": row.cap_alert_id,
+            "alert_identifier": row.alert_identifier,
+            "same_header": row.same_header,
+            "audio_filename": row.audio_filename,
+            "text_filename": row.text_filename,
+            "has_audio_blob": row.has_audio_blob,
+            "has_eom_blob": row.has_eom_blob,
+            "has_same_audio": row.has_same_audio,
+            "has_attention_audio": row.has_attention_audio,
+            "has_tts_audio": row.has_tts_audio,
+            "has_buffer_audio": row.has_buffer_audio,
+            "has_text_payload": bool(row.text_payload),
+            "tts_warning": row.tts_warning,
+            "tts_provider": row.tts_provider,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "metadata": dict(row.metadata_payload or {}),
+        }
+
 
 class EASDecodedAudio(db.Model):
     __tablename__ = "eas_decoded_audio"
@@ -353,6 +441,36 @@ class ManualEASActivation(db.Model):
     # System-level pre/post-alert signal audio (bell, beep, QC-II, DTMF, MDC1200)
     pre_chime_audio_data = db.Column(db.LargeBinary)
     post_chime_audio_data = db.Column(db.LargeBinary)
+
+    #: Every LargeBinary column on this model, for the deferring helper below.
+    AUDIO_BLOB_COLUMNS = (
+        "composite_audio_data",
+        "same_audio_data",
+        "attention_audio_data",
+        "tts_audio_data",
+        "eom_audio_data",
+        "narration_upload_audio_data",
+        "pre_alert_audio_data",
+        "post_alert_audio_data",
+        "pre_chime_audio_data",
+        "post_chime_audio_data",
+    )
+
+    @classmethod
+    def without_audio(cls):
+        """Query this model with all ten audio blobs deferred.
+
+        List views read only the small scalar columns, but a plain query
+        loads every LargeBinary column too -- ten of them, each up to a
+        megabyte. A 500-row listing therefore moved gigabytes of audio that
+        nothing rendered. Use this for any multi-row query; a deferred
+        column still loads on demand if some caller does need it.
+        """
+        from sqlalchemy.orm import defer
+
+        return cls.query.options(
+            *(defer(getattr(cls, name)) for name in cls.AUDIO_BLOB_COLUMNS)
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         return {

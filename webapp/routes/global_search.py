@@ -87,7 +87,8 @@ def _partial_identifier_matches(query: str, limit: int = 10):
     # Also try the EASMessage alert_identifier column to surface
     # OTA-derived correlation IDs.
     eas_rows = (
-        EASMessage.query
+        # without_audio(): search only reads alert_identifier.
+        EASMessage.without_audio()
         .filter(EASMessage.alert_identifier.ilike(like))
         .order_by(EASMessage.created_at.desc())
         .limit(limit)

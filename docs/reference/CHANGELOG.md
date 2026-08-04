@@ -8,6 +8,98 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.128.2] - 2026-08-04 - Stop list views from loading audio blobs
+
+Follow-up sweep after the FCC reports 502 (2.128.1). The same defect —
+loading whole ORM rows when only small columns are rendered — was present
+across the rest of the logs and audio pages. Several were worse than the
+bug originally reported.
+
+### Fixed
+- **`/logs` detail tabs loaded every audio blob to compute a checkbox.**
+  The EAS Messages, Decoded Audio, Manual Activations and Received Alerts
+  tabs each loaded whole rows, in most cases only to evaluate
+  `x_audio_data is not None`. Measured on 100 seeded rows carrying 1 MB
+  captures (`limit` accepts up to 500):
+
+  | Tab | Before | After |
+  |---|---|---|
+  | Decoded Audio (7 blobs/row) | 12.5 s, 2119 MiB | 0.02 s, ~0 MiB |
+  | Manual Activations (10 blobs/row, none read) | 12.8 s, 2118 MiB | 0.02 s, ~0 MiB |
+  | EAS Messages (6 blobs/row) | 10.5 s, 1818 MiB | 0.02 s, ~0 MiB |
+  | Received Alerts | 0.7 s, 305 MiB | 0.02 s, ~0 MiB |
+  | All (default tab) | 1.8 s, 231 MiB | 0.09 s, ~0 MiB |
+
+  The blob-presence booleans are now SQL `IS NOT NULL` tests.
+
+- **`/audio` (audio history) was the worst case: 19.7 s and 2715 MiB.**
+  Three separate causes, all fixed: whole `EASMessage` rows (six blobs)
+  joined to whole `CAPAlert` rows (`raw_json` plus PostGIS `geom`); whole
+  `ManualEASActivation` rows (ten blobs); and a lazy `message.source_alerts`
+  relationship that fired one query per row, each loading a `ReceivedEASAlert`
+  with its captured WAV. Now 0.23 s and 2 MiB. The page's fetch window is
+  `offset + per_page`, so the old cost grew with every page turned.
+
+- **`/audio/received` listing** deferred `raw_audio_data` and
+  `full_alert_data`; only the detail view renders them.
+
+- **`/api/logs/recent`** — polled every 10 s by the live log viewer — no
+  longer loads the six `EASMessage` audio columns on every poll.
+
+- **Bulk exports loaded geometry they never wrote.** `/export/alerts`,
+  `/export/alerts/cap.xml`, `/export/alerts/csv` (limits of 50,000, 10,000
+  and 50,000 rows) and `/export/boundaries` (20,000) render only small
+  scalar columns, but each loaded every alert's PostGIS `geom`, `raw_json`,
+  `description` and `instruction` — or, for boundaries, the geometry itself.
+  All four now defer those columns; output is unchanged.
+
+- **The active-alert WebSocket push** (`alerts_update`, every 5 s) loaded 50
+  alerts' geometry and raw CAP payloads to send eight small fields — a
+  standing background load. Now deferred.
+
+- **Expired-alert sweeps** (`cleanup_expired()` plus the two admin
+  maintenance endpoints) loaded every expiring alert's geometry and raw CAP
+  payload only to set `status`/`updated_at`, or to hand the row to
+  `db.session.delete()`. Now deferred, which keeps the per-object ORM
+  delete and its cascade behaviour exactly as they were.
+
+- **Smaller listings** — the admin dashboard's recent-messages panel, the
+  EAS workflow page, and global search — deferred their `EASMessage` audio
+  columns too.
+
+- **EAS message purge loaded every blob it was about to delete.** Purging
+  by "older than N days" read all six audio columns of every doomed row.
+  Now consolidated in `purge_eas_messages()`, which selects only the on-disk
+  filenames, clears the dependent `received_eas_alerts.generated_message_id`
+  reference the previous per-object delete relied on SQLAlchemy's cascade
+  for, and deletes in batches of 1000 to stay under Postgres' bound-parameter
+  limit. Measured on 150 messages: 0 MiB, down from ~900 MB.
+
+- **Manual activation purge** had the same shape — it reads only `id` and
+  `storage_path` but loaded all ten audio columns of every doomed row. The
+  blobs are now deferred, keeping the per-object `db.session.delete()` and
+  its fail-closed audit ordering exactly as they were. Measured on 120
+  activations: 0 MiB, down from ~720 MB.
+
+### Added
+- `EASMessage.summary_query()` / `summary_to_dict()`, plus
+  `EASMessage.without_audio()` and `ManualEASActivation.without_audio()` —
+  shared helpers so list views have an obvious correct path.
+  `summary_to_dict()` returns exactly the same payload as `to_dict()`;
+  `without_audio()` is for views that need whole ORM instances but no audio.
+- `tests/test_blob_free_list_views.py` — pins the query shapes and asserts
+  the blob-column lists stay complete, so a newly added audio column cannot
+  silently stop being deferred.
+
+### Notes
+- Every changed endpoint was diffed before and after against seeded data:
+  all 13 responses are byte-identical apart from the CSRF token and
+  `/api/logs/recent`'s own generation timestamp.
+- `webapp/admin/audio.py` is dead code — the `webapp/admin/audio/` package
+  shadows it, so the module is never imported. It is a stale copy of the
+  live `history.py`/`received.py` routes and was left untouched; it should
+  be removed or renamed per the `_old` convention in a separate change.
+
 ## [2.128.1] - 2026-08-04 - Fix gateway error on the FCC reports page
 
 ### Fixed

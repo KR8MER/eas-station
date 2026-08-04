@@ -156,6 +156,7 @@ from app_core.boundaries import (
 )
 from app_core.cache import init_cache, cache
 from app_core.extensions import db
+from sqlalchemy.orm import defer
 from app_core.led import (
     LED_AVAILABLE,
     ensure_led_tables,
@@ -1797,7 +1798,15 @@ def cleanup_expired():
     """Mark expired alerts as expired (safe cleanup)"""
     try:
         now = utc_now()
-        expired_alerts = CAPAlert.query.filter(
+        # Only status and updated_at are written, so the geometry and raw
+        # CAP payload of every expiring alert are dead weight here.
+        expired_alerts = CAPAlert.query.options(
+            defer(CAPAlert.geom),
+            defer(CAPAlert.raw_json),
+            defer(CAPAlert.certificate_info),
+            defer(CAPAlert.description),
+            defer(CAPAlert.instruction),
+        ).filter(
             CAPAlert.expires < now,
             CAPAlert.status != 'Expired'
         ).all()

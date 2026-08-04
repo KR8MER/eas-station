@@ -477,6 +477,54 @@ def remove_eas_files(message) -> None:
             continue
 
 
+# Chunk size for the IN () clauses used when purging. Postgres caps a
+# statement at 65535 bound parameters, so a large purge must be batched.
+PURGE_CHUNK = 1000
+
+
+def purge_eas_messages(query) -> List[int]:
+    """Delete the EASMessage rows matched by ``query`` and their disk files.
+
+    ``query`` is an EASMessage query carrying the caller's selection
+    criteria; it is narrowed to the columns needed for cleanup rather than
+    loaded whole. Whole rows would drag in six LargeBinary audio columns
+    per message -- gigabytes for an "older than N days" purge, all of it
+    read only to be thrown away.
+
+    Returns the deleted IDs.
+    """
+    doomed = query.with_entities(
+        EASMessage.id,
+        EASMessage.audio_filename,
+        EASMessage.text_filename,
+        EASMessage.metadata_payload,
+    ).all()
+    if not doomed:
+        return []
+
+    deleted_ids = [row.id for row in doomed]
+    for row in doomed:
+        remove_eas_files(row)
+
+    # received_eas_alerts.generated_message_id has no ON DELETE rule, so the
+    # database rejects the delete while a reference survives. The previous
+    # per-object db.session.delete() relied on SQLAlchemy's default cascade
+    # to null it out; a set-based delete has to do that explicitly.
+    for offset in range(0, len(deleted_ids), PURGE_CHUNK):
+        chunk = deleted_ids[offset:offset + PURGE_CHUNK]
+        ReceivedEASAlert.query.filter(
+            ReceivedEASAlert.generated_message_id.in_(chunk)
+        ).update(
+            {ReceivedEASAlert.generated_message_id: None},
+            synchronize_session=False,
+        )
+        EASMessage.query.filter(EASMessage.id.in_(chunk)).delete(
+            synchronize_session=False
+        )
+
+    return deleted_ids
+
+
 def ensure_eas_audio_columns(logger) -> bool:
     """Ensure blob columns exist for caching generated audio payloads."""
 

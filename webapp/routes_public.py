@@ -1658,9 +1658,21 @@ def register(app: Flask, logger) -> None:
                 db.session.rollback()
                 route_logger.warning("Failed to load GPIO logs: %s", e)
 
-            # EAS Messages
+            # EAS Messages (column-scoped: six audio blobs go unread here)
             try:
-                for log in EASMessage.query.order_by(EASMessage.created_at.desc()).limit(logs_per_category).all():
+                eas_message_rows = (
+                    EASMessage.query
+                    .with_entities(
+                        EASMessage.created_at,
+                        EASMessage.same_header,
+                        EASMessage.tts_provider,
+                        EASMessage.audio_filename,
+                    )
+                    .order_by(EASMessage.created_at.desc())
+                    .limit(logs_per_category)
+                    .all()
+                )
+                for log in eas_message_rows:
                     all_logs.append({
                         'timestamp': log.created_at,
                         'level': 'INFO',
@@ -1676,9 +1688,21 @@ def register(app: Flask, logger) -> None:
                 db.session.rollback()
                 route_logger.warning("Failed to load EAS messages: %s", e)
 
-            # Manual Activations
+            # Manual Activations (column-scoped: ten audio blobs go unread)
             try:
-                for log in ManualEASActivation.query.order_by(ManualEASActivation.created_at.desc()).limit(logs_per_category).all():
+                manual_rows = (
+                    ManualEASActivation.query
+                    .with_entities(
+                        ManualEASActivation.created_at,
+                        ManualEASActivation.event_name,
+                        ManualEASActivation.event_code,
+                        ManualEASActivation.status,
+                    )
+                    .order_by(ManualEASActivation.created_at.desc())
+                    .limit(logs_per_category)
+                    .all()
+                )
+                for log in manual_rows:
                     all_logs.append({
                         'timestamp': log.created_at,
                         'level': 'WARNING' if log.status == 'ALERT' else 'INFO',
@@ -1694,9 +1718,24 @@ def register(app: Flask, logger) -> None:
                 db.session.rollback()
                 route_logger.warning("Failed to load manual activations: %s", e)
 
-            # Received EAS Alerts (from audio monitoring)
+            # Received EAS Alerts (column-scoped: skips the WAV capture)
             try:
-                for log in ReceivedEASAlert.query.order_by(ReceivedEASAlert.received_at.desc()).limit(logs_per_category).all():
+                received_rows = (
+                    ReceivedEASAlert.query
+                    .with_entities(
+                        ReceivedEASAlert.received_at,
+                        ReceivedEASAlert.source_name,
+                        ReceivedEASAlert.event_code,
+                        ReceivedEASAlert.event_name,
+                        ReceivedEASAlert.callsign,
+                        ReceivedEASAlert.forwarding_decision,
+                        ReceivedEASAlert.forwarding_reason,
+                    )
+                    .order_by(ReceivedEASAlert.received_at.desc())
+                    .limit(logs_per_category)
+                    .all()
+                )
+                for log in received_rows:
                     all_logs.append({
                         'timestamp': log.received_at,
                         'level': 'INFO' if log.forwarding_decision == 'forwarded'
@@ -1793,9 +1832,22 @@ def register(app: Flask, logger) -> None:
                 db.session.rollback()
                 route_logger.warning("Failed to load audio health status: %s", e)
 
-            # Decoded EAS Audio
+            # Decoded EAS Audio (column-scoped: seven audio blobs go unread)
             try:
-                for log in EASDecodedAudio.query.order_by(EASDecodedAudio.created_at.desc()).limit(logs_per_category).all():
+                decoded_rows = (
+                    EASDecodedAudio.query
+                    .with_entities(
+                        EASDecodedAudio.id,
+                        EASDecodedAudio.created_at,
+                        EASDecodedAudio.original_filename,
+                        EASDecodedAudio.content_type,
+                        EASDecodedAudio.same_headers,
+                    )
+                    .order_by(EASDecodedAudio.created_at.desc())
+                    .limit(logs_per_category)
+                    .all()
+                )
+                for log in decoded_rows:
                     all_logs.append({
                         'timestamp': log.created_at,
                         'level': 'INFO',
@@ -2104,8 +2156,31 @@ def register(app: Flask, logger) -> None:
 
         elif log_type == 'eas_messages':
             log_type_name = "EAS Messages Generated"
+            # Column-scoped: EASMessage carries six LargeBinary audio blobs
+            # and this view only needs to know whether each is populated.
+            # Ask the database for the NULL test instead of transferring the
+            # audio — loading the blobs to evaluate ``is not None`` cost
+            # ~1.8 GB of resident memory for 100 rows.
             logs_result = (
                 EASMessage.query
+                .with_entities(
+                    EASMessage.id,
+                    EASMessage.created_at,
+                    EASMessage.cap_alert_id,
+                    EASMessage.alert_identifier,
+                    EASMessage.same_header,
+                    EASMessage.audio_filename,
+                    EASMessage.text_filename,
+                    EASMessage.tts_provider,
+                    EASMessage.tts_warning,
+                    EASMessage.text_payload,
+                    EASMessage.metadata_payload,
+                    EASMessage.audio_data.isnot(None).label('has_audio_data'),
+                    EASMessage.eom_audio_data.isnot(None).label('has_eom_audio'),
+                    EASMessage.same_audio_data.isnot(None).label('has_same_audio'),
+                    EASMessage.attention_audio_data.isnot(None).label('has_attention_audio'),
+                    EASMessage.tts_audio_data.isnot(None).label('has_tts_audio'),
+                )
                 .order_by(EASMessage.created_at.desc())
                 .limit(limit)
                 .all()
@@ -2128,11 +2203,11 @@ def register(app: Flask, logger) -> None:
                         'same_header': log.same_header,
                         'audio_filename': log.audio_filename,
                         'text_filename': log.text_filename,
-                        'has_audio_data': log.audio_data is not None,
-                        'has_eom_audio': log.eom_audio_data is not None,
-                        'has_same_audio': log.same_audio_data is not None,
-                        'has_attention_audio': log.attention_audio_data is not None,
-                        'has_tts_audio': log.tts_audio_data is not None,
+                        'has_audio_data': log.has_audio_data,
+                        'has_eom_audio': log.has_eom_audio,
+                        'has_same_audio': log.has_same_audio,
+                        'has_attention_audio': log.has_attention_audio,
+                        'has_tts_audio': log.has_tts_audio,
                         'tts_provider': log.tts_provider,
                         'tts_warning': log.tts_warning,
                         'text_payload': log.text_payload,
@@ -2144,8 +2219,27 @@ def register(app: Flask, logger) -> None:
 
         elif log_type == 'decoded_audio':
             log_type_name = "Decoded EAS Audio"
+            # EASDecodedAudio carries seven LargeBinary segments (header,
+            # attention tone, narration, EOM, buffer, composite, and the
+            # deprecated message blob).  This view only reports which are
+            # present, so the NULL tests run in SQL.
             logs_result = (
                 EASDecodedAudio.query
+                .with_entities(
+                    EASDecodedAudio.id,
+                    EASDecodedAudio.created_at,
+                    EASDecodedAudio.original_filename,
+                    EASDecodedAudio.content_type,
+                    EASDecodedAudio.raw_text,
+                    EASDecodedAudio.same_headers,
+                    EASDecodedAudio.quality_metrics,
+                    EASDecodedAudio.segment_metadata,
+                    EASDecodedAudio.header_audio_data.isnot(None).label('has_header_audio'),
+                    EASDecodedAudio.attention_tone_audio_data.isnot(None).label('has_attention_tone'),
+                    EASDecodedAudio.narration_audio_data.isnot(None).label('has_narration'),
+                    EASDecodedAudio.eom_audio_data.isnot(None).label('has_eom_audio'),
+                    EASDecodedAudio.composite_audio_data.isnot(None).label('has_composite'),
+                )
                 .order_by(EASDecodedAudio.created_at.desc())
                 .limit(limit)
                 .all()
@@ -2168,11 +2262,11 @@ def register(app: Flask, logger) -> None:
                         'same_headers': log.same_headers or [],
                         'quality_metrics': log.quality_metrics or {},
                         'segment_metadata': log.segment_metadata or {},
-                        'has_header_audio': log.header_audio_data is not None,
-                        'has_attention_tone': log.attention_tone_audio_data is not None,
-                        'has_narration': log.narration_audio_data is not None,
-                        'has_eom_audio': log.eom_audio_data is not None,
-                        'has_composite': log.composite_audio_data is not None,
+                        'has_header_audio': log.has_header_audio,
+                        'has_attention_tone': log.has_attention_tone,
+                        'has_narration': log.has_narration,
+                        'has_eom_audio': log.has_eom_audio,
+                        'has_composite': log.has_composite,
                     },
                 }
                 for log in logs_result
@@ -2180,8 +2274,33 @@ def register(app: Flask, logger) -> None:
 
         elif log_type == 'manual_activations':
             log_type_name = "Manual EAS Activations"
+            # ManualEASActivation carries ten LargeBinary audio columns and
+            # this view reads none of them — not even to test for NULL.
             logs_result = (
                 ManualEASActivation.query
+                .with_entities(
+                    ManualEASActivation.id,
+                    ManualEASActivation.created_at,
+                    ManualEASActivation.identifier,
+                    ManualEASActivation.event_code,
+                    ManualEASActivation.event_name,
+                    ManualEASActivation.status,
+                    ManualEASActivation.message_type,
+                    ManualEASActivation.same_header,
+                    ManualEASActivation.same_locations,
+                    ManualEASActivation.tone_profile,
+                    ManualEASActivation.tone_seconds,
+                    ManualEASActivation.includes_tts,
+                    ManualEASActivation.tts_warning,
+                    ManualEASActivation.sent_at,
+                    ManualEASActivation.expires_at,
+                    ManualEASActivation.headline,
+                    ManualEASActivation.message_text,
+                    ManualEASActivation.instruction_text,
+                    ManualEASActivation.duration_minutes,
+                    ManualEASActivation.storage_path,
+                    ManualEASActivation.archived_at,
+                )
                 .order_by(ManualEASActivation.created_at.desc())
                 .limit(limit)
                 .all()
@@ -2224,8 +2343,27 @@ def register(app: Flask, logger) -> None:
 
         elif log_type == 'received_alerts':
             log_type_name = "Received EAS Alerts"
+            # Skip raw_audio_data (the WAV capture) and full_alert_data
+            # (JSONB); neither is displayed in this list view.
             logs_result = (
                 ReceivedEASAlert.query
+                .with_entities(
+                    ReceivedEASAlert.id,
+                    ReceivedEASAlert.received_at,
+                    ReceivedEASAlert.source_name,
+                    ReceivedEASAlert.raw_same_header,
+                    ReceivedEASAlert.event_code,
+                    ReceivedEASAlert.event_name,
+                    ReceivedEASAlert.originator_code,
+                    ReceivedEASAlert.originator_name,
+                    ReceivedEASAlert.fips_codes,
+                    ReceivedEASAlert.forwarding_decision,
+                    ReceivedEASAlert.forwarding_reason,
+                    ReceivedEASAlert.matched_fips_codes,
+                    ReceivedEASAlert.decode_confidence,
+                    ReceivedEASAlert.generated_message_id,
+                    ReceivedEASAlert.callsign,
+                )
                 .order_by(ReceivedEASAlert.received_at.desc())
                 .limit(limit)
                 .all()
