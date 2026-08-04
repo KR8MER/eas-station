@@ -51,6 +51,11 @@
         border: none;
         background: transparent;
         padding-bottom: 0;
+        /* styles.css sets a global `.card-header { color: white }` for the
+           gradient-filled headers used elsewhere. These two headers are
+           deliberately transparent over the card's light body, so inheriting
+           white left the titles invisible — white on white. */
+        color: var(--text-color);
     }
 
     .control-card .card-title,
@@ -58,6 +63,7 @@
         font-size: 1rem;
         font-weight: 600;
         letter-spacing: 0.02em;
+        color: var(--text-color);
     }
 
     .card-subtitle {

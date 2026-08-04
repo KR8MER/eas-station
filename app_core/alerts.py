@@ -184,10 +184,37 @@ def get_active_alerts_query():
 
 
 def get_expired_alerts_query():
-    """Return a query for expired alerts."""
+    """Return a query for alerts that are no longer active.
+
+    This is the exact complement of :func:`get_active_alerts_query`: an alert
+    is either active or it is here. That matters because the two queries used
+    to be written independently — active excluded three things that expired
+    never picked up, so alerts could fall out of *both* views and become
+    invisible in the UI entirely:
+
+    * ``status='Expired'`` with an ``expires`` timestamp still in the future
+    * ``status='Cancelled'`` with an ``expires`` timestamp still in the future
+    * superseded alerts (``superseded_by_id`` set) that had not yet expired
+
+    A cancelled-but-not-yet-expired alert silently vanishing from both the
+    active list and the archive is a real operational problem: an operator
+    cannot see that the alert was cancelled at all.
+
+    ``<=`` rather than ``<`` also closes the boundary case where ``expires``
+    equals *now* exactly, which the old pair of queries left in neither set.
+
+    All callers are read-only (dashboard counts, historical listings, exports);
+    nothing purges from this query, so widening it cannot delete data.
+    """
 
     now = utc_now()
-    return CAPAlert.query.filter(CAPAlert.expires < now)
+    return CAPAlert.query.filter(
+        or_(
+            CAPAlert.expires <= now,
+            CAPAlert.status.in_(("Expired", "Cancelled")),
+            CAPAlert.superseded_by_id.isnot(None),
+        )
+    )
 
 
 def _extract_text_from_payload(payload: Dict[str, object]) -> Optional[str]:

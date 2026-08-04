@@ -51,6 +51,23 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      # PostGIS, not plain PostgreSQL: CAPAlert carries a geometry column, so
+      # the alert-query tests cannot run against SQLite. Tests that do not need
+      # a database still use the in-memory SQLite default from conftest.py.
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: eas_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -75,13 +92,17 @@ jobs:
           python -m pip install pytest pytest-asyncio
 
       - name: Run test suite
-        env:
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
         # Tests listed in tests/known_failures.txt are marked xfail by
         # conftest.py rather than skipped, so they still execute: when one
         # starts passing it reports XPASS and the entry can be deleted. The
         # list is meant to shrink to nothing.
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          # Tests that need a real database read this; conftest.py only applies
+          # its sqlite:///:memory: default when DATABASE_URL is unset.
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/eas_test
+          SECRET_KEY: ci-secret-key-not-for-production-use-only-0123456789
         run: |
           python -m pytest tests/ \
             --junitxml=junit-${{ matrix.python-version }}.xml

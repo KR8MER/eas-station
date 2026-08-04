@@ -1890,6 +1890,20 @@ small,
     overflow: hidden;
 }
 
+/* Top-level navbar items are an icon plus a label. Bootstrap ships
+   `.nav-link { display: block }`, and nothing here overrode it, so the icon
+   and label were laid out as inline content: the one plain link (Dashboard —
+   every sibling is a .dropdown-toggle) wrapped onto two lines below ~1440px,
+   rendering 61px tall against its siblings' 37px and colliding with the
+   active-state pill. Scoped to .navbar so .nav-pills / .nav-tabs elsewhere
+   keep Bootstrap's own layout. */
+.navbar .navbar-nav > .nav-item > .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    white-space: nowrap;
+}
+
 /* Glow effect behind link */
 .nav-link::before {
     content: "";

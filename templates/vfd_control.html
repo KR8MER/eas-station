@@ -343,18 +343,16 @@
     <div class="toast-body" id="toastBody"></div>
 </div>
 
-<script>
-// Load jQuery for this page (needed for AJAX calls)
-if (typeof jQuery === 'undefined') {
-    const jqueryScript = document.createElement('script');
-    jqueryScript.src = '/static/vendor/jquery/jquery.min.js';
-    document.head.appendChild(jqueryScript);
-}
-</script>
+{# jQuery must be loaded with an ordinary blocking <script src> tag, not
+   injected via document.createElement. A dynamically created script is async
+   by default, so the inline block below — which calls $('#textForm') at top
+   level — ran before jQuery had arrived and threw "$ is not defined". That
+   killed every handler on this page: neither form submitted and no AJAX call
+   fired. A plain src tag blocks until it has executed, so $ is guaranteed to
+   exist for the code that follows. #}
+<script src="{{ url_for('static', filename='vendor/jquery/jquery.min.js') }}"></script>
 
 <script>
-// Toast helper
-
 // Text form submission
 $('#textForm').on('submit', function(e) {
     e.preventDefault();

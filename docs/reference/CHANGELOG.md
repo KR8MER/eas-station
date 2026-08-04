@@ -8,6 +8,72 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.126.0] - 2026-08-04 - Legible page titles, navbar layout, alert visibility
+
+Found by rendering the running application in a headless browser rather than
+by reading the code — every item below was verified on screen.
+
+### Fixed
+- **Every page title in the application was close to illegible.**
+  `static/js/visual-effects.js` applied its `.gradient-text` class to *every*
+  `h1` and `.page-title`. That class fills the glyphs with
+  `linear-gradient(--primary-color → --secondary-color)` and sets
+  `-webkit-text-fill-color: transparent` — and the standard page header's
+  background is built from those same two variables, so each title was painted
+  in the colours of the surface directly behind it. Headings on coloured
+  header/hero/navbar surfaces are now excluded; headings on plain backgrounds
+  keep the effect.
+- **The "Map Layers" and map-legend panel titles on the dashboard were white
+  text on a white surface.** `styles.css` sets a global
+  `.card-header { color: white }` for the gradient-filled card headers used
+  elsewhere; these two headers are deliberately transparent over the card's
+  light body, so they inherited white and vanished.
+- **The Dashboard navbar item wrapped onto two lines below ~1440px**,
+  rendering 61px tall against its siblings' 37px and colliding with the
+  active-state pill. Bootstrap ships `.nav-link { display: block }` and nothing
+  overrode it, so the icon and label were laid out as inline content. Only the
+  Dashboard link was affected because every other top-level item is a
+  `.dropdown-toggle`, which picked up flex layout elsewhere.
+- **Alerts could disappear from the UI entirely.**
+  `get_active_alerts_query()` and `get_expired_alerts_query()` were written
+  independently and were not complements: active excluded `status='Expired'`,
+  `status='Cancelled'` and superseded alerts, while expired only checked
+  `expires < now`. An alert in any of those three states with a *future* expiry
+  matched neither query, so it vanished from the dashboard, the active count
+  and the archive at the same time — a cancelled-but-not-yet-expired alert left
+  no trace anywhere in the interface. `get_expired_alerts_query()` is now the
+  exact complement of active, and `<=` closes the boundary case where `expires`
+  equals *now*. All callers are read-only counts, listings and exports; nothing
+  purges from this query. Regression coverage in
+  `tests/test_alert_active_expired_partition.py`.
+- **The VFD Display Control page was entirely non-functional.** It injected
+  jQuery with `document.createElement('script')` — async by default — and the
+  next inline block called `$('#textForm')` at top level, throwing
+  "$ is not defined" before jQuery arrived. Neither form submitted and no AJAX
+  request fired. jQuery is now loaded with an ordinary blocking `<script src>`.
+- `README.md` referenced `docs/screenshots/system-health.jpg`, which did not
+  exist — a broken image in the Screenshot Tour.
+
+### Changed
+- Removed the "🔍 Ctrl K" search pill from the navbar by request. It occupied
+  a third row at common desktop widths; with it and the layout fix above the
+  navbar is a consistent 142px at every width tested (was 212px). The command
+  palette is unchanged and still opens on Ctrl/Cmd+K or via
+  `window.EASCommandPalette.open()`.
+- Refreshed the README screenshot tour from the running application and added a
+  Broadcast Builder panel.
+
+### Added
+- The CI test job now provisions a **PostGIS** service container and exports
+  `DATABASE_URL`, so tests needing a real database (the alert-query partition
+  tests) execute in CI instead of skipping. Tests that do not need one still
+  use the in-memory SQLite default from `conftest.py`.
+
+### Verified, not changed
+- The horizontal-overflow warnings on `.page-header` are a false positive: the
+  element sets `overflow-x: hidden` to clip its decorative orbs, and the page
+  itself does not scroll horizontally at 1440px, 390px or 320px.
+
 ## [2.125.0] - 2026-08-04 - Front-end consistency: one escapeHtml, one page header
 
 ### Added

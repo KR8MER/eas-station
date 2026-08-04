@@ -2,7 +2,7 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-2.125.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.126.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -75,6 +75,11 @@ A few of the web dashboards, captured from a running instance with sample alert 
 |---|---|
 | [![GPS dashboard with polar sky plot and chrony tracking](docs/screenshots/gps-dashboard.jpg)](docs/screenshots/gps-dashboard.jpg) | [![System health dashboard with CPU, memory, disk and temperature](docs/screenshots/system-health.jpg)](docs/screenshots/system-health.jpg) |
 | **GPS & Time** — polar sky plot, `chronyc` tracking and per-PRN signal levels for stratum-1 NTP. | **System Health** — CPU / memory / disk / temperature with historical trends. |
+
+| Broadcast Builder | |
+|---|---|
+| [![Broadcast Builder console for composing manual SAME activations](docs/screenshots/broadcast-builder.jpg)](docs/screenshots/broadcast-builder.jpg) | |
+| **Broadcast Builder** — compose manual SAME activations, generate the audio package and review recent transmissions, with the station's originator / station ID / attention-tone settings shown inline. | |
 
 > Screenshots are captured from the bundled dashboards; map basemap tiles and live SDR/GPS telemetry depend on network access and attached hardware.
 

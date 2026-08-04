@@ -255,13 +255,23 @@
     // GRADIENT TEXT ANIMATION
     // ============================================
 
+    // Surfaces whose background is itself painted from --primary-color /
+    // --secondary-color. A heading sitting on one of these must NOT get
+    // .gradient-text: that class fills the glyphs with the same two-colour
+    // ramp and sets -webkit-text-fill-color: transparent, so the title ends up
+    // drawn in the colours of the surface directly behind it and is very close
+    // to invisible. This affected the title of every page using the standard
+    // page header.
+    const GRADIENT_TEXT_EXCLUDED_SURFACES =
+        '.page-header, .page-header-gradient, .eas-hero, .navbar, .hero, .card-header';
+
     function initGradientText() {
-        // Apply gradient text to main headings
+        // Apply gradient text to main headings on plain backgrounds only.
         document.querySelectorAll('h1, .page-title').forEach(heading => {
+            if (heading.closest(GRADIENT_TEXT_EXCLUDED_SURFACES)) {
+                return;
+            }
             if (!heading.classList.contains('gradient-applied')) {
-                // Store original text
-                const text = heading.textContent;
-                // Add gradient class
                 heading.classList.add('gradient-text');
                 heading.classList.add('gradient-applied');
             }
