@@ -8,6 +8,41 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.128.1] - 2026-08-04 - Fix gateway error on the FCC reports page
+
+### Fixed
+- **FCC Reports returned a 502 gateway error.** Reports → FCC Reports
+  (`/logs?type=report_received`) and its sibling report tabs failed on any
+  station with real traffic. The report builders loaded whole ORM rows, so
+  printing a table of timestamps and event codes also pulled every heavy
+  column attached to those rows:
+
+  | Report | Columns loaded but never printed |
+  |---|---|
+  | Received / Forwarded / Ignored | `received_eas_alerts.raw_audio_data` (the WAV capture, ~1 MB per alert) and `full_alert_data` (JSONB) |
+  | Initiated | six `eas_messages` audio blobs, plus `cap_alerts.raw_json` and the PostGIS `geom` via an eager join |
+
+  Measured on 200 seeded alerts carrying 1 MB captures, the received report
+  used 614 MiB of resident memory and 4.7 s; the initiated report used
+  736 MiB and 6.8 s. A month of real traffic pushed the gunicorn worker past
+  its memory ceiling, and the OOM kill surfaced to the browser as a bad
+  gateway rather than an application error.
+
+  Both builders now select only the columns they print. The same 200 alerts
+  now cost 1 MiB and 0.02 s — a 600× reduction in memory. The weekly and
+  monthly summaries were already column-scoped and are unchanged.
+
+- **Report queries are now bounded.** The export routes accept arbitrary
+  `start`/`end` bounds, so a multi-year window could build an unbounded row
+  list. Reports cap at 25,000 rows (`REPORT_MAX_ROWS`) and note the
+  truncation in their summary block.
+
+### Added
+- `tests/test_fcc_report_queries.py` — asserts the report queries never
+  select a blob, large JSON, or geometry column, that the `CAPAlert` join and
+  the `forwarding_decision` filter survive the rewrite, and that the row cap
+  is applied.
+
 ## [2.128.0] - 2026-08-04 - Authentication audit: public docs, private diagnostics
 
 Audited every registered route against the deny-by-default gate in
