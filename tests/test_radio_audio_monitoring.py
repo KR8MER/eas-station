@@ -116,7 +116,7 @@ def _create_receiver(**overrides) -> RadioReceiver:
     return RadioReceiver(**data)
 
 
-def test_ensure_radio_squelch_columns_backfills_missing_columns(audio_app):
+def test_ensure_radio_squelch_columns_backfills_missing_columns(audio_app, authenticated_user):
     with audio_app.app_context():
         engine = db.engine
 
@@ -160,7 +160,7 @@ def test_ensure_radio_squelch_columns_backfills_missing_columns(audio_app):
         assert set(_EXPECTED_SQUELCH_COLUMNS).issubset(column_names)
 
 
-def test_ensure_sdr_audio_monitor_source_creates_config(audio_app):
+def test_ensure_sdr_audio_monitor_source_creates_config(audio_app, authenticated_user):
     with audio_app.app_context():
         receiver = _create_receiver()
         db.session.add(receiver)
@@ -197,7 +197,7 @@ def test_ensure_sdr_audio_monitor_source_creates_config(audio_app):
         assert adapter.metrics.metadata["carrier_alarm_enabled"] is True
 
 
-def test_remove_radio_managed_audio_source_cleans_up(audio_app):
+def test_remove_radio_managed_audio_source_cleans_up(audio_app, authenticated_user):
     with audio_app.app_context():
         receiver = _create_receiver()
         db.session.add(receiver)
@@ -213,7 +213,7 @@ def test_remove_radio_managed_audio_source_cleans_up(audio_app):
         assert "sdr-wx42" not in controller._sources
 
 
-def test_sync_radio_manager_state_updates_audio_sources(audio_app, monkeypatch):
+def test_sync_radio_manager_state_updates_audio_sources(audio_app, monkeypatch, authenticated_user):
     class DummyReceiverInstance:
         def __init__(self, identifier: str) -> None:
             self.identifier = identifier
@@ -270,7 +270,7 @@ def test_sync_radio_manager_state_updates_audio_sources(audio_app, monkeypatch):
         assert "sdr-wxstale" not in controller._sources
 
 
-def test_api_ensure_audio_monitor_endpoint(audio_app):
+def test_api_ensure_audio_monitor_endpoint(audio_app, authenticated_user):
     with audio_app.app_context():
         receiver = _create_receiver(identifier="WXMON", display_name="Monitor NOAA")
         db.session.add(receiver)
@@ -298,7 +298,7 @@ def test_api_ensure_audio_monitor_endpoint(audio_app):
         assert "message" in payload_start
 
 
-def test_audio_source_endpoint_restores_missing_adapter(audio_app):
+def test_audio_source_endpoint_restores_missing_adapter(audio_app, authenticated_user):
     with audio_app.app_context():
         receiver = _create_receiver(identifier="WXRESTORE", display_name="Restore NOAA")
         db.session.add(receiver)
@@ -321,7 +321,7 @@ def test_audio_source_endpoint_restores_missing_adapter(audio_app):
         assert "sdr-wxrestore" in controller._sources
 
 
-def test_audio_start_endpoint_restores_missing_adapter(audio_app, monkeypatch):
+def test_audio_start_endpoint_restores_missing_adapter(audio_app, monkeypatch, authenticated_user):
     with audio_app.app_context():
         receiver = _create_receiver(identifier="WXSTART", display_name="Start NOAA")
         db.session.add(receiver)
@@ -377,7 +377,7 @@ def test_audio_start_endpoint_restores_missing_adapter(audio_app, monkeypatch):
         assert "sdr-wxstart" in controller._sources
 
 
-def test_audio_stream_endpoint_uses_wav_mimetype(audio_app):
+def test_audio_stream_endpoint_uses_wav_mimetype(audio_app, authenticated_user):
     with audio_app.app_context():
         controller = audio_admin._get_audio_controller()
 

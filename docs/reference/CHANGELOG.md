@@ -8,6 +8,107 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.124.0] - 2026-08-04 - CI runs the test suite; latent NameError crashes fixed
+
+### Added
+- **CI now runs the full test suite.** `.github/workflows/tests.yml` runs
+  `pytest tests/` on every pull request and on pushes to `main` / `develop`,
+  across Python 3.11 and 3.13, with a Redis service container. Previously CI
+  executed exactly one test file (`tests/test_release_metadata.py`) plus the
+  template-block check, so roughly 1,700 tests across 147 files never gated a
+  merge.
+- **A lint gate.** New `pyproject.toml` carries pytest and ruff configuration.
+  The enforced ruff rule set is deliberately narrow (`E9`, `F821`, `F811`,
+  `F601`, `F632`) — every rule the codebase is now clean against, so a failure
+  is always a new regression rather than pre-existing debt. The remaining
+  categories are recorded as a documented backlog with counts.
+- `AudioSourceManager.remove_source()` — the manager could add sources but had
+  no way to remove one. Stops the source, drops it from every per-source map,
+  and fails over first if the source being removed is the active one.
+- `AudioSourceManager(monitor_interval=...)` — the health-check interval was
+  hardcoded to 1.0s, which made failover assertions in tests depend on
+  sleeping longer than the production poll period.
+- `tests/known_failures.txt` — tests that need real hardware or a live SDR
+  service are marked xfail (not skipped) so they still run and report XPASS
+  when they start passing. The list is meant to shrink to nothing.
+- A shared `authenticated_user` pytest fixture covering all three auth
+  decorators (`require_auth`, `require_role`, `require_permission`).
+
+### Fixed
+- **`pip install -r requirements.txt` failed outright on Python 3.11 and 3.12,
+  and on every non-Raspberry-Pi machine.** `audioop-lts` publishes wheels only
+  for Python >= 3.13, and `rpi-ws281x` builds a C extension that cannot compile
+  on x86 — neither carried an environment marker, so installation aborted
+  before any other dependency resolved. This blocked contributors on x86
+  laptops and any CI runner, and `install.sh` explicitly suggests downgrading
+  to Python 3.12 when SoapySDR bindings mismatch, which walked users straight
+  into it.
+- **Twenty undefined names that raise `NameError` at runtime**, found by the
+  new lint gate:
+  - `webapp/routes_security.py` used `logger` in three `except` handlers
+    without importing it, so the ban-list and overview endpoints raised
+    `NameError` *from inside the error handler* whenever geo enrichment or
+    fail2ban status was unavailable — the default state on a fresh install.
+  - `webapp/routes_backups.py` used `os` without importing it, in the backup
+    download temp-file cleanup and its error path.
+  - `app_core/audio/eas_monitor.py` read `full_alert_json` roughly 25 lines
+    before it was assigned, in the duplicate-alert suppression branch. SAME
+    headers are transmitted three times, so the duplicate path is the normal
+    case, not an edge case.
+  - `webapp/routes_monitoring.py` called `get_redis_client()` without
+    importing it. The surrounding `except Exception` turned the resulting
+    `NameError` into a permanent "Redis check failed", so the health dashboard
+    could never report Redis as healthy regardless of the server's real state.
+  - Missing `Any` / `Optional` typing imports and several unresolvable forward
+    references (`np.ndarray`, `ReceiverConfig`, `ReceiverStatus`, `OLEDLine`,
+    `Path`), now declared under `TYPE_CHECKING`.
+- **`AudioSourceManager.start()` could never succeed.** The guard read
+  `if not self._stop_event.is_set()`, but `threading.Event()` starts *unset*,
+  so a freshly constructed manager always took the "already running" branch and
+  returned False. The check now keys on whether the monitor thread is alive,
+  which is the only state that distinguishes "never started" from "running".
+  (The class has no production callers yet, so this was latent rather than a
+  live outage.)
+- **The app could not be instantiated against SQLite at all.** `app.py` passed
+  `pool_size` / `max_overflow` / `pool_timeout` and libpq-specific
+  `connect_args` to `create_engine()` unconditionally; SQLite's pool classes
+  accept none of them, so construction raised `TypeError`. These are now
+  applied only for non-SQLite URLs, which also makes the in-memory database the
+  test fixtures ask for actually work.
+- **`scripts/database/check_schema.py` silently skipped three column checks.**
+  A duplicate `"location_settings"` key in `REQUIRED_COLUMNS` overwrote the
+  earlier, longer entry, dropping `map_center_lat`, `map_center_lng` and
+  `map_default_zoom` from validation.
+- `app_core/radio/schema.py` used PostgreSQL-only
+  `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. Every call site already guards on
+  the inspector's column list, so the clause was redundant on PostgreSQL and a
+  syntax error on SQLite. Production behaviour is unchanged.
+- `app_utils/eas_tts.py` fell back to `import audioop_lts`, which does not
+  exist — the `audioop-lts` package installs a module named `audioop`. The
+  fallback could never succeed; it now raises an actionable error naming the
+  package to install.
+- Test doubles in `tests/test_audio_source_manager.py` had drifted from the
+  real interfaces: mock factories took a positional `config` the manager no
+  longer passes, and the source double implemented `read_audio` (the
+  *manager's* method name) instead of `read_samples` (the *source's*). Both
+  failures surfaced as confusing assertion errors rather than the real cause,
+  because `add_source()` swallowed the `TypeError`.
+
+### Changed
+- `tests/conftest.py` seeds `DATABASE_URL`, `SECRET_KEY`, `SKIP_DB_INIT` and
+  `TESTING` at import time via `setdefault`, so a bare `pytest` works with no
+  external services — as `tests/README.md` already documented. A real exported
+  value still wins, which is how CI points the suite at live services.
+- The `audio`, `gpio` and `radio` pytest marks are registered in
+  `pyproject.toml`; they were applied by a conftest hook but never declared,
+  emitting `PytestUnknownMarkWarning` on every run. Marker checking is now
+  strict, so a typo is an error rather than a silently dropped mark.
+- Roughly 28 MB of scratch bug artifacts (two PDFs and an unreferenced IQ
+  capture) are no longer tracked. `bugs/` was already in `.gitignore`; these
+  predated that rule. The one IQ capture consumed by the RTL-SDR saturation
+  regression test is explicitly re-included so the test keeps running instead
+  of degrading to a permanent skip.
+
 ## [2.123.2] - 2026-08-01 - GPIO activation logging and relay release pairing
 
 ### Fixed

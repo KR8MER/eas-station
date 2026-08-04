@@ -93,7 +93,8 @@ class AudioSourceManager:
         self,
         sample_rate: int = 44100,  # Native sample rate for audio sources/streams
         master_buffer_seconds: float = 5.0,
-        failover_callback: Optional[Callable[[FailoverEvent], None]] = None
+        failover_callback: Optional[Callable[[FailoverEvent], None]] = None,
+        monitor_interval: float = 1.0
     ):
         """
         Initialize source manager.
@@ -102,9 +103,14 @@ class AudioSourceManager:
             sample_rate: Global sample rate for all sources (native rate for streams)
             master_buffer_seconds: Size of master output buffer
             failover_callback: Optional callback for failover events
+            monitor_interval: Seconds between health checks in the monitor loop.
+                Also the worst-case delay before a failed source triggers
+                failover. Exposed so tests can poll fast enough to assert on a
+                failover without sleeping for whole seconds.
         """
         self.sample_rate = sample_rate
         self.failover_callback = failover_callback
+        self.monitor_interval = monitor_interval
 
         # Master output buffer (feeds EAS decoder)
         buffer_samples = int(sample_rate * master_buffer_seconds)
@@ -165,6 +171,46 @@ class AudioSourceManager:
             logger.error(f"Failed to add source {config.name}: {e}")
             return False
 
+    def remove_source(self, name: str) -> bool:
+        """
+        Remove an audio source from the manager.
+
+        Stops the underlying source and drops it from every per-source map. If
+        the source being removed is currently active, a replacement is selected
+        before returning so the mixer is never left pointing at a source that
+        no longer exists.
+
+        Args:
+            name: Name of the source to remove
+
+        Returns:
+            True if the source existed and was removed, False if unknown
+        """
+        if name not in self._sources:
+            logger.warning(f"Cannot remove unknown source: {name}")
+            return False
+
+        source = self._sources[name]
+        try:
+            source.stop()
+        except Exception as e:
+            # A source that fails to stop cleanly must still be removed —
+            # leaving it in the maps would keep the mixer reading from it.
+            logger.error(f"Error stopping source {name} during removal: {e}")
+
+        self._sources.pop(name, None)
+        self._source_configs.pop(name, None)
+        self._silence_start_times.pop(name, None)
+
+        # If the removed source was the active one, fail over now rather than
+        # waiting for the monitor loop to notice a missing key.
+        if self._active_source == name:
+            self._active_source = None
+            self._select_best_source(reason=FailoverReason.MANUAL)
+
+        logger.info(f"Removed source: {name}")
+        return True
+
     def start(self) -> bool:
         """
         Start the source manager and all enabled sources.
@@ -172,10 +218,18 @@ class AudioSourceManager:
         Returns:
             True if started successfully
         """
-        if not self._stop_event.is_set():
+        # Guard on the monitor thread, not on _stop_event. threading.Event()
+        # starts *unset*, so the previous `if not self._stop_event.is_set()`
+        # check was true on a freshly constructed manager and start() bailed out
+        # with "already running" every time — the manager could never be started
+        # at all. The stop event's initial state cannot distinguish "never
+        # started" from "currently running"; an live monitor thread can.
+        if self._monitor_thread is not None and self._monitor_thread.is_alive():
             logger.warning("AudioSourceManager already running")
             return False
 
+        # Clear any stop signal left over from a previous start/stop cycle so
+        # the monitor and mixer loops below do not exit immediately.
         self._stop_event.clear()
 
         # Start all enabled sources
@@ -248,7 +302,7 @@ class AudioSourceManager:
         """
         logger.debug("Source monitor loop started")
 
-        while not self._stop_event.wait(1.0):
+        while not self._stop_event.wait(self.monitor_interval):
             try:
                 try:
                     # Check if active source is still healthy

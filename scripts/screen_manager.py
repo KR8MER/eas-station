@@ -30,9 +30,15 @@ import threading
 import time
 from collections import deque
 from datetime import datetime, timedelta
-from typing import Any, Deque, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional
 
 from flask import Flask
+
+if TYPE_CHECKING:  # pragma: no cover - import only for type checkers
+    # Referenced by the List["OLEDLine"] annotation on
+    # _start_oled_template_scroll. The OLED module is imported lazily at call
+    # time (hardware may be absent), so it must not be imported at module load.
+    from app_core.oled import OLEDLine
 
 from app_utils import ALERT_SOURCE_IPAWS, ALERT_SOURCE_MANUAL
 

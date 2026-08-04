@@ -112,7 +112,11 @@ luma.oled==3.14.0  # I2C SSD1306/SH1106 driver used by the Argon OLED
 
 # GPIO control for Raspberry Pi hardware
 gpiozero==2.0.1
-rpi-ws281x>=0.0.5  # NeoPixel/WS2812B addressable LED strip control (requires DMA/root on Pi)
+# Marker required: rpi-ws281x builds a C extension against Raspberry Pi headers
+# and cannot compile on x86 (contributor laptops, CI runners). Restricting it to
+# ARM keeps `pip install -r requirements.txt` working everywhere; the LED-strip
+# code paths already degrade gracefully when the module is absent.
+rpi-ws281x>=0.0.5; platform_machine in "armv6l armv7l aarch64"  # NeoPixel/WS2812B addressable LED strip control (requires DMA/root on Pi)
 
 # Multi-Factor Authentication (MFA) support
 pyotp==2.9.0  # TOTP (Time-based One-Time Password) generation and verification
@@ -137,7 +141,11 @@ pyproj==3.7.1  # CRS reprojection from shapefile .prj to WGS84 (optional, gracef
 geoip2>=4.8.0
 
 # Audio processing - audioop replacement for Python 3.13+
-audioop-lts==0.2.2  # Drop-in replacement for audioop (removed in Python 3.13)
+# Marker required: audioop-lts only publishes wheels for Python >= 3.13. Without
+# the marker `pip install -r requirements.txt` hard-fails on 3.11/3.12, which
+# install.sh explicitly suggests as a fallback when SoapySDR bindings mismatch.
+# On <= 3.12 the stdlib `audioop` module is still present, so nothing is needed.
+audioop-lts==0.2.2; python_version >= "3.13"  # Drop-in replacement for audioop (removed in Python 3.13)
 
 # Cryptography - Ed25519 signatures for the tamper-evident audit-log chain
 # (see app_core/auth/audit.py AuditLogger.verify_chain).  Pinned >=46.0.5 to

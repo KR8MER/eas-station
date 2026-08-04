@@ -19,6 +19,8 @@ Repository: https://github.com/KR8MER/eas-station
 
 from __future__ import annotations
 
+import pathlib
+
 """Administrative routes and helpers for managing boundary data."""
 
 from typing import Any, Dict, Iterable, List, Optional, Set
@@ -528,7 +530,7 @@ def convert_shapefile_to_geojson(shapefile_path: str) -> Dict[str, Any]:
     }
 
 
-def get_shapefile_directory() -> "Path":
+def get_shapefile_directory() -> "pathlib.Path":
     """Return the directory scanned by /admin/list_shapefiles.
 
     Resolution order:

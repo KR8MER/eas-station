@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import MappingProxyType
-from typing import Dict, FrozenSet, List, Mapping, Tuple
+from typing import Dict, FrozenSet, List, Mapping, Optional, Tuple
 
 
 STATE_ABBR_NAMES: Dict[str, str] = {

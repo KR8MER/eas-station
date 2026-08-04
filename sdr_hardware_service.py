@@ -74,9 +74,15 @@ import signal
 import logging
 import json
 import threading
-from typing import Optional, Dict, Any
+from typing import TYPE_CHECKING, Optional, Dict, Any
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
+
+if TYPE_CHECKING:  # pragma: no cover - import only for type checkers
+    # numpy is imported lazily inside the functions that need it to keep
+    # service startup cheap on the Pi. The "np.ndarray" annotation on
+    # _compute_capture_spectral_diagnostics still needs the name to resolve.
+    import numpy as np
 
 # Configure logging early
 from app_core.logging_context import (

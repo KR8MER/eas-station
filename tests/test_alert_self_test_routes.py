@@ -21,8 +21,6 @@ import logging
 from pathlib import Path
 from types import SimpleNamespace
 
-import logging
-from pathlib import Path
 
 import pytest
 from flask import Flask
@@ -82,7 +80,7 @@ def alert_self_test_setup(monkeypatch, tmp_path):
         yield {'client': client, 'sample_path': sample}
 
 
-def test_alert_self_test_run_endpoint_returns_results(alert_self_test_setup):
+def test_alert_self_test_run_endpoint_returns_results(alert_self_test_setup, authenticated_user):
     client = alert_self_test_setup['client']
     sample_path = alert_self_test_setup['sample_path']
 
@@ -103,7 +101,7 @@ def test_alert_self_test_run_endpoint_returns_results(alert_self_test_setup):
     assert payload['source_name'] == 'ui-demo'
 
 
-def test_alert_self_test_rejects_missing_audio(alert_self_test_setup):
+def test_alert_self_test_rejects_missing_audio(alert_self_test_setup, authenticated_user):
     client = alert_self_test_setup['client']
 
     response = client.post(

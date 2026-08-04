@@ -25,6 +25,63 @@ Run all tests:
 pytest
 ```
 
+No database, Redis or other service is required for a bare `pytest` run.
+`conftest.py` seeds `DATABASE_URL=sqlite:///:memory:`, `SKIP_DB_INIT=1`,
+`SECRET_KEY` and `TESTING` at import time. Because it uses `setdefault`, any
+value you export yourself wins — which is how CI points the suite at its Redis
+service container:
+
+```bash
+REDIS_HOST=localhost REDIS_PORT=6379 pytest
+```
+
+### Continuous Integration
+
+`.github/workflows/tests.yml` runs this suite on every pull request and on
+pushes to `main` / `develop`, across Python 3.11 and 3.13, with a Redis service
+container. A separate `lint` job runs `ruff check .` against the enforced rule
+set declared in `pyproject.toml`.
+
+### Known failures
+
+`tests/known_failures.txt` lists tests that do not currently pass in a clean
+environment — mostly ones needing real hardware or a live SDR service on the
+other end of Redis. `conftest.py` marks them **xfail rather than skipping
+them**, so they still execute:
+
+- a listed test that fails is reported `xfail` and does not break the build
+- a listed test that *passes* is reported `XPASS` — the signal to delete its
+  line from the file
+
+Entries may be a full node ID (`tests/test_x.py::test_y`) or a whole file
+(`tests/test_x.py`). `#` comments and blank lines are ignored. **This list is a
+backlog and is meant to shrink to nothing** — if you fix a test, remove its
+entry in the same change.
+
+### Testing authenticated routes
+
+Routes are protected by a deny-by-default gate, so a plain test client gets 401
+from anything non-public. Use the shared `authenticated_user` fixture, which
+satisfies `require_auth`, `require_role` and `require_permission`:
+
+```python
+def test_my_admin_route(client, authenticated_user):
+    response = client.post('/api/something')
+    assert response.status_code == 200
+```
+
+The fixture yields the stub user, so a test needing a particular role can
+adjust it:
+
+```python
+def test_operator_only(client, authenticated_user):
+    authenticated_user.role.name = "operator"
+```
+
+Do **not** use it in tests that are themselves asserting on authentication
+behaviour (`test_public_pages_authz.py`, the RBAC suite) — those must keep
+exercising the real code path.
+
 Run tests with verbose output:
 ```bash
 pytest -v

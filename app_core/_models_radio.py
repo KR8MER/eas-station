@@ -21,7 +21,15 @@ from __future__ import annotations
 
 """Radio receiver and receiver-status models."""
 
+from typing import TYPE_CHECKING
+
 from ._models_base import Optional, db, utc_now
+
+if TYPE_CHECKING:  # pragma: no cover - import only for type checkers
+    # Imported lazily: app_core.radio.manager imports the models package, so a
+    # module-level import here would be circular. The to_receiver_config /
+    # to_receiver_status return annotations below reference these names.
+    from app_core.radio.manager import ReceiverConfig, ReceiverStatus
 
 
 class RadioReceiver(db.Model):

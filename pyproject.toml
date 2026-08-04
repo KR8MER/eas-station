@@ -1,0 +1,102 @@
+# Tooling configuration for EAS Station.
+#
+# This file intentionally carries *only* tool configuration — the project is
+# deployed from a git checkout via install.sh, not installed as a distribution,
+# so there is no [project] / [build-system] table here.
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+# Note: no -q here. addopts is *prepended* to the command line, so a `-q` here
+# plus the `-q` people habitually type becomes -qq, which suppresses the final
+# "N passed, M xfailed" summary line entirely.
+addopts = "--strict-markers"
+
+# Every marker applied anywhere in the suite must be declared here, otherwise
+# --strict-markers turns a typo into an error instead of a silently-ignored
+# mark. `audio`, `gpio` and `radio` are applied automatically by the
+# pytest_collection_modifyitems hook in tests/conftest.py.
+markers = [
+    "unit: Unit tests (fast, no external dependencies)",
+    "integration: Integration tests (may use mocks)",
+    "functional: Functional tests (complete workflows)",
+    "slow: Tests that take more than 1 second",
+    "audio: Touches the audio pipeline",
+    "gpio: Touches GPIO / relay control",
+    "radio: Touches SDR / radio tuning",
+    "hardware: Requires real attached hardware (deselected in CI)",
+    "redis: Requires a reachable Redis server",
+]
+
+filterwarnings = [
+    "default",
+    # audioop is deprecated in 3.11/3.12 and removed in 3.13, where the
+    # audioop-lts backfill takes over. The warning is expected on <= 3.12 and
+    # would otherwise be emitted on every single test run.
+    "ignore:'audioop' is deprecated:DeprecationWarning",
+]
+
+[tool.ruff]
+target-version = "py311"
+# AGENTS.md asks for lines under 100 characters where practical.
+line-length = 100
+exclude = [
+    ".git",
+    "venv",
+    ".venv",
+    "app_core/migrations/versions",  # generated-style files, reviewed by hand
+    "static/vendor",
+]
+
+[tool.ruff.lint]
+# ENFORCED SET — the codebase is clean against these today, so any new
+# violation is a genuine regression and CI fails on it.
+#
+# This is deliberately narrow. ~230k lines of Python had never been linted
+# before this config existed; a full `select = ["E", "F", "B"]` reports ~855
+# findings, which would make the gate meaningless on day one. The rules below
+# are the ones that catch *bugs* rather than style, and all existing
+# violations of them have been fixed:
+#
+#   F821  undefined name          — 20 found and fixed (NameError at runtime:
+#                                   missing `os` in the backup download path,
+#                                   missing `logger` in three security-route
+#                                   except handlers, `full_alert_json` used
+#                                   before assignment in the EAS dedup path,
+#                                   an unimported get_redis_client that made
+#                                   the Redis health check permanently fail)
+#   F601  repeated dict key       — 1 found and fixed (a duplicate
+#                                   "location_settings" key silently disabled
+#                                   three column checks in check_schema.py)
+#   F811  redefinition            — 6 found and fixed
+#   F632  `is` with a literal     — already clean
+#   E9    syntax / IO errors      — already clean
+select = ["E9", "F821", "F811", "F601", "F632"]
+
+# BACKLOG — real findings that are not yet enforced because the existing
+# violations need burning down first. Counts are as of this commit; promote a
+# rule into `select` above once its count reaches zero.
+#
+#   F401  unused import                388   (some are intentional re-exports;
+#                                             needs a careful manual pass)
+#   T201  print() in app code          155   (AGENTS.md says use the logger)
+#   F541  f-string without placeholder 153   (safe mechanical fix)
+#   F841  unused variable               62   (some may be masking real bugs)
+#   B904  raise without `from` inside except  29
+#   B007  unused loop control variable  16
+#   B905  zip() without explicit strict= 14
+#   B023  loop variable not bound in closure  8
+#
+# B023 note: all 8 current sites were audited by hand — every closure is
+# invoked inside the same loop iteration that defines it, so late binding is
+# harmless there. It stays out of `select` rather than being "fixed" with
+# churn to working code.
+
+[tool.ruff.lint.per-file-ignores]
+# Scripts, tooling and the CLI are *meant* to write to stdout. Listed now so
+# the entries are already correct when T201 graduates out of the backlog.
+"scripts/**" = ["T201"]
+"tools/**" = ["T201"]
+"bin/**" = ["T201"]
+"tests/**" = ["T201"]
+"eas-config" = ["T201"]

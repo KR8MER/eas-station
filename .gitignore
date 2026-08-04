@@ -64,7 +64,15 @@ bare-metal/scripts/*.iso
 *.iso
 
 # Development-only directories (not for ISO)
-bugs/
+# Note: `bugs/*` rather than `bugs/` so the one committed IQ capture below can
+# be re-included — a negation cannot resurrect a path whose parent directory is
+# itself excluded.
+bugs/*
+# Exception: this capture is the fixture for the RTL-SDR saturation regression
+# test in tests/test_radio_diagnostics_analyzer.py. Without it that test
+# silently degrades to a permanent skip. Screenshots and other scratch bug
+# artifacts stay ignored.
+!bugs/iq_sdr_256000Hz_1778772958_211c2893.npz
 tests/bug_reproductions/
 
 # Don't allow root clutter - keep docs in proper directories
