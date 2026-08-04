@@ -8,6 +8,73 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.126.2] - 2026-08-04 - MFA login delays and GPIO relay keying
+
+### Fixed
+- **MFA login rejected valid codes for 90 seconds after every sign-in.**
+  `verify_user_mfa()` guarded against code reuse by comparing wall-clock time
+  since the last successful verification: any code accepted within 90 s of the
+  previous login was logged as a "TOTP code reuse attempt" and rejected. That
+  check cannot distinguish a replayed code from the brand-new one the
+  authenticator has already rotated to, so it rejected both — operators had to
+  wait out several 30-second rotations before a second login would go through.
+
+  Replay prevention now keys off the RFC 6238 *time step* the submitted code
+  belongs to. `MFAManager.verify_totp_with_counter()` reports which step
+  matched (searching the same ±1 skew window as before, with a constant-time
+  comparison), and a code is rejected only when its step is not newer than the
+  last one that user spent. A replayed code still fails; the next rotated code
+  is accepted immediately. Codes pasted with the space authenticators display
+  ("123 456") now verify instead of failing.
+
+  New nullable `admin_users.mfa_last_totp_counter` column (migration
+  `20260804_mfa_totp_counter`) records the spent step. Rows predating it fall
+  back to deriving the step from `mfa_last_totp_at`, so upgraded installs get
+  the fix without re-enrolling.
+
+- **GPIO relays never fired for automated RWTs or forwarded alerts.** Two
+  independent causes, both of which had to be fixed:
+
+  1. *The pin-owning service could not start.* `eas-station-gpio` is the only
+     process permitted to claim the relay lines (lgpio claims are exclusive per
+     process), and it was capped at `MemoryMax=128M` — a hard cgroup limit —
+     while needing roughly 240 MB just to import. Importing `app_core.models`
+     transitively pulls in the DSP stack (`app_utils.eas_decode` →
+     `eas_demod` → numba → scipy and numpy) before the service does any work.
+     The kernel OOM-killed it during startup and `Restart=always` turned that
+     into a silent crash loop, so no automated relay action was possible at
+     all. Raised to `MemoryMax=384M` on all six affected units
+     (`gpio`, `displays`, `gps`, `network`, `zigbee`, `endec-feeds`) — every one
+     of them imports the model layer and every one was capped below its own
+     startup footprint. `tests/test_systemd_memory_limits.py` fails if a
+     ceiling drops back below the floor.
+
+  2. *Forwarded alerts released the air-chain marker instantly.*
+     `EASBroadcaster.handle_alert()` — the path every auto-forwarded CAP alert
+     and OTA relay takes — set the `eas:broadcast_active` marker, called the
+     audio player, and cleared it. On any station without a local
+     `EAS_AUDIO_PLAYER` (Icecast-only or external-ENDEC installs) that call
+     returns in microseconds while the encoder is still working through the
+     queued SAME burst, so the marker existed for under a millisecond. The GPIO
+     subprocess keys the relay off that marker's rising edge and samples it at
+     1 Hz, so the edge was never observed. `handle_alert()` now holds the
+     marker for the full composite duration (bounded by
+     `max_activation_seconds`), matching what the manual send path and the RWT
+     scheduler already did.
+
+### Changed
+- The GPIO subsystem's active-alert count is cached for 5 seconds. It was
+  issuing a database `COUNT` on every indicator refresh — once a second plus
+  once per pub/sub notification — all serialised behind the same lock that
+  keys the relay, so a slow query delayed relay keying.
+
+### Removed
+- `tests/known_failures.txt` no longer lists `test_mfa_totp_reuse_prevention`.
+  Those seven tests were not failing for the recorded reason ("needs a real
+  database"); every one errored during fixture setup because patching the
+  `current_app` LocalProxy resolves it outside an application context. The
+  fixture now passes an explicit replacement and the suite runs clean.
+
 ## [2.126.1] - 2026-08-04 - SessionStart hook for Claude Code on the web
 
 ### Added

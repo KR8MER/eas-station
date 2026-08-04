@@ -297,6 +297,53 @@ sudo systemctl restart eas-station-gpio
 
 ### Relay Troubleshooting
 
+#### Relay never fires for automated RWTs or forwarded alerts
+
+**Start here — check that the GPIO service is actually running.**
+
+`eas-station-gpio` is the *only* process allowed to drive the relay lines
+(lgpio claims are exclusive per process), and it keys them off the
+`eas:broadcast_active` Redis marker that every broadcast producer publishes. If
+that service is not up, nothing automated can move a relay — manual test buttons
+included — even though the pins are configured correctly and the web UI looks
+healthy.
+
+In the web UI: **Operations → GPIO Control**. A banner reading *"GPIO is
+disabled or the GPIO service (eas-station-gpio) is not reporting state"* means
+the subprocess is not publishing its pin snapshot.
+
+The usual cause is a crash loop rather than a stopped service — `Restart=always`
+restarts it immediately, so it looks enabled while never staying up long enough
+to do anything. The most common reason is the process exceeding its
+`MemoryMax=` ceiling, which is a **hard** cgroup limit: the kernel OOM-kills it
+during startup. Releases before 2.126.2 shipped a 128M ceiling on a service that
+needs roughly 240 MB to import, so it could never start at all. Confirm with:
+
+```bash
+systemctl show eas-station-gpio -p NRestarts -p MemoryMax -p MemoryPeak
+journalctl -u eas-station-gpio -n 50        # look for "Killed" / oom
+```
+
+If `NRestarts` keeps climbing, or the journal shows OOM kills, the ceiling is
+too low. Re-run `sudo bash update.sh` to install the corrected unit files, or
+raise it by hand and reload:
+
+```bash
+sudo systemctl edit eas-station-gpio     # add [Service] / MemoryMax=384M
+sudo systemctl daemon-reload && sudo systemctl restart eas-station-gpio
+```
+
+A healthy service logs `✅ GPIO controller initialized with N pin(s)` and stays
+running.
+
+**If the service is up and only *forwarded* alerts fail**, confirm you are on
+2.126.2 or later. Earlier releases cleared the broadcast marker the instant the
+audio player call returned; on a station with no local `EAS_AUDIO_PLAYER`
+(Icecast-only or external-ENDEC installs) that is under a millisecond, far too
+short for the GPIO subprocess to observe, so the relay was never keyed. Manual
+sends and RWTs were unaffected because those paths already held the marker for
+the full broadcast.
+
 #### "Permission denied" accessing GPIO
 
 ```bash

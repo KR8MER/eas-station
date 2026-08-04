@@ -27,11 +27,13 @@ Provides:
 - MFA enrollment and validation
 """
 
+import hmac
 import secrets
 import hashlib
 import json
+import time
 from typing import List, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 try:
@@ -46,6 +48,15 @@ from flask import current_app
 
 from app_core.extensions import db
 from app_utils import utc_now
+
+#: Length of one TOTP time step, in seconds (RFC 6238 default, and what every
+#: authenticator app uses).
+TOTP_INTERVAL_SECONDS = 30
+
+#: How many time steps either side of "now" are accepted, to tolerate clock
+#: skew between the server and the authenticator app.  ``1`` means the previous,
+#: current, and next codes are all accepted — a 90-second acceptance span.
+TOTP_VALID_WINDOW = 1
 
 
 class MFAManager:
@@ -163,7 +174,7 @@ class MFAManager:
         return buffer.getvalue()
 
     @staticmethod
-    def verify_totp(secret: str, code: str, window: int = 1) -> bool:
+    def verify_totp(secret: str, code: str, window: int = TOTP_VALID_WINDOW) -> bool:
         """
         Verify a TOTP code.
 
@@ -175,11 +186,60 @@ class MFAManager:
         Returns:
             True if code is valid, False otherwise
         """
+        return MFAManager.verify_totp_with_counter(secret, code, window)[0]
+
+    @staticmethod
+    def verify_totp_with_counter(
+        secret: str, code: str, window: int = TOTP_VALID_WINDOW
+    ) -> Tuple[bool, Optional[int]]:
+        """
+        Verify a TOTP code and report *which* time step it belongs to.
+
+        ``pyotp.TOTP.verify()`` only answers "is this code currently valid?",
+        which is not enough to tell a replay of an already-used code from a
+        genuinely new code generated one time step later.  Both look identical
+        to a wall-clock "was the last successful login recent?" check, so such a
+        check locks legitimate users out for a minute and a half after every
+        login.  Returning the matched time-step counter lets the caller reject
+        only true replays.
+
+        Args:
+            secret: TOTP secret key
+            code: User-provided 6-digit code
+            window: Number of time steps to check either side of now (clock skew)
+
+        Returns:
+            Tuple of ``(is_valid, counter)``.  ``counter`` is the RFC 6238 time
+            step the code was generated for, or ``None`` when the code is
+            invalid.  Counters increase monotonically with time, so a code is a
+            replay exactly when its counter is not greater than the last one
+            this user consumed.
+        """
         if not TOTP_AVAILABLE:
             raise ImportError("pyotp is required for MFA functionality")
 
+        # Authenticator apps display codes in groups ("123 456"); operators
+        # paste them that way, and a stray space must not fail an otherwise
+        # correct code.
+        submitted = ''.join((code or '').split())
+        if not submitted or not secret:
+            return False, None
+
         totp = pyotp.TOTP(secret)
-        return totp.verify(code, valid_window=window)
+        interval = int(getattr(totp, 'interval', TOTP_INTERVAL_SECONDS) or TOTP_INTERVAL_SECONDS)
+        now_ts = int(time.time())
+        current_counter = now_ts // interval
+
+        for offset in range(-abs(window), abs(window) + 1):
+            try:
+                candidate = totp.at(now_ts, offset)
+            except Exception:  # pragma: no cover - pyotp input guard
+                continue
+            # Constant-time compare so a wrong code leaks no timing signal.
+            if hmac.compare_digest(str(candidate), submitted):
+                return True, current_counter + offset
+
+        return False, None
 
     @staticmethod
     def get_current_totp(secret: str) -> str:
@@ -210,6 +270,84 @@ def verify_totp_code(secret: str, code: str) -> bool:
     return MFAManager.verify_totp(secret, code)
 
 
+def verify_totp_code_with_counter(secret: str, code: str) -> Tuple[bool, Optional[int]]:
+    """Verify a TOTP code and return the time step it was generated for."""
+    return MFAManager.verify_totp_with_counter(secret, code)
+
+
+def _consumed_totp_counter(user) -> Optional[int]:
+    """Return the last TOTP time step this user has already spent, if any.
+
+    Prefers the exact counter recorded by :func:`verify_user_mfa`.  Rows written
+    before that column existed only carry ``mfa_last_totp_at`` (the wall-clock
+    time of the last successful verification), so derive the counter from it —
+    that still blocks a replay inside the same time step while letting the next
+    code through immediately.
+
+    Deriving from the timestamp is one step coarser than the recorded counter:
+    a code accepted from the *next* step (the +1 clock-skew slot) lands in a
+    later bucket than the login that spent it, so on such a row that one code
+    could be replayed until the step rolls over.  The window is at most 30
+    seconds and closes permanently at the next successful verification, which
+    writes the exact counter.
+    """
+    counter = getattr(user, 'mfa_last_totp_counter', None)
+    if counter is not None:
+        try:
+            return int(counter)
+        except (TypeError, ValueError):
+            return None
+
+    last_at = getattr(user, 'mfa_last_totp_at', None)
+    if not last_at:
+        return None
+    try:
+        if last_at.tzinfo is None:
+            last_at = last_at.replace(tzinfo=timezone.utc)
+        return int(last_at.timestamp()) // TOTP_INTERVAL_SECONDS
+    except (AttributeError, TypeError, ValueError, OSError):
+        return None
+
+
+def _record_spent_totp(user, counter: Optional[int]) -> None:
+    """Persist the time step a successful verification just consumed.
+
+    Falls back to writing only ``mfa_last_totp_at`` when the counter column is
+    not present in the database.  ``update.sh`` runs ``alembic upgrade head``
+    before restarting services, but the documented bare ``git pull`` + restart
+    flow does not — and without this fallback that combination would make every
+    MFA login fail on the commit rather than merely lose counter precision.
+    Replay protection still holds in that state via the timestamp-derived
+    counter in :func:`_consumed_totp_counter`.
+    """
+    now = utc_now()
+    user.mfa_last_totp_at = now
+    user.mfa_last_totp_counter = counter
+    try:
+        db.session.commit()
+        return
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.error(
+            "Could not record TOTP counter for user %s (%s); "
+            "run 'alembic upgrade head' to add admin_users.mfa_last_totp_counter",
+            getattr(user, 'username', '?'),
+            exc,
+        )
+
+    # Second attempt without the new column so the login still completes.
+    try:
+        user.mfa_last_totp_at = now
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.error(
+            "Could not record TOTP usage for user %s: %s",
+            getattr(user, 'username', '?'),
+            exc,
+        )
+
+
 def enroll_user_mfa(user, verify_code: str) -> Tuple[bool, Optional[List[str]]]:
     """
     Enroll a user in MFA after verification.
@@ -226,7 +364,8 @@ def enroll_user_mfa(user, verify_code: str) -> Tuple[bool, Optional[List[str]]]:
         return False, None
 
     # Verify the code
-    if not verify_totp_code(user.mfa_secret, verify_code):
+    is_valid, counter = verify_totp_code_with_counter(user.mfa_secret, verify_code)
+    if not is_valid:
         current_app.logger.warning(f"MFA enrollment failed for user {user.username}: invalid code")
         return False, None
 
@@ -236,7 +375,10 @@ def enroll_user_mfa(user, verify_code: str) -> Tuple[bool, Optional[List[str]]]:
     user.mfa_enabled = True
     now = utc_now()
     user.mfa_enrolled_at = now
-    user.mfa_last_totp_at = now  # Mark the enrollment code as used
+    # Spend the enrollment code so it can't be replayed at the login screen,
+    # while the *next* code the app shows still works right away.
+    user.mfa_last_totp_at = now
+    user.mfa_last_totp_counter = counter
 
     db.session.commit()
     current_app.logger.info(f"MFA enrolled for user {user.username}")
@@ -256,6 +398,7 @@ def disable_user_mfa(user):
     user.mfa_backup_codes_hash = None
     user.mfa_enrolled_at = None
     user.mfa_last_totp_at = None
+    user.mfa_last_totp_counter = None
 
     db.session.commit()
     current_app.logger.info(f"MFA disabled for user {user.username}")
@@ -276,25 +419,25 @@ def verify_user_mfa(user, code: str) -> bool:
         return False
 
     # Try TOTP first
-    if verify_totp_code(user.mfa_secret, code):
-        # Check if this code was already used recently (prevent reuse)
-        now = utc_now()
-        if user.mfa_last_totp_at:
-            # TOTP codes are valid for 30 seconds each
-            # With pyotp's window=1, codes are valid for 3 windows (90 seconds total):
-            # current window + 1 before + 1 after
-            # Prevent reuse within 90 seconds to cover all possible valid windows
-            time_since_last = (now - user.mfa_last_totp_at).total_seconds()
-            if time_since_last < 90:
-                current_app.logger.warning(
-                    f"TOTP code reuse attempt for user {user.username} "
-                    f"(last used {time_since_last:.1f}s ago)"
-                )
-                return False
-        
-        # Valid code and not a reuse - update timestamp
-        user.mfa_last_totp_at = now
-        db.session.commit()
+    is_valid, counter = verify_totp_code_with_counter(user.mfa_secret, code)
+    if is_valid:
+        # Reject replays only.  Each TOTP code belongs to exactly one 30-second
+        # time step, and counters increase with time, so "already spent" means
+        # "counter <= the last one we accepted".  Comparing wall-clock elapsed
+        # time instead (the previous implementation blocked every code for 90 s
+        # after a successful login) rejected perfectly good *new* codes and
+        # forced operators to sit through several code rotations before they
+        # could log in again.
+        last_counter = _consumed_totp_counter(user)
+        if last_counter is not None and counter is not None and counter <= last_counter:
+            current_app.logger.warning(
+                f"TOTP code reuse attempt for user {user.username} "
+                f"(time step {counter} was already used)"
+            )
+            return False
+
+        # Valid, previously unused code - spend this time step.
+        _record_spent_totp(user, counter)
         return True
 
     # Try backup code

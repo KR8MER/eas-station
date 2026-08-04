@@ -102,7 +102,15 @@ The system accepts codes from ±1 time step (90 seconds total window) to handle 
 
 ### "Code already used" error
 
-EAS Station™ prevents the same TOTP code from being used twice within 90 seconds. Wait for the next code to appear in your authenticator app before trying again.
+EAS Station™ refuses to accept the **same** code twice — each 30-second code may
+be spent on exactly one successful sign-in. Wait for your authenticator to show
+the next code and enter that one; it is accepted immediately, with no cooldown
+between logins.
+
+> **Fixed in 2.126.2:** earlier releases rejected *every* code for 90 seconds
+> after a successful sign-in, not just reused ones, so a second login meant
+> sitting through several code rotations. If you are on an older build and see
+> "Invalid verification code" for correct, freshly rotated codes, upgrade.
 
 ### Locked out (lost authenticator + backup codes)
 

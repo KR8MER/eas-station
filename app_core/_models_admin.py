@@ -73,6 +73,10 @@ class AdminUser(db.Model):
     mfa_backup_codes_hash = db.Column(db.Text, nullable=True)  # JSON array of hashed backup codes
     mfa_enrolled_at = db.Column(db.DateTime(timezone=True), nullable=True)
     mfa_last_totp_at = db.Column(db.DateTime(timezone=True), nullable=True)  # Last successful TOTP code timestamp
+    # RFC 6238 time step of the last accepted TOTP code.  Replay prevention
+    # compares against this counter rather than elapsed wall-clock time, so a
+    # newly rotated code is accepted immediately while a reused one is not.
+    mfa_last_totp_counter = db.Column(db.BigInteger, nullable=True)
 
     # Relationships
     role = db.relationship('Role', back_populates='users', lazy='joined')
