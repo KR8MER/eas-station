@@ -27,6 +27,7 @@ from xml.dom import minidom
 
 from flask import Flask, Response, jsonify, request
 from sqlalchemy import func
+from sqlalchemy.orm import defer
 
 from app_core.alerts import get_active_alerts_query, get_expired_alerts_query
 from app_core.extensions import db
@@ -38,6 +39,21 @@ from app_utils import (
     local_now,
     utc_now,
 )
+
+# These exports render only small scalar columns, but a plain entity query
+# also loads each alert's PostGIS geometry, its raw CAP payload, and the
+# long free-text fields -- for up to 50,000 rows. Deferring them keeps an
+# export bounded; nothing below reads any of these.
+def _alert_export_query():
+    """CAPAlert query with every heavy column deferred."""
+    return CAPAlert.query.options(
+        defer(CAPAlert.geom),
+        defer(CAPAlert.raw_json),
+        defer(CAPAlert.certificate_info),
+        defer(CAPAlert.description),
+        defer(CAPAlert.instruction),
+    )
+
 
 _CAP_NS = "urn:oasis:names:tc:emergency:cap:1.2"
 
@@ -98,7 +114,7 @@ def register(app: Flask, logger) -> None:
             limit = request.args.get('limit', 10000, type=int)
             limit = min(max(1, limit), 50000)  # Clamp between 1 and 50,000
 
-            alerts = CAPAlert.query.order_by(CAPAlert.sent.desc()).limit(limit).all()
+            alerts = _alert_export_query().order_by(CAPAlert.sent.desc()).limit(limit).all()
             alerts_data: List[Dict[str, Any]] = []
 
             for alert in alerts:
@@ -158,7 +174,14 @@ def register(app: Flask, logger) -> None:
             limit = request.args.get('limit', 5000, type=int)
             limit = min(max(1, limit), 20000)  # Clamp between 1 and 20,000
 
-            boundaries = Boundary.query.order_by(Boundary.type, Boundary.name).limit(limit).all()
+            # defer(geom): this export lists names and types, not shapes, and a
+            # boundary geometry can be megabytes on its own.
+            boundaries = (
+                Boundary.query.options(defer(Boundary.geom))
+                .order_by(Boundary.type, Boundary.name)
+                .limit(limit)
+                .all()
+            )
             boundaries_data: List[Dict[str, Any]] = []
 
             for boundary in boundaries:
@@ -271,7 +294,7 @@ def register(app: Flask, logger) -> None:
             limit = request.args.get("limit", 1000, type=int)
             limit = min(max(1, limit), 10000)
 
-            alerts = CAPAlert.query.order_by(CAPAlert.sent.desc()).limit(limit).all()
+            alerts = _alert_export_query().order_by(CAPAlert.sent.desc()).limit(limit).all()
 
             feed = ET.Element(f"{{{_CAP_NS}}}feed")
             feed.set("xmlns", _CAP_NS)
@@ -308,7 +331,7 @@ def register(app: Flask, logger) -> None:
             limit = request.args.get("limit", 10000, type=int)
             limit = min(max(1, limit), 50000)
 
-            alerts = CAPAlert.query.order_by(CAPAlert.sent.desc()).limit(limit).all()
+            alerts = _alert_export_query().order_by(CAPAlert.sent.desc()).limit(limit).all()
             rows: List[Dict[str, Any]] = []
             for alert in alerts:
                 rows.append(

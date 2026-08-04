@@ -213,8 +213,13 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
         state_tree = get_extended_state_county_tree()
         same_lookup = get_extended_same_lookup()
 
+        # without_audio(): workflow.html reads created_at, id,
+        # metadata_payload, text_filename and text_payload -- no audio.
         recent_messages: List[EASMessage] = (
-            EASMessage.query.order_by(EASMessage.created_at.desc()).limit(10).all()
+            EASMessage.without_audio()
+            .order_by(EASMessage.created_at.desc())
+            .limit(10)
+            .all()
         )
 
         # Detect local authority context for the current user
@@ -915,7 +920,9 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             limit = min(max(limit, 1), 500)
             total = ManualEASActivation.query.count()
             events = (
-                ManualEASActivation.query.order_by(ManualEASActivation.created_at.desc())
+                # without_audio(): this listing reads no audio blob.
+                ManualEASActivation.without_audio()
+                .order_by(ManualEASActivation.created_at.desc())
                 .limit(limit)
                 .all()
             )
@@ -1468,7 +1475,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                 id_list = [int(item) for item in ids if item is not None]
             except (TypeError, ValueError):
                 return jsonify({'error': 'ids must be a list of integers.'}), 400
-            query = ManualEASActivation.query.filter(ManualEASActivation.id.in_(id_list))
+            query = ManualEASActivation.without_audio().filter(ManualEASActivation.id.in_(id_list))
         else:
             before_text = payload.get('before')
             older_than_days = payload.get('older_than_days')
@@ -1495,8 +1502,12 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
 
             if cutoff.tzinfo is None:
                 cutoff = cutoff.replace(tzinfo=timezone.utc)
-            query = ManualEASActivation.query.filter(ManualEASActivation.created_at < cutoff)
+            query = ManualEASActivation.without_audio().filter(ManualEASActivation.created_at < cutoff)
 
+        # without_audio(): this purge reads only id and storage_path, but a
+        # plain query loaded all ten audio blobs of every row it was about
+        # to delete. Deferred columns keep the ORM objects that
+        # db.session.delete() below needs, without transferring the audio.
         activations = query.all()
         if not activations:
             return jsonify({'message': 'No manual EAS activations matched the purge criteria.', 'deleted': 0})

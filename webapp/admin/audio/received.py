@@ -25,6 +25,7 @@ import io
 
 from flask import render_template, request, jsonify, send_file, abort
 from sqlalchemy import desc, func
+from sqlalchemy.orm import defer
 
 from app_core.extensions import db
 from app_core.models import ReceivedEASAlert
@@ -54,7 +55,18 @@ def register_received_alerts_routes(app, logger) -> None:
             # Parse and apply filters (multi-value source/event with
             # include/exclude modes; see received_filters.py).
             filters = parse_filters(request.args)
-            base_query = apply_filters(ReceivedEASAlert.query, filters)
+            # Defer the two heavy columns: raw_audio_data is the captured WAV
+            # (~1 MB per alert) and full_alert_data is the complete decoded
+            # JSONB. The list template (audio_received.html) renders neither
+            # -- only the detail view does -- so a 100-row page was moving
+            # ~100 MB of audio it would immediately discard.
+            base_query = apply_filters(
+                ReceivedEASAlert.query.options(
+                    defer(ReceivedEASAlert.raw_audio_data),
+                    defer(ReceivedEASAlert.full_alert_data),
+                ),
+                filters,
+            )
 
             # Order by most recent first
             query = base_query.order_by(desc(ReceivedEASAlert.received_at))

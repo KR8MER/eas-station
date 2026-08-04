@@ -30,7 +30,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from flask import current_app
 from sqlalchemy import or_, select, text
-from sqlalchemy.orm import defer, joinedload
+from sqlalchemy.orm import defer
 
 from app_core.extensions import db
 from app_core.models import (
@@ -475,6 +475,54 @@ def remove_eas_files(message) -> None:
             os.remove(disk_path)
         except OSError:
             continue
+
+
+# Chunk size for the IN () clauses used when purging. Postgres caps a
+# statement at 65535 bound parameters, so a large purge must be batched.
+PURGE_CHUNK = 1000
+
+
+def purge_eas_messages(query) -> List[int]:
+    """Delete the EASMessage rows matched by ``query`` and their disk files.
+
+    ``query`` is an EASMessage query carrying the caller's selection
+    criteria; it is narrowed to the columns needed for cleanup rather than
+    loaded whole. Whole rows would drag in six LargeBinary audio columns
+    per message -- gigabytes for an "older than N days" purge, all of it
+    read only to be thrown away.
+
+    Returns the deleted IDs.
+    """
+    doomed = query.with_entities(
+        EASMessage.id,
+        EASMessage.audio_filename,
+        EASMessage.text_filename,
+        EASMessage.metadata_payload,
+    ).all()
+    if not doomed:
+        return []
+
+    deleted_ids = [row.id for row in doomed]
+    for row in doomed:
+        remove_eas_files(row)
+
+    # received_eas_alerts.generated_message_id has no ON DELETE rule, so the
+    # database rejects the delete while a reference survives. The previous
+    # per-object db.session.delete() relied on SQLAlchemy's default cascade
+    # to null it out; a set-based delete has to do that explicitly.
+    for offset in range(0, len(deleted_ids), PURGE_CHUNK):
+        chunk = deleted_ids[offset:offset + PURGE_CHUNK]
+        ReceivedEASAlert.query.filter(
+            ReceivedEASAlert.generated_message_id.in_(chunk)
+        ).update(
+            {ReceivedEASAlert.generated_message_id: None},
+            synchronize_session=False,
+        )
+        EASMessage.query.filter(EASMessage.id.in_(chunk)).delete(
+            synchronize_session=False
+        )
+
+    return deleted_ids
 
 
 def ensure_eas_audio_columns(logger) -> bool:
@@ -2164,6 +2212,12 @@ _DECISION_TITLES: Dict[str, str] = {
     "ignored": "Ignored Alerts Report",
 }
 
+# Hard ceiling on the number of rows any single report will materialise.
+# The export routes accept arbitrary start/end bounds, so a multi-year
+# window could otherwise build a list large enough to exhaust the worker.
+# Reports that hit the cap say so in their summary block.
+REPORT_MAX_ROWS = 25000
+
 
 def build_received_alerts_report(
     *,
@@ -2178,19 +2232,42 @@ def build_received_alerts_report(
     decision_key = decision if decision in REPORT_DECISION_FILTERS else "received"
     filters = REPORT_DECISION_FILTERS[decision_key]
 
-    query = ReceivedEASAlert.query.filter(
-        ReceivedEASAlert.received_at >= window_start,
-        ReceivedEASAlert.received_at < window_end,
+    # Select only the columns the report prints.  Loading whole
+    # ``ReceivedEASAlert`` ORM rows drags along ``raw_audio_data``
+    # (LargeBinary WAV capture, ~1 MB per alert) and ``full_alert_data``
+    # (JSONB) — none of which appear in the output.  On a month of traffic
+    # that was hundreds of megabytes of working set per request, enough to
+    # get the gunicorn worker OOM-killed, which surfaces to the user as a
+    # 502 gateway error on /logs?type=report_received.
+    stmt = (
+        select(
+            ReceivedEASAlert.received_at,
+            ReceivedEASAlert.event_code,
+            ReceivedEASAlert.event_name,
+            ReceivedEASAlert.originator_code,
+            ReceivedEASAlert.callsign,
+            ReceivedEASAlert.source_name,
+            ReceivedEASAlert.matched_fips_codes,
+            ReceivedEASAlert.fips_codes,
+            ReceivedEASAlert.forwarding_decision,
+            ReceivedEASAlert.forwarding_reason,
+        )
+        .where(
+            ReceivedEASAlert.received_at >= window_start,
+            ReceivedEASAlert.received_at < window_end,
+        )
+        .order_by(ReceivedEASAlert.received_at.desc())
+        .limit(REPORT_MAX_ROWS)
+        .execution_options(yield_per=500)
     )
     if filters:
-        query = query.filter(ReceivedEASAlert.forwarding_decision.in_(filters))
-    alerts = query.order_by(ReceivedEASAlert.received_at.desc()).all()
+        stmt = stmt.where(ReceivedEASAlert.forwarding_decision.in_(filters))
 
     rows: List[List[Any]] = []
     forwarded_count = 0
     ignored_count = 0
     error_count = 0
-    for alert in alerts:
+    for alert in db.session.execute(stmt):
         decision_value = (alert.forwarding_decision or "").lower()
         if decision_value == "forwarded":
             forwarded_count += 1
@@ -2227,11 +2304,16 @@ def build_received_alerts_report(
     )
 
     summary_lines = [
-        f"Total entries:    {len(alerts)}",
+        f"Total entries:    {len(rows)}",
         f"Forwarded:        {forwarded_count}",
         f"Ignored:          {ignored_count}",
         f"Errors:           {error_count}",
     ]
+    if len(rows) >= REPORT_MAX_ROWS:
+        summary_lines.append(
+            f"Note: truncated to the newest {REPORT_MAX_ROWS} entries — "
+            "narrow the reporting window to see the rest."
+        )
 
     slug = f"{decision_key}-alerts"
     return {
@@ -2243,7 +2325,7 @@ def build_received_alerts_report(
         "summary_lines": summary_lines,
         "window_start": window_start,
         "window_end": window_end,
-        "row_count": len(alerts),
+        "row_count": len(rows),
     }
 
 
@@ -2254,37 +2336,64 @@ def build_initiated_alerts_report(
 ) -> Dict[str, Any]:
     """Alerts initiated by this station: auto-relays plus manual activations."""
 
-    auto_query = (
-        EASMessage.query.options(joinedload(EASMessage.cap_alert))
-        .filter(EASMessage.created_at >= window_start)
-        .filter(EASMessage.created_at < window_end)
+    # Column-level selects, not whole ORM rows: ``EASMessage`` carries six
+    # LargeBinary audio columns and ``CAPAlert`` carries ``raw_json`` plus a
+    # PostGIS ``geom``.  A joined eager load of both to print two strings is
+    # what pushed this report past the worker's memory ceiling and turned
+    # /logs?type=report_initiated into a 502 gateway error.
+    auto_stmt = (
+        select(
+            EASMessage.created_at,
+            EASMessage.same_header,
+            CAPAlert.event,
+            CAPAlert.identifier,
+        )
+        .select_from(EASMessage)
+        .outerjoin(CAPAlert, EASMessage.cap_alert_id == CAPAlert.id)
+        .where(
+            EASMessage.created_at >= window_start,
+            EASMessage.created_at < window_end,
+        )
         .order_by(EASMessage.created_at.desc())
+        .limit(REPORT_MAX_ROWS)
+        .execution_options(yield_per=500)
     )
-    manual_query = (
-        ManualEASActivation.query.filter(
+    manual_stmt = (
+        select(
+            ManualEASActivation.sent_at,
+            ManualEASActivation.created_at,
+            ManualEASActivation.event_name,
+            ManualEASActivation.event_code,
+            ManualEASActivation.same_header,
+            ManualEASActivation.status,
+            ManualEASActivation.identifier,
+        )
+        .where(
             ManualEASActivation.created_at >= window_start,
             ManualEASActivation.created_at < window_end,
-        ).order_by(ManualEASActivation.created_at.desc())
+        )
+        .order_by(ManualEASActivation.created_at.desc())
+        .limit(REPORT_MAX_ROWS)
+        .execution_options(yield_per=500)
     )
 
     rows: List[List[Any]] = []
     auto_count = 0
     manual_count = 0
 
-    for message in auto_query:
+    for message in db.session.execute(auto_stmt):
         auto_count += 1
-        alert = message.cap_alert
         rows.append([
             format_local_datetime(message.created_at, include_utc=True),
             "AUTO",
-            (alert.event if alert and alert.event else "") or "",
+            message.event or "",
             "",
             _short(message.same_header, 50),
             "relayed",
-            _short(alert.identifier if alert else "", 40),
+            _short(message.identifier or "", 40),
         ])
 
-    for activation in manual_query:
+    for activation in db.session.execute(manual_stmt):
         manual_count += 1
         ts = activation.sent_at or activation.created_at
         rows.append([
@@ -2298,6 +2407,7 @@ def build_initiated_alerts_report(
         ])
 
     rows.sort(key=lambda r: r[0], reverse=True)
+    truncated = auto_count >= REPORT_MAX_ROWS or manual_count >= REPORT_MAX_ROWS
 
     columns = [
         {"label": "Initiated (local / UTC)", "weight": 2.4},
@@ -2318,6 +2428,11 @@ def build_initiated_alerts_report(
         f"Automated relay:  {auto_count}",
         f"Manual activation:{manual_count}",
     ]
+    if truncated:
+        summary_lines.append(
+            f"Note: truncated to the newest {REPORT_MAX_ROWS} entries per source — "
+            "narrow the reporting window to see the rest."
+        )
 
     return {
         "slug": "initiated-alerts",

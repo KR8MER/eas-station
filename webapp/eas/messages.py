@@ -28,7 +28,12 @@ from flask import current_app, g, jsonify, request, url_for
 
 from app_core.extensions import db
 from app_core.models import EASMessage, SystemLog
-from app_core.eas_storage import get_eas_static_prefix, remove_eas_files
+from app_core.eas_storage import (
+    get_eas_static_prefix,
+    remove_eas_files,
+    # Aliased: the purge route below is itself named purge_eas_messages.
+    purge_eas_messages as purge_eas_message_rows,
+)
 from app_core.auth.roles import require_permission
 from app_utils import utc_now
 
@@ -43,13 +48,15 @@ def register_message_routes(bp, logger) -> None:
         try:
             limit = request.args.get('limit', type=int) or 50
             limit = min(max(limit, 1), 500)
-            base_query = EASMessage.query.order_by(EASMessage.created_at.desc())
+            # summary_query() skips the six audio blobs; this listing only
+            # needs the "is it populated?" booleans, computed in SQL.
+            base_query = EASMessage.summary_query().order_by(EASMessage.created_at.desc())
             messages = base_query.limit(limit).all()
-            total = base_query.count()
+            total = EASMessage.query.count()
 
             items = []
             for message in messages:
-                data = message.to_dict()
+                data = EASMessage.summary_to_dict(message)
                 audio_url = url_for('eas_message_audio', message_id=message.id)
                 if message.text_payload:
                     text_url = url_for('eas_message_summary', message_id=message.id)
@@ -142,15 +149,9 @@ def register_message_routes(bp, logger) -> None:
                 cutoff = cutoff.replace(tzinfo=timezone.utc)
             query = EASMessage.query.filter(EASMessage.created_at < cutoff)
 
-        messages = query.all()
-        if not messages:
+        deleted_ids: List[int] = purge_eas_message_rows(query)
+        if not deleted_ids:
             return jsonify({'message': 'No EAS messages matched the purge criteria.', 'deleted': 0})
-
-        deleted_ids: List[int] = []
-        for message in messages:
-            deleted_ids.append(message.id)
-            remove_eas_files(message)
-            db.session.delete(message)
 
         try:
             db.session.add(

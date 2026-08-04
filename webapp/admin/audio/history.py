@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from flask import render_template, request, url_for
 from sqlalchemy import or_
+from sqlalchemy.orm import defer
 
 from app_core.extensions import db
 from app_core.models import CAPAlert, EASMessage, ManualEASActivation, ReceivedEASAlert
@@ -51,8 +52,32 @@ def register_history_routes(app, logger) -> None:
             severity_filter = request.args.get('severity', '').strip()
             status_filter = request.args.get('status', '').strip()
 
-            base_query = db.session.query(EASMessage, CAPAlert).outerjoin(
+            # This listing renders only small scalar columns, and the one
+            # blob it consults (eom_audio_data) is consulted as a boolean --
+            # so that NULL test runs in SQL and every LargeBinary / geometry
+            # / large-JSON column is deferred.  Left as a plain entity query
+            # this loaded six audio blobs per message plus each CAP alert's
+            # raw_json and PostGIS geometry; since the fetch window is
+            # offset+per_page, the cost grew with every page turned.
+            base_query = db.session.query(
+                EASMessage,
+                CAPAlert,
+                EASMessage.eom_audio_data.isnot(None).label('has_eom_blob'),
+            ).outerjoin(
                 CAPAlert, EASMessage.cap_alert_id == CAPAlert.id
+            ).options(
+                defer(EASMessage.audio_data),
+                defer(EASMessage.eom_audio_data),
+                defer(EASMessage.same_audio_data),
+                defer(EASMessage.attention_audio_data),
+                defer(EASMessage.tts_audio_data),
+                defer(EASMessage.buffer_audio_data),
+                defer(CAPAlert.geom),
+                defer(CAPAlert.raw_json),
+                defer(CAPAlert.certificate_info),
+                defer(CAPAlert.description),
+                defer(CAPAlert.instruction),
+                defer(CAPAlert.area_desc),
             )
 
             if search:
@@ -75,7 +100,8 @@ def register_history_routes(app, logger) -> None:
 
             query = base_query.order_by(EASMessage.created_at.desc())
 
-            manual_query = ManualEASActivation.query
+            # Same story on the manual side: ten audio blobs, none rendered.
+            manual_query = ManualEASActivation.without_audio()
             include_manual = True
 
             if search:
@@ -117,16 +143,40 @@ def register_history_routes(app, logger) -> None:
             if include_manual and fetch_limit:
                 manual_records = manual_query.limit(fetch_limit).all()
 
+            # Resolve the OTA source alert for every message in one query.
+            # ``message.source_alerts`` is a lazy relationship, so touching it
+            # per row issued a SELECT per message that loaded whole
+            # ReceivedEASAlert rows -- each carrying the captured WAV in
+            # raw_audio_data.  Only three small facts are needed, and whether
+            # audio exists is a NULL test SQL can answer.
+            received_by_message: Dict[int, Any] = {}
+            message_ids = [row[0].id for row in automated_records]
+            if message_ids:
+                received_rows = (
+                    db.session.query(
+                        ReceivedEASAlert.generated_message_id,
+                        ReceivedEASAlert.id,
+                        ReceivedEASAlert.raw_same_header,
+                        ReceivedEASAlert.raw_audio_data.isnot(None).label('has_raw_audio'),
+                    )
+                    .filter(ReceivedEASAlert.generated_message_id.in_(message_ids))
+                    .order_by(ReceivedEASAlert.id)
+                    .all()
+                )
+                # First row per message mirrors the old source_alerts[0].
+                for row in received_rows:
+                    received_by_message.setdefault(row.generated_message_id, row)
+
             messages: List[Dict[str, Any]] = []
             web_prefix = get_eas_static_prefix()
 
-            for message, alert in automated_records:
+            for message, alert, has_eom_blob in automated_records:
                 metadata = dict(message.metadata_payload or {})
                 event_name = (alert.event if alert and alert.event else metadata.get('event')) or 'Unknown Event'
                 severity = alert.severity if alert and alert.severity else metadata.get('severity')
                 status = alert.status if alert and alert.status else metadata.get('status')
                 eom_filename = metadata.get('eom_filename')
-                has_eom_data = bool(message.eom_audio_data) or bool(eom_filename)
+                has_eom_data = bool(has_eom_blob) or bool(eom_filename)
 
                 audio_url = url_for('eas_message_audio', message_id=message.id)
                 if message.text_payload:
@@ -145,7 +195,7 @@ def register_history_routes(app, logger) -> None:
 
                 # Determine alert link: prefer CAP alert, fall back to OTA received alert.
                 # Also collect original received header and audio for OTA-triggered messages.
-                _received = message.source_alerts[0] if message.source_alerts else None
+                _received = received_by_message.get(message.id)
                 if alert:
                     _alert_url = url_for('api.alert_detail', alert_id=alert.id)
                     _alert_label = 'View Alert'
@@ -166,7 +216,7 @@ def register_history_routes(app, logger) -> None:
                     _original_same_header = _received.raw_same_header if _received else None
                     _received_audio_url = (
                         url_for('received_alert_audio', alert_id=_received.id)
-                        if _received and _received.raw_audio_data
+                        if _received and _received.has_raw_audio
                         else None
                     )
 
@@ -194,10 +244,26 @@ def register_history_routes(app, logger) -> None:
                     }
                 )
 
+            # The manual payload builder needs to know which of the two
+            # served blobs exist.  With the audio columns deferred, reading
+            # them per row would fire a lazy load each -- so resolve all of
+            # them in one NULL-testing query instead.
+            manual_audio_flags: Dict[int, Tuple[bool, bool]] = {}
+            if manual_records:
+                for row in db.session.query(
+                    ManualEASActivation.id,
+                    ManualEASActivation.composite_audio_data.isnot(None),
+                    ManualEASActivation.eom_audio_data.isnot(None),
+                ).filter(
+                    ManualEASActivation.id.in_([e.id for e in manual_records])
+                ):
+                    manual_audio_flags[row[0]] = (row[1], row[2])
+
             manual_messages = _build_manual_message_entries(
                 manual_records,
                 manual_prefix=app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/'),
                 web_prefix=web_prefix,
+                audio_flags=manual_audio_flags,
             )
             messages.extend(manual_messages)
 
@@ -313,10 +379,20 @@ def _build_manual_message_entries(
     *,
     manual_prefix: str,
     web_prefix: Optional[str],
+    audio_flags: Optional[Dict[int, Tuple[bool, bool]]] = None,
 ) -> List[Dict[str, Any]]:
+    """Render manual activations for the audio history listing.
+
+    ``audio_flags`` maps activation id to ``(has_composite, has_eom)``, the
+    two blob-presence facts this builder needs.  They are passed in rather
+    than read off the row because the caller defers all ten audio columns;
+    touching one here would undo that with a lazy load per row.
+    """
     messages: List[Dict[str, Any]] = []
+    audio_flags = audio_flags or {}
 
     for event in manual_records:
+        has_composite_blob, has_eom_blob = audio_flags.get(event.id, (False, False))
         metadata = dict(event.metadata_payload or {})
         components_payload = dict(event.components_payload or {})
 
@@ -355,7 +431,7 @@ def _build_manual_message_entries(
         )
         eom_subpath = metadata.get('eom_subpath') or _component_subpath('eom')
 
-        if event.composite_audio_data:
+        if has_composite_blob:
             audio_url = url_for('manual_eas_audio', event_id=event.id, component='composite')
         else:
             audio_url = (
@@ -368,7 +444,7 @@ def _build_manual_message_entries(
             if summary_subpath
             else None
         )
-        if event.eom_audio_data:
+        if has_eom_blob:
             eom_url = url_for('manual_eas_audio', event_id=event.id, component='eom')
         else:
             eom_url = (

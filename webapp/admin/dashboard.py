@@ -156,7 +156,11 @@ def admin():
             recent_eas_messages = safe_db_operation(
                 'load recent EAS messages',
                 [],
-                lambda: EASMessage.query.order_by(EASMessage.created_at.desc()).limit(10).all(),
+                # without_audio(): the dashboard shows filenames and timestamps.
+                lambda: EASMessage.without_audio()
+                .order_by(EASMessage.created_at.desc())
+                .limit(10)
+                .all(),
             )
 
         eas_event_options = [

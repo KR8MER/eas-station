@@ -34,6 +34,7 @@ import requests
 from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy import desc, or_, text
 from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.orm import defer
 
 from app_core.alerts import (
     assign_alert_geometry,
@@ -1378,7 +1379,15 @@ def mark_expired():
     try:
         now = utc_now()
 
-        expired_alerts = CAPAlert.query.filter(
+        # Only status and updated_at are written; the geometry and raw CAP
+        # payload of every expiring alert are dead weight here.
+        expired_alerts = CAPAlert.query.options(
+            defer(CAPAlert.geom),
+            defer(CAPAlert.raw_json),
+            defer(CAPAlert.certificate_info),
+            defer(CAPAlert.description),
+            defer(CAPAlert.instruction),
+        ).filter(
             CAPAlert.expires < now, CAPAlert.status != "Expired"
         ).all()
 
@@ -1428,7 +1437,16 @@ def clear_expired():
         payload = request.get_json(silent=True) or {}
         confirmed = payload.get("confirmed", False)
 
-        expired_alerts = CAPAlert.query.filter(
+        # Nothing is read off these rows -- they are only counted and passed
+        # to db.session.delete() -- so their geometry and raw CAP payloads
+        # need never leave the database.
+        expired_alerts = CAPAlert.query.options(
+            defer(CAPAlert.geom),
+            defer(CAPAlert.raw_json),
+            defer(CAPAlert.certificate_info),
+            defer(CAPAlert.description),
+            defer(CAPAlert.instruction),
+        ).filter(
             or_(CAPAlert.expires < now, CAPAlert.status == "Expired")
         ).all()
 

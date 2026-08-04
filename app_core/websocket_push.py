@@ -42,6 +42,8 @@ import threading
 import time
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+from sqlalchemy.orm import defer
+
 try:  # numpy is a hard runtime dependency for the audio stack, but keep this
     # defensive so the module can still import (e.g. during isolated tests)
     # when numpy is unavailable.
@@ -890,8 +892,19 @@ def _emit_alerts_update(
 
     try:
         now_utc = datetime.now(timezone.utc)
+        # Pushed every ALERTS_UPDATE_INTERVAL seconds, so this query is a
+        # standing background load. It reads eight small columns; deferring
+        # the geometry and raw CAP payload keeps each push cheap.
         rows = (
             CAPAlert.query
+            .options(
+                defer(CAPAlert.geom),
+                defer(CAPAlert.raw_json),
+                defer(CAPAlert.certificate_info),
+                defer(CAPAlert.description),
+                defer(CAPAlert.instruction),
+                defer(CAPAlert.area_desc),
+            )
             .filter(CAPAlert.expires > now_utc)
             .order_by(CAPAlert.received_at.desc())
             .limit(50)

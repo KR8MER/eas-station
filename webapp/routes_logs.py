@@ -329,8 +329,24 @@ def get_recent_logs():
                 },
             })
 
-        # Get recent EAS messages
-        for log in EASMessage.query.order_by(EASMessage.created_at.desc()).limit(limit // 4).all():
+        # Get recent EAS messages.  Column-scoped: EASMessage carries six
+        # LargeBinary audio columns and none are read here.  This endpoint is
+        # polled every 10 s by the real-time log viewer, so loading the audio
+        # would have made the blob transfer a steady background load.
+        eas_message_rows = (
+            EASMessage.query
+            .with_entities(
+                EASMessage.id,
+                EASMessage.created_at,
+                EASMessage.same_header,
+                EASMessage.audio_filename,
+                EASMessage.alert_identifier,
+            )
+            .order_by(EASMessage.created_at.desc())
+            .limit(limit // 4)
+            .all()
+        )
+        for log in eas_message_rows:
             logs.append({
                 'id': f'eas_{log.id}',
                 'timestamp': log.created_at.isoformat() if log.created_at else None,
