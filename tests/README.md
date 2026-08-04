@@ -35,6 +35,24 @@ service container:
 REDIS_HOST=localhost REDIS_PORT=6379 pytest
 ```
 
+### Claude Code on the web
+
+`.claude/hooks/session-start.sh` provisions a remote session automatically:
+PostGIS and Redis are installed and started, `requirements.txt` plus
+pytest/ruff/playwright are installed, the schema is built and stamped, and
+`DATABASE_URL` / `SECRET_KEY` / `REDIS_*` / `CHROMIUM_BIN` are exported. A
+session therefore starts with the full suite runnable — including the
+database-backed tests that otherwise skip.
+
+Schema bootstrap mirrors `install.sh`: `db.create_all()` followed by
+`alembic stamp head`. A bare `alembic upgrade head` cannot build an empty
+database — no migration creates the base tables, so the first one referencing
+`cap_alerts` fails. Stamping means a migration added during a session applies
+cleanly with `alembic upgrade head`.
+
+The hook only runs when `CLAUDE_CODE_REMOTE=true`, so it never touches a
+developer's own machine.
+
 ### Continuous Integration
 
 `.github/workflows/tests.yml` runs this suite on every pull request and on

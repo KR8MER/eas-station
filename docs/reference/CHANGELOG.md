@@ -8,6 +8,39 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.126.1] - 2026-08-04 - SessionStart hook for Claude Code on the web
+
+### Added
+- `.claude/hooks/session-start.sh` — provisions a remote session end to end in
+  roughly 45 seconds: installs PostGIS, Redis, ffmpeg and libsndfile; installs
+  `requirements.txt` plus pytest/ruff/playwright; creates and starts a
+  PostgreSQL cluster with the PostGIS extension; builds and stamps the schema;
+  starts Redis; and exports `DATABASE_URL`, `SECRET_KEY`, `REDIS_HOST`,
+  `REDIS_PORT`, `LOG_LEVEL` and `CHROMIUM_BIN` for the session.
+
+  Schema bootstrap deliberately mirrors `install.sh`: `db.create_all()` then
+  `alembic stamp head`. A bare `alembic upgrade head` cannot build an empty
+  database, because no migration in `app_core/migrations/versions/` creates the
+  base tables — the first migration referencing `cap_alerts` fails with
+  UndefinedTable. Stamping records the head revision so a migration written
+  during a session applies cleanly with `alembic upgrade head`; on later runs
+  the hook takes that upgrade path automatically.
+
+  The hook is idempotent, non-interactive, and gated on `CLAUDE_CODE_REMOTE`
+  so it never modifies a developer's own machine. Optional packages are
+  installed under a bounded `timeout`, and if PostgreSQL cannot be provisioned
+  the hook declines to export `DATABASE_URL` so `conftest.py` falls back to
+  in-memory SQLite rather than the session failing outright.
+
+### Fixed
+- `app_core/migrations/env.py` set `SKIP_DB_INIT` inside `_get_configured_url()`,
+  which runs *after* the module-level `from app import create_app`. Importing
+  `app` is what reads the flag to decide whether to start the background
+  workers (RWT scheduler, retention, auto-purge, metrics sampler), so the guard
+  never took effect: every `alembic` invocation started those workers, and they
+  queried tables mid-migration and buried the real output in UndefinedTable
+  tracebacks. The assignment now happens before the import.
+
 ## [2.126.0] - 2026-08-04 - Legible page titles, navbar layout, alert visibility
 
 Found by rendering the running application in a headless browser rather than
