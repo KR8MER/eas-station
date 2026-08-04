@@ -8,6 +8,61 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.128.0] - 2026-08-04 - Authentication audit: public docs, private diagnostics
+
+Audited every registered route against the deny-by-default gate in
+`app.by:before_request`. Two problems in opposite directions; see
+[Public vs. Authenticated Routes](../security/PUBLIC_ROUTES.md) for the full
+inventory.
+
+### Changed
+- **Documentation and licence pages no longer require a login.** `/attribution`
+  (the AGPL-3.0 and third-party licence disclosures) and `/style-guide` (the UI
+  component reference, linked from the developer docs) were behind the gate.
+  Neither carries station data, and putting licence notices behind a password
+  defeats their purpose. The `/docs` tree, `/about`, `/help`, `/terms`,
+  `/privacy`, `/support` and `/version` were already public and stay that way.
+
+- **Machine-describing diagnostics are no longer readable from the internet.**
+  These GET endpoints answered any anonymous caller:
+
+  | Endpoint | Exposed |
+  |---|---|
+  | `/api/smart_diag` | Raw `smartctl` output — drive models, **serial numbers**, firmware, temperatures, power-on hours, error logs, plus `lsblk` topology |
+  | `/api/system_status` | Hostname, primary IP address, CPU/memory/disk utilisation, uptime |
+  | `/api/system_health` | Service and dependency health detail |
+  | `/api/monitoring/radio`, `/api/eas-monitor/status` | Receiver and decoder state |
+  | `/api/audio/metrics`, `/api/audio/metrics/latest`, `/api/audio/health`, `/api/audio/sources` | Audio hardware and source configuration |
+
+  They now sit in a new `LOCAL_API_GET_PATHS` tier: still reachable without a
+  session, but only from loopback or a private network. The reason they cannot
+  simply be gated is `scripts/screen_renderer.ScreenRenderer`, which the
+  displays subsystem runs against `http://localhost:5000` with no credentials to
+  populate OLED/LED/VFD screens — that path is unaffected. A signed-in operator
+  still reaches all of them from anywhere. `request.remote_addr` is the real
+  client IP (ProxyFix, one trusted hop), so a remote caller cannot claim to be
+  local by sending its own `X-Forwarded-For`.
+
+  `/api/alerts`, `/api/alerts/historical`, `/api/boundaries`,
+  `/api/broadcast/state`, `/api/health`, `/api/release-manifest` and
+  `/api/traffic/client` remain fully public — alert content is the point of the
+  station, and the rest are small non-sensitive signals the public pages poll.
+
+### Removed
+- The public landing page fetched `/api/system_status` on first load and on
+  every refresh and did nothing with the result but `console.log` it. Each call
+  sampled CPU, measured disk usage and ran database queries. Removed, along with
+  the endpoint's entry in the `window.mapDebug.testAPIs` console helper.
+
+### Added
+- `docs/security/PUBLIC_ROUTES.md` — the route inventory, the rule for deciding
+  which tier a new route belongs in, and how to re-run the audit.
+- `tests/test_public_route_audit.py` — asserts documentation stays public
+  (including every route under `/docs`), that machine-describing endpoints stay
+  out of the internet-public set while remaining reachable for the screen
+  renderer, and that the local-network check fails closed on a missing or
+  malformed client address.
+
 ## [2.127.0] - 2026-08-04 - Weekly RWT scheduling, Security Center speed-up, OTP autofill
 
 ### Changed

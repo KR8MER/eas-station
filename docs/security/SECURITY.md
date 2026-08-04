@@ -4,6 +4,13 @@
 
 EAS Station™ implements comprehensive security controls including Role-Based Access Control (RBAC), Multi-Factor Authentication (MFA), and detailed audit logging. This guide covers setup, configuration, and best practices for securing your EAS Station™ deployment.
 
+> **Which routes need a login?** RBAC governs what a *signed-in* user may do.
+> For what an anonymous visitor can reach — the public documentation pages, the
+> local-network-only diagnostics, and the deny-by-default rule behind
+> everything else — see
+> [Public vs. Authenticated Routes](PUBLIC_ROUTES.md). Read it before publishing
+> a station at a public hostname.
+
 ## Table of Contents
 
 1. [Quick Start](#quick-start)

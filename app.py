@@ -37,6 +37,7 @@ See app.config['SYSTEM_VERSION'] for current version.
 import base64
 import hmac
 import io
+import ipaddress
 import os
 import sys
 import math
@@ -439,35 +440,82 @@ app.config['AUDIO_PATH_ALERT_THRESHOLD_MINUTES'] = parse_int_env(
     'AUDIO_PATH_ALERT_THRESHOLD_MINUTES', 60
 )
 
+# GET APIs readable by anyone, including from the public internet.
+#
+# Keep this list to data that is genuinely public: emergency alert content (the
+# whole point of the station), the boundaries needed to draw it, and the small
+# non-sensitive signals the public pages poll. Anything that describes the
+# *machine* — hostname, addresses, disks, receivers, audio hardware — belongs in
+# LOCAL_API_GET_PATHS below instead.
 PUBLIC_API_GET_PATHS = {
+    # Alert content and the map geometry the public landing page renders.
     '/api/alerts',
     '/api/alerts/historical',
     '/api/boundaries',
+    # Air-chain broadcast state. base.html + the navbar poll this on every page
+    # (a 1.5s WebSocket-fallback) to drive the global broadcast overlay — including
+    # the login page and after a session expires. Without this exemption those
+    # polls hit the deny-by-default gate and flood the logs with 401s. The payload
+    # (active flag, active-alert count, timestamp) is non-sensitive and less
+    # revealing than /api/alerts, which is already public.
+    '/api/broadcast/state',
+    # Liveness probe and the version shown on the public /version page.
+    '/api/health',
+    '/api/release-manifest',
+    # Traffic-analytics client beacon (screen resolution) — harmless, public so
+    # every visitor's resolution is captured for the awstats-style dashboard.
+    '/api/traffic/client',
+}
+
+# GET APIs that may be read without a session, but only by a caller on the
+# appliance itself or its local network.
+#
+# These describe the machine rather than the emergency-alert service: hostname
+# and primary IP address, CPU/memory/disk utilisation, uptime, SMART data
+# (including drive serial numbers), receiver and audio-hardware state. None of
+# that should be readable by the internet on a box published at a public
+# hostname, and none of it needs to be: the only unauthenticated consumer is
+# ``scripts/screen_renderer.ScreenRenderer``, which the displays subsystem runs
+# against ``http://localhost:5000`` to populate OLED/LED/VFD screens.
+#
+# A signed-in operator still reaches all of them from anywhere — this only
+# removes the anonymous-from-the-internet path. ``request.remote_addr`` is the
+# real client IP (ProxyFix, one trusted hop), so a remote caller cannot claim to
+# be local by sending its own X-Forwarded-For.
+LOCAL_API_GET_PATHS = {
     '/api/system_status',
+    '/api/system_health',
+    # Hardware diagnostics — raw smartctl output, including drive serial numbers.
+    '/api/smart_diag',
     # Display hardware endpoints (OLED/LED/VFD screens)
     '/api/audio/metrics',
     '/api/audio/metrics/latest',
     '/api/audio/health',
     '/api/audio/sources',
     '/api/eas-monitor/status',
-    '/api/system_health',
     '/api/monitoring/radio',
-    # Air-chain broadcast state. base.html + the navbar poll this on every page
-    # (a 1.5s WebSocket-fallback) to drive the global broadcast overlay — including
-    # the login page and after a session expires. Without this exemption those
-    # polls hit the deny-by-default gate and flood the logs with 401s. The payload
-    # (active flag, active-alert count, timestamp) is non-sensitive and less
-    # revealing than /api/alerts and /api/system_status, which are already public.
-    '/api/broadcast/state',
-    # Monitoring endpoints (for health checks and version tracking)
-    '/api/health',
-    '/api/release-manifest',
-    # Hardware diagnostics (used by local monitoring/debugging)
-    '/api/smart_diag',
-    # Traffic-analytics client beacon (screen resolution) — harmless, public so
-    # every visitor's resolution is captured for the awstats-style dashboard.
-    '/api/traffic/client',
 }
+
+
+def _is_local_network_client(remote_addr: Optional[str]) -> bool:
+    """True when *remote_addr* is the appliance itself or its local network.
+
+    Covers loopback, RFC1918 / RFC4193 private ranges, link-local and CGNAT.
+    Used to keep the machine-describing diagnostics in LOCAL_API_GET_PATHS
+    reachable for on-box consumers (the display screen renderer) and LAN
+    monitoring without publishing them to the internet.
+    """
+    if not remote_addr:
+        return False
+    try:
+        addr = ipaddress.ip_address(remote_addr.strip())
+    except ValueError:
+        return False
+    return bool(
+        addr.is_loopback
+        or addr.is_private
+        or addr.is_link_local
+    )
 
 # Pages that do not require authentication.
 # Everything else is protected by the deny-by-default check in before_request.
@@ -491,6 +539,15 @@ _PUBLIC_PAGE_PATHS = frozenset({
     '/docs',
     '/support',
     '/repo-stats',
+    # Open-source attribution and third-party licence notices. EAS Station is
+    # AGPL-3.0; putting its licence disclosures behind a login defeats their
+    # purpose, and the page contains no station data.
+    '/attribution',
+    # UI component reference. Documentation for the design system — static
+    # markup demonstrating headers, buttons and theme variables, with no
+    # station data on it. It is referenced from the developer docs, which are
+    # themselves public.
+    '/style-guide',
     # Auth endpoints
     '/login',
     '/logout',
@@ -1210,11 +1267,18 @@ def before_request():
 
     if request.path.startswith('/api/'):
         normalized_path = request.path.rstrip('/') or '/'
-        if (
-            request.method in {'GET', 'HEAD', 'OPTIONS'}
-            and normalized_path in PUBLIC_API_GET_PATHS
-        ):
-            return
+        if request.method in {'GET', 'HEAD', 'OPTIONS'}:
+            if normalized_path in PUBLIC_API_GET_PATHS:
+                return
+            # Machine-describing diagnostics: unauthenticated only for callers
+            # on this box or its local network (the display screen renderer
+            # fetches these from http://localhost:5000 with no session). A
+            # remote caller falls through to the normal auth requirement below.
+            if (
+                normalized_path in LOCAL_API_GET_PATHS
+                and _is_local_network_client(request.remote_addr)
+            ):
+                return
 
     if not setup_mode_active:
         if g.current_user is None:

@@ -973,8 +973,7 @@ async function initMap() {
         // Load initial data
         await Promise.all([
             loadAlerts(),
-            loadBoundaries(),
-            updateSystemStatus()
+            loadBoundaries()
         ]);
         isMapReady = true;
         markDataRefreshed('Initial load');
@@ -1459,19 +1458,6 @@ function updateAlertSummary(alerts) {
     }
 }
 
-async function updateSystemStatus() {
-    try {
-        const response = await fetch('/api/system_status');
-        if (response.ok) {
-            const data = await response.json();
-            console.log('✅ System status updated:', data);
-            // Update any additional system status here if needed
-        }
-    } catch (error) {
-        console.warn('Could not fetch system status:', error);
-    }
-}
-
 // Event handlers
 function setupEventListeners() {
     // Layer toggles
@@ -1530,8 +1516,7 @@ async function refreshData(options = {}) {
 
     try {
         const tasks = [
-            loadAlerts(),
-            updateSystemStatus()
+            loadAlerts()
         ];
 
         if (includeBoundaries) {
@@ -1874,8 +1859,7 @@ window.mapDebug = {
 
         const endpoints = [
             '/api/alerts',
-            '/api/boundaries',
-            '/api/system_status'
+            '/api/boundaries'
         ];
 
         for (const endpoint of endpoints) {
