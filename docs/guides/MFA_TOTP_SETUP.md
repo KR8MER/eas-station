@@ -100,6 +100,25 @@ The system accepts codes from ±1 time step (90 seconds total window) to handle 
 - Verify you scanned the correct QR code — each enrollment generates a new secret.
 - Wait for the current 30-second window to expire and try with the next code.
 
+### Autofilling the code from a password manager
+
+The verification field is marked `autocomplete="one-time-code"`, so iOS/macOS
+Passwords, 1Password, Bitwarden and Chrome will offer the stored code above the
+keyboard and the form submits itself once the code lands — no typing.
+
+For that to work your password manager needs the TOTP secret, which it cannot
+learn from the login page. Add it once, during (or after) enrolment:
+
+1. Start MFA enrolment. Under the QR code, copy the **setup key** shown next to
+   *"Or manually enter this secret key"*.
+2. Open the saved EAS Station entry in your password manager and paste the key
+   into its one-time-code / verification-code field (in iOS Passwords: **Edit →
+   Set Up Verification Code → Enter Setup Key**).
+3. Finish enrolment using the code your password manager now generates.
+
+If the entry has no verification-code field, the manager has no code to offer
+and the field will simply behave as a normal text input.
+
 ### "Code already used" error
 
 EAS Station™ refuses to accept the **same** code twice — each 30-second code may

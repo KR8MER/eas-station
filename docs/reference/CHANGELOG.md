@@ -8,6 +8,80 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.127.0] - 2026-08-04 - Weekly RWT scheduling, Security Center speed-up, OTP autofill
+
+### Changed
+- **The RWT now fires once per week, on one of the selected days — not on every
+  selected day.** The scheduler treated the day list as "broadcast on each of
+  these days", so a Sunday + Tuesday schedule sent two tests a week. The days
+  are now the days the test is *allowed* to land on: `weekly_fire_slot()` picks
+  exactly one of them per ISO week, at a random minute inside the configured
+  window. Varying the day and time is also what
+  [47 CFR §11.61(a)(2)](https://www.ecfr.gov/current/title-47/section-11.61)
+  asks of a Required Weekly Test — ticking more days makes it less predictable
+  rather than more frequent.
+
+  The choice is seeded from (schedule id, ISO year, ISO week), so it is stable
+  for the whole week, identical in every Gunicorn worker without coordination,
+  and different each week. The "already sent" check and the cross-worker Redis
+  lock are now keyed on the ISO week rather than the calendar date. A slot
+  missed because the station was down is caught up on a later allowed day in
+  the same week, inside its window, rather than losing the week. The RWT
+  Schedule page explains the behaviour and the day picker is relabelled
+  "Allowed Days".
+
+- The traffic dashboard's 60-second auto-refresh only runs while it is actually
+  on screen. One refresh runs ~35 aggregations over `web_request_log`, and the
+  old unconditional interval kept paying that on a backgrounded browser tab or
+  while the operator was reading a different Security Center tab — the largest
+  recurring CPU cost the web process carried. Becoming visible again reloads
+  immediately if the data went stale. The dashboard cache TTL moved from 30s to
+  55s so it sits under the refresh interval and concurrent viewers (or the
+  second Gunicorn worker) share one computed payload instead of each recomputing.
+
+### Fixed
+- **`/security/center` took a very long time to open.** Two causes:
+
+  1. `GET /admin/fail2ban/status` ran `import_ssh_bans()` **and**
+     `heal_firewall_bans()` inside the request. The latter re-pushes the whole
+     ban list into the firewall with one `sudo fail2ban-client set … banip`
+     subprocess *per banned IP*, so after any fail2ban restart (which flushes
+     the jails) the first page load paid for hundreds of privileged subprocess
+     round trips before it could render. Both functions have run on a
+     60-second background schedule in `app_core.fail2ban_sync` since it was
+     added; the route is now read-only and its result is cached for 10s, with
+     the cache invalidated by every mutating action.
+  2. The page fetched all four tabs' data on load. Each tab now loads the first
+     time it is shown, so opening the default Traffic tab no longer pays for
+     the fail2ban status call, the malicious-attempts query and the ban list.
+
+- **Automated RWTs could leave the transmitter unkeyed even with the GPIO
+  service healthy.** `GPIOBehaviorManager.start_alert()` counted a
+  `FIVE_SECONDS` pulse as having "handled" the broadcast, which suppresses the
+  subprocess's fallback of keying every configured pin. On a station whose
+  relay is assigned *Forwarding Alert* (held only for forwarded alerts)
+  alongside a beacon pulse, an automated RWT therefore held nothing, blinked
+  the beacon, reported handled, and never keyed the air chain. A five-second
+  pulse cannot carry a broadcast that runs for minutes, so only holds and
+  flashes count as handled now; a broadcast the matrix holds nothing for also
+  logs a warning naming the fix.
+
+- GPIO behaviour-matrix warnings (e.g. "no pin is assigned a transmit-capable
+  behavior — the transmitter will NOT be keyed") were only written to the GPIO
+  subprocess's journal at startup, where no operator sees them. They now appear
+  on the GPIO Control page alongside the existing environment issues.
+
+### Added
+- The MFA code field is now autofillable. It carried `autocomplete="off"`,
+  which explicitly opts out of the one-time-code suggestion iOS/macOS
+  Passwords, 1Password, Bitwarden and Chrome offer; it is now
+  `autocomplete="one-time-code"` with `inputmode="numeric"`. Auto-submit moved
+  from `keyup` to `input`/`change`, because a password manager sets the value
+  programmatically and fires neither key event — an autofilled code used to sit
+  in the box waiting for a manual tap on Verify. (Storing the TOTP secret in
+  the password manager is still a one-time manual step: copy the setup key
+  shown during MFA enrolment into the saved entry.)
+
 ## [2.126.2] - 2026-08-04 - MFA login delays and GPIO relay keying
 
 ### Fixed

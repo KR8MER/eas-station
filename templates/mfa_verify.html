@@ -28,6 +28,15 @@
 
                         <div class="mb-4">
                             <label for="code" class="form-label">Verification Code</label>
+                            {#
+                              autocomplete="one-time-code" is what makes iOS/macOS
+                              Passwords, 1Password, Bitwarden and Chrome offer the
+                              stored TOTP code above the keyboard. It was previously
+                              "off", which explicitly opts out of that. inputmode
+                              brings up the numeric keypad on phones without
+                              blocking the 8-character hex backup codes this field
+                              also accepts (type stays "text" for the same reason).
+                            #}
                             <input
                                 type="text"
                                 class="form-control form-control-lg text-center"
@@ -38,7 +47,11 @@
                                 maxlength="8"
                                 required
                                 autofocus
-                                autocomplete="off"
+                                autocomplete="one-time-code"
+                                inputmode="numeric"
+                                spellcheck="false"
+                                autocorrect="off"
+                                autocapitalize="off"
                                 style="letter-spacing: 0.5em; font-family: monospace;"
                             >
                             <div class="form-text">
@@ -92,26 +105,44 @@
         }, false);
     });
 
-    // Auto-format code input
+    // Auto-format + auto-submit.
+    //
+    // Both hang off 'input', not 'keyup': a password manager (iOS Passwords,
+    // 1Password, Chrome) sets .value programmatically, which fires 'input' but
+    // never 'keyup'. Auto-submitting on keyup meant an autofilled code just sat
+    // in the box waiting for a manual tap on Verify.
     const codeInput = document.getElementById('code');
     if (codeInput) {
-        codeInput.addEventListener('input', function(e) {
-            // Remove non-alphanumeric characters
-            this.value = this.value.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
-        });
+        let submitting = false;
 
-        // Auto-submit when 6 or 8 characters entered
-        codeInput.addEventListener('keyup', function(e) {
-            const length = this.value.length;
-            if (length === 6 || length === 8) {
-                // Small delay to show the full code before submitting
-                setTimeout(() => {
-                    if (this.form.checkValidity()) {
-                        this.form.submit();
-                    }
-                }, 300);
+        const handleInput = function () {
+            // Strip anything that is neither a TOTP digit nor a backup-code
+            // hex character. Autofill can deliver the code with the space
+            // authenticators display it with ("123 456").
+            const cleaned = this.value.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+            if (cleaned !== this.value) {
+                this.value = cleaned;
             }
-        });
+
+            const length = cleaned.length;
+            if (submitting || (length !== 6 && length !== 8)) {
+                return;
+            }
+            // Small delay so the operator sees the full code land before the
+            // page navigates.
+            submitting = true;
+            setTimeout(() => {
+                if (this.form.checkValidity()) {
+                    this.form.submit();
+                } else {
+                    submitting = false;
+                }
+            }, 300);
+        };
+
+        codeInput.addEventListener('input', handleInput);
+        // Safari fires 'change' rather than 'input' for some autofill paths.
+        codeInput.addEventListener('change', handleInput);
     }
 })();
 </script>

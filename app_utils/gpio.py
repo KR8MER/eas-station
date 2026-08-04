@@ -1953,14 +1953,36 @@ class GPIOBehaviorManager:
 
         flash_started = self._start_flash(alert_id, event_code, reason)
 
-        pulse_triggered = self._pulse_behavior(
+        self._pulse_behavior(
             GPIOBehavior.FIVE_SECONDS,
             alert_id,
             event_code,
             pulse_seconds=GPIO_BEHAVIOR_PULSE_DEFAULTS[GPIOBehavior.FIVE_SECONDS],
         )
 
-        return hold_started or flash_started or pulse_triggered
+        # Only holds and flashes count as "handled".  The caller treats a False
+        # return as "the matrix took nothing for this broadcast" and falls back
+        # to keying every configured pin, which is what keeps the air chain up.
+        #
+        # A FIVE_SECONDS pulse used to count too, and that silently dropped the
+        # transmitter: on a station whose relay is assigned FORWARDING_ALERT
+        # (held only for forwarded alerts) plus a 5-second beacon pulse, an
+        # automated RWT held nothing, pulsed the beacon, reported "handled", and
+        # so skipped the fallback — the beacon blinked and the transmitter never
+        # keyed. A five-second pulse cannot carry a broadcast that runs for
+        # minutes, so it must not suppress the fallback.
+        handled = hold_started or flash_started
+        if not handled and self.logger:
+            self.logger.warning(
+                "GPIO behavior matrix held no pin for this broadcast "
+                "(event=%s, forwarded=%s); falling back to keying all configured "
+                "pins. Assign a transmit-capable behavior (Transmitter PTT, "
+                "Duration of Alert or Audio Playout) to the relay pin to control "
+                "this explicitly.",
+                event_code or "unknown",
+                forwarded,
+            )
+        return handled
 
     def end_alert(
         self,

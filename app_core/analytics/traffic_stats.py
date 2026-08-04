@@ -60,7 +60,12 @@ _STATUS_FAMILIES = {2: "2xx Success", 3: "3xx Redirect", 4: "4xx Client Error", 
 # in-process TTL cache collapses those repeat/concurrent loads into a single set
 # of queries. Analytics tolerate a few seconds of staleness, and the cache is
 # invalidated immediately on any data-changing action (purge / anonymize).
-_DASHBOARD_CACHE_TTL_SECONDS = 30
+#
+# The TTL sits just under the page's 60s auto-refresh so a second viewer (or the
+# other Gunicorn worker) landing between one operator's ticks is served from the
+# cache instead of re-running ~35 aggregations. At 30s it expired before the
+# next refresh in every case, so concurrent viewers never shared a payload.
+_DASHBOARD_CACHE_TTL_SECONDS = 55
 _DASHBOARD_CACHE_MAX = 64
 _dashboard_cache: Dict[Any, tuple] = {}
 _dashboard_cache_lock = threading.Lock()
