@@ -851,7 +851,7 @@
                             </h2>
                             <div id="rwtScheduleCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
                                 <div class="accordion-body">
-                                    <p><strong>Required Weekly Test (RWT)</strong> broadcasts can be automatically scheduled to run on specific days and time windows.</p>
+                                    <p><strong>Required Weekly Test (RWT)</strong> broadcasts are scheduled automatically: <strong>one test per week</strong>, on one of the days you allow, at a random time inside your window.</p>
 
                                     <h6><i class="fas fa-cog me-2"></i>Accessing Weekly Test Automation</h6>
                                     <ol>
@@ -862,8 +862,8 @@
                                     <h6 class="mt-3"><i class="fas fa-sliders-h me-2"></i>Configuration Options</h6>
                                     <ul>
                                         <li><strong>Enable/Disable:</strong> Toggle automatic RWT broadcasts on or off</li>
-                                        <li><strong>Days of Week:</strong> Select which days to send RWT (Monday through Sunday)</li>
-                                        <li><strong>Time Window:</strong> Set start and end times (e.g., 8:00 AM to 4:00 PM)</li>
+                                        <li><strong>Allowed Days:</strong> The days the test is permitted to land on (Monday through Sunday). The scheduler picks <strong>one</strong> of them each week &mdash; ticking Sunday and Tuesday means one test, on a Sunday <em>or</em> a Tuesday, not one on each. Allowing more days makes the test less predictable, which is what 47 CFR &sect;11.61 asks for; it does not send more tests.</li>
+                                        <li><strong>Time Window:</strong> Set start and end times (e.g., 8:00 AM to 4:00 PM). The exact minute is drawn at random from inside this window each week.</li>
                                         <li><strong>Coverage:</strong> The scheduler always follows the shared <em>Default RWT Counties</em> list that sits next to the form—update it once and Quick RWT, manual defaults, and automation all stay aligned.</li>
                                     </ul>
 
@@ -877,7 +877,7 @@
                                     <ul>
                                         <li><strong>No TTS Narration:</strong> RWT contains only SAME headers and EOM tones</li>
                                         <li><strong>No Attention Tones:</strong> Silent except for required signaling</li>
-                                        <li><strong>Once Per Day:</strong> Only one RWT sent per configured day</li>
+                                        <li><strong>Once Per Week:</strong> Exactly one RWT per week, however many days you allow. If the station is down during the chosen slot, the test is caught up on a later allowed day in the same week.</li>
                                         <li><strong>Time Window:</strong> Broadcasts only during configured hours</li>
                                         <li><strong>Logged:</strong> All broadcasts stored in database for compliance tracking</li>
                                     </ul>

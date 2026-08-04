@@ -102,6 +102,34 @@ def register(app: Flask, logger) -> None:
             )
         return pins, False
 
+    def _behavior_matrix_warnings(configured_pins):
+        """Return operator-readable warnings about the GPIO behavior matrix.
+
+        Reuses ``GPIOBehaviorManager.validate_configuration()`` — the same
+        checks the GPIO subprocess runs at startup — but without a controller,
+        so nothing here can touch the physical lines.  Purely diagnostic; any
+        failure is swallowed so the control panel still renders.
+        """
+        try:
+            from app_utils.gpio import GPIOBehaviorManager
+
+            oled_enabled = _get_oled_enabled_status()
+            matrix = load_gpio_behavior_matrix_from_db(
+                route_logger, oled_enabled=oled_enabled
+            )
+            if not matrix:
+                return []
+            manager = GPIOBehaviorManager(
+                controller=None,
+                pin_configs=configured_pins,
+                behavior_matrix=matrix,
+                logger=None,
+            )
+            return list(manager.validate_configuration())
+        except Exception as exc:  # pragma: no cover - diagnostic only
+            route_logger.debug("GPIO behavior validation skipped: %s", exc)
+            return []
+
     def _build_pin_entry(pin_def, config_map, behavior_matrix):
         entry = {
             "physical": pin_def.physical,
@@ -578,6 +606,12 @@ def register(app: Flask, logger) -> None:
                     "reporting state. Relays cannot be controlled until GPIO is "
                     "enabled and the service is running."
                 )
+
+            # Behaviour-matrix warnings (e.g. "no pin will key the transmitter")
+            # were only logged by the GPIO subprocess at startup, where an
+            # operator never sees them — so a matrix that silently leaves the
+            # air chain unkeyed during an automated RWT looked healthy here.
+            environment_issues.extend(_behavior_matrix_warnings(configured_pins))
 
             # Get recent history (last 24 hours)
             cutoff = utc_now() - timedelta(hours=24)

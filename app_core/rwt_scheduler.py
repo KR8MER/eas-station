@@ -27,12 +27,13 @@ RWT broadcasts according to configured schedules.
 
 import logging
 import os
+import random
 import subprocess
 import tempfile
 import threading
 import time
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Flask, current_app, has_app_context
 from app_core.extensions import db
@@ -53,6 +54,110 @@ from app_utils.eas import (
 logger = logging.getLogger(__name__)
 
 
+def week_key(moment: datetime) -> Tuple[int, int]:
+    """Return the ISO ``(year, week)`` the given local datetime falls in.
+
+    An RWT is a *weekly* obligation, so every "have we already run?" decision is
+    made per ISO week rather than per calendar date.
+    """
+    iso = moment.isocalendar()
+    return int(iso[0]), int(iso[1])
+
+
+def _window_minutes(config: RWTScheduleConfig) -> Tuple[int, int]:
+    """Return the configured window as ``(start, end)`` minutes past midnight.
+
+    An end before the start is treated as a zero-length window at the start
+    rather than an error, so a mis-entered schedule still fires once at the
+    start time instead of never firing.
+    """
+    start = int(config.start_hour or 0) * 60 + int(config.start_minute or 0)
+    end = int(config.end_hour or 0) * 60 + int(config.end_minute or 0)
+    if end < start:
+        end = start
+    return start, end
+
+
+def _eligible_days(config: RWTScheduleConfig, monday: date) -> List[int]:
+    """Configured weekdays in the week starting *monday*, minus skipped ones."""
+    configured = sorted({int(d) for d in (config.days_of_week or []) if 0 <= int(d) <= 6})
+    skip_until = getattr(config, 'skip_until', None)
+    if not skip_until:
+        return configured
+    return [d for d in configured if (monday + timedelta(days=d)) > skip_until]
+
+
+def weekly_fire_slot(
+    config: RWTScheduleConfig,
+    reference_local: datetime,
+) -> Optional[datetime]:
+    """Pick this week's single RWT slot: one configured day, at a random time.
+
+    A Required Weekly Test is sent **once per week**, not once on every day the
+    operator ticked.  The day list is the set of days the broadcast is *allowed*
+    to land on; the scheduler chooses exactly one of them each week — which is
+    also what makes the test unpredictable, as 47 CFR §11.61(a)(2) intends.  The
+    time is drawn at random from inside the configured window for the same
+    reason.
+
+    The choice is derived from a seed of (schedule id, ISO year, ISO week), so
+    it is:
+
+    * **stable** — every poll during the week resolves to the same slot, and the
+      UI's "next scheduled fire" does not jump around;
+    * **identical in every Gunicorn worker** — each worker runs its own copy of
+      this scheduler, and they must agree on the slot without coordinating; and
+    * **different each week** — the day and minute move around within the
+      operator's constraints instead of settling on a fixed weekly pattern.
+
+    Returns ``None`` when the config is disabled or no day in this week is
+    eligible (no days configured, or all of them covered by ``skip_until``).
+    """
+    if not config.enabled:
+        return None
+
+    monday = reference_local.date() - timedelta(days=reference_local.weekday())
+    days = _eligible_days(config, monday)
+    if not days:
+        return None
+
+    iso_year, iso_week = week_key(reference_local)
+    rng = random.Random(f"eas-rwt-slot:{config.id}:{iso_year}:{iso_week}")
+
+    chosen_day = rng.choice(days)
+    start_min, end_min = _window_minutes(config)
+    chosen_minute = rng.randint(start_min, end_min)
+
+    slot_date = monday + timedelta(days=chosen_day)
+    return datetime(
+        slot_date.year,
+        slot_date.month,
+        slot_date.day,
+        chosen_minute // 60,
+        chosen_minute % 60,
+        tzinfo=reference_local.tzinfo,
+    )
+
+
+def _ran_in_week(config: RWTScheduleConfig, reference_local: datetime) -> bool:
+    """True when a successful RWT is already recorded for *reference_local*'s week."""
+    if not config.last_run_at or config.last_run_status != 'success':
+        return False
+    last_run = config.last_run_at
+    if last_run.tzinfo is None:
+        last_run = last_run.replace(tzinfo=timezone.utc)
+    return week_key(last_run.astimezone(reference_local.tzinfo)) == week_key(reference_local)
+
+
+def _window_bounds(config: RWTScheduleConfig, day: date, tz) -> Tuple[datetime, datetime]:
+    """Return the local ``(start, end)`` datetimes of the window on *day*."""
+    start_min, end_min = _window_minutes(config)
+    return (
+        datetime(day.year, day.month, day.day, start_min // 60, start_min % 60, tzinfo=tz),
+        datetime(day.year, day.month, day.day, end_min // 60, end_min % 60, tzinfo=tz),
+    )
+
+
 def compute_next_fire(
     config: RWTScheduleConfig,
     now_local: Optional[datetime] = None,
@@ -60,80 +165,61 @@ def compute_next_fire(
     """Compute the next datetime (local timezone, aware) at which this
     configuration will fire an automatic RWT broadcast.
 
-    Returns ``None`` when the config is disabled, has no configured days, or
+    Returns ``None`` when the config is disabled, has no eligible days, or
     would otherwise never fire.
 
-    Rules:
-      * The fire time on a configured day is the start of the time window
-        (start_hour:start_minute, local time).  We deliberately return
-        ``window_start`` even when ``now > window_start`` — the scheduler
-        thread evaluates the window every minute and will fire on the next
-        iteration, so the UI should show the operator-scheduled time rather
-        than a moving target that advances by one minute on every refresh
-        (which the previous ``max(now, window_start)`` formulation produced
-        and operators read as "the broadcast keeps getting pushed back").
-      * If today is a configured day, the window has not closed, and an
-        RWT hasn't already been sent successfully today, fire is today at
-        ``window_start``.
-      * If ``skip_until`` is set, dates on or before it are skipped.
-      * Otherwise scan the next 14 days for the first configured weekday.
+    One RWT is sent per **week**, on one of the configured days — not on every
+    configured day.  :func:`weekly_fire_slot` makes that choice; this function
+    reports it, and rolls forward when the week's test has already gone out or
+    its slot has passed:
+
+      * If this week's test has already been sent, report next week's slot.
+      * If this week's slot is still ahead, report it.
+      * If the slot has passed without the test going out (the station was down
+        during it), report the start of the next configured window still left in
+        the week — the scheduler catches up rather than losing the week.  When
+        no window remains, report next week's slot.
+      * Days on or before ``skip_until`` are never eligible; a week with no
+        eligible day at all rolls to the next week that has one.
     """
     if not config.enabled:
-        return None
-    configured_days = [int(d) for d in (config.days_of_week or [])]
-    if not configured_days:
         return None
 
     if now_local is None:
         now_local = datetime.now(timezone.utc).astimezone()
 
     tz = now_local.tzinfo
-    today = now_local.date()
-    start_h = int(config.start_hour or 0)
-    start_m = int(config.start_minute or 0)
-    end_h = int(config.end_hour or 0)
-    end_m = int(config.end_minute or 0)
 
-    skip_until = getattr(config, 'skip_until', None)
+    def _next_week_slot(from_moment: datetime) -> Optional[datetime]:
+        # Look ahead a few weeks so a skip_until spanning a holiday still
+        # resolves to a real date instead of "never".
+        probe = from_moment
+        for _ in range(8):
+            probe = probe + timedelta(days=7)
+            slot = weekly_fire_slot(config, probe)
+            if slot is not None:
+                return slot
+        return None
 
-    last_success_date: Optional[date] = None
-    if config.last_run_at and config.last_run_status == 'success':
-        last_run_local = config.last_run_at
-        if last_run_local.tzinfo is None:
-            last_run_local = last_run_local.replace(tzinfo=timezone.utc)
-        last_success_date = last_run_local.astimezone(tz).date()
+    if _ran_in_week(config, now_local):
+        return _next_week_slot(now_local)
 
-    # Scan today + next 14 days for the first day that qualifies.
-    for offset in range(0, 15):
-        candidate_date = today + timedelta(days=offset)
-        if candidate_date.weekday() not in configured_days:
-            continue
-        if skip_until and candidate_date <= skip_until:
-            continue
-        if last_success_date == candidate_date:
-            continue
-        window_start = datetime(
-            candidate_date.year, candidate_date.month, candidate_date.day,
-            start_h, start_m, tzinfo=tz,
-        )
-        window_end = datetime(
-            candidate_date.year, candidate_date.month, candidate_date.day,
-            end_h, end_m, tzinfo=tz,
-        )
-        if offset == 0:
-            # Today: if we're past the window, the broadcast missed its
-            # slot — move on to the next configured day.  Otherwise return
-            # the operator-configured window start.  Previously this used
-            # ``max(now, window_start)`` which made the UI's "Next
-            # scheduled fire" timestamp advance by one minute on every
-            # refresh once we were inside the window — operators read
-            # that as the scheduler "pushing back" the broadcast.
-            if now_local > window_end:
-                continue
-            return window_start
-        return window_start
+    slot = weekly_fire_slot(config, now_local)
+    if slot is None:
+        return _next_week_slot(now_local)
 
-    return None
+    if slot >= now_local:
+        return slot
+
+    # The slot has passed and nothing was sent.  Offer the next configured
+    # window remaining in this week so a missed slot still gets caught up.
+    monday = now_local.date() - timedelta(days=now_local.weekday())
+    for day in _eligible_days(config, monday):
+        window_start, window_end = _window_bounds(config, monday + timedelta(days=day), tz)
+        if now_local <= window_end:
+            return max(window_start, slot)
+
+    return _next_week_slot(now_local)
 
 
 def _drive_rwt_airchain(
@@ -692,34 +778,54 @@ class RWTScheduler:
             now_utc = datetime.now(timezone.utc)
             now_local = now_utc.astimezone()  # System local timezone
 
-            # Honour skip_until: operator-set pause for one or more upcoming
-            # scheduled days (e.g. "skip this week").
-            if config.skip_until and now_local.date() <= config.skip_until:
+            # An RWT is a *weekly* obligation.  The configured days are the days
+            # the broadcast is allowed to land on; exactly one of them is chosen
+            # each week (see weekly_fire_slot), so ticking Sunday and Tuesday
+            # means "one test, on a Sunday or a Tuesday" — not one on each.
+            if _ran_in_week(config, now_local):
                 if self._iteration % 60 == 1:
                     self.logger.info(
-                        "RWT scheduler skipping per skip_until=%s (today=%s)",
-                        config.skip_until.isoformat(), now_local.date().isoformat(),
+                        "RWT already sent this week (%s) at %s — skipping",
+                        "%d-W%02d" % week_key(now_local),
+                        config.last_run_at.isoformat(timespec='seconds'),
                     )
                 return
 
-            # Check if current day is in configured days
-            current_day = now_local.weekday()  # 0=Monday, 6=Sunday
-            configured_days = list(config.days_of_week or [])
-            if current_day not in configured_days:
+            slot = weekly_fire_slot(config, now_local)
+            if slot is None:
                 if self._iteration % 60 == 1:
                     self.logger.info(
-                        "RWT scheduler loop alive — today (weekday %d, local) "
-                        "not in configured days %s",
-                        current_day, configured_days,
+                        "RWT scheduler loop alive — no eligible day this week "
+                        "(configured days %s, skip_until=%s)",
+                        list(config.days_of_week or []), config.skip_until,
                     )
                 return
 
-            # Check if current time is within configured window
-            current_time_minutes = now_local.hour * 60 + now_local.minute
-            start_time_minutes = config.start_hour * 60 + config.start_minute
-            end_time_minutes = config.end_hour * 60 + config.end_minute
+            if now_local < slot:
+                if self._iteration % 30 == 1:
+                    self.logger.info(
+                        "RWT scheduler waiting for this week's slot: %s (now %s)",
+                        slot.isoformat(timespec='minutes'),
+                        now_local.isoformat(timespec='minutes'),
+                    )
+                return
 
-            if not (start_time_minutes <= current_time_minutes <= end_time_minutes):
+            # Past the slot.  Fire only inside a configured window on a
+            # configured day, so a slot missed while the station was down is
+            # caught up later the same week rather than firing at an arbitrary
+            # hour (or being lost entirely).
+            monday = now_local.date() - timedelta(days=now_local.weekday())
+            if now_local.weekday() not in _eligible_days(config, monday):
+                if self._iteration % 60 == 1:
+                    self.logger.info(
+                        "RWT slot %s missed; waiting for the next configured day "
+                        "this week to catch up",
+                        slot.isoformat(timespec='minutes'),
+                    )
+                return
+
+            window_start, window_end = _window_bounds(config, now_local.date(), now_local.tzinfo)
+            if not (window_start <= now_local <= window_end):
                 if self._iteration % 30 == 1:
                     self.logger.info(
                         "RWT scheduler waiting for window: local time %02d:%02d, "
@@ -730,24 +836,6 @@ class RWTScheduler:
                     )
                 return
 
-            # Check if RWT was already sent today (compare in local time to
-            # match the operator-facing "once per scheduled day" semantics).
-            if config.last_run_at:
-                last_run_local = config.last_run_at
-                if last_run_local.tzinfo is None:
-                    last_run_local = last_run_local.replace(tzinfo=timezone.utc)
-                last_run_local = last_run_local.astimezone()
-                if (
-                    last_run_local.date() == now_local.date()
-                    and config.last_run_status == 'success'
-                ):
-                    if self._iteration % 60 == 1:
-                        self.logger.info(
-                            "RWT already sent today at %s — skipping",
-                            last_run_local.isoformat(timespec='seconds'),
-                        )
-                    return
-
             # All conditions met - send RWT.
             #
             # Cross-worker lock: this module is imported by every Gunicorn
@@ -757,23 +845,25 @@ class RWTScheduler:
             # ManualEASActivation rows per window every minute (visible
             # in production journals as identifier RWT-AUTO-<same ts>
             # logged by multiple gunicorn PIDs in the same second).  Use
-            # Redis SETNX with a 25 h TTL keyed on (schedule_id, local
-            # date) so exactly one worker per day wins the race; losers
-            # silently skip.  TTL > 24 h so the key survives across the
-            # day boundary even if the window straddles midnight.  If
-            # Redis is unreachable we fall back to the historical
-            # behaviour (best-effort fire from every worker) rather than
-            # block RWT entirely on a Redis outage.
+            # Redis SETNX keyed on (schedule_id, ISO week) so exactly one
+            # worker per *week* wins the race; losers silently skip.  The
+            # key is the week rather than the date because the test is a
+            # weekly obligation — a date key would let a second broadcast
+            # through on the next configured day of the same week.  TTL is
+            # 8 days so the key outlives its week even when the slot lands
+            # on a Monday.  If Redis is unreachable we fall back to the
+            # historical behaviour (best-effort fire from every worker)
+            # rather than block RWT entirely on a Redis outage.
             try:
                 from app_core.extensions import get_redis_client
                 redis_client = get_redis_client()
-                lock_key = f"rwt:fired:{config.id}:{now_local.date().isoformat()}"
-                acquired = redis_client.set(lock_key, str(now_local), nx=True, ex=25 * 3600)
+                lock_key = "rwt:fired:%s:%d-W%02d" % ((config.id,) + week_key(now_local))
+                acquired = redis_client.set(lock_key, str(now_local), nx=True, ex=8 * 86400)
                 if not acquired:
                     if self._iteration % 60 == 1:
                         self.logger.info(
                             "RWT fire-lock already held for %s — another worker "
-                            "is handling today's broadcast, skipping",
+                            "is handling this week's broadcast, skipping",
                             lock_key,
                         )
                     return
@@ -785,10 +875,11 @@ class RWTScheduler:
                 )
 
             self.logger.info(
-                "Triggering automatic RWT broadcast (local %s, window %02d:%02d–%02d:%02d)",
+                "Triggering automatic RWT broadcast for week %d-W%02d "
+                "(slot %s, local now %s)",
+                week_key(now_local)[0], week_key(now_local)[1],
+                slot.isoformat(timespec='minutes'),
                 now_local.isoformat(timespec='seconds'),
-                config.start_hour, config.start_minute,
-                config.end_hour, config.end_minute,
             )
             result = trigger_rwt_broadcast(config, self.logger)
 
@@ -836,8 +927,11 @@ def stop_scheduler():
 
 __all__ = [
     "RWTScheduler",
+    "compute_next_fire",
     "get_scheduler",
     "start_scheduler",
     "stop_scheduler",
     "trigger_rwt_broadcast",
+    "week_key",
+    "weekly_fire_slot",
 ]

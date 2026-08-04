@@ -144,6 +144,15 @@ def _run_api_server(app: Flask) -> None:
         log.error(f"[{SUBSYSTEM}] API server crashed: {e}", exc_info=True)
 
 
+#: How long an active-alert count is reused before the database is queried
+#: again.  The count only decides whether the tower light holds yellow after a
+#: broadcast ends, so a few seconds of staleness is invisible — but querying it
+#: on every refresh is not: the refresh runs at 1 Hz *and* on every pub/sub
+#: notification, all serialised behind the indicator monitor's lock.  A slow
+#: COUNT there delays the relay keying that shares that lock.
+ACTIVE_ALERT_COUNT_TTL_S = 5.0
+
+
 def _make_active_alert_counter(flask_app):
     """Return a callable counting unexpired alerts in its own app context.
 
@@ -151,21 +160,33 @@ def _make_active_alert_counter(flask_app):
     physical tower light and the website stack light agree on what "an alert is
     active" means.  Runs inside ``flask_app.app_context()`` because the
     indicator refresh loop and pub/sub listener run outside the bootstrap
-    context.  Any failure returns 0 so a database hiccup never crashes the
-    indicator loop or blacks out the light.
+    context.  Any failure returns the last known count (0 before the first
+    successful query) so a database hiccup never crashes the indicator loop or
+    blacks out the light.
+
+    The result is cached for :data:`ACTIVE_ALERT_COUNT_TTL_S` so the 1 Hz
+    indicator refresh does not issue a database COUNT every second.
     """
 
+    cache = {"value": 0, "ts": 0.0}
+
     def _count() -> int:
+        now = time.monotonic()
+        if now - cache["ts"] < ACTIVE_ALERT_COUNT_TTL_S:
+            return cache["value"]
         try:
             from datetime import datetime, timezone
             from app_core.models import CAPAlert
 
             with flask_app.app_context():
                 now_utc = datetime.now(timezone.utc)
-                return int(CAPAlert.query.filter(CAPAlert.expires > now_utc).count())
+                cache["value"] = int(
+                    CAPAlert.query.filter(CAPAlert.expires > now_utc).count()
+                )
         except Exception as exc:  # pragma: no cover - defensive
             logging.getLogger(__name__).debug("active alert count failed: %s", exc)
-            return 0
+        cache["ts"] = now
+        return cache["value"]
 
     return _count
 

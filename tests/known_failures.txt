@@ -106,14 +106,6 @@ tests/test_location_reference.py::test_update_location_settings_infers_county_zo
 # tests/test_memdiag.py (1) — Requires tracemalloc enabled in the interpreter under test.
 tests/test_memdiag.py::test_memory_dump_includes_tracemalloc_section_when_enabled
 
-# tests/test_mfa_totp_reuse_prevention.py (7) — Needs a real database for AdminUser/MFA rows.
-tests/test_mfa_totp_reuse_prevention.py::test_backup_code_still_works
-tests/test_mfa_totp_reuse_prevention.py::test_enrollment_initializes_timestamp
-tests/test_mfa_totp_reuse_prevention.py::test_first_totp_code_succeeds
-tests/test_mfa_totp_reuse_prevention.py::test_invalid_totp_code_fails
-tests/test_mfa_totp_reuse_prevention.py::test_totp_code_reuse_within_90_seconds_fails
-tests/test_mfa_totp_reuse_prevention.py::test_totp_code_succeeds_after_90_seconds
-tests/test_mfa_totp_reuse_prevention.py::test_totp_reuse_just_under_90_seconds_fails
 
 # tests/test_radio_audio_monitoring.py (5) — Needs a live sdr-service responding over Redis; times out waiting for it.
 tests/test_radio_audio_monitoring.py::test_audio_source_endpoint_restores_missing_adapter

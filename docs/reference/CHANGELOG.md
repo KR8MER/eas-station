@@ -8,6 +8,202 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.128.0] - 2026-08-04 - Authentication audit: public docs, private diagnostics
+
+Audited every registered route against the deny-by-default gate in
+`app.by:before_request`. Two problems in opposite directions; see
+[Public vs. Authenticated Routes](../security/PUBLIC_ROUTES.md) for the full
+inventory.
+
+### Changed
+- **Documentation and licence pages no longer require a login.** `/attribution`
+  (the AGPL-3.0 and third-party licence disclosures) and `/style-guide` (the UI
+  component reference, linked from the developer docs) were behind the gate.
+  Neither carries station data, and putting licence notices behind a password
+  defeats their purpose. The `/docs` tree, `/about`, `/help`, `/terms`,
+  `/privacy`, `/support` and `/version` were already public and stay that way.
+
+- **Machine-describing diagnostics are no longer readable from the internet.**
+  These GET endpoints answered any anonymous caller:
+
+  | Endpoint | Exposed |
+  |---|---|
+  | `/api/smart_diag` | Raw `smartctl` output — drive models, **serial numbers**, firmware, temperatures, power-on hours, error logs, plus `lsblk` topology |
+  | `/api/system_status` | Hostname, primary IP address, CPU/memory/disk utilisation, uptime |
+  | `/api/system_health` | Service and dependency health detail |
+  | `/api/monitoring/radio`, `/api/eas-monitor/status` | Receiver and decoder state |
+  | `/api/audio/metrics`, `/api/audio/metrics/latest`, `/api/audio/health`, `/api/audio/sources` | Audio hardware and source configuration |
+
+  They now sit in a new `LOCAL_API_GET_PATHS` tier: still reachable without a
+  session, but only from loopback or a private network. The reason they cannot
+  simply be gated is `scripts/screen_renderer.ScreenRenderer`, which the
+  displays subsystem runs against `http://localhost:5000` with no credentials to
+  populate OLED/LED/VFD screens — that path is unaffected. A signed-in operator
+  still reaches all of them from anywhere. `request.remote_addr` is the real
+  client IP (ProxyFix, one trusted hop), so a remote caller cannot claim to be
+  local by sending its own `X-Forwarded-For`.
+
+  `/api/alerts`, `/api/alerts/historical`, `/api/boundaries`,
+  `/api/broadcast/state`, `/api/health`, `/api/release-manifest` and
+  `/api/traffic/client` remain fully public — alert content is the point of the
+  station, and the rest are small non-sensitive signals the public pages poll.
+
+### Removed
+- The public landing page fetched `/api/system_status` on first load and on
+  every refresh and did nothing with the result but `console.log` it. Each call
+  sampled CPU, measured disk usage and ran database queries. Removed, along with
+  the endpoint's entry in the `window.mapDebug.testAPIs` console helper.
+
+### Added
+- `docs/security/PUBLIC_ROUTES.md` — the route inventory, the rule for deciding
+  which tier a new route belongs in, and how to re-run the audit.
+- `tests/test_public_route_audit.py` — asserts documentation stays public
+  (including every route under `/docs`), that machine-describing endpoints stay
+  out of the internet-public set while remaining reachable for the screen
+  renderer, and that the local-network check fails closed on a missing or
+  malformed client address.
+
+## [2.127.0] - 2026-08-04 - Weekly RWT scheduling, Security Center speed-up, OTP autofill
+
+### Changed
+- **The RWT now fires once per week, on one of the selected days — not on every
+  selected day.** The scheduler treated the day list as "broadcast on each of
+  these days", so a Sunday + Tuesday schedule sent two tests a week. The days
+  are now the days the test is *allowed* to land on: `weekly_fire_slot()` picks
+  exactly one of them per ISO week, at a random minute inside the configured
+  window. Varying the day and time is also what
+  [47 CFR §11.61(a)(2)](https://www.ecfr.gov/current/title-47/section-11.61)
+  asks of a Required Weekly Test — ticking more days makes it less predictable
+  rather than more frequent.
+
+  The choice is seeded from (schedule id, ISO year, ISO week), so it is stable
+  for the whole week, identical in every Gunicorn worker without coordination,
+  and different each week. The "already sent" check and the cross-worker Redis
+  lock are now keyed on the ISO week rather than the calendar date. A slot
+  missed because the station was down is caught up on a later allowed day in
+  the same week, inside its window, rather than losing the week. The RWT
+  Schedule page explains the behaviour and the day picker is relabelled
+  "Allowed Days".
+
+- The traffic dashboard's 60-second auto-refresh only runs while it is actually
+  on screen. One refresh runs ~35 aggregations over `web_request_log`, and the
+  old unconditional interval kept paying that on a backgrounded browser tab or
+  while the operator was reading a different Security Center tab — the largest
+  recurring CPU cost the web process carried. Becoming visible again reloads
+  immediately if the data went stale. The dashboard cache TTL moved from 30s to
+  55s so it sits under the refresh interval and concurrent viewers (or the
+  second Gunicorn worker) share one computed payload instead of each recomputing.
+
+### Fixed
+- **`/security/center` took a very long time to open.** Two causes:
+
+  1. `GET /admin/fail2ban/status` ran `import_ssh_bans()` **and**
+     `heal_firewall_bans()` inside the request. The latter re-pushes the whole
+     ban list into the firewall with one `sudo fail2ban-client set … banip`
+     subprocess *per banned IP*, so after any fail2ban restart (which flushes
+     the jails) the first page load paid for hundreds of privileged subprocess
+     round trips before it could render. Both functions have run on a
+     60-second background schedule in `app_core.fail2ban_sync` since it was
+     added; the route is now read-only and its result is cached for 10s, with
+     the cache invalidated by every mutating action.
+  2. The page fetched all four tabs' data on load. Each tab now loads the first
+     time it is shown, so opening the default Traffic tab no longer pays for
+     the fail2ban status call, the malicious-attempts query and the ban list.
+
+- **Automated RWTs could leave the transmitter unkeyed even with the GPIO
+  service healthy.** `GPIOBehaviorManager.start_alert()` counted a
+  `FIVE_SECONDS` pulse as having "handled" the broadcast, which suppresses the
+  subprocess's fallback of keying every configured pin. On a station whose
+  relay is assigned *Forwarding Alert* (held only for forwarded alerts)
+  alongside a beacon pulse, an automated RWT therefore held nothing, blinked
+  the beacon, reported handled, and never keyed the air chain. A five-second
+  pulse cannot carry a broadcast that runs for minutes, so only holds and
+  flashes count as handled now; a broadcast the matrix holds nothing for also
+  logs a warning naming the fix.
+
+- GPIO behaviour-matrix warnings (e.g. "no pin is assigned a transmit-capable
+  behavior — the transmitter will NOT be keyed") were only written to the GPIO
+  subprocess's journal at startup, where no operator sees them. They now appear
+  on the GPIO Control page alongside the existing environment issues.
+
+### Added
+- The MFA code field is now autofillable. It carried `autocomplete="off"`,
+  which explicitly opts out of the one-time-code suggestion iOS/macOS
+  Passwords, 1Password, Bitwarden and Chrome offer; it is now
+  `autocomplete="one-time-code"` with `inputmode="numeric"`. Auto-submit moved
+  from `keyup` to `input`/`change`, because a password manager sets the value
+  programmatically and fires neither key event — an autofilled code used to sit
+  in the box waiting for a manual tap on Verify. (Storing the TOTP secret in
+  the password manager is still a one-time manual step: copy the setup key
+  shown during MFA enrolment into the saved entry.)
+
+## [2.126.2] - 2026-08-04 - MFA login delays and GPIO relay keying
+
+### Fixed
+- **MFA login rejected valid codes for 90 seconds after every sign-in.**
+  `verify_user_mfa()` guarded against code reuse by comparing wall-clock time
+  since the last successful verification: any code accepted within 90 s of the
+  previous login was logged as a "TOTP code reuse attempt" and rejected. That
+  check cannot distinguish a replayed code from the brand-new one the
+  authenticator has already rotated to, so it rejected both — operators had to
+  wait out several 30-second rotations before a second login would go through.
+
+  Replay prevention now keys off the RFC 6238 *time step* the submitted code
+  belongs to. `MFAManager.verify_totp_with_counter()` reports which step
+  matched (searching the same ±1 skew window as before, with a constant-time
+  comparison), and a code is rejected only when its step is not newer than the
+  last one that user spent. A replayed code still fails; the next rotated code
+  is accepted immediately. Codes pasted with the space authenticators display
+  ("123 456") now verify instead of failing.
+
+  New nullable `admin_users.mfa_last_totp_counter` column (migration
+  `20260804_mfa_totp_counter`) records the spent step. Rows predating it fall
+  back to deriving the step from `mfa_last_totp_at`, so upgraded installs get
+  the fix without re-enrolling.
+
+- **GPIO relays never fired for automated RWTs or forwarded alerts.** Two
+  independent causes, both of which had to be fixed:
+
+  1. *The pin-owning service could not start.* `eas-station-gpio` is the only
+     process permitted to claim the relay lines (lgpio claims are exclusive per
+     process), and it was capped at `MemoryMax=128M` — a hard cgroup limit —
+     while needing roughly 240 MB just to import. Importing `app_core.models`
+     transitively pulls in the DSP stack (`app_utils.eas_decode` →
+     `eas_demod` → numba → scipy and numpy) before the service does any work.
+     The kernel OOM-killed it during startup and `Restart=always` turned that
+     into a silent crash loop, so no automated relay action was possible at
+     all. Raised to `MemoryMax=384M` on all six affected units
+     (`gpio`, `displays`, `gps`, `network`, `zigbee`, `endec-feeds`) — every one
+     of them imports the model layer and every one was capped below its own
+     startup footprint. `tests/test_systemd_memory_limits.py` fails if a
+     ceiling drops back below the floor.
+
+  2. *Forwarded alerts released the air-chain marker instantly.*
+     `EASBroadcaster.handle_alert()` — the path every auto-forwarded CAP alert
+     and OTA relay takes — set the `eas:broadcast_active` marker, called the
+     audio player, and cleared it. On any station without a local
+     `EAS_AUDIO_PLAYER` (Icecast-only or external-ENDEC installs) that call
+     returns in microseconds while the encoder is still working through the
+     queued SAME burst, so the marker existed for under a millisecond. The GPIO
+     subprocess keys the relay off that marker's rising edge and samples it at
+     1 Hz, so the edge was never observed. `handle_alert()` now holds the
+     marker for the full composite duration (bounded by
+     `max_activation_seconds`), matching what the manual send path and the RWT
+     scheduler already did.
+
+### Changed
+- The GPIO subsystem's active-alert count is cached for 5 seconds. It was
+  issuing a database `COUNT` on every indicator refresh — once a second plus
+  once per pub/sub notification — all serialised behind the same lock that
+  keys the relay, so a slow query delayed relay keying.
+
+### Removed
+- `tests/known_failures.txt` no longer lists `test_mfa_totp_reuse_prevention`.
+  Those seven tests were not failing for the recorded reason ("needs a real
+  database"); every one errored during fixture setup because patching the
+  `current_app` LocalProxy resolves it outside an application context. The
+  fixture now passes an explicit replacement and the suite runs clean.
+
 ## [2.126.1] - 2026-08-04 - SessionStart hook for Claude Code on the web
 
 ### Added

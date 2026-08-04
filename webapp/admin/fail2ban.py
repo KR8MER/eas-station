@@ -38,6 +38,8 @@ import logging
 import re
 import shutil
 import subprocess
+import threading
+import time
 from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
@@ -434,7 +436,40 @@ def run_background_sync() -> dict:
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("fail2ban self-heal resync skipped: %s", exc)
 
+    # This function mutates jail state, so any cached snapshot is now stale.
+    invalidate_status_cache()
     return _status()
+
+
+#: Seconds a computed status snapshot is served before fail2ban is shelled
+#: again.  One _status() call costs roughly a dozen `sudo fail2ban-client`
+#: round trips, which on a Pi is a large fraction of a second; the Security
+#: Center polls it and several operators may have the page open at once.
+_STATUS_CACHE_TTL_S = 10.0
+_status_cache: dict = {"value": None, "ts": 0.0}
+_status_cache_lock = threading.Lock()
+
+
+def invalidate_status_cache() -> None:
+    """Drop the cached status so the next read reflects a just-applied change."""
+    with _status_cache_lock:
+        _status_cache["value"] = None
+        _status_cache["ts"] = 0.0
+
+
+def _cached_status() -> dict:
+    """Return a recent status snapshot, recomputing at most every few seconds."""
+    with _status_cache_lock:
+        cached = _status_cache["value"]
+        if cached is not None and (time.monotonic() - _status_cache["ts"]) < _STATUS_CACHE_TTL_S:
+            return cached
+
+    value = _status()
+
+    with _status_cache_lock:
+        _status_cache["value"] = value
+        _status_cache["ts"] = time.monotonic()
+    return value
 
 
 # ── Routes ──────────────────────────────────────────────────────────────────────
@@ -443,7 +478,22 @@ def run_background_sync() -> dict:
 @require_auth
 @require_permission("system.configure")
 def fail2ban_status():
-    return jsonify(run_background_sync())
+    """Report fail2ban state. Read-only and cached — never mutates.
+
+    This used to call :func:`run_background_sync`, so simply opening the
+    Security Center ran ``import_ssh_bans`` **and** ``heal_firewall_bans``
+    inside the HTTP request. The latter re-pushes the whole ban list into the
+    firewall one ``sudo fail2ban-client set … banip`` subprocess *per banned
+    IP*; after any fail2ban restart (which flushes the jails) the first page
+    load therefore paid for hundreds of privileged subprocess round trips
+    before it could render — the "this page takes forever" report.
+
+    That work is not needed here: ``app_core.fail2ban_sync`` has run both
+    functions on a 60-second background schedule since it was added, precisely
+    so the ban list stays current with the UI closed. Doing it again per page
+    view was duplicated effort in the worst possible place.
+    """
+    return jsonify(_cached_status())
 
 
 @fail2ban_bp.route("/configure", methods=["POST"])
@@ -576,6 +626,7 @@ def resync_fail2ban():
         msg += f" Re-applied {ssh_synced} SSH ban(s) to the sshd jail."
     if imported:
         msg += f" Imported {imported} SSH offender(s) into the ban list."
+    invalidate_status_cache()
     return jsonify({"success": True, "message": msg})
 
 
@@ -609,6 +660,7 @@ def fail2ban_service():
         resync_bans()
         resync_ssh_bans()
 
+    invalidate_status_cache()
     return jsonify({"success": True, "message": f"fail2ban {action}ed.", "output": output})
 
 
@@ -652,6 +704,7 @@ def ssh_unban():
     msg = f"Unbanned {ip_address} from the SSH jail."
     if removed:
         msg += " Also removed it from the global ban list."
+    invalidate_status_cache()
     return jsonify({"success": True, "message": msg})
 
 

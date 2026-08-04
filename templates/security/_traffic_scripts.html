@@ -1118,7 +1118,45 @@
             addFilter(el.getAttribute('data-fk'), el.getAttribute('data-fv'));
         });
 
-        loadDashboard();
-        setInterval(loadDashboard, 60000);
+        // Auto-refresh, but only when someone is actually looking.
+        //
+        // One dashboard refresh runs ~35 aggregations over web_request_log. The
+        // old unconditional 60-second interval kept paying that on a backgrounded
+        // browser tab, on a laptop left open overnight, and while the operator
+        // was reading a different Security Center tab entirely — the single
+        // largest recurring CPU cost the web process carried. Skipping a hidden
+        // refresh costs nothing: the next visible tick reloads the data, and
+        // becoming visible triggers an immediate reload if the data went stale.
+        const REFRESH_MS = 60000;
+        let lastLoadedAt = 0;
+
+        function trafficPaneVisible() {
+            if (document.visibilityState === 'hidden') return false;
+            const pane = document.getElementById('traffic-pane');
+            // Standalone use (no tabs) counts as visible.
+            return !pane || pane.classList.contains('active');
+        }
+
+        function refreshIfVisible() {
+            if (!trafficPaneVisible()) return;
+            lastLoadedAt = Date.now();
+            loadDashboard();
+        }
+
+        function refreshIfStale() {
+            if (trafficPaneVisible() && Date.now() - lastLoadedAt >= REFRESH_MS) {
+                refreshIfVisible();
+            }
+        }
+
+        refreshIfVisible();
+        setInterval(refreshIfVisible, REFRESH_MS);
+
+        // Catch up as soon as the operator comes back to the data.
+        document.addEventListener('visibilitychange', refreshIfStale);
+        const trafficTabBtn = document.getElementById('traffic-tab');
+        if (trafficTabBtn) {
+            trafficTabBtn.addEventListener('shown.bs.tab', refreshIfStale);
+        }
     });
 </script>

@@ -3761,6 +3761,7 @@ class EASBroadcaster:
             identifier=str(alert_identifier) if alert_identifier else '',
         )
 
+        playout_start = time.monotonic()
         try:
             # Inject into Icecast FIRST so stream listeners hear the alert
             # in sync with local playback.  inject_eas_audio() queues all
@@ -3785,6 +3786,27 @@ class EASBroadcaster:
             # All segments are in a single uninterrupted audio file, so no
             # gap can appear between the narration and the EOM burst.
             self._play_audio_or_bytes(audio_path, audio_bytes)
+
+            # Hold the broadcast marker for the full composite duration even if
+            # playback returned early.  The marker's rising and falling edges are
+            # what the eas-station-gpio subprocess keys and releases the relay
+            # on, and it samples them at 1 Hz — so a marker that is set and
+            # cleared within the same millisecond is never observed at all and
+            # the transmitter is never keyed.  That is exactly what happens on
+            # any station without a local EAS_AUDIO_PLAYER (Icecast-only or
+            # external-ENDEC installs): _play_audio_or_bytes() logs "no audio
+            # player configured" and returns immediately, while the encoder is
+            # still working through the queued SAME burst.  The manual send path
+            # (webapp/eas/workflow.py) and the RWT scheduler already hold the
+            # marker this way; auto-forwarded alerts — every OTA relay and CAP
+            # auto-forward — came through here and did not.
+            hold_seconds = min(
+                float(_duration_hint or 0.0),
+                float(self.config.get('max_activation_seconds', 300) or 300),
+            )
+            remaining_playout = hold_seconds - (time.monotonic() - playout_start)
+            if remaining_playout > 0:
+                time.sleep(remaining_playout)
         finally:
             # Falling edge: the GPIO subprocess releases the relay when this
             # marker clears (and self-releases on the marker TTL as a backstop).

@@ -77,8 +77,17 @@ DeviceAllow=/dev/gpiochip0 rw
 DeviceAllow=/dev/gpiochip1 rw
 
 # Resource limits
+#
+# MemoryMax is a HARD cgroup limit: exceeding it gets the process OOM-killed,
+# and with Restart=always that becomes a silent crash loop rather than a
+# visible failure.  This service imports app_core.models, which transitively
+# pulls in the DSP stack (app_utils.eas_decode -> eas_demod -> numba -> scipy
+# + numpy) and lands around 240 MB RSS before it does any work at all.  The
+# previous 128M ceiling was therefore unreachable — the unit was killed during
+# startup on every restart.  Keep this at or above 384M; see
+# tests/test_systemd_memory_limits.py, which fails if it is lowered.
 LimitNOFILE=65536
-MemoryMax=128M
+MemoryMax=384M
 
 [Install]
 WantedBy=multi-user.target eas-station-hardware.target

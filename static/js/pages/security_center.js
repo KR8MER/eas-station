@@ -33,17 +33,48 @@
         return div.innerHTML;
     }
 
+    /* -------------------------------------------------------------- */
+    /* Tab loading                                                     */
+    /* -------------------------------------------------------------- */
+    //
+    // Each tab's data is fetched the first time that tab is shown, not on page
+    // load. Loading all of them up front meant opening the page always paid for
+    // the fail2ban status call (a dozen privileged `fail2ban-client` subprocess
+    // round trips), the malicious-attempt query and the ban list — even for an
+    // operator who only wanted the Traffic tab. On a Pi that was most of the
+    // page's load time.
+
+    const TAB_LOADERS = {
+        'malicious-tab': loadAttempts,
+        'bans-tab': loadIPFilters,
+        'fail2ban-tab': loadFail2banStatus,
+    };
+    const loadedTabs = new Set();
+
+    function loadTabOnce(tabId) {
+        const loader = TAB_LOADERS[tabId];
+        if (!loader || loadedTabs.has(tabId)) return;
+        loadedTabs.add(tabId);
+        loader();
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         addFilterModal = new bootstrap.Modal(document.getElementById('addFilterModal'));
 
-        loadAttempts();
-        loadIPFilters();
-        loadFail2banStatus();
-
-        // Honour a #hash so the legacy /security/malicious-logins redirect (and
-        // any deep link) opens the right tab.
+        // Fetch whichever tab a #hash selects (or the default active one).
         activateTabFromHash();
         window.addEventListener('hashchange', activateTabFromHash);
+
+        // Bootstrap fires shown.bs.tab on the newly activated trigger.
+        Object.keys(TAB_LOADERS).forEach(tabId => {
+            const el = document.getElementById(tabId);
+            if (el) {
+                el.addEventListener('shown.bs.tab', () => loadTabOnce(tabId));
+            }
+        });
+
+        const active = document.querySelector('#securityTabs .nav-link.active');
+        if (active) loadTabOnce(active.id);
     });
 
     function activateTabFromHash() {
@@ -56,7 +87,10 @@
         const tabId = map[window.location.hash];
         if (tabId) {
             const el = document.getElementById(tabId);
-            if (el) bootstrap.Tab.getOrCreateInstance(el).show();
+            if (el) {
+                bootstrap.Tab.getOrCreateInstance(el).show();
+                loadTabOnce(tabId);
+            }
         }
     }
 

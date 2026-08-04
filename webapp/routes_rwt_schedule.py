@@ -45,23 +45,6 @@ def _serialize_config(config: Optional[RWTScheduleConfig]) -> dict:
     return payload
 
 
-def _next_configured_date(
-    configured_days: List[int],
-    skip_until: Optional[date],
-    today: date,
-) -> Optional[date]:
-    """Return the first configured-weekday date strictly after ``skip_until``
-    (or after today if no skip set)."""
-    if not configured_days:
-        return None
-    anchor = (skip_until or today)
-    for offset in range(1, 15):
-        candidate = anchor + timedelta(days=offset)
-        if candidate.weekday() in configured_days:
-            return candidate
-    return None
-
-
 def register_routes(app, logger):
     """Register RWT schedule configuration routes."""
 
@@ -231,11 +214,17 @@ def register_routes(app, logger):
     @app.route('/api/rwt-schedule/skip-week', methods=['POST'])
     @require_permission('system.configure')
     def skip_rwt_week():
-        """Skip the upcoming scheduled RWT broadcast(s).
+        """Skip this week's RWT broadcast; resume next week.
 
-        Sets ``skip_until`` to a date that covers all configured days in
-        the current scheduled week.  If today is itself a configured day
-        and the broadcast hasn't fired yet, today is included.
+        Sets ``skip_until`` to the last day (Sunday) of the current ISO week, so
+        no day left in this week is eligible and the scheduler draws its next
+        slot from the following week.
+
+        This used to set ``skip_until`` to the day before the next configured
+        weekday, which matched the old "fire on every configured day" model. It
+        does not match the weekly one: with Sunday+Tuesday configured, skipping
+        on a Monday left both Tuesday and Sunday still eligible, so the test
+        simply landed on one of them and the week was never skipped at all.
         """
         try:
             config = RWTScheduleConfig.query.first()
@@ -252,19 +241,8 @@ def register_routes(app, logger):
             now_local = datetime.now(timezone.utc).astimezone()
             today = now_local.date()
 
-            # Find the next configured weekday strictly AFTER today.  Setting
-            # skip_until to the day BEFORE that means the scheduler will
-            # suppress all configured fires from today through the end of
-            # this scheduled "week" but resume at the next one.
-            next_after = _next_configured_date(configured_days, None, today)
-            if next_after is None:
-                # Shouldn't happen given configured_days is non-empty.
-                return jsonify({
-                    'success': False,
-                    'error': 'Could not determine next scheduled date',
-                }), 500
-
-            new_skip = next_after - timedelta(days=1)
+            # Sunday of the current ISO week (Monday is weekday 0).
+            new_skip = today + timedelta(days=6 - today.weekday())
             config.skip_until = new_skip
             db.session.add(config)
             db.session.add(SystemLog(
@@ -273,7 +251,7 @@ def register_routes(app, logger):
                 module='rwt_schedule',
                 details={
                     'skip_until': new_skip.isoformat(),
-                    'next_fire_after': next_after.isoformat(),
+                    'resumes_week_of': (new_skip + timedelta(days=1)).isoformat(),
                 },
             ))
             db.session.commit()

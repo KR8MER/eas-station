@@ -518,8 +518,16 @@ def test_end_alert_release_ignores_long_min_hold(monkeypatch):
     )
 
 
-def test_behavior_manager_pulse_only(monkeypatch):
-    """Pulse-only behaviors should prevent fallback activation."""
+def test_behavior_manager_pulse_only_does_not_claim_the_broadcast(monkeypatch):
+    """A pulse-only matrix pulses, but must NOT suppress fallback activation.
+
+    ``start_alert`` reporting True is what tells the GPIO subprocess "the matrix
+    has taken this broadcast" and skips keying every configured pin.  A
+    five-second beacon pulse cannot carry a broadcast that runs for minutes, so
+    counting it as handled left the transmitter unkeyed for the whole alert —
+    the failure operators saw on automated RWTs when their relay was assigned
+    Forwarding Alert (held only for forwarded alerts) alongside a beacon pulse.
+    """
 
     controller = _FakeController()
     configs = [GPIOPinConfig(pin=18, name="Beacon")]
@@ -539,8 +547,38 @@ def test_behavior_manager_pulse_only(monkeypatch):
     monkeypatch.setattr(manager, "_pulse_pin", fake_pulse)
 
     handled = manager.start_alert(alert_id="pulse", event_code="RWT")
-    assert handled is True
-    assert calls == [18]
+    assert handled is False, "a beacon pulse must not stand in for keying the air chain"
+    assert calls == [18], "the pulse itself should still fire"
+
+
+def test_forwarding_only_matrix_falls_back_on_an_rwt(monkeypatch):
+    """The automated-RWT case: a Forwarding Alert relay holds nothing for an RWT.
+
+    An RWT is originated locally, not forwarded, so FORWARDING_ALERT pins are
+    correctly left alone — which means nothing holds the air chain and the
+    subprocess must fall back to keying every configured pin.
+    """
+
+    controller = _FakeController()
+    configs = [
+        GPIOPinConfig(pin=17, name="Transmit relay"),
+        GPIOPinConfig(pin=18, name="Beacon"),
+    ]
+    manager = GPIOBehaviorManager(
+        controller=controller,
+        pin_configs=configs,
+        behavior_matrix={
+            17: {GPIOBehavior.FORWARDING_ALERT},
+            18: {GPIOBehavior.FIVE_SECONDS},
+        },
+    )
+    monkeypatch.setattr(manager, "_pulse_pin", lambda **kwargs: None)
+
+    # Automated RWT (forwarded=False): nothing is held -> fallback required.
+    assert manager.start_alert(alert_id="RWT-AUTO-1", event_code="RWT") is False
+
+    # A forwarded alert on the same matrix does hold the relay.
+    assert manager.start_alert(alert_id="urn:cap:1", event_code="TOR", forwarded=True) is True
 
 
 # ---------------------------------------------------------------------------

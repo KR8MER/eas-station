@@ -305,3 +305,215 @@ def test_set_incoming_alert_carries_identifier(monkeypatch):
     stored = json.loads(client.store[eas._INCOMING_STATE_KEY])
     assert stored["identifier"] == "urn:cap:42"
     assert stored["event_code"] == "TOR"
+
+
+# ---------------------------------------------------------------------------
+# Marker hold across playout (auto-forwarded alerts)
+# ---------------------------------------------------------------------------
+#
+# The subprocess only ever sees the marker by sampling it (1 Hz poll plus a
+# pub/sub nudge).  A producer that sets and clears the marker in the same
+# millisecond therefore never keys the relay at all — there is no edge left to
+# observe by the time any consumer looks.  That is the failure mode for every
+# auto-forwarded alert on a station with no local EAS_AUDIO_PLAYER (Icecast-only
+# or external-ENDEC installs), where playback returns immediately while the
+# encoder is still working through the queued SAME burst.
+
+
+def test_monitor_misses_a_marker_that_never_survives_a_refresh(monkeypatch):
+    """A marker set and cleared between refreshes produces no keying at all.
+
+    This is the behaviour the producer-side hold exists to prevent; it is
+    asserted here so the requirement stays visible.
+    """
+    bm = _FakeBehaviorManager()
+    controller = _FakeController(behavior_manager=bm)
+    monitor = AlertIndicatorMonitor(gpio_controller=controller)
+
+    _patch_state(monkeypatch, broadcast=False, incoming=False)
+    monitor.refresh()  # before the broadcast
+
+    # The whole broadcast happens here, between two refreshes.
+
+    monitor.refresh()  # after the broadcast — marker already gone
+
+    assert bm.starts == []
+    assert controller.activate_all_calls == []
+
+
+def _silent_wav(seconds: float, sample_rate: int = 8000) -> bytes:
+    """Build a real WAV blob of the requested duration."""
+    import app_utils.eas as eas
+
+    return eas.samples_to_wav_bytes([0] * int(seconds * sample_rate), sample_rate)
+
+
+class _FakeAudioGenerator:
+    """Stands in for EASAudioGenerator: returns a fixed composite WAV."""
+
+    def __init__(self, wav_bytes):
+        self.wav_bytes = wav_bytes
+        self.output_dir = "/nonexistent"
+
+    def build_files(self, alert, payload, header, location_codes):
+        return (
+            "alert.wav",
+            "alert.txt",
+            "message text",
+            self.wav_bytes,
+            {"tts_warning": None, "voiceover_provider": None},
+            {},
+        )
+
+
+class _FakeRecord:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+        self.id = 1
+
+
+class _FakeSession:
+    def __init__(self):
+        self.added = []
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    def commit(self):
+        pass
+
+    def rollback(self):  # pragma: no cover - not expected in these tests
+        pass
+
+
+def _build_forwarding_broadcaster(monkeypatch, client, duration_seconds):
+    """Wire an EASBroadcaster whose playout returns instantly (no audio player)."""
+    import logging
+    import app_utils.eas as eas
+
+    _patch_redis(monkeypatch, client)
+    monkeypatch.setattr(
+        eas,
+        "build_same_header",
+        lambda alert, payload, config, location_settings: (
+            "ZCZC-EAS-RWT-039000+0015-2180000-EASNODE-",
+            ["039000"],
+            "RWT",
+        ),
+    )
+
+    broadcaster = eas.EASBroadcaster(
+        db_session=_FakeSession(),
+        model_cls=_FakeRecord,
+        # No 'audio_player_cmd' — the exact configuration where playback
+        # returns immediately and the marker used to vanish with it.
+        config={"enabled": True, "max_activation_seconds": 300},
+        logger=logging.getLogger("test.eas"),
+    )
+    broadcaster.audio_generator = _FakeAudioGenerator(_silent_wav(duration_seconds))
+    return broadcaster
+
+
+def _forwarded_alert():
+    from types import SimpleNamespace
+
+    alert = SimpleNamespace(
+        identifier="urn:oid:forwarded-1",
+        event="Required Weekly Test",
+        status="Test",
+        message_type="Alert",
+        severity="Minor",
+        id=7,
+        raw_json={},
+    )
+    payload = {
+        "identifier": "urn:oid:forwarded-1",
+        "status": "Test",
+        "message_type": "Alert",
+        "forwarding_decision": "forwarded",
+        "forwarded": True,
+    }
+    return alert, payload
+
+
+def test_forwarded_broadcast_holds_marker_for_full_playout(monkeypatch):
+    """handle_alert() keeps the marker up for the composite duration.
+
+    Without a local audio player the player call returns in microseconds, so
+    the relay would never be keyed if the marker were cleared right after it.
+    """
+    import time as _time
+
+    import app_utils.eas as eas
+
+    duration = 0.6
+    client = _FakeRedis()
+    broadcaster = _build_forwarding_broadcaster(monkeypatch, client, duration)
+    alert, payload = _forwarded_alert()
+
+    marker_present_at_clear = {}
+    real_clear = eas.clear_broadcast_active
+
+    def _recording_clear(identifier=""):
+        marker_present_at_clear["present"] = eas._BROADCAST_STATE_KEY in client.store
+        marker_present_at_clear["at"] = _time.monotonic()
+        real_clear(identifier=identifier)
+
+    monkeypatch.setattr(eas, "clear_broadcast_active", _recording_clear)
+
+    started = _time.monotonic()
+    result = broadcaster.handle_alert(alert, payload)
+    elapsed = _time.monotonic() - started
+
+    assert result["same_triggered"] is True
+    # The marker was still live right up to the falling edge...
+    assert marker_present_at_clear["present"] is True
+    # ...and it stayed live for the whole broadcast, not just an instant.
+    assert marker_present_at_clear["at"] - started >= duration * 0.9, (
+        "broadcast marker was released before end-of-message; the GPIO "
+        "subprocess samples it and would never see the rising edge"
+    )
+    assert elapsed >= duration * 0.9
+    # Falling edge really did clear it.
+    assert eas._BROADCAST_STATE_KEY not in client.store
+
+
+def test_forwarded_broadcast_marker_is_observable_by_the_monitor(monkeypatch):
+    """A polling consumer sees the forwarded broadcast's rising edge.
+
+    Drives the real marker helpers through the same monitor the subprocess
+    uses, sampling far slower than the marker's lifetime.
+    """
+    import threading
+    import time as _time
+
+    import app_utils.eas as eas
+
+    duration = 0.8
+    client = _FakeRedis()
+    broadcaster = _build_forwarding_broadcaster(monkeypatch, client, duration)
+    alert, payload = _forwarded_alert()
+
+    bm = _FakeBehaviorManager()
+    controller = _FakeController(behavior_manager=bm)
+    monitor = AlertIndicatorMonitor(gpio_controller=controller)
+    monkeypatch.setattr(indicators, "_redis_ok", lambda: True)
+
+    worker = threading.Thread(target=broadcaster.handle_alert, args=(alert, payload))
+    worker.start()
+    # Deliberately do not look until well after playback would have returned on
+    # a player-less host.  A marker that is only up for the length of the
+    # (instant) player call is already gone by now; one held for the broadcast
+    # is not.  This is what makes the test discriminate the fix.
+    _time.sleep(0.15)
+    deadline = _time.monotonic() + duration + 2.0
+    while worker.is_alive() and _time.monotonic() < deadline:
+        monitor.refresh()
+        _time.sleep(0.1)
+    worker.join(timeout=5)
+    monitor.refresh()  # falling edge
+
+    assert len(bm.starts) == 1, "relay was never keyed for the forwarded broadcast"
+    assert bm.starts[0]["forwarded"] is True
+    assert bm.starts[0]["alert_id"] == "urn:oid:forwarded-1"
+    assert len(bm.ends) == 1, "relay was never released after the broadcast"
