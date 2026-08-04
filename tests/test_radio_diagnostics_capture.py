@@ -149,7 +149,7 @@ def _add_receiver():
     return receiver
 
 
-def test_capture_iq_happy_path(capture_app, monkeypatch):
+def test_capture_iq_happy_path(capture_app, monkeypatch, authenticated_user):
     """POST creates a capture; GET streams it and cleans up."""
     app, capture_dir = capture_app
 
@@ -212,7 +212,7 @@ def test_capture_iq_happy_path(capture_app, monkeypatch):
         assert dl2.status_code == 404
 
 
-def test_capture_iq_rejects_out_of_tree_path(capture_app, monkeypatch, tmp_path):
+def test_capture_iq_rejects_out_of_tree_path(capture_app, monkeypatch, tmp_path, authenticated_user):
     """The POST handler refuses to register a path outside RADIO_CAPTURE_DIR.
 
     Defends against a compromised SDR-service worker (or a developer
@@ -254,7 +254,7 @@ def test_capture_iq_rejects_out_of_tree_path(capture_app, monkeypatch, tmp_path)
         assert attacker_path.exists()
 
 
-def test_download_rejects_non_hex_capture_id(capture_app, monkeypatch):
+def test_download_rejects_non_hex_capture_id(capture_app, monkeypatch, authenticated_user):
     """Path traversal via the URL segment is blocked before Redis lookup."""
     app, _ = capture_app
 
@@ -271,7 +271,7 @@ def test_download_rejects_non_hex_capture_id(capture_app, monkeypatch):
         assert resp.status_code == 400
 
 
-def test_download_404_when_capture_expired(capture_app, monkeypatch):
+def test_download_404_when_capture_expired(capture_app, monkeypatch, authenticated_user):
     """A capture id with no Redis entry returns 404 (TTL expired)."""
     app, _ = capture_app
     fake_redis = FakeRedis()
@@ -285,7 +285,7 @@ def test_download_404_when_capture_expired(capture_app, monkeypatch):
         assert resp.status_code == 404
 
 
-def test_download_blocks_tampered_redis_path(capture_app, monkeypatch, tmp_path):
+def test_download_blocks_tampered_redis_path(capture_app, monkeypatch, tmp_path, authenticated_user):
     """Defence-in-depth: download endpoint re-validates the on-disk path.
 
     Even if a capture pointer in Redis has been tampered with to point
@@ -314,7 +314,7 @@ def test_download_blocks_tampered_redis_path(capture_app, monkeypatch, tmp_path)
         assert bad_path.exists()
 
 
-def test_capture_iq_timeout_returns_504(capture_app, monkeypatch):
+def test_capture_iq_timeout_returns_504(capture_app, monkeypatch, authenticated_user):
     """If the SDR service never responds, the operator gets a 504 with a hint."""
     app, _ = capture_app
 
@@ -345,7 +345,7 @@ def test_capture_iq_timeout_returns_504(capture_app, monkeypatch):
         assert "Timeout" in body.get("error", "")
 
 
-def test_capture_iq_long_duration_is_accepted(capture_app, monkeypatch):
+def test_capture_iq_long_duration_is_accepted(capture_app, monkeypatch, authenticated_user):
     """A 30-second capture request must be passed through (not clamped to 5 s).
 
     Verifies that:
@@ -403,7 +403,7 @@ def test_capture_iq_long_duration_is_accepted(capture_app, monkeypatch):
         assert command["num_samples"] == 30 * 2_400_000
 
 
-def test_capture_iq_clamps_excessive_duration(capture_app, monkeypatch):
+def test_capture_iq_clamps_excessive_duration(capture_app, monkeypatch, authenticated_user):
     """Durations beyond RADIO_CAPTURE_MAX_DURATION_SEC are clamped, not rejected."""
     app, capture_dir = capture_app
     with app.app_context():
@@ -438,7 +438,7 @@ def test_capture_iq_clamps_excessive_duration(capture_app, monkeypatch):
         )
 
 
-def test_auto_gain_happy_path(capture_app, monkeypatch):
+def test_auto_gain_happy_path(capture_app, monkeypatch, authenticated_user):
     """Auto-gain endpoint returns the selected gain and queues an SDR command."""
     app, _ = capture_app
     with app.app_context():
@@ -486,7 +486,7 @@ def test_auto_gain_happy_path(capture_app, monkeypatch):
         assert command["target_rms_dbfs"] == -12.0
 
 
-def test_auto_gain_persists_when_requested(capture_app, monkeypatch):
+def test_auto_gain_persists_when_requested(capture_app, monkeypatch, authenticated_user):
     """With persist=true, the chosen gain is written to radio_receivers.gain."""
     app, _ = capture_app
     with app.app_context():
@@ -520,7 +520,7 @@ def test_auto_gain_persists_when_requested(capture_app, monkeypatch):
         assert refreshed.gain == 17.5
 
 
-def test_auto_gain_propagates_service_failure(capture_app, monkeypatch):
+def test_auto_gain_propagates_service_failure(capture_app, monkeypatch, authenticated_user):
     """A failing SDR-service auto_gain result yields a 503 with the hint."""
     app, _ = capture_app
     with app.app_context():

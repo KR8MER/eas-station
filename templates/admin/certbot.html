@@ -1287,15 +1287,6 @@ async function cancelHttpsRedirect() {
     showToast('HTTPS redirect cancelled - staying on HTTP', 'info');
 }
 
-function escapeHtml(text) {
-    // Handle null, undefined, or falsy values
-    if (!text && text !== 0) {
-        return '';
-    }
-    const div = document.createElement('div');
-    div.textContent = String(text);
-    return div.innerHTML;
-}
 
 // View certbot logs
 async function viewCertbotLogs() {

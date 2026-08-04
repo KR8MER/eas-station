@@ -63,8 +63,16 @@ class MockFFmpegSource:
     def is_running(self) -> bool:
         return self._running
 
-    def read_audio(self, num_samples: int, timeout: float = 0.1):
-        """Return mock audio samples."""
+    def read_samples(self, num_samples: int):
+        """Return mock audio samples.
+
+        Mirrors ``FFmpegAudioSource.read_samples(num_samples)``. This double
+        previously defined ``read_audio(num_samples, timeout=0.1)``, which is
+        the *manager's* public method name (AudioSourceManager.read_audio), not
+        the *source's*. AudioSourceManager calls ``source.read_samples(...)``
+        internally, so the mismatch raised AttributeError inside the mixer and
+        monitor threads on every run.
+        """
         if not self._running or self._health == SourceHealth.FAILED:
             return None
 
@@ -101,6 +109,37 @@ class MockFFmpegSource:
     def set_health(self, health: SourceHealth):
         """Change health status for testing."""
         self._health = health
+
+
+def mock_source_factory(sources_by_url):
+    """Build an ``FFmpegAudioSource`` side_effect keyed on ``source_url``.
+
+    ``AudioSourceManager.add_source()`` constructs ``FFmpegAudioSource`` with
+    keyword arguments only — ``source_url``, ``sample_rate``, ``buffer_seconds``,
+    ``watchdog_timeout`` and ``health_callback``. It deliberately does *not*
+    forward the ``AudioSourceConfig`` object itself.
+
+    These tests previously used ``def create_mock(config, **kwargs)``, which
+    assumed the config was passed positionally. That signature stopped matching
+    when the manager moved to explicit keyword arguments, so every call raised
+    TypeError inside ``add_source``'s ``except Exception`` handler. The manager
+    swallowed the error and returned False, and the tests failed later with
+    confusing assertions about missing sources rather than the real cause.
+
+    ``source_url`` is the only identifying field that reaches the constructor,
+    so it is what the doubles dispatch on.
+    """
+
+    def _side_effect(*args, **kwargs):
+        url = kwargs.get("source_url") or (args[0] if args else None)
+        if url not in sources_by_url:
+            raise AssertionError(
+                f"FFmpegAudioSource constructed with unexpected source_url {url!r}; "
+                f"known URLs: {sorted(sources_by_url)}"
+            )
+        return sources_by_url[url]
+
+    return _side_effect
 
 
 class TestAudioSourceManager:
@@ -168,12 +207,10 @@ class TestAudioSourceManager:
         source1 = MockFFmpegSource("source-1", SourceHealth.HEALTHY)
         source2 = MockFFmpegSource("source-2", SourceHealth.HEALTHY)
 
-        def create_mock(config, **kwargs):
-            if config.name == "source-1":
-                return source1
-            return source2
-
-        mock_ffmpeg_class.side_effect = create_mock
+        mock_ffmpeg_class.side_effect = mock_source_factory({
+            "http://example.com/primary": source1,
+            "http://example.com/backup": source2,
+        })
 
         manager = AudioSourceManager(sample_rate=22050)
 
@@ -205,12 +242,10 @@ class TestAudioSourceManager:
         source1 = MockFFmpegSource("source-1", SourceHealth.HEALTHY)
         source2 = MockFFmpegSource("source-2", SourceHealth.HEALTHY)
 
-        def create_mock(config, **kwargs):
-            if config.name == "source-1":
-                return source1
-            return source2
-
-        mock_ffmpeg_class.side_effect = create_mock
+        mock_ffmpeg_class.side_effect = mock_source_factory({
+            "http://example.com/primary": source1,
+            "http://example.com/backup": source2,
+        })
 
         # Track failover events
         failover_events = []
@@ -218,9 +253,12 @@ class TestAudioSourceManager:
         def on_failover(event):
             failover_events.append(event)
 
+        # Poll fast so the failover assertion below does not depend on sleeping
+        # longer than the production 1.0s health-check interval.
         manager = AudioSourceManager(
             sample_rate=22050,
-            failover_callback=on_failover
+            failover_callback=on_failover,
+            monitor_interval=0.05
         )
 
         # Add sources
@@ -327,14 +365,11 @@ class TestAudioSourceManager:
         source2 = MockFFmpegSource("medium-priority", SourceHealth.HEALTHY)
         source3 = MockFFmpegSource("high-priority", SourceHealth.HEALTHY)
 
-        def create_mock(config, **kwargs):
-            if config.name == "low-priority":
-                return source1
-            elif config.name == "medium-priority":
-                return source2
-            return source3
-
-        mock_ffmpeg_class.side_effect = create_mock
+        mock_ffmpeg_class.side_effect = mock_source_factory({
+            "http://example.com/low": source1,
+            "http://example.com/medium": source2,
+            "http://example.com/high": source3,
+        })
 
         manager = AudioSourceManager(sample_rate=22050)
 
@@ -374,12 +409,10 @@ class TestAudioSourceManager:
         source1 = MockFFmpegSource("enabled-source", SourceHealth.HEALTHY)
         source2 = MockFFmpegSource("disabled-source", SourceHealth.HEALTHY)
 
-        def create_mock(config, **kwargs):
-            if config.name == "enabled-source":
-                return source1
-            return source2
-
-        mock_ffmpeg_class.side_effect = create_mock
+        mock_ffmpeg_class.side_effect = mock_source_factory({
+            "http://example.com/enabled": source1,
+            "http://example.com/disabled": source2,
+        })
 
         manager = AudioSourceManager(sample_rate=22050)
 
@@ -457,12 +490,10 @@ class TestAudioSourceManager:
         source1 = MockFFmpegSource("source-1", SourceHealth.HEALTHY)
         source2 = MockFFmpegSource("source-2", SourceHealth.DEGRADED)
 
-        def create_mock(config, **kwargs):
-            if config.name == "source-1":
-                return source1
-            return source2
-
-        mock_ffmpeg_class.side_effect = create_mock
+        mock_ffmpeg_class.side_effect = mock_source_factory({
+            "http://example.com/1": source1,
+            "http://example.com/2": source2,
+        })
 
         manager = AudioSourceManager(sample_rate=22050)
 

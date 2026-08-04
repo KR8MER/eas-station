@@ -372,19 +372,11 @@
         return { open, close };
     }
 
-    function addNavbarButton(palette) {
-        const host = document.querySelector('.navbar .navbar-sections');
-        if (!host) return;
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn btn-sm btn-outline-secondary d-none d-lg-inline-flex align-items-center gap-1 ms-2';
-        btn.setAttribute('aria-label', 'Search pages (Ctrl+K)');
-        btn.title = 'Search pages (Ctrl+K)';
-        btn.innerHTML = '<i class="fas fa-magnifying-glass" aria-hidden="true"></i>'
-            + '<kbd class="small" style="font-size:.65rem;">Ctrl K</kbd>';
-        btn.addEventListener('click', palette.open);
-        host.appendChild(btn);
-    }
+    // NOTE: this module used to append a "🔍 Ctrl K" pill into
+    // .navbar-sections. It was removed by request — it pushed the navbar to a
+    // third row at common desktop widths. The command palette itself is
+    // unchanged and still opens on Ctrl/Cmd+K, or programmatically via
+    // window.EASCommandPalette.open().
 
     document.addEventListener('DOMContentLoaded', () => {
         const entries = buildIndex();
@@ -392,7 +384,6 @@
         injectStyles();
         renderBreadcrumbs(entries);
         const palette = createPalette(entries);
-        addNavbarButton(palette);
         window.EASCommandPalette = palette;
     });
 })();

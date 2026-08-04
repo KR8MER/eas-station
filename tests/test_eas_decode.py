@@ -17,6 +17,11 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - import only for type checkers
+    import numpy as np
+
 import struct
 import math
 import sys

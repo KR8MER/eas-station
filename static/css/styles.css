@@ -1890,6 +1890,20 @@ small,
     overflow: hidden;
 }
 
+/* Top-level navbar items are an icon plus a label. Bootstrap ships
+   `.nav-link { display: block }`, and nothing here overrode it, so the icon
+   and label were laid out as inline content: the one plain link (Dashboard —
+   every sibling is a .dropdown-toggle) wrapped onto two lines below ~1440px,
+   rendering 61px tall against its siblings' 37px and colliding with the
+   active-state pill. Scoped to .navbar so .nav-pills / .nav-tabs elsewhere
+   keep Bootstrap's own layout. */
+.navbar .navbar-nav > .nav-item > .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    white-space: nowrap;
+}
+
 /* Glow effect behind link */
 .nav-link::before {
     content: "";
@@ -4179,6 +4193,23 @@ html:has(.modal.show) {
     margin-bottom: 1.5rem;
 }
 
+/* Borderless variant. The Network, Zigbee and Screens pages each carried an
+   identical page-local `.empty-state` rule with no dashed border or fill,
+   which overrode the boxed design above. Expressed as a modifier so the two
+   treatments can coexist without one silently shadowing the other. */
+.empty-state-plain {
+    border: none;
+    background: none;
+    padding: 3rem 1rem;
+    color: var(--text-secondary);
+}
+
+.empty-state-plain i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
 /* Status Badge - Unified Design
    (promoted from identical per-page CSS on the Certbot, Tailscale, and
    Icecast admin pages; page-level overrides still win the cascade) */
@@ -4216,9 +4247,37 @@ html:has(.modal.show) {
     color: var(--text-color);
 }
 
+/* Connection-state variants (promoted from the Network admin page, which had
+   its own outlined treatment). */
+.status-badge.connected {
+    background: color-mix(in srgb, var(--success-color) 10%, transparent);
+    color: var(--success-color);
+    border: 1px solid var(--success-color);
+}
+
+.status-badge.disconnected {
+    background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+/* Sentence-case variant. The shared badge uppercases its text; several pages
+   render badges whose content is already sentence-cased (hostnames, driver
+   names, Bootstrap .badge pills) and had each redefined the base rule to undo
+   the transform. Use this modifier instead of overriding `.status-badge`. */
+.status-badge-plain {
+    text-transform: none;
+}
+
 /* Inline spinner - Unified Design
    (promoted from identical per-page CSS on the Network and Zigbee admin
-   pages; uses the global `spin` keyframes defined below) */
+   pages; uses the global `spin` keyframes defined below)
+
+   Pages MUST NOT redefine `.spinner` in a page-local <style> block — the page
+   rule wins the cascade and the shared design stops applying, which is how the
+   same class ended up meaning a 1rem inline spinner on one page and a 44px
+   page loader on another. Use the `.spinner-lg` modifier below instead.
+   Enforced by tests/test_frontend_consistency.py. */
 .spinner {
     display: inline-block;
     width: 1rem;
@@ -4227,6 +4286,14 @@ html:has(.modal.show) {
     border-left-color: var(--primary-color);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
+}
+
+/* Large block spinner for full-panel loading states (dashboard tiles, the
+   stats page's chart placeholders). Same design language, bigger. */
+.spinner-lg {
+    width: 44px;
+    height: 44px;
+    border-width: 3px;
 }
 
 /* SNR quality scale - shared color ramp for signal-strength meters

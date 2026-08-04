@@ -200,6 +200,13 @@ def register(app: Flask, logger) -> None:
         redis_host = app.config.get("REDIS_HOST", "localhost")
         redis_port = app.config.get("REDIS_PORT", 6379)
         try:
+            # Imported lazily here, matching the pattern used elsewhere in the
+            # webapp package. Without this import the call below raised
+            # NameError, which the surrounding `except Exception` turned into a
+            # permanent "Redis check failed" — the dependency could never be
+            # reported healthy no matter the state of the server.
+            from app_core.redis_client import get_redis_client
+
             redis_client = get_redis_client()
             if redis_client and redis_client.ping():
                 dependencies["redis"] = {

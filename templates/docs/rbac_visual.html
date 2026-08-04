@@ -87,8 +87,10 @@
 <div class="container-fluid">
     <div class="row mb-4">
         <div class="col">
-            <h1><i class="fas fa-sitemap"></i> RBAC Permission Tree</h1>
-            <p class="text-muted">Visual representation of role-based access control permissions</p>
+            {% set header_icon = 'fas fa-sitemap' %}
+            {% set header_title = 'RBAC Permission Tree' %}
+            {% set header_subtitle = 'Visual representation of role-based access control permissions' %}
+            {% include 'components/page_header.html' %}
         </div>
         <div class="col-auto">
             <a href="/docs/RBAC_PERMISSION_TREE" class="btn btn-outline-secondary">

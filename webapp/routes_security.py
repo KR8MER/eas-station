@@ -785,7 +785,7 @@ def _attach_geo(filter_dicts):
         classify_location = _cl
         db_path = TrafficAnalyticsSettings.get_settings().geoip_database_path
     except Exception as e:
-        logger.debug(f"Geo enrichment unavailable for ban list: {e}")
+        current_app.logger.debug(f"Geo enrichment unavailable for ban list: {e}")
 
     for entry in filter_dicts:
         loc = {'country_code': None, 'country': None, 'city': None, 'region': None}
@@ -839,7 +839,7 @@ def security_overview():
             AuditLog.timestamp >= day_ago,
         ).count()
     except Exception as e:
-        logger.debug(f"failed_logins_24h metric unavailable: {e}")
+        current_app.logger.debug(f"failed_logins_24h metric unavailable: {e}")
 
     # fail2ban / host-firewall status (read-only). Imported lazily to avoid a
     # circular import at module load.
@@ -848,7 +848,7 @@ def security_overview():
         from webapp.admin.fail2ban import _status as _f2b_status
         f2b = _f2b_status()
     except Exception as e:
-        logger.debug(f"fail2ban status unavailable for overview: {e}")
+        current_app.logger.debug(f"fail2ban status unavailable for overview: {e}")
 
     enforcement_on = bool(f2b.get('enforcement_enabled'))
     jail_loaded = bool(f2b.get('actuator_jail_loaded'))

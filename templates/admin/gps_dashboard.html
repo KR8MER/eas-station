@@ -2515,12 +2515,6 @@
     // Active filter — null means "all", else a 2-letter talker code.
     var activeFilter = null;
 
-    function escapeHtml(s) {
-        if (s === null || s === undefined) return '';
-        return String(s).replace(/[&<>"']/g, function (c) {
-            return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
-        });
-    }
     function setText(id, text) {
         var el = document.getElementById(id);
         if (el) el.textContent = (text === null || text === undefined || text === '') ? '—' : text;

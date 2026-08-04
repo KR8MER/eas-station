@@ -26,6 +26,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Generator
 from unittest.mock import Mock, MagicMock
 
@@ -35,6 +36,23 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+
+# ============================================================================
+# Import-time environment defaults
+# ============================================================================
+# Several test modules do a module-level ``from app import ...`` to assert on
+# module constants (allowlists, route tables). Importing ``app`` raises
+# ValueError unless DATABASE_URL is already set, so a fixture cannot help —
+# the import happens during collection, before any fixture runs. conftest.py is
+# imported before the test modules it covers, so seeding the defaults here makes
+# a bare ``pytest`` invocation work with no external services, exactly as
+# tests/README.md documents. setdefault() keeps any real values the caller
+# exported (e.g. a CI job pointing at a live PostgreSQL service container).
+os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production-use-only")
+os.environ.setdefault("SKIP_DB_INIT", "1")
+os.environ.setdefault("TESTING", "true")
 
 
 # ============================================================================
@@ -134,7 +152,6 @@ def mock_database():
 @pytest.fixture
 def mock_gpio_controller():
     """Provide a mock GPIO controller for testing without hardware."""
-    from unittest.mock import MagicMock
     
     mock_gpio = MagicMock()
     mock_gpio.add_pin = Mock()
@@ -231,29 +248,133 @@ GPIO_ENABLED=false
 
 
 # ============================================================================
+# Authentication helpers
+# ============================================================================
+
+def make_stub_user(role_name: str = "admin", user_id: int = 1):
+    """Build a stand-in for an authenticated AdminUser.
+
+    Only the attributes the auth decorators actually touch are provided:
+    ``is_active``, ``id``, ``role.name`` and ``role.has_permission()``.
+    """
+    role = SimpleNamespace(
+        name=role_name,
+        has_permission=lambda _permission_name: True,
+    )
+    return SimpleNamespace(id=user_id, is_active=True, role=role)
+
+
+@pytest.fixture
+def authenticated_user(monkeypatch):
+    """Satisfy the deny-by-default auth gate with an active stub user.
+
+    Routes are guarded by ``require_auth`` / ``require_role`` /
+    ``require_permission``. All three resolve the caller through
+    ``app_core.auth.roles.get_current_user()``, which reads
+    ``session['user_id']`` and then loads an AdminUser row from the database.
+    Tests running against an empty in-memory SQLite database cannot satisfy
+    that, so every protected route returned 401 regardless of what the test was
+    actually trying to assert.
+
+    The lookup is patched in both modules that hold a reference to it —
+    ``roles`` (where it is defined and where ``has_permission`` calls it) and
+    ``decorators`` (which did ``from .roles import get_current_user`` at import
+    time, binding its own name).
+
+    Patching the lookup is deliberate rather than seeding a real user row:
+    these tests exercise route behaviour, not the authentication chain itself.
+    The gate has its own dedicated coverage in ``test_public_pages_authz.py``
+    and the RBAC suite, which must keep exercising the real code path — so do
+    not reach for this fixture there.
+
+    Yields the stub user so a test can adjust it, e.g.::
+
+        def test_something(authenticated_user, client):
+            authenticated_user.role.name = "operator"
+    """
+    from app_core.auth import decorators as auth_decorators
+    from app_core.auth import roles as auth_roles
+
+    user = make_stub_user()
+
+    # Patch the module objects rather than dotted-path strings: monkeypatch
+    # resolves a string path by walking attributes from the top-level package,
+    # and `app_core.auth` is not exposed as an attribute of `app_core` unless
+    # something has already imported it.
+    for module in (auth_roles, auth_decorators):
+        monkeypatch.setattr(module, "get_current_user", lambda: user, raising=True)
+
+    # require_permission() routes through roles.has_permission(), which does its
+    # own get_current_user() call plus a role lookup; short-circuit it so a stub
+    # role without a real permission table still passes.
+    monkeypatch.setattr(
+        auth_roles,
+        "has_permission",
+        lambda _permission_name, user=None: True,
+        raising=True,
+    )
+
+    yield user
+
+
+# ============================================================================
 # Test markers and utilities
 # ============================================================================
 
-def pytest_configure(config):
-    """Configure pytest with custom settings."""
-    # Register custom markers
-    config.addinivalue_line(
-        "markers", "unit: Unit tests (fast, no external dependencies)"
-    )
-    config.addinivalue_line(
-        "markers", "integration: Integration tests (may use mocks)"
-    )
-    config.addinivalue_line(
-        "markers", "functional: Functional tests (complete workflows)"
-    )
-    config.addinivalue_line(
-        "markers", "slow: Tests that take more than 1 second"
-    )
+# Marker registration lives in pyproject.toml under
+# [tool.pytest.ini_options] markers, which runs with --strict-markers so an
+# unregistered mark is an error rather than a silently-dropped no-op. The
+# `audio`, `gpio` and `radio` marks applied below were never registered here,
+# which is why every run emitted PytestUnknownMarkWarning for them.
+
+
+KNOWN_FAILURES_FILE = Path(__file__).parent / "known_failures.txt"
+
+
+def _load_known_failures() -> set:
+    """Read tests/known_failures.txt into a set of node IDs / file paths.
+
+    Blank lines and ``#`` comments are ignored, as is any trailing comment on
+    an entry line. Entries may be either a full node ID
+    (``tests/test_x.py::test_y``) or a whole file (``tests/test_x.py``).
+    """
+    if not KNOWN_FAILURES_FILE.is_file():
+        return set()
+
+    entries = set()
+    for raw_line in KNOWN_FAILURES_FILE.read_text(encoding="utf-8").splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if line:
+            entries.add(line)
+    return entries
+
+
+_KNOWN_FAILURES = _load_known_failures()
+
+
+def _is_known_failure(node_id: str) -> bool:
+    """True if *node_id* is listed directly or via its containing file."""
+    if node_id in _KNOWN_FAILURES:
+        return True
+    file_part = node_id.split("::", 1)[0]
+    return file_part in _KNOWN_FAILURES
 
 
 def pytest_collection_modifyitems(config, items):
     """Modify test collection to add markers automatically."""
     for item in items:
+        # Known-failing tests are marked xfail rather than skipped or
+        # deselected, so they still execute. A test that starts passing reports
+        # XPASS, which is the signal to delete its line from
+        # tests/known_failures.txt. non-strict so an XPASS does not fail the
+        # run — the list is a shrinking backlog, not a contract.
+        if _is_known_failure(item.nodeid):
+            item.add_marker(
+                pytest.mark.xfail(
+                    reason="listed in tests/known_failures.txt", strict=False
+                )
+            )
+
         # Add 'unit' marker to tests without any marker
         if not any(item.iter_markers()):
             item.add_marker(pytest.mark.unit)

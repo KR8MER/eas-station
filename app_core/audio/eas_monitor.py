@@ -233,6 +233,28 @@ def _store_received_alert(
         if purge_time:
             purge_datetime = datetime.fromisoformat(purge_time) if isinstance(purge_time, str) else purge_time
 
+        # Build the JSON payload before the duplicate check below, which reads
+        # full_alert_json to promote a stored burst-1 record's endec_mode. This
+        # construction used to sit *after* that check, so every duplicate raised
+        # NameError — and because SAME headers are transmitted three times, the
+        # duplicate path is the normal case, not an edge case.
+        #
+        # Strip the raw audio bytes from the JSON payload — the binary is
+        # already stored in the dedicated raw_audio_data column.  Leaving it
+        # in the dict would cause JSONB serialization to fail (bytes are not
+        # JSON-serializable), which would roll back the entire commit and lose
+        # the alert record entirely.  relay_audio_wav is also bytes and must be
+        # stripped for the same reason.
+        _BINARY_KEYS = {'raw_audio_wav', 'relay_audio_wav'}
+        full_alert_json = {k: v for k, v in alert.items() if k not in _BINARY_KEYS}
+        # numpy float64 is not JSON-serializable — convert to plain Python float
+        # so the JSONB commit does not fail and silently drop the alert record.
+        if 'confidence' in full_alert_json and full_alert_json['confidence'] is not None:
+            try:
+                full_alert_json['confidence'] = float(full_alert_json['confidence'])
+            except (TypeError, ValueError):
+                pass
+
         # Check for duplicates within 10 minute window
         dedup_cutoff = utc_now() - timedelta(minutes=10)
         duplicate_filters = [ReceivedEASAlert.received_at >= dedup_cutoff]
@@ -267,22 +289,6 @@ def _store_received_alert(
             return
 
         # Create database record
-        # Strip the raw audio bytes from the JSON payload — the binary is
-        # already stored in the dedicated raw_audio_data column.  Leaving it
-        # in the dict would cause JSONB serialization to fail (bytes are not
-        # JSON-serializable), which would roll back the entire commit and lose
-        # the alert record entirely.  relay_audio_wav is also bytes and must be
-        # stripped for the same reason.
-        _BINARY_KEYS = {'raw_audio_wav', 'relay_audio_wav'}
-        full_alert_json = {k: v for k, v in alert.items() if k not in _BINARY_KEYS}
-        # numpy float64 is not JSON-serializable — convert to plain Python float
-        # so the JSONB commit does not fail and silently drop the alert record.
-        if 'confidence' in full_alert_json and full_alert_json['confidence'] is not None:
-            try:
-                full_alert_json['confidence'] = float(full_alert_json['confidence'])
-            except (TypeError, ValueError):
-                pass
-
         received_alert = ReceivedEASAlert(
             received_at=utc_now(),
             source_name=source_name,

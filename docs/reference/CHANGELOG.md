@@ -8,6 +8,279 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.126.1] - 2026-08-04 - SessionStart hook for Claude Code on the web
+
+### Added
+- `.claude/hooks/session-start.sh` — provisions a remote session end to end in
+  roughly 45 seconds: installs PostGIS, Redis, ffmpeg and libsndfile; installs
+  `requirements.txt` plus pytest/ruff/playwright; creates and starts a
+  PostgreSQL cluster with the PostGIS extension; builds and stamps the schema;
+  starts Redis; and exports `DATABASE_URL`, `SECRET_KEY`, `REDIS_HOST`,
+  `REDIS_PORT`, `LOG_LEVEL` and `CHROMIUM_BIN` for the session.
+
+  Schema bootstrap deliberately mirrors `install.sh`: `db.create_all()` then
+  `alembic stamp head`. A bare `alembic upgrade head` cannot build an empty
+  database, because no migration in `app_core/migrations/versions/` creates the
+  base tables — the first migration referencing `cap_alerts` fails with
+  UndefinedTable. Stamping records the head revision so a migration written
+  during a session applies cleanly with `alembic upgrade head`; on later runs
+  the hook takes that upgrade path automatically.
+
+  The hook is idempotent, non-interactive, and gated on `CLAUDE_CODE_REMOTE`
+  so it never modifies a developer's own machine. Optional packages are
+  installed under a bounded `timeout`, and if PostgreSQL cannot be provisioned
+  the hook declines to export `DATABASE_URL` so `conftest.py` falls back to
+  in-memory SQLite rather than the session failing outright.
+
+### Fixed
+- `app_core/migrations/env.py` set `SKIP_DB_INIT` inside `_get_configured_url()`,
+  which runs *after* the module-level `from app import create_app`. Importing
+  `app` is what reads the flag to decide whether to start the background
+  workers (RWT scheduler, retention, auto-purge, metrics sampler), so the guard
+  never took effect: every `alembic` invocation started those workers, and they
+  queried tables mid-migration and buried the real output in UndefinedTable
+  tracebacks. The assignment now happens before the import.
+
+## [2.126.0] - 2026-08-04 - Legible page titles, navbar layout, alert visibility
+
+Found by rendering the running application in a headless browser rather than
+by reading the code — every item below was verified on screen.
+
+### Fixed
+- **Every page title in the application was close to illegible.**
+  `static/js/visual-effects.js` applied its `.gradient-text` class to *every*
+  `h1` and `.page-title`. That class fills the glyphs with
+  `linear-gradient(--primary-color → --secondary-color)` and sets
+  `-webkit-text-fill-color: transparent` — and the standard page header's
+  background is built from those same two variables, so each title was painted
+  in the colours of the surface directly behind it. Headings on coloured
+  header/hero/navbar surfaces are now excluded; headings on plain backgrounds
+  keep the effect.
+- **The "Map Layers" and map-legend panel titles on the dashboard were white
+  text on a white surface.** `styles.css` sets a global
+  `.card-header { color: white }` for the gradient-filled card headers used
+  elsewhere; these two headers are deliberately transparent over the card's
+  light body, so they inherited white and vanished.
+- **The Dashboard navbar item wrapped onto two lines below ~1440px**,
+  rendering 61px tall against its siblings' 37px and colliding with the
+  active-state pill. Bootstrap ships `.nav-link { display: block }` and nothing
+  overrode it, so the icon and label were laid out as inline content. Only the
+  Dashboard link was affected because every other top-level item is a
+  `.dropdown-toggle`, which picked up flex layout elsewhere.
+- **Alerts could disappear from the UI entirely.**
+  `get_active_alerts_query()` and `get_expired_alerts_query()` were written
+  independently and were not complements: active excluded `status='Expired'`,
+  `status='Cancelled'` and superseded alerts, while expired only checked
+  `expires < now`. An alert in any of those three states with a *future* expiry
+  matched neither query, so it vanished from the dashboard, the active count
+  and the archive at the same time — a cancelled-but-not-yet-expired alert left
+  no trace anywhere in the interface. `get_expired_alerts_query()` is now the
+  exact complement of active, and `<=` closes the boundary case where `expires`
+  equals *now*. All callers are read-only counts, listings and exports; nothing
+  purges from this query. Regression coverage in
+  `tests/test_alert_active_expired_partition.py`.
+- **The VFD Display Control page was entirely non-functional.** It injected
+  jQuery with `document.createElement('script')` — async by default — and the
+  next inline block called `$('#textForm')` at top level, throwing
+  "$ is not defined" before jQuery arrived. Neither form submitted and no AJAX
+  request fired. jQuery is now loaded with an ordinary blocking `<script src>`.
+- `README.md` referenced `docs/screenshots/system-health.jpg`, which did not
+  exist — a broken image in the Screenshot Tour.
+
+### Changed
+- Removed the "🔍 Ctrl K" search pill from the navbar by request. It occupied
+  a third row at common desktop widths; with it and the layout fix above the
+  navbar is a consistent 142px at every width tested (was 212px). The command
+  palette is unchanged and still opens on Ctrl/Cmd+K or via
+  `window.EASCommandPalette.open()`.
+- Refreshed the README screenshot tour from the running application and added a
+  Broadcast Builder panel.
+
+### Added
+- The CI test job now provisions a **PostGIS** service container and exports
+  `DATABASE_URL`, so tests needing a real database (the alert-query partition
+  tests) execute in CI instead of skipping. Tests that do not need one still
+  use the in-memory SQLite default from `conftest.py`.
+
+### Verified, not changed
+- The horizontal-overflow warnings on `.page-header` are a false positive: the
+  element sets `overflow-x: hidden` to clip its decorative orbs, and the page
+  itself does not scroll horizontally at 1440px, 390px or 320px.
+
+## [2.125.0] - 2026-08-04 - Front-end consistency: one escapeHtml, one page header
+
+### Added
+- `tests/test_frontend_consistency.py` — static guards so the duplication
+  cleaned up below cannot silently return. Covers: only one `escapeHtml` and
+  one `showToast` definition; the shared implementation must escape quotes and
+  be published as a global; no page may redefine a `styles.css`-owned class or
+  a Bootstrap class unscoped; no page may hand-roll `.page-header` markup.
+- `tests/css_collisions_allowlist.txt` — the 33 CSS classes currently defined
+  unscoped by two or more pages, recorded as a shrinking backlog. New
+  collisions fail CI; existing ones are listed with the files that clash. The
+  largest cluster is `.gps-*`, copy-pasted across the GPS dashboard, Hardware
+  Settings and System Health and since diverged.
+- `.spinner-lg`, `.empty-state-plain`, `.status-badge-plain`,
+  `.status-badge.connected` / `.disconnected` in `static/css/styles.css` — the
+  page-local variants that previously overrode the shared rules, expressed as
+  modifiers so both treatments can coexist.
+
+### Fixed
+- **`escapeHtml` had 16 behaviourally different implementations across 22
+  templates, plus 6 more in `static/js`.** Several used the detached-`<div>`
+  `textContent` round-trip, which escapes `&`, `<` and `>` but leaves `"` and
+  `'` intact — unsafe wherever the result is interpolated into a quoted HTML
+  attribute, which happened in 13 places (`onclick="editProfile('${...}')"`,
+  `placeholder="${...}"`, and similar on the Stream Profiles and Environment
+  admin pages). There is now a single implementation in
+  `static/js/core/utils.js` that escapes all five characters. It is published
+  as `window.escapeHtml`; it was previously reachable only as
+  `EASUtils.escapeHtml`, which is precisely why every page grew its own copy.
+  The two `escapeHtmlAdmin` aliases now forward to it instead of carrying
+  their own bodies.
+- **`showToast` was redefined in 8 templates and one module**, despite being
+  documented in AGENTS.md as a global to reuse; the local copies shadowed it.
+  The VFD Display Control page had also drifted onto a different calling
+  convention — `showToast(message, isSuccess)` taking a boolean rather than a
+  type string — so its 13 call sites were converted to `'success'` / `'error'`.
+- **The August 2026 CSS consolidation was additive but never subtractive.**
+  `.spinner`, `.status-badge` and `.empty-state` were promoted into
+  `styles.css`, but the inline copies were left in place, so the page-local
+  rules kept winning the cascade and the shared versions did nothing. The
+  duplicates are gone; genuine variants became modifiers. Two overrides on
+  System Health (`.table`, `.alert`) were byte-for-byte what `styles.css`
+  already applied and were simply deleted.
+- **Bootstrap primitives were being restyled per page.** The Environment
+  settings page redefined `.form-control` unscoped, so form fields rendered in
+  a monospace face there and nowhere else; it is now scoped to that page's own
+  `.env-page` wrapper.
+- `.stat-label` was defined unscoped by three pages with three different
+  treatments. Each is now scoped under the wrapper it already lives in
+  (`.stat-box`, `.stat-item`, `.stat-card`) — a specificity change only.
+
+### Changed
+- **Every page header now comes from `components/page_header.html`.** Four
+  systems previously coexisted: the shared component (59 pages), the shared
+  hero (8), a hand-rolled `.page-header` on System Health, a bespoke
+  `.workflow-hero` on the Broadcast Builder, and ~13 pages with no standard
+  header at all that opened with a bare `<h1>` — themselves inconsistent
+  (`mb-4`, `h3 mb-1`, `editor-title`, or unclassed), so heading size and
+  spacing visibly changed as you moved around the UI. Converted: LED Sign
+  Control, VFD Display Control, Alert Statistics (which had a fifth system,
+  `.stats-page-header`), Alert Trail, Audio System Health, Audio Pipeline Test
+  Suite, Documentation Search, RBAC Permission Tree, search results, System
+  Health and the Broadcast Builder Console. Adoption is now 70 pages on the
+  standard header and 7 on the hero, with zero hand-rolled headers.
+  System Health's live platform pills and the Broadcast Builder's station-facts
+  strip ride in the component's actions slot, preserving their element IDs and
+  behaviour.
+- The empty-state icon on the Screens page was harmonised from 4rem/0.35
+  opacity to the 3rem/0.5 used by the other two pages sharing that treatment.
+- Deleted `templates/privacy.html`. The `/privacy` route renders
+  `PRIVACY_POLICY.md` through `_render_policy_page()`, so the template had been
+  unreachable.
+
+## [2.124.0] - 2026-08-04 - CI runs the test suite; latent NameError crashes fixed
+
+### Added
+- **CI now runs the full test suite.** `.github/workflows/tests.yml` runs
+  `pytest tests/` on every pull request and on pushes to `main` / `develop`,
+  across Python 3.11 and 3.13, with a Redis service container. Previously CI
+  executed exactly one test file (`tests/test_release_metadata.py`) plus the
+  template-block check, so roughly 1,700 tests across 147 files never gated a
+  merge.
+- **A lint gate.** New `pyproject.toml` carries pytest and ruff configuration.
+  The enforced ruff rule set is deliberately narrow (`E9`, `F821`, `F811`,
+  `F601`, `F632`) — every rule the codebase is now clean against, so a failure
+  is always a new regression rather than pre-existing debt. The remaining
+  categories are recorded as a documented backlog with counts.
+- `AudioSourceManager.remove_source()` — the manager could add sources but had
+  no way to remove one. Stops the source, drops it from every per-source map,
+  and fails over first if the source being removed is the active one.
+- `AudioSourceManager(monitor_interval=...)` — the health-check interval was
+  hardcoded to 1.0s, which made failover assertions in tests depend on
+  sleeping longer than the production poll period.
+- `tests/known_failures.txt` — tests that need real hardware or a live SDR
+  service are marked xfail (not skipped) so they still run and report XPASS
+  when they start passing. The list is meant to shrink to nothing.
+- A shared `authenticated_user` pytest fixture covering all three auth
+  decorators (`require_auth`, `require_role`, `require_permission`).
+
+### Fixed
+- **`pip install -r requirements.txt` failed outright on Python 3.11 and 3.12,
+  and on every non-Raspberry-Pi machine.** `audioop-lts` publishes wheels only
+  for Python >= 3.13, and `rpi-ws281x` builds a C extension that cannot compile
+  on x86 — neither carried an environment marker, so installation aborted
+  before any other dependency resolved. This blocked contributors on x86
+  laptops and any CI runner, and `install.sh` explicitly suggests downgrading
+  to Python 3.12 when SoapySDR bindings mismatch, which walked users straight
+  into it.
+- **Twenty undefined names that raise `NameError` at runtime**, found by the
+  new lint gate:
+  - `webapp/routes_security.py` used `logger` in three `except` handlers
+    without importing it, so the ban-list and overview endpoints raised
+    `NameError` *from inside the error handler* whenever geo enrichment or
+    fail2ban status was unavailable — the default state on a fresh install.
+  - `webapp/routes_backups.py` used `os` without importing it, in the backup
+    download temp-file cleanup and its error path.
+  - `app_core/audio/eas_monitor.py` read `full_alert_json` roughly 25 lines
+    before it was assigned, in the duplicate-alert suppression branch. SAME
+    headers are transmitted three times, so the duplicate path is the normal
+    case, not an edge case.
+  - `webapp/routes_monitoring.py` called `get_redis_client()` without
+    importing it. The surrounding `except Exception` turned the resulting
+    `NameError` into a permanent "Redis check failed", so the health dashboard
+    could never report Redis as healthy regardless of the server's real state.
+  - Missing `Any` / `Optional` typing imports and several unresolvable forward
+    references (`np.ndarray`, `ReceiverConfig`, `ReceiverStatus`, `OLEDLine`,
+    `Path`), now declared under `TYPE_CHECKING`.
+- **`AudioSourceManager.start()` could never succeed.** The guard read
+  `if not self._stop_event.is_set()`, but `threading.Event()` starts *unset*,
+  so a freshly constructed manager always took the "already running" branch and
+  returned False. The check now keys on whether the monitor thread is alive,
+  which is the only state that distinguishes "never started" from "running".
+  (The class has no production callers yet, so this was latent rather than a
+  live outage.)
+- **The app could not be instantiated against SQLite at all.** `app.py` passed
+  `pool_size` / `max_overflow` / `pool_timeout` and libpq-specific
+  `connect_args` to `create_engine()` unconditionally; SQLite's pool classes
+  accept none of them, so construction raised `TypeError`. These are now
+  applied only for non-SQLite URLs, which also makes the in-memory database the
+  test fixtures ask for actually work.
+- **`scripts/database/check_schema.py` silently skipped three column checks.**
+  A duplicate `"location_settings"` key in `REQUIRED_COLUMNS` overwrote the
+  earlier, longer entry, dropping `map_center_lat`, `map_center_lng` and
+  `map_default_zoom` from validation.
+- `app_core/radio/schema.py` used PostgreSQL-only
+  `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. Every call site already guards on
+  the inspector's column list, so the clause was redundant on PostgreSQL and a
+  syntax error on SQLite. Production behaviour is unchanged.
+- `app_utils/eas_tts.py` fell back to `import audioop_lts`, which does not
+  exist — the `audioop-lts` package installs a module named `audioop`. The
+  fallback could never succeed; it now raises an actionable error naming the
+  package to install.
+- Test doubles in `tests/test_audio_source_manager.py` had drifted from the
+  real interfaces: mock factories took a positional `config` the manager no
+  longer passes, and the source double implemented `read_audio` (the
+  *manager's* method name) instead of `read_samples` (the *source's*). Both
+  failures surfaced as confusing assertion errors rather than the real cause,
+  because `add_source()` swallowed the `TypeError`.
+
+### Changed
+- `tests/conftest.py` seeds `DATABASE_URL`, `SECRET_KEY`, `SKIP_DB_INIT` and
+  `TESTING` at import time via `setdefault`, so a bare `pytest` works with no
+  external services — as `tests/README.md` already documented. A real exported
+  value still wins, which is how CI points the suite at live services.
+- The `audio`, `gpio` and `radio` pytest marks are registered in
+  `pyproject.toml`; they were applied by a conftest hook but never declared,
+  emitting `PytestUnknownMarkWarning` on every run. Marker checking is now
+  strict, so a typo is an error rather than a silently dropped mark.
+- Roughly 28 MB of scratch bug artifacts (two PDFs and an unreferenced IQ
+  capture) are no longer tracked. `bugs/` was already in `.gitignore`; these
+  predated that rule. The one IQ capture consumed by the RTL-SDR saturation
+  regression test is explicitly re-included so the test keeps running instead
+  of degrading to a permanent skip.
+
 ## [2.123.2] - 2026-08-01 - GPIO activation logging and relay release pairing
 
 ### Fixed

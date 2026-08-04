@@ -597,21 +597,35 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # greenlets would queue 10 s waiting for a connection — a major contributor
 # to "snail's pace" page loads.
 # Note: With 2 gunicorn workers, total max connections = 2 * (pool_size + max_overflow) = 2 * (10 + 10) = 40
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'connect_args': {
-        'connect_timeout': 5,       # 5 second timeout for initial connection (reduced from 10)
-        'options': '-c statement_timeout=30s',  # 30 second query timeout
-    },
-    # pool_pre_ping was previously True, which issued a SELECT 1 on every
-    # checkout — measurable latency for the many tiny queries the dashboards
-    # fan out.  pool_recycle=3600 already replaces stale connections.
-    'pool_pre_ping': False,
-    'pool_recycle': 3600,           # Recycle connections after 1 hour
-    'pool_size': 10,                # Steady-state pool per worker
-    'max_overflow': 10,             # Burst capacity per worker
-    'pool_timeout': 10,             # Timeout waiting for connection from pool
-    'echo_pool': False,             # Set to True for connection pool debugging
-}
+# Both the queue-pool sizing and the connect_args below are PostgreSQL-specific:
+# SQLite is served by SingletonThreadPool/StaticPool, which accept none of
+# pool_size/max_overflow/pool_timeout, and libpq's connect_timeout/options are
+# meaningless to pysqlite. Passing them anyway makes create_engine() raise
+# TypeError, which previously made the app impossible to instantiate against
+# SQLite — including the in-memory URL the test fixtures rely on.
+if DATABASE_URL.startswith('sqlite'):
+    # Tests and lightweight local runs. Let SQLAlchemy pick the pool class it
+    # needs for the SQLite dialect and keep cross-thread access working for the
+    # background threads that also touch the session.
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'connect_args': {'check_same_thread': False},
+    }
+else:
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'connect_args': {
+            'connect_timeout': 5,       # 5 second timeout for initial connection (reduced from 10)
+            'options': '-c statement_timeout=30s',  # 30 second query timeout
+        },
+        # pool_pre_ping was previously True, which issued a SELECT 1 on every
+        # checkout — measurable latency for the many tiny queries the dashboards
+        # fan out.  pool_recycle=3600 already replaces stale connections.
+        'pool_pre_ping': False,
+        'pool_recycle': 3600,           # Recycle connections after 1 hour
+        'pool_size': 10,                # Steady-state pool per worker
+        'max_overflow': 10,             # Burst capacity per worker
+        'pool_timeout': 10,             # Timeout waiting for connection from pool
+        'echo_pool': False,             # Set to True for connection pool debugging
+    }
 
 # Initialize database
 db.init_app(app)
@@ -696,7 +710,7 @@ def _load_db_settings_into_config() -> None:
     exist (e.g. before the first migration run).
     """
     from app_core.models import NotificationSettings, ApplicationSettings
-    from urllib.parse import urlparse, unquote
+    from urllib.parse import unquote
 
     try:
         with app.app_context():
@@ -1005,9 +1019,14 @@ def _inject_global_vars_wrapper():
 # =============================================================================
 
 @app.template_filter('shields_escape')
-def shields_escape_filter(text):
-    """Wrapper for shields_escape to work with app.template_filter decorator."""
-    return shields_escape(text)
+def shields_escape_filter(value):
+    """Wrapper for shields_escape to work with app.template_filter decorator.
+
+    The parameter is named ``value`` rather than ``text`` so it does not shadow
+    ``sqlalchemy.text``, which is imported at module scope and used for raw SQL
+    elsewhere in this file.
+    """
+    return shields_escape(value)
 
 
 @app.template_filter('is_expired')

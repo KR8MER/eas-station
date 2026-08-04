@@ -2030,15 +2030,6 @@ sudo systemctl restart eas-station</code></pre>
         container.appendChild(card);
     }
 
-    function escapeHtml(s) {
-        if (s === null || s === undefined) return '';
-        return String(s)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
 
     // Draw the quantised spectrogram returned by
     // /api/radio/diagnostics/waterfall into a canvas inside ``container``.

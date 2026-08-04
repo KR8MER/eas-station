@@ -214,21 +214,14 @@ function setInputValue(id, value) {
  * @param {string} value - String to escape
  * @returns {string} Escaped string
  */
-function escapeHtml(value) {
-    if (typeof value !== 'string') {
-        return value;
-    }
-    return value
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
 
 // Export functions to window for global access
 window.formatDateTimeDisplay = formatDateTimeDisplay;
 window.isoToLocalInputValue = isoToLocalInputValue;
 window.localInputToIso = localInputToIso;
 window.setInputValue = setInputValue;
-window.escapeHtmlAdmin = escapeHtml;  // Different name to avoid conflict with operations.js
+// Alias only. The name exists because operations.js and utilities.js each
+// used to declare their own top-level `escapeHtml`, which clobbered each other
+// and the global; both are gone now and this simply forwards to the canonical
+// implementation in js/core/utils.js.
+window.escapeHtmlAdmin = window.escapeHtml;

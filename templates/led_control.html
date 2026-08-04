@@ -571,6 +571,11 @@ details.debug-details > .debug-details-body {
 {% endblock %}
 
 {% block content %}
+{% set header_icon = 'fas fa-lightbulb' %}
+{% set header_title = 'LED Sign Control' %}
+{% set header_subtitle = 'Compose, preview and send messages to the LED display' %}
+{% include 'components/page_header.html' %}
+
 <div class="container-fluid py-4">
 <!-- LED Status + Quick Actions hero -->
 <div class="card mb-4">
@@ -2887,25 +2892,6 @@ function displayFilteredHistory() {
 }
 
 // Toast notification function
-function showToast(message, type = 'info') {
-    // Create toast element
-    const toast = document.createElement('div');
-    toast.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
-    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-    toast.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-
-    document.body.appendChild(toast);
-
-    // Auto-remove after 5 seconds
-    setTimeout(() => {
-        if (toast.parentNode) {
-            toast.parentNode.removeChild(toast);
-        }
-    }, 5000);
-}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Protocol Debug Terminal — polls /api/led/debug/frames and renders captured
@@ -4351,9 +4337,6 @@ function sendAllFeedsRSS() {
     .catch(() => showToast('Error', 'error'));
 }
 
-function escapeHtml(str) {
-    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
 
 // ── Init additions ──────────────────────────────────────────────────────────
 

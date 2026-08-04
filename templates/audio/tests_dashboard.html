@@ -3,15 +3,14 @@
 {% block title %}Audio Pipeline Tests{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <h1 class="mb-4">
-        <i class="fas fa-flask"></i> Audio Pipeline Test Suite
-    </h1>
+{% set header_icon = 'fas fa-flask' %}
+{% set header_title = 'Audio Pipeline Test Suite' %}
+{% set header_subtitle = 'Run and monitor tests for audio ingest, playout, broadcast, Icecast and output' %}
+{% include 'components/page_header.html' %}
 
+<div class="container-fluid">
     <p class="lead mb-4">
-        Run and monitor tests for audio ingest, playout queue, broadcast, Icecast,
-        and output service components. Test files and counts are discovered live from
-        the <code>tests/</code> directory.
+        Test files and counts are discovered live from the <code>tests/</code> directory.
     </p>
 
     <!-- Test Summary Cards -->
@@ -427,10 +426,5 @@ function statusBadgeClass(status) {
     }
 }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text == null ? '' : String(text);
-    return div.innerHTML;
-}
 </script>
 {% endblock %}

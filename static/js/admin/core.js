@@ -65,12 +65,13 @@ window.AdminCore.init = function(config) {
 /**
  * HTML escape utility for admin panel
  */
+// Legacy alias kept for callers that still reference escapeHtmlAdmin (e.g.
+// zone-catalog.js). It delegates to the single canonical implementation in
+// js/core/utils.js — do not reintroduce a separate body here. The previous
+// local version used the textContent round-trip, which does not escape quotes
+// and so was unsafe in attribute contexts.
 window.escapeHtmlAdmin = function(str) {
-    if (str === null || str === undefined) return '';
-    if (typeof str !== 'string') return str;
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+    return window.escapeHtml(str);
 };
 
 /**

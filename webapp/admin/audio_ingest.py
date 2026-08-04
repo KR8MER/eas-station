@@ -249,7 +249,6 @@ def _initialize_auto_streaming() -> None:
     # With multiple gunicorn workers, each worker would initialize its own streaming
     # service, causing multiple FFmpeg processes to fight for the same Icecast mount.
     # Use a file lock to ensure only ONE worker starts the streaming service.
-    import os
 
     lock_file_path = '/tmp/eas-auto-streaming.lock'
 

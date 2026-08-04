@@ -124,10 +124,6 @@
         return v || fallback;
     }
     function num(n) { return (n || 0).toLocaleString(); }
-    function escapeHtml(s) {
-        if (s === null || s === undefined) return '';
-        return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-    }
     // Real flag IMAGE for an ISO 3166-1 alpha-2 code. Emoji flags don't render on
     // Windows (it shows the letters instead), so we use bundled flag-icons SVGs
     // served locally — works on every OS, no external/CDN calls.

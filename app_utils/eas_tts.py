@@ -21,11 +21,20 @@ from __future__ import annotations
 
 """Text-to-speech helpers used by the EAS audio generator."""
 
-# audioop was removed in Python 3.13; use audioop-lts as a drop-in replacement
+# audioop was removed from the stdlib in Python 3.13. The `audioop-lts` package
+# backfills it and installs a top-level module named `audioop` (not
+# `audioop_lts`), so a single import covers both cases: the stdlib module on
+# <= 3.12 and the audioop-lts backfill on >= 3.13. Raise an actionable error
+# rather than a bare ModuleNotFoundError when neither is present.
 try:
     import audioop
-except ModuleNotFoundError:
-    import audioop_lts as audioop
+except ModuleNotFoundError as exc:  # pragma: no cover - depends on interpreter version
+    raise ModuleNotFoundError(
+        "The 'audioop' module is unavailable. It was removed from the standard "
+        "library in Python 3.13; install the backfill with "
+        "`pip install audioop-lts` (already pinned in requirements.txt for "
+        "Python >= 3.13)."
+    ) from exc
 
 import ctypes.util
 import io

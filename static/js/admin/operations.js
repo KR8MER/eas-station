@@ -40,17 +40,6 @@ function formatOperationTimestamp(value) {
  * @param {string} value - String to escape
  * @returns {string} Escaped string
  */
-function escapeHtml(value) {
-    if (typeof value !== 'string') {
-        return value;
-    }
-    return value
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
 
 /**
  * Set operation status indicator

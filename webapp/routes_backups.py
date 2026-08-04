@@ -22,6 +22,7 @@ from __future__ import annotations
 """Backup and restore management routes."""
 
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime

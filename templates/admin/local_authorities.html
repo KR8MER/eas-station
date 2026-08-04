@@ -192,19 +192,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return div.innerHTML;
     }
 
-    function showToast(message, type) {
-        const container = document.querySelector('.container');
-        const el = document.createElement('div');
-        el.className = `alert alert-${esc(type)} alert-dismissible fade show`;
-        el.textContent = message;
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn-close';
-        btn.setAttribute('data-bs-dismiss', 'alert');
-        el.appendChild(btn);
-        container.insertBefore(el, container.children[1]);
-        setTimeout(() => el.remove(), 5000);
-    }
 
     function parseCodes(input) {
         return input.split(/[,;\s]+/).map(c => c.trim().toUpperCase()).filter(Boolean);

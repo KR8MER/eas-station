@@ -108,11 +108,6 @@ const FORMAT_LABELS = {
     encoder: 'Raw EAS Encoder',
 };
 
-function escapeHtml(str) {
-    return String(str == null ? '' : str).replace(/[&<>"']/g, c => (
-        {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
-    ));
-}
 
 function formatOptions(selected) {
     return FEED_FORMATS.map(f =>

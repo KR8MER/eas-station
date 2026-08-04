@@ -3,8 +3,12 @@
 {% block title %}Audio System Health Dashboard{% endblock %}
 
 {% block content %}
+{% set header_icon = 'fas fa-heart-pulse' %}
+{% set header_title = 'Audio System Health' %}
+{% set header_subtitle = 'Live health of the audio ingest, playout and output components' %}
+{% include 'components/page_header.html' %}
+
 <div class="container-fluid">
-    <h1 class="mb-4">Audio System Health Dashboard</h1>
 
     <!-- Overall Health Summary -->
     <div class="row mb-4">

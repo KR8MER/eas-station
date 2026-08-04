@@ -1951,33 +1951,10 @@ function showError(message) {
 /**
  * Show a toast notification
  */
-function showToast(message, type = 'info') {
-    const container = document.querySelector('.toast-container');
-    if (!container) return;
-
-    const toast = document.createElement('div');
-    toast.className = `alert alert-${type} alert-dismissible fade show`;
-    toast.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    `;
-
-    container.appendChild(toast);
-
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 150);
-    }, 5000);
-}
 
 /**
  * Escape HTML to prevent XSS
  */
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
 
 /**
  * Format timestamp for display

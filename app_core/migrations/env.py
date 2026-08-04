@@ -10,8 +10,18 @@ from typing import Any
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app import create_app
-from app_core.extensions import db
+# MUST be set before `from app import create_app` below. Importing app.py runs
+# its module-level startup, which reads SKIP_DB_INIT to decide whether to launch
+# the background workers (RWT scheduler, retention, auto-purge, metrics
+# sampler). Those workers query tables immediately, so during a migration run
+# against a database whose schema is mid-flight they raise UndefinedTable and
+# bury the real migration output in tracebacks. This assignment used to live
+# inside _get_configured_url(), which runs long after the import has already
+# started the workers, so the guard never took effect.
+os.environ["SKIP_DB_INIT"] = "1"
+
+from app import create_app  # noqa: E402  (import intentionally after the flag)
+from app_core.extensions import db  # noqa: E402
 
 
 config = context.config
@@ -27,10 +37,9 @@ def _get_configured_url() -> str:
     if url:
         return url
 
-    # Skip database initialization during migrations to prevent chicken-and-egg issues
-    # where migrations need to add columns that the initialization code tries to query
-    os.environ["SKIP_DB_INIT"] = "1"
-
+    # SKIP_DB_INIT is set at module import time above — it has to be, because
+    # the guard is read while `app` is being imported, which happens before
+    # this function ever runs.
     app = create_app()
     with app.app_context():
         database_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")

@@ -159,7 +159,11 @@
         margin-top: 0.25rem;
     }
 
-    .form-control, .form-select {
+    /* Scoped to this page's own wrapper. Unscoped, this restyled every
+       Bootstrap input in the application's stylesheet cascade, so form fields
+       rendered in a monospace face here but not on any other settings page. */
+    .env-page .form-control,
+    .env-page .form-select {
         font-family: 'Courier New', monospace;
     }
 
@@ -1105,11 +1109,6 @@
         }
     }
 
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
 
     function showLoading() {
         // You can implement a loading overlay here
@@ -1119,32 +1118,6 @@
         // Hide loading overlay
     }
 
-    function showToast(message, type = 'info', duration = 5000) {
-        const toastContainer = document.querySelector('.toast-container');
-        if (!toastContainer) return;
-
-        const toastId = 'toast-' + Date.now();
-        const bgClass = type === 'success' ? 'bg-success' : type === 'danger' ? 'bg-danger' : type === 'warning' ? 'bg-warning' : 'bg-info';
-
-        const toast = document.createElement('div');
-        toast.id = toastId;
-        toast.className = `toast align-items-center text-white ${bgClass} border-0`;
-        toast.setAttribute('role', 'alert');
-        toast.innerHTML = `
-            <div class="d-flex">
-                <div class="toast-body">${message}</div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-            </div>
-        `;
-
-        toastContainer.appendChild(toast);
-        const bsToast = new bootstrap.Toast(toast, { delay: duration });
-        bsToast.show();
-
-        toast.addEventListener('hidden.bs.toast', () => {
-            toast.remove();
-        });
-    }
 
     // Load settings on page load
     document.addEventListener('DOMContentLoaded', loadSettings);

@@ -1627,11 +1627,6 @@ const ScreenEditor = (function() {
         state.dirty = false;
     }
 
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text == null ? '' : text;
-        return div.innerHTML;
-    }
 
     return { init, loadScreen, removeDataSource };
 })();

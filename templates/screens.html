@@ -334,19 +334,6 @@
     justify-content: center;
     font-weight: 600;
 }
-
-.empty-state {
-    text-align: center;
-    padding: 3rem 1rem;
-    color: var(--text-secondary);
-}
-
-.empty-state i {
-    font-size: 4rem;
-    margin-bottom: 1rem;
-    opacity: 0.35;
-}
-
 .tab-pane {
     padding-top: 1.5rem;
 }
@@ -584,7 +571,7 @@
         <!-- Screens Tab -->
         <div class="tab-pane fade show active" id="screens-pane" role="tabpanel">
             <div id="screens-list">
-                <div class="empty-state">
+                <div class="empty-state empty-state-plain">
                     <i class="fas fa-spinner fa-spin"></i>
                     <p>Loading screens...</p>
                 </div>
@@ -594,7 +581,7 @@
         <!-- Rotations Tab -->
         <div class="tab-pane fade" id="rotations-pane" role="tabpanel">
             <div id="rotations-list">
-                <div class="empty-state">
+                <div class="empty-state empty-state-plain">
                     <i class="fas fa-spinner fa-spin"></i>
                     <p>Loading rotations...</p>
                 </div>
@@ -920,7 +907,7 @@ async function loadScreens() {
     } catch (error) {
         console.error('Error loading screens:', error);
         document.getElementById('screens-list').innerHTML = `
-            <div class="empty-state">
+            <div class="empty-state empty-state-plain">
                 <i class="fas fa-exclamation-triangle text-warning"></i>
                 <p>Error loading screens: ${error.message}</p>
                 <button class="btn btn-primary mt-3" onclick="loadScreens()">
@@ -955,7 +942,7 @@ function renderScreens() {
 
     if (filtered.length === 0) {
         container.innerHTML = `
-            <div class="empty-state">
+            <div class="empty-state empty-state-plain">
                 <i class="fas fa-display"></i>
                 <p>No screens found</p>
                 <button class="btn btn-primary mt-3" onclick="showCreateScreenModal()">
@@ -986,7 +973,7 @@ async function loadRotations() {
     } catch (error) {
         console.error('Error loading rotations:', error);
         document.getElementById('rotations-list').innerHTML = `
-            <div class="empty-state">
+            <div class="empty-state empty-state-plain">
                 <i class="fas fa-exclamation-triangle text-warning"></i>
                 <p>Error loading rotations: ${error.message}</p>
                 <button class="btn btn-primary mt-3" onclick="loadRotations()">
@@ -1003,7 +990,7 @@ function renderRotations() {
 
     if (allRotations.length === 0) {
         container.innerHTML = `
-            <div class="empty-state">
+            <div class="empty-state empty-state-plain">
                 <i class="fas fa-sync"></i>
                 <p>No rotations configured</p>
                 <button class="btn btn-primary mt-3" onclick="showCreateRotationModal()">
@@ -1481,17 +1468,6 @@ function extractLineText(entry) {
     return '';
 }
 
-function escapeHtml(value) {
-    if (value === null || value === undefined) {
-        return '';
-    }
-    return String(value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
 
 function formatDate(value) {
     try {

@@ -60,9 +60,10 @@ REQUIRED_COLUMNS: dict[str, list[str]] = {
     ],
     "eas_messages": ["id", "cap_alert_id", "same_header", "created_at"],
     "eas_settings": ["id", "broadcast_enabled", "originator"],
-    "location_settings": [
-        "id", "county_name", "state_code", "timezone",
-    ],
+    # NOTE: "location_settings" is declared once, at the top of this dict. A
+    # second, shorter entry used to sit here and silently overwrote it, so
+    # map_center_lat / map_center_lng / map_default_zoom were never actually
+    # checked by this script.
 }
 
 # Columns that *must not* be present — they should have been removed by a

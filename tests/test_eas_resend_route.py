@@ -86,7 +86,7 @@ def _install_message(monkeypatch, *, audio_data=b'RIFFfake', metadata=None):
     return message
 
 
-def test_resend_returns_202_and_spawns_detached_worker(resend_app):
+def test_resend_returns_202_and_spawns_detached_worker(resend_app, authenticated_user):
     _install_message(resend_app.monkeypatch)
 
     resp = resend_app.client.post('/eas/messages/194/resend')
@@ -107,7 +107,7 @@ def test_resend_returns_202_and_spawns_detached_worker(resend_app):
     assert spawn['kwargs'].get('start_new_session') is True
 
 
-def test_resend_blocked_when_broadcast_active(resend_app):
+def test_resend_blocked_when_broadcast_active(resend_app, authenticated_user):
     _install_message(resend_app.monkeypatch)
     resend_app.monkeypatch.setattr(eas_module, 'get_broadcast_state', lambda: {'active': True})
 
@@ -119,7 +119,7 @@ def test_resend_blocked_when_broadcast_active(resend_app):
     assert resend_app.spawned == []
 
 
-def test_resend_requires_stored_audio(resend_app):
+def test_resend_requires_stored_audio(resend_app, authenticated_user):
     _install_message(resend_app.monkeypatch, audio_data=None)
 
     resp = resend_app.client.post('/eas/messages/194/resend')
