@@ -6762,9 +6762,22 @@
             })
             .then(function (data) {
                 render(data);
-                hideFeedError();
+                // gps_dashboard_data() answers HTTP 200 carrying
+                // gps._error when the hardware service is unreachable —
+                // deliberately, so the chrony half of the dashboard keeps
+                // rendering. Treating any 200 as success would hide
+                // precisely the outage this banner exists for.
+                if (data && data.gps && data.gps._error) {
+                    showFeedError('GNSS receiver telemetry is unavailable — the '
+                        + 'hardware service is not responding. Timing data below is '
+                        + 'still live; satellite and fix values are last-known.');
+                } else {
+                    hideFeedError();
+                }
                 // Pulse the heartbeat dot so the operator can see
                 // that fresh telemetry arrived without any fanfare.
+                // Still correct in the gps._error case: the request did
+                // succeed and the chrony half genuinely refreshed.
                 flashEl(document.getElementById('gps-live-dot'));
             })
             .catch(function (err) {

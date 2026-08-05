@@ -39,7 +39,13 @@ in each case the better-behaved page set the pattern.
   live — too subtle for a page used to confirm timing integrity. Failures
   now raise a banner stating the values are last-known, not live.
   Non-2xx responses are treated as failures rather than being parsed as a
-  valid snapshot.
+  valid snapshot. The hardware-service outage path needed handling of its
+  own: `gps_dashboard_data()` answers **HTTP 200** carrying
+  `gps._error` when the hardware service is unreachable — deliberately,
+  so the chrony half of the dashboard keeps rendering — so treating every
+  200 as success would have hidden exactly the outage the banner exists
+  for. That envelope now keeps the banner up, with a message noting that
+  timing data is still live while satellite and fix values are not.
 
 ### Accessibility
 - **All 15 `<canvas>` elements on System Health now carry an accessible

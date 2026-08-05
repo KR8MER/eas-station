@@ -223,6 +223,51 @@ class TestGpsDashboardSurfacesFeedErrors:
             "JSON and rendered as if it were a valid snapshot."
         )
 
+    def test_http_200_failure_envelope_keeps_the_banner_up(self):
+        """The hardware-service outage path answers 200, not 5xx.
+
+        ``gps_dashboard_data()`` deliberately returns HTTP 200 carrying
+        ``gps._error`` when the hardware service is unreachable, so the
+        chrony half of the dashboard keeps rendering. Treating every 200
+        as success hides precisely the outage the banner exists for.
+        """
+        script = _script_block(GPS_DASHBOARD)
+        # Anchor on the telemetry fetch specifically — the file has
+        # several `.then(function (data) {` handlers (events, trends).
+        success_handler = re.search(
+            r"fetch\('/admin/api/gps-dashboard/data'.*?\.then\(function \(data\) \{"
+            r"(.*?)\n\s*\}\)",
+            script, re.S,
+        )
+        assert success_handler, "could not locate the telemetry success handler"
+        body = success_handler.group(1)
+        assert "_error" in body, (
+            "The success handler does not inspect gps._error, so a "
+            "hardware-service outage renders with the banner hidden."
+        )
+        # hideFeedError() must be reachable only when _error is absent.
+        error_pos = body.index("_error")
+        hide_pos = body.index("hideFeedError")
+        assert error_pos < hide_pos, (
+            "hideFeedError() runs before the gps._error check, so the "
+            "banner is cleared regardless of the failure envelope."
+        )
+
+    def test_backend_still_emits_the_error_envelope(self):
+        """Pin the contract the front-end check depends on.
+
+        If the backend stops using ``_error`` (or starts returning a
+        non-200), the guard above becomes dead code — this test fails
+        loudly rather than letting the UI silently regress.
+        """
+        hardware = (REPO_ROOT / "webapp" / "admin" / "hardware.py").read_text(
+            encoding="utf-8"
+        )
+        assert '"_error": "hardware_service_unavailable"' in hardware, (
+            "webapp/admin/hardware.py no longer emits the _error envelope "
+            "the GNSS dashboard's success handler checks for."
+        )
+
 
 class TestSystemHealthCanvasAccessibility:
     """Every canvas needs an accessible name."""
