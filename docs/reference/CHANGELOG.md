@@ -8,6 +8,287 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.129.0] - 2026-08-05 - Faster VU meters for less CPU
+
+The VU meters were throttled to ~15 fps specifically to keep CPU down. Rather
+than trade responsiveness against load, this reworks what each update costs so
+both improve: the refresh rate doubles to ~30 fps while the per-frame work
+drops.
+
+### Changed
+- **One shared `AudioContext` instead of one per source.** Every
+  `AudioContext` carries its own audio render thread, so a context per player
+  multiplied that fixed cost by the number of players on the page.
+- **Time-domain sampling instead of an FFT.** `getByteFrequencyData()` runs a
+  transform on every call and returns spectral magnitudes — which are not
+  signal amplitude, so the previous peak/RMS figures were measuring the wrong
+  quantity *and* paying for a transform to do it.
+  `getByteTimeDomainData()` copies the sample buffer: cheaper, and the correct
+  input for a level meter.
+- **Frame-rate-independent ballistics.** Attack and release are now time
+  constants applied against the real elapsed interval. The previous fixed
+  per-frame coefficients meant the decay rate changed with the frame rate:
+  measured over the same half-second of silence, the old release landed
+  anywhere between roughly −80 dB and the −120 dB floor across 10–144 fps.
+  That coupling is what made raising the rate risky; the new curve holds to
+  within 3 dB across the same range. The elapsed interval is clamped so the
+  first frame after a hidden tab resumes cannot apply a multi-second decay in
+  one step.
+- **DOM writes only on change.** Bar widths are quantised to 0.1% and written
+  only when they differ; the dB text labels refresh at ~8 fps rather than with
+  every frame. Style and text writes trigger layout and cost far more than the
+  sampling.
+- **Paused, fully decayed sources are skipped entirely** rather than being
+  re-analysed and re-rendered with identical values every frame.
+- The loop remains `requestAnimationFrame` — display-capped, and suspended
+  outright while the tab is hidden. No timer-driven spin was introduced.
+
+### Fixed
+- **Meters for replaced audio elements ran forever.** The source list
+  re-renders on a timer and rebuilds its `<audio>` elements, but the old
+  meters stayed in the map — analysed on every frame, against elements no
+  longer in the document, each holding its own `AudioContext` open. Detached
+  meters are now pruned and their nodes released.
+- **Duplicate listeners accumulated on every re-render.**
+  `enableRealtimeVUMeters()` is called after each render and re-registered its
+  `playing`/`ended` handlers each time; they are now bound once per element.
+
+### Tooling
+- New `tests/test_realtime_vu_meters.py` pins the static guarantees (no FFT
+  call, single context, rAF-driven, pruning and bind guards present,
+  write-elision caches intact) and executes the module under node to verify
+  decay is frame-rate independent, the fill/label helpers hold at their
+  bounds, and the public API the page calls is preserved. The node-backed
+  cases skip cleanly if node is unavailable.
+
+## [2.128.7] - 2026-08-05 - Audio monitor: honest labels, visible stream failures
+
+### Removed
+- **The per-source player's MP3 claims, which were wrong in both directions.**
+  `/api/audio/stream/<source>` responds `mimetype='audio/wav'` and writes a
+  RIFF header — uncompressed PCM at the source's native rate — while the UI
+  advertised "MP3 Streaming @ 128 kbps" and "Audio compressed to MP3 format
+  (10x more efficient than WAV)". Replaced with an accurate one-line note.
+
+### Fixed
+- **A decoder feed that died mid-listen reported nothing.** `onPlaying()`
+  removed both the `playing` and `error` listeners, so once playback started
+  nothing was watching. If the audio service restarted or the source stopped,
+  the player went silent while the button still read "Stop" and no message
+  appeared — the feed just seemed to stop working. Playback failures are now
+  watched for the life of the stream, reset the button, and report why.
+  `stalled` is deliberately *not* treated as terminal: browsers fire it after
+  a few seconds without data, which a live feed hits on ordinary jitter, so
+  reacting to it would tear down healthy streams. Only `error` and `ended`
+  are terminal — a live stream has no natural end, so `ended` means the
+  server closed the connection.
+- **Stopping deliberately no longer raises a "stream ended" alert.**
+  `removeAttribute('src')` + `load()` fire `error`/`ended` during teardown,
+  which would trip the new watcher; the handler is detached first.
+- **A stream that never produced a frame hung the button on "Loading…"
+  forever.** Added a 20s startup watchdog that diagnoses and resets. Every
+  path that concludes the start attempt cancels it.
+- **A missing ffmpeg was reported as an audio-source problem.** The decoder
+  stream encodes 16 kHz PCM to MP3 via ffmpeg inside the response generator.
+  By the time the generator runs, `Response()` has already sent the headers,
+  so a missing ffmpeg simply ended the generator and the browser received
+  "200 OK" with an empty body — a generic media error that the UI attributed
+  to the audio source, the one thing that was not wrong. ffmpeg is now
+  pre-flighted in the request phase, where a status code can still be chosen,
+  and returns a 503 naming the real cause.
+
+### Tooling
+- New `tests/test_audio_monitor_decoder_feed.py` pins the stream labelling
+  against the endpoint's actual mimetype, the client-side failure handling
+  (post-start watcher, no `stalled` teardown, watchdog cancellation on all
+  three paths, detach-before-teardown ordering), and the ffmpeg pre-flight's
+  placement ahead of the streaming generator.
+
+## [2.128.6] - 2026-08-05 - Test surfaces that report a real verdict
+
+Audit of the test and diagnostic suites exposed in the web UI, checking that
+each one's verdict actually reflects what it measured. Two did not — in
+opposite directions.
+
+### Fixed
+- **The Services diagnostic failed every unit it could not query.**
+  `check_services_running()` runs `systemctl is-active` per unit. When systemd
+  is unreachable, each probe returns an empty state, which the per-unit branch
+  reported as a hard failure — so the Diagnostics page showed all ten services
+  red regardless of whether they were running, burying any real failure among
+  false ones. It now probes reachability once with `systemctl is-system-running`
+  and reports a single informational line instead. Checking only that the
+  `systemctl` binary exists is not sufficient: the binary is present in images
+  where the bus is not, and there it exits non-zero on every query — which is
+  exactly the situation this bug appeared in.
+- **The alert self-test could not fail.** `run_alert_self_test` computed
+  `decode_error_count`, displayed it in its own tile, and then ignored it when
+  setting `success`. Unless the caller opted into `require_match`, the verdict
+  was `True` on every run — a test where every sample failed to decode still
+  rendered a green **PASS**. A decode error means the SAME header could not be
+  recovered from the audio, which is the precise failure this self-test exists
+  to surface. Decode errors and an empty result set now fail the run;
+  `FILTERED` and `SUPPRESSED_DUPLICATE` continue to pass, since those are
+  correct outcomes rather than faults.
+
+### Changed
+- Raised the audio pipeline suite's run budget from 180s to 240s and made the
+  timeout message actionable. The route runs pytest synchronously in the
+  gunicorn worker, which systemd starts with `--timeout 300`, so the ceiling
+  has to stay below that — overrunning gunicorn kills the worker and returns a
+  502 with no results, which is worse than a reported timeout. The suite takes
+  ~35s on a fast x86 host, but on the Raspberry Pi deployment target 180s was
+  close enough to the real runtime for a full run to time out and report
+  FAILED regardless of how the tests did.
+
+### Verified (no change needed)
+- The audio pipeline suite genuinely runs pytest and parses its JUnit XML:
+  189 tests across 21 files, correct per-module attribution, working
+  single-module runs, and path-traversal input rejection.
+- The remaining diagnostic checks are honest — Audio Service, Audio Devices
+  and Icecast all skip with an explicit informational note when their feature
+  is disabled, rather than reporting a failure.
+
+### Tooling
+- New `tests/test_diagnostics_service_check.py` covers the unreachable-bus,
+  missing-binary, healthy-host, uninstalled-unit and `degraded` cases. The
+  `degraded` case matters specifically: `is-system-running` exits non-zero for
+  it, so keying the probe off the exit code would skip per-unit checks on
+  exactly the hosts that have a failed unit worth reporting.
+- Extended `tests/test_alert_self_test_routes.py` with the decode-error,
+  all-forwarded, filtered/duplicate, `require_match` and empty-result verdicts.
+
+## [2.128.5] - 2026-08-05 - Restore two panels that rendered into nothing
+
+Both panels shipped as scripts that were written defensively and therefore
+failed silently: each wrote into a container guarded by `if (element)`, and no
+element carried the id. A guarded write to a missing element logs nothing and
+shows nothing — the feature is simply absent.
+
+### Fixed
+- **System Health "Service Details" never appeared.** The refresh script built
+  the full per-service card with `renderSystemdDetails()` and assigned it to
+  `getElementById('systemd-details').innerHTML`, but no element declared that
+  id, so the card was rendered and discarded on every refresh cycle. Added the
+  container as a full-width row under Resource Usage, with a server-rendered
+  first paint (matching the sibling `smart-card` / `dependencies-card`
+  pattern) that the refresh then replaces. Covers all three states the script
+  handles: populated, systemd unavailable (shows the reported reason), and
+  available-but-empty.
+- **The radio receiver's "Service Configuration" summary never appeared.**
+  `showConfigSummary()` runs whenever a service type is picked and populates
+  six fields behind an `if (summary)` guard; none of the seven ids
+  (`configSummary`, `summaryModulation`, `summarySampleRate`,
+  `summaryBandwidth`, `summaryAudio`, `summaryStereo`, `summaryRBDS`) existed.
+  Added the panel to the Add/Edit Receiver modal, hidden until a service type
+  is selected since the script is what reveals it. Sample rate is read from
+  the hardware-populated dropdown rather than the service config, which
+  deliberately omits it.
+
+### Tooling
+- New `tests/test_health_and_radio_panels.py`: asserts every id the two
+  scripts address exists, that the radio panel starts hidden, that no
+  `getElementById()` target in `admin/radio.html` is unbacked, and renders the
+  health page across all three systemd states to check row content, status
+  badge mapping, category labels and the `table-responsive` wrapper.
+
+## [2.128.4] - 2026-08-05 - Broken URL targets and a shadowed module
+
+A sweep for URL targets that do not resolve — every literal `url_for()` and
+every literal `fetch()` in the UI, checked against the real URL map.
+
+### Fixed
+- **Role denials returned 500 instead of a redirect.** `_role_denied_response`
+  in `app_core/auth/decorators.py` called `url_for("admin")`, but the admin
+  dashboard is registered on the `dashboard` blueprint. Every HTML (non-JSON)
+  request denied for insufficient role raised `BuildError` — the "You do not
+  have permission" flash was never shown.
+- **The per-boundary Delete button had no endpoint.** The boundary-management
+  UI shipped a Delete action with a confirmation modal calling
+  `DELETE /admin/delete_boundary/<id>`, which no route answered. Only bulk
+  "clear by type" and "clear all" existed. Added
+  `boundaries.delete_boundary`, permission-gated like its siblings and
+  audit-logged to `SystemLog`.
+- **The audio detail page's Delete button 404'd.** It called
+  `/admin/eas_messages/<id>`; that route moved to `/eas/messages/<id>`. The
+  404 body is HTML, so `response.json()` threw and the page reported a
+  generic "Failed to delete audio message".
+- **The storm-track map legend never rendered.** `alert_detail.html` called
+  `getElementById('map-legend')` against a div carrying `class="map-legend"`
+  and no `id`, so the "Storm Line (N cells)" legend entry was silently
+  dropped.
+
+### Removed
+- **`webapp/admin/audio.py` (1276 lines) was dead code.** It sat next to the
+  `webapp/admin/audio/` package, and Python resolves the package — so the
+  module was never imported. Its blueprint was never registered, and its
+  three `url_for()` calls referenced endpoints that no longer exist. A prior
+  security commit ("require authorization on 80 unprotected mutating routes")
+  had applied decorators to this file, giving a false impression that those
+  routes were hardened. The live equivalents in `webapp/eas/workflow.py` and
+  `webapp/eas/messages.py` were verified to carry `@require_permission`.
+- Dead `url_for("public_index") if False else "/"` branch in `global_search`.
+
+### Tooling
+- New `tests/test_url_targets_resolve.py` replaces brittle hardcoded-string
+  guards with three generic checks that would have caught all of the above:
+  every `url_for()` literal resolves to a registered endpoint (suggesting the
+  blueprint-qualified name when one exists); every literal `fetch()` path in
+  templates and `static/js` matches a route that accepts its method; and no
+  module is shadowed by a same-named package.
+
+## [2.128.3] - 2026-08-05 - Readable status text and links in every theme
+
+The theme contrast audit added in 2.126.0 probed two strict surfaces (table
+headers) and reported a clean run — while the most common text utilities in
+the codebase were failing WCAG AA in most themes. The audit simply never
+looked at them.
+
+Root cause: `--success-color` / `--danger-color` / `--warning-color` /
+`--info-color` / `--primary-color` are tuned as **fills** — they sit behind
+white text in badges, buttons and `.bg-*` utilities, so they are deliberately
+vivid. `.text-*` and `a` reused those same vivid values as **text on a card**,
+where they are far too light.
+
+### Fixed
+- **`.text-warning` was illegible on cards in all 11 light themes** —
+  `#ffa726` on white measures **1.94:1** against a 4.5:1 floor. Alongside it
+  `.text-info` measured 2.30:1, `.text-success` 2.78:1 and `.text-danger`
+  3.49:1. These utilities appear ~1700 times across `templates/`.
+- **Every hyperlink failed AA in 11 of 20 themes.** `a { color:
+  var(--primary-color) }` put the brand colour into body copy: Yellow
+  measured **1.97:1**, Slate 1.98:1, Orange 2.70:1, Charcoal 2.77:1, Sunset
+  2.79:1, Midnight 2.89:1, plus Green, Spring, Tide, Nebula and Obsidian.
+- **Muted text in the default Cosmo theme measured 2.56:1** (`#94a3b8` on
+  white), affecting every out-of-the-box install. Spring (4.10:1), Slate
+  (4.18:1) and Nebula (4.47:1) were also short.
+- **Dark theme's `--text-secondary`** measured 4.23:1 on its own surface.
+- **Coffee's page header title measured 1.91:1** — white ink on a pale tan
+  `#e2b37f → #c7a06e` gradient. This is the third instance of the bug already
+  fixed for Lightning and Yellow, and it gets the same dark-ink treatment.
+- **Aurora, Orange, Sunset and Dark page header titles** sat under the 3.0
+  large-text floor (2.36–2.81:1). Their gradients are deepened ~26% so the
+  hue and the white ink both survive.
+
+### Changed
+- Added a **semantic ink layer**: each theme now carries `--success-ink`,
+  `--danger-ink`, `--warning-ink`, `--info-ink` and `--primary-ink` — the same
+  hue as the fill, lightness shifted until it clears 4.5:1 against that
+  theme's own `--surface-color`. `.text-*` and `a` use the ink; `.bg-*`,
+  badges and buttons keep using the vivid fill. Light themes share one ink
+  set (Bootstrap's text-emphasis palette, which the existing `.bg-light`
+  overrides had already standardised on); dark themes map ink back to the
+  fill except where measurement said otherwise.
+- `.eas-hero-lead` is now full-opacity white with a stronger shadow.
+
+### Tooling
+- `scripts/diagnostics/check_theme_contrast.py` gained **9 strict probes** for
+  the flat card surfaces it never covered: `.text-primary`, `.text-success`,
+  `.text-danger`, `.text-warning`, `.text-info`, `.text-muted`,
+  `.text-secondary`, a link in card copy, and body text on the page. Strict
+  coverage goes from 2 surfaces to 11, all 20 themes passing; gradient
+  advisories drop from 34 to 27.
+
 ## [2.128.2] - 2026-08-04 - Stop list views from loading audio blobs
 
 Follow-up sweep after the FCC reports 502 (2.128.1). The same defect —

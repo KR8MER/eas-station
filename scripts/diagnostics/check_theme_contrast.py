@@ -69,6 +69,20 @@ PROBES = {
     ".page-header .page-subtitle": ("Page header subtitle", False),
     ".eas-hero-title": ("Hero title", False),
     ".eas-hero-lead": ("Hero lead", False),
+    # Semantic text utilities on a plain card. These are flat surfaces, so
+    # the WCAG formula applies exactly and a shortfall is a real failure.
+    # They went unprobed until the `--*-ink` split, which is how
+    # `.text-warning` shipped at 1.94:1 on white in all 11 light themes
+    # while the audit reported a clean run.
+    ".card .text-primary": ("Card .text-primary", True),
+    ".card .text-success": ("Card .text-success", True),
+    ".card .text-danger": ("Card .text-danger", True),
+    ".card .text-warning": ("Card .text-warning", True),
+    ".card .text-info": ("Card .text-info", True),
+    ".card .text-muted": ("Card .text-muted", True),
+    ".card .text-secondary": ("Card .text-secondary", True),
+    ".card a.probe-link": ("Card body link", True),
+    ".page-shell .probe-body": ("Body text on page", True),
 }
 
 FIXTURE = """<!DOCTYPE html>
@@ -92,6 +106,17 @@ FIXTURE = """<!DOCTYPE html>
   <div class="table-responsive"><table class="table eas-table">
     <thead><tr><th>Header</th></tr></thead><tbody><tr><td>Cell</td></tr></tbody>
   </table></div>
+  <p class="probe-body">Ordinary body copy on the page background.</p>
+  <div class="card"><div class="card-body">
+    <p class="text-primary">Primary</p>
+    <p class="text-success">Success</p>
+    <p class="text-danger">Danger</p>
+    <p class="text-warning">Warning</p>
+    <p class="text-info">Info</p>
+    <p class="text-muted">Muted</p>
+    <p class="text-secondary">Secondary</p>
+    <p><a class="probe-link" href="#">A link in card copy</a></p>
+  </div></div>
 </div></main></body></html>
 """
 

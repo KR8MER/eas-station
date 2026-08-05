@@ -430,6 +430,49 @@
                                 <label class="form-check-label" for="receiverAutoStart">Auto-start</label>
                             </div>
                         </div>
+
+                        <!-- Service configuration summary.
+                             showConfigSummary() has always populated these
+                             fields when a service type is picked, but the
+                             markup was never added, so the call was a no-op
+                             behind its `if (summary)` guard and the summary
+                             never appeared. Hidden until a service type is
+                             selected — the script sets display:block. -->
+                        <div class="col-12" id="configSummary" style="display: none;">
+                            <div class="card border-primary">
+                                <div class="card-body py-2">
+                                    <h6 class="card-title text-primary mb-2">
+                                        <i class="fas fa-clipboard-check me-1"></i>Service Configuration
+                                    </h6>
+                                    <div class="row g-2 small">
+                                        <div class="col-6 col-md-4">
+                                            <span class="text-muted d-block">Modulation</span>
+                                            <span class="fw-semibold" id="summaryModulation">—</span>
+                                        </div>
+                                        <div class="col-6 col-md-4">
+                                            <span class="text-muted d-block">Sample Rate</span>
+                                            <span class="fw-semibold" id="summarySampleRate">—</span>
+                                        </div>
+                                        <div class="col-6 col-md-4">
+                                            <span class="text-muted d-block">Bandwidth</span>
+                                            <span class="fw-semibold" id="summaryBandwidth">—</span>
+                                        </div>
+                                        <div class="col-6 col-md-4">
+                                            <span class="text-muted d-block">Audio Output</span>
+                                            <span class="fw-semibold" id="summaryAudio">—</span>
+                                        </div>
+                                        <div class="col-6 col-md-4">
+                                            <span class="text-muted d-block">FM Stereo</span>
+                                            <span class="fw-semibold" id="summaryStereo">—</span>
+                                        </div>
+                                        <div class="col-6 col-md-4">
+                                            <span class="text-muted d-block">RBDS/RDS</span>
+                                            <span class="fw-semibold" id="summaryRBDS">—</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">

@@ -214,11 +214,22 @@ def _parse_junit_xml(xml_path: Path) -> Tuple[Dict[str, int], List[Dict[str, Any
     return totals, details
 
 
+# Wall-clock budget for a full run. The route executes pytest synchronously in
+# the gunicorn worker, which systemd starts with `--timeout 300`
+# (systemd/eas-station-web.service) — so this ceiling has to stay comfortably
+# below 300s. Overrunning gunicorn kills the worker and the browser gets a 502
+# with no results at all, which is strictly worse than a reported timeout.
+# The suite takes ~35s on a fast x86 host, but the deployment target is a
+# Raspberry Pi, where 180s was close enough to the real runtime that a full
+# run could time out and report FAILED regardless of how the tests did.
+RUN_TIMEOUT_SECONDS = 240
+
+
 def _run_pytest_and_parse(
     test_files: List[Path],
     verbose: bool,
     logger,
-    timeout: int = 180,
+    timeout: int = RUN_TIMEOUT_SECONDS,
 ) -> Dict[str, Any]:
     """Run pytest on ``test_files`` and return a structured result dict."""
     if not test_files:
@@ -272,7 +283,13 @@ def _run_pytest_and_parse(
         totals, details = _parse_junit_xml(xml_path)
 
         if timed_out:
-            summary = f"Timed out after {timeout}s"
+            # pytest only writes the JUnit report at the end of a run, so a
+            # timeout leaves no per-test detail to show. Say what to do next
+            # rather than leaving the dashboard on a bare FAILED.
+            summary = (
+                f"Timed out after {timeout}s — run a single module instead of "
+                "the full suite"
+            )
             success = False
         elif totals["total"] == 0:
             # No JUnit data — likely a collection error.
