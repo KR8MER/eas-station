@@ -968,6 +968,52 @@ def upload_shapefile():
         current_app.logger.error("Error uploading shapefile: %s", exc)
         return jsonify({"error": f"Shapefile upload failed: {exc}"}), 500
 
+@boundaries_bp.route("/admin/delete_boundary/<int:boundary_id>", methods=["DELETE"])
+@require_permission('system.configure')
+def delete_boundary(boundary_id: int):
+    """Delete a single boundary by ID.
+
+    The boundary-management UI has shipped a per-row Delete button (with a
+    confirmation modal) calling this URL, but no route answered it — the
+    request 404'd and the page reported a generic failure. Only the bulk
+    "clear by type" and "clear all" endpoints existed.
+    """
+
+    try:
+        boundary = Boundary.query.get(boundary_id)
+        if boundary is None:
+            return jsonify({"error": "Boundary not found"}), 404
+
+        name = boundary.name or f"#{boundary_id}"
+        boundary_type = boundary.type
+
+        db.session.delete(boundary)
+        db.session.commit()
+
+        message = f"Deleted boundary '{name}'"
+        db.session.add(
+            SystemLog(
+                level="WARNING",
+                message=message,
+                module="admin",
+                details={
+                    "boundary_id": boundary_id,
+                    "boundary_name": name,
+                    "boundary_type": boundary_type,
+                    "deleted_at_utc": utc_now().isoformat(),
+                    "deleted_at_local": local_now().isoformat(),
+                },
+            )
+        )
+        db.session.commit()
+
+        return jsonify({"success": message, "deleted_count": 1})
+    except Exception as exc:  # pragma: no cover - defensive
+        db.session.rollback()
+        current_app.logger.error("Error deleting boundary %s: %s", boundary_id, exc)
+        return jsonify({"error": f"Failed to delete boundary: {exc}"}), 500
+
+
 @boundaries_bp.route("/admin/clear_boundaries/<boundary_type>", methods=["DELETE"])
 @require_permission('system.configure')
 def clear_boundaries(boundary_type: str):

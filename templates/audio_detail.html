@@ -481,7 +481,7 @@ async function deleteAudioMessage() {
     }
 
     try {
-        const response = await fetch(`/admin/eas_messages/${messageId}`, {
+        const response = await fetch(`/eas/messages/${messageId}`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json'

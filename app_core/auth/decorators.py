@@ -100,7 +100,11 @@ def _role_denied_response(required_roles: tuple[str, ...]):
         )
 
     flash(f"You do not have permission to access that page. Required role: {roles_str}")
-    return redirect(url_for("admin"))
+    # The admin dashboard lives on the `dashboard` blueprint, so the bare
+    # "admin" endpoint does not exist. Building it raised BuildError, turning
+    # every role denial on an HTML request into a 500 instead of this
+    # redirect-with-flash.
+    return redirect(url_for("dashboard.admin"))
 
 
 def require_auth(f: Callable) -> Callable:

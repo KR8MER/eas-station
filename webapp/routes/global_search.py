@@ -118,7 +118,9 @@ def register(app: Flask, logger) -> None:
         if not query:
             # Empty submit — bounce back to home rather than rendering
             # an "all alerts" dump.
-            return redirect(url_for("public_index") if False else "/", code=302)
+            # `url_for("index")` would work, but the home route is a stable
+            # public URL and this keeps the redirect free of endpoint coupling.
+            return redirect("/", code=302)
         if len(query) > _MAX_QUERY_LEN:
             query = query[:_MAX_QUERY_LEN]
 

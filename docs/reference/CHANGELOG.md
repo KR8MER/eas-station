@@ -8,6 +8,51 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.128.4] - 2026-08-05 - Broken URL targets and a shadowed module
+
+A sweep for URL targets that do not resolve — every literal `url_for()` and
+every literal `fetch()` in the UI, checked against the real URL map.
+
+### Fixed
+- **Role denials returned 500 instead of a redirect.** `_role_denied_response`
+  in `app_core/auth/decorators.py` called `url_for("admin")`, but the admin
+  dashboard is registered on the `dashboard` blueprint. Every HTML (non-JSON)
+  request denied for insufficient role raised `BuildError` — the "You do not
+  have permission" flash was never shown.
+- **The per-boundary Delete button had no endpoint.** The boundary-management
+  UI shipped a Delete action with a confirmation modal calling
+  `DELETE /admin/delete_boundary/<id>`, which no route answered. Only bulk
+  "clear by type" and "clear all" existed. Added
+  `boundaries.delete_boundary`, permission-gated like its siblings and
+  audit-logged to `SystemLog`.
+- **The audio detail page's Delete button 404'd.** It called
+  `/admin/eas_messages/<id>`; that route moved to `/eas/messages/<id>`. The
+  404 body is HTML, so `response.json()` threw and the page reported a
+  generic "Failed to delete audio message".
+- **The storm-track map legend never rendered.** `alert_detail.html` called
+  `getElementById('map-legend')` against a div carrying `class="map-legend"`
+  and no `id`, so the "Storm Line (N cells)" legend entry was silently
+  dropped.
+
+### Removed
+- **`webapp/admin/audio.py` (1276 lines) was dead code.** It sat next to the
+  `webapp/admin/audio/` package, and Python resolves the package — so the
+  module was never imported. Its blueprint was never registered, and its
+  three `url_for()` calls referenced endpoints that no longer exist. A prior
+  security commit ("require authorization on 80 unprotected mutating routes")
+  had applied decorators to this file, giving a false impression that those
+  routes were hardened. The live equivalents in `webapp/eas/workflow.py` and
+  `webapp/eas/messages.py` were verified to carry `@require_permission`.
+- Dead `url_for("public_index") if False else "/"` branch in `global_search`.
+
+### Tooling
+- New `tests/test_url_targets_resolve.py` replaces brittle hardcoded-string
+  guards with three generic checks that would have caught all of the above:
+  every `url_for()` literal resolves to a registered endpoint (suggesting the
+  blueprint-qualified name when one exists); every literal `fetch()` path in
+  templates and `static/js` matches a route that accepts its method; and no
+  module is shadowed by a same-named package.
+
 ## [2.128.3] - 2026-08-05 - Readable status text and links in every theme
 
 The theme contrast audit added in 2.126.0 probed two strict surfaces (table
