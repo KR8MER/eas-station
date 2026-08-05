@@ -271,7 +271,12 @@
     --bg-card: #243046;
     --bg-primary: #161d2b;
     --text-color: #ffffff;
-    --text-secondary: #8892a6;
+    /* Lifted from #8892a6, which measured 4.23:1 on this theme's
+       --surface-color (#243046) — just under the AA floor. Note this theme's
+       secondary ink is *darker* than its muted ink, which is inverted from
+       every other theme but is left as-is: it is a deliberate part of the
+       Dark palette and both now clear AA. */
+    --text-secondary: #8f99ab;
     --text-muted: #acbad8;
     --border-color: #40516c;
     --shadow-color: rgba(8, 11, 19, 0.55);
@@ -854,6 +859,88 @@
     --shadow-color: rgba(0, 0, 0, 0.45);
 }
 
+/* ----------------------------------------------------------------------------
+   SEMANTIC TEXT INK — readable variants of the status colours
+   ----------------------------------------------------------------------------
+   The `--success-color` / `--danger-color` / `--warning-color` / `--info-color`
+   / `--primary-color` variables are tuned to be *fills*: they sit behind white
+   text in `.bg-success`, `.badge`, buttons and chips, so they are deliberately
+   vivid. Using that same vivid value as *text on a card* is what broke
+   readability across the theme set — e.g. `.text-warning` (#ffa726) on a white
+   surface measures 1.94:1, far below the WCAG AA 4.5:1 floor, and `.text-info`
+   measures 2.30:1. Those utilities appear ~1700 times across `templates/`.
+
+   So each theme also carries an "ink" variant: same hue, lightness shifted
+   until it clears 4.5:1 against that theme's own `--surface-color`. Fills keep
+   using `--*-color`; text (`.text-*`, `a`) uses `--*-ink`. Light themes share
+   one ink set because they all render on a white surface; the dark themes
+   already read well at their vivid values, so their ink maps straight back to
+   the fill colour except where measured otherwise.
+
+   Verify with: python3 scripts/diagnostics/check_theme_contrast.py */
+
+/* Light themes (white surface) — Bootstrap's text-emphasis palette, which the
+   `.bg-light` overrides further down already standardised on. */
+:root {
+    --success-ink: #198754;   /* 4.53:1 on #fff */
+    --danger-ink: #b02a37;    /* 6.50:1 */
+    --warning-ink: #a86400;   /* 4.68:1 — #997404 only reaches 4.33:1 */
+    --info-ink: #087990;      /* 5.06:1 */
+    --primary-ink: var(--primary-color);
+}
+
+/* Dark themes: the vivid status colours already clear AA on a dark surface,
+   so ink tracks the fill colour. Without this reset they would inherit the
+   light-theme inks above and render dark-on-dark. */
+:is([data-theme="dark"],
+    [data-theme="coffee"],
+    [data-theme="aurora"],
+    [data-theme="nebula"],
+    [data-theme="midnight"],
+    [data-theme="charcoal"],
+    [data-theme="obsidian"],
+    [data-theme="slate"],
+    [data-theme="lightning"]) {
+    --success-ink: var(--success-color);
+    --danger-ink: var(--danger-color);
+    --warning-ink: var(--warning-color);
+    --info-ink: var(--info-color);
+    --primary-ink: var(--primary-color);
+}
+
+/* Per-theme corrections, all measured against that theme's --surface-color.
+   Comments record the failing ratio the override replaces. */
+
+/* Light themes whose brand colour is too light to serve as link text. */
+[data-theme="green"]  { --primary-ink: #348438; }  /* #388e3c 4.12 -> 4.66 */
+[data-theme="orange"] { --primary-ink: #b55c00; }  /* #f57c00 2.70 -> 4.67 */
+[data-theme="spring"] { --primary-ink: #37833a; }  /* #43a047 3.30 -> 4.70 */
+[data-theme="sunset"] { --primary-ink: #bf5300; }  /* #ff6f00 2.79 -> 4.72 */
+[data-theme="tide"]   { --primary-ink: #00818f; }  /* #0097a7 3.51 -> 4.63 */
+[data-theme="yellow"] { --primary-ink: #a46705; }  /* #f9a825 1.97 -> 4.65 */
+
+/* Dark themes whose brand/danger colour is too dark for its own surface. */
+[data-theme="aurora"]   { --danger-ink: #ff6666; }   /* #ff5252 4.12 -> 4.60 */
+[data-theme="charcoal"] { --danger-ink: #ff9c9c;     /* #ff5252 2.91 -> 4.64 */
+                          --primary-ink: #abbac2; }  /* #78909c 2.77 -> 4.66 */
+[data-theme="midnight"] { --primary-ink: #677efe; }  /* #304ffe 2.89 -> 4.71 */
+[data-theme="nebula"]   { --primary-ink: #bc6bc9; }  /* #ab47bc 3.30 -> 4.61 */
+[data-theme="obsidian"] { --primary-ink: #875cff; }  /* #7c4dff 4.04 -> 4.63 */
+[data-theme="slate"]    { --danger-ink: #ff9696;     /* #ff5252 3.02 -> 4.62 */
+                          --primary-ink: #aab2de; }  /* #5c6bc0 1.98 -> 4.65 */
+
+/* Muted ink that fell below AA on its own surface. Cosmo is the default
+   theme, so its 2.56:1 muted text affected every out-of-the-box install.
+   Deliberately NOT written as `:root, [data-theme="cosmo"]`: `:root` carries
+   the same specificity as `[data-theme="dark"]` but sits later in the file,
+   so it would win over every dark theme's own muted ink and repaint it. The
+   bare-`:root` arm is guarded to the no-attribute case only. */
+:root:not([data-theme]),
+[data-theme="cosmo"] { --text-muted: #627693; }  /* #94a3b8 2.56 -> 4.63 */
+[data-theme="spring"] { --text-muted: #4f822c; } /* #558b2f 4.10 -> 4.60 */
+[data-theme="nebula"] { --text-muted: #bc6bc9; } /* #ba68c8 4.47 -> 4.61 */
+[data-theme="slate"]  { --text-muted: #aab2de; } /* #9fa8da 4.18 -> 4.65 */
+
 /* Lightning Theme - Electric glow on bolt icons.
    Filter is held steady so only `opacity` animates — interpolating a
    multi-stop drop-shadow stack at 60 fps is what made every page with
@@ -1308,6 +1395,66 @@
     border-color: rgba(13, 27, 42, 0.55);
 }
 
+/* Coffee Theme - Page header readability
+   Third instance of the Lightning/Yellow problem. Coffee's gradient runs
+   #e2b37f -> #c7a06e, a pale tan, and the inherited white page-header ink
+   measured 1.91:1 on it — the worst reading of any theme, and well under
+   even the 3.0 large-text floor. Same dark-ink treatment. */
+[data-theme="coffee"] .page-header {
+    color: #2a1a0e;
+}
+
+[data-theme="coffee"] .page-header h1,
+[data-theme="coffee"] .page-header h2,
+[data-theme="coffee"] .page-header .page-title {
+    color: #2a1a0e;
+    text-shadow: 0 1px 3px rgba(255, 255, 255, 0.25);
+}
+
+[data-theme="coffee"] .page-header .page-subtitle {
+    color: rgba(42, 26, 14, 0.85);
+    text-shadow: none;
+}
+
+[data-theme="coffee"] .page-header .page-header-icon {
+    color: #2a1a0e;
+    background: rgba(42, 26, 14, 0.08);
+    border-color: rgba(42, 26, 14, 0.25);
+}
+
+[data-theme="coffee"] .page-header .page-header-actions .btn-outline-light {
+    color: #2a1a0e;
+    background: rgba(42, 26, 14, 0.08);
+    border-color: rgba(42, 26, 14, 0.35);
+}
+
+[data-theme="coffee"] .page-header .page-header-actions .btn-outline-light:hover {
+    color: #2a1a0e;
+    background: rgba(42, 26, 14, 0.16);
+    border-color: rgba(42, 26, 14, 0.55);
+}
+
+/* Page header gradients that are too light for white ink, but whose hue would
+   look wrong carrying dark ink (unlike Coffee/Yellow/Lightning above). These
+   are mid-tone saturated ramps — Aurora's cyan end, Orange, Sunset and Dark's
+   lavender end — where white is the right ink and the gradient itself is the
+   problem. Deepening both stops keeps the hue and the white text while
+   lifting the title clear of the 3.0 large-text floor. */
+:is([data-theme="aurora"],
+    [data-theme="orange"],
+    [data-theme="sunset"],
+    [data-theme="dark"]) .page-header {
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--primary-color) 74%, #10131c) 0%,
+        color-mix(in srgb,
+            color-mix(in srgb, var(--primary-color) 90%, var(--secondary-color))
+            74%, #10131c) 40%,
+        color-mix(in srgb,
+            color-mix(in srgb, var(--primary-color) 70%, var(--secondary-color))
+            74%, #10131c) 70%,
+        color-mix(in srgb, var(--secondary-color) 74%, #10131c) 100%);
+}
+
 /* Lightning Theme - Form check / switch readability
    .form-check-input:checked sets background to --primary-color (yellow).
    The standard Bootstrap checkmark and radio SVGs use a white stroke/fill
@@ -1591,7 +1738,9 @@ p {
 }
 
 a {
-    color: var(--primary-color);
+    /* Ink, not fill: several themes' brand colours are far too light to serve
+       as body-copy links (Yellow measured 1.97:1, Slate 1.98:1). */
+    color: var(--primary-ink);
     text-decoration: none;
     transition: color var(--transition-fast);
 }
@@ -4039,13 +4188,17 @@ html:has(.modal.show) {
 .align-items-baseline { align-items: baseline; }
 .align-items-stretch { align-items: stretch; }
 
-/* Color Utilities */
-.text-primary { color: var(--primary-color) !important; }
+/* Color Utilities.
+   These paint *text*, so they use the readable `--*-ink` variants rather than
+   the vivid `--*-color` fills — see "SEMANTIC TEXT INK" above. The `.bg-*`
+   utilities below keep using `--*-color`, since there the colour is the
+   background and white/near-black text sits on top of it. */
+.text-primary { color: var(--primary-ink) !important; }
 .text-secondary { color: var(--text-secondary) !important; }
-.text-success { color: var(--success-color) !important; }
-.text-danger { color: var(--danger-color) !important; }
-.text-warning { color: var(--warning-color) !important; }
-.text-info { color: var(--info-color) !important; }
+.text-success { color: var(--success-ink) !important; }
+.text-danger { color: var(--danger-ink) !important; }
+.text-warning { color: var(--warning-ink) !important; }
+.text-info { color: var(--info-ink) !important; }
 .text-muted { color: var(--text-muted) !important; }
 
 .bg-primary { background-color: var(--primary-color) !important; color: white; }
@@ -7919,9 +8072,12 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 }
 .eas-hero-lead {
     font-size: 1.05rem; font-weight: 500;
-    color: rgba(255,255,255,0.92);
+    /* Full-opacity white: the hero gradient is theme-independent, so this
+       lead measured the same ~3.85:1 in all 20 themes. The shadow below is
+       what carries the remainder of the separation. */
+    color: #ffffff;
     max-width: 720px; margin: 0 auto;
-    text-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    text-shadow: 0 1px 3px rgba(0,0,0,0.35);
 }
 
 /* ---- Chip row (pill metadata) ------------------------------------------- */

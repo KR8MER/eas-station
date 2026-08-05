@@ -8,6 +8,58 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.128.3] - 2026-08-05 - Readable status text and links in every theme
+
+The theme contrast audit added in 2.126.0 probed two strict surfaces (table
+headers) and reported a clean run — while the most common text utilities in
+the codebase were failing WCAG AA in most themes. The audit simply never
+looked at them.
+
+Root cause: `--success-color` / `--danger-color` / `--warning-color` /
+`--info-color` / `--primary-color` are tuned as **fills** — they sit behind
+white text in badges, buttons and `.bg-*` utilities, so they are deliberately
+vivid. `.text-*` and `a` reused those same vivid values as **text on a card**,
+where they are far too light.
+
+### Fixed
+- **`.text-warning` was illegible on cards in all 11 light themes** —
+  `#ffa726` on white measures **1.94:1** against a 4.5:1 floor. Alongside it
+  `.text-info` measured 2.30:1, `.text-success` 2.78:1 and `.text-danger`
+  3.49:1. These utilities appear ~1700 times across `templates/`.
+- **Every hyperlink failed AA in 11 of 20 themes.** `a { color:
+  var(--primary-color) }` put the brand colour into body copy: Yellow
+  measured **1.97:1**, Slate 1.98:1, Orange 2.70:1, Charcoal 2.77:1, Sunset
+  2.79:1, Midnight 2.89:1, plus Green, Spring, Tide, Nebula and Obsidian.
+- **Muted text in the default Cosmo theme measured 2.56:1** (`#94a3b8` on
+  white), affecting every out-of-the-box install. Spring (4.10:1), Slate
+  (4.18:1) and Nebula (4.47:1) were also short.
+- **Dark theme's `--text-secondary`** measured 4.23:1 on its own surface.
+- **Coffee's page header title measured 1.91:1** — white ink on a pale tan
+  `#e2b37f → #c7a06e` gradient. This is the third instance of the bug already
+  fixed for Lightning and Yellow, and it gets the same dark-ink treatment.
+- **Aurora, Orange, Sunset and Dark page header titles** sat under the 3.0
+  large-text floor (2.36–2.81:1). Their gradients are deepened ~26% so the
+  hue and the white ink both survive.
+
+### Changed
+- Added a **semantic ink layer**: each theme now carries `--success-ink`,
+  `--danger-ink`, `--warning-ink`, `--info-ink` and `--primary-ink` — the same
+  hue as the fill, lightness shifted until it clears 4.5:1 against that
+  theme's own `--surface-color`. `.text-*` and `a` use the ink; `.bg-*`,
+  badges and buttons keep using the vivid fill. Light themes share one ink
+  set (Bootstrap's text-emphasis palette, which the existing `.bg-light`
+  overrides had already standardised on); dark themes map ink back to the
+  fill except where measurement said otherwise.
+- `.eas-hero-lead` is now full-opacity white with a stronger shadow.
+
+### Tooling
+- `scripts/diagnostics/check_theme_contrast.py` gained **9 strict probes** for
+  the flat card surfaces it never covered: `.text-primary`, `.text-success`,
+  `.text-danger`, `.text-warning`, `.text-info`, `.text-muted`,
+  `.text-secondary`, a link in card copy, and body text on the page. Strict
+  coverage goes from 2 surfaces to 11, all 20 themes passing; gradient
+  advisories drop from 34 to 27.
+
 ## [2.128.2] - 2026-08-04 - Stop list views from loading audio blobs
 
 Follow-up sweep after the FCC reports 502 (2.128.1). The same defect —
