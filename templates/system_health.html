@@ -663,12 +663,7 @@
            components/page_header.html, so this page no longer styles them.
            What remains is the pill strip that rides in the component's
            actions slot. */
-        .system-health-root .health-dash-pills {
-            display: flex; flex-wrap: wrap;
-            gap: 10px 14px; align-items: center;
-        }
-        .system-health-root .health-dash-pills select.form-select-sm { width: auto; }
-        .system-health-root .health-dash-pills .distro-logo {
+        .system-health-root .page-header-actions .distro-logo {
             height: 36px; width: auto; margin: 0;
             filter: brightness(1.1) drop-shadow(0 2px 6px rgba(0,0,0,0.35));
         }
@@ -677,110 +672,10 @@
             font-family: var(--font-mono, ui-monospace, monospace);
         }
 
-        /* Pills (platform, kernel, etc.) — sit inside the gradient
-           header, so they use solid text + translucent backdrop. */
-        .system-health-root .health-pill {
-            display: inline-flex; align-items: center; gap: 6px;
-            padding: 3px 10px; border-radius: 999px;
-            font-size: 0.74rem; font-weight: 600; letter-spacing: 0.04em;
-            border: 1px solid currentColor;
-            background: rgba(0,0,0,0.22);
-            font-family: var(--font-mono, ui-monospace, monospace);
-        }
-        .system-health-root .health-pill.ok      { color: #6ee07a; }
-        .system-health-root .health-pill.warn    { color: #f6c343; }
-        .system-health-root .health-pill.danger  { color: #ff7b72; }
-        .system-health-root .health-pill.info    { color: #79c0ff; }
-        .system-health-root .health-pill.muted   { color: rgba(255,255,255,0.78); }
-        .system-health-root .health-pill i { font-size: 0.72rem; opacity: 0.85; }
-
-        /* Live-data heartbeat dot — pulses after each successful poll. */
-        .system-health-root .health-live-dot {
-            display: inline-block; width: 8px; height: 8px;
-            border-radius: 50%; background: rgba(255,255,255,0.45);
-            flex-shrink: 0;
-        }
-        @keyframes health-data-ping {
-            0%   { box-shadow: 0 0 0 0   rgba(63,185,80,0.80); background: #3fb950; }
-            70%  { box-shadow: 0 0 0 8px rgba(63,185,80,0);    background: #3fb950; }
-            100% { box-shadow: 0 0 0 0   rgba(63,185,80,0);    background: rgba(255,255,255,0.45); }
-        }
-        .system-health-root .health-live-dot.ping { animation: health-data-ping 0.75s ease forwards; }
-
-        /* ── Persistent at-a-glance status strip ──────────────────────
-           Seven tiles spanning the page width. Each tile shows a
-           short uppercase label, a large mono value, and a one-line
-           context sub-string. Severity is conveyed by the left-edge
-           rail and the value colour. */
-        .system-health-root .health-status-strip {
-            display: grid;
-            grid-template-columns: repeat(7, minmax(0, 1fr));
-            gap: 8px;
-            margin: 0 0 18px 0;
-        }
-        .system-health-root .health-status-tile {
-            position: relative;
-            padding: 10px 12px;
-            border: 1px solid var(--border-color, rgba(127,127,127,.22));
-            border-left: 3px solid var(--text-muted, #8b949e);
-            border-radius: 6px;
-            background: var(--surface-color, rgba(127,127,127,.04));
-            display: flex; flex-direction: column; gap: 4px;
-            min-width: 0;
-            transition: border-left-color 0.45s ease, background-color 0.45s ease;
-        }
-        .system-health-root .health-status-tile .lbl {
-            font-size: 0.66rem; font-weight: 700;
-            letter-spacing: 0.10em; text-transform: uppercase;
-            color: var(--text-muted, #8b949e);
-            display: flex; align-items: center; gap: 5px;
-        }
-        .system-health-root .health-status-tile .lbl i { font-size: 0.74rem; opacity: 0.7; }
-        .system-health-root .health-status-tile .val {
-            font-family: var(--font-mono, ui-monospace, monospace);
-            font-size: 1.18rem; font-weight: 700; line-height: 1.05;
-            color: var(--text-color);
-            font-variant-numeric: tabular-nums;
-            letter-spacing: 0.02em;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-        .system-health-root .health-status-tile .sub {
-            font-size: 0.68rem; color: var(--text-muted, #8b949e);
-            font-family: var(--font-mono, ui-monospace, monospace);
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-        .system-health-root .health-status-tile.sev-ok    { border-left-color: #3fb950; }
-        .system-health-root .health-status-tile.sev-ok    .val { color: #3fb950; }
-        .system-health-root .health-status-tile.sev-warn  { border-left-color: #d29922; background: rgba(210,153,34,0.06); }
-        .system-health-root .health-status-tile.sev-warn  .val { color: #f6c343; }
-        .system-health-root .health-status-tile.sev-fault { border-left-color: #f85149; background: rgba(248,81,73,0.07); }
-        .system-health-root .health-status-tile.sev-fault .val { color: #f85149; }
-        .system-health-root .health-status-tile.sev-info  { border-left-color: #58a6ff; }
-        .system-health-root .health-status-tile.sev-info  .val { color: #58a6ff; }
-        .system-health-root .health-status-tile.sev-unknown .val { color: var(--text-muted, #8b949e); }
-
-        @keyframes health-tile-in {
-            from { opacity: 0; transform: translateY(6px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-        .system-health-root .health-status-tile { animation: health-tile-in 0.35s ease both; }
-        .system-health-root .health-status-tile:nth-child(2) { animation-delay: 0.05s; }
-        .system-health-root .health-status-tile:nth-child(3) { animation-delay: 0.10s; }
-        .system-health-root .health-status-tile:nth-child(4) { animation-delay: 0.15s; }
-        .system-health-root .health-status-tile:nth-child(5) { animation-delay: 0.20s; }
-        .system-health-root .health-status-tile:nth-child(6) { animation-delay: 0.25s; }
-        .system-health-root .health-status-tile:nth-child(7) { animation-delay: 0.30s; }
-        @media (prefers-reduced-motion: reduce) {
-            .system-health-root .health-status-tile { animation: none; }
-        }
-        @media (max-width: 1180px) {
-            .system-health-root .health-status-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-        }
-        @media (max-width: 720px) {
-            .system-health-root .health-status-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-            .system-health-root .health-status-tile { padding: 8px 10px; }
-            .system-health-root .health-status-tile .val { font-size: 1.02rem; }
-        }
+        /* Header pills, the heartbeat dot and the status strip now come
+           from the shared .status-pill / .live-dot / .status-strip
+           component in static/css/styles.css, shared with the GNSS
+           & Time dashboard so both monitoring pages match. */
 
         /* ── Section dividers — tiny-caps title + horizontal rule, used
            to break the dense page into operator-friendly chunks. */
@@ -899,33 +794,31 @@
 {% set header_title = 'System Health Monitor' %}
 {% set header_subtitle %}Host: <span id="health-host-name">{{ system.hostname or '—' }}</span>{% endset %}
 {% set header_actions %}
-        <div class="health-dash-pills">
             {% if distro_logo_url %}
             <img src="{{ distro_logo_url }}" alt="Distribution Logo" class="distro-logo" onerror="this.style.display='none'">
             {% endif %}
             {% if system.os_pretty_name or system.distribution %}
-            <span class="health-pill ok" id="health-platform-pill" title="Operating system"><i class="fas fa-server"></i>
+            <span class="status-pill ok" id="health-platform-pill" title="Operating system"><i class="fas fa-server"></i>
                 {{ system.os_pretty_name or system.distribution }}
             </span>
             {% endif %}
             {% if system.kernel_release or system.release %}
-            <span class="health-pill muted" id="health-kernel-pill" title="Kernel release"><i class="fas fa-microchip"></i>
+            <span class="status-pill muted" id="health-kernel-pill" title="Kernel release"><i class="fas fa-microchip"></i>
                 {{ system.kernel_release or system.release }}
             </span>
             {% endif %}
             {% if system.architecture %}
-            <span class="health-pill info" id="health-arch-pill" title="CPU architecture"><i class="fas fa-bezier-curve"></i>
+            <span class="status-pill info" id="health-arch-pill" title="CPU architecture"><i class="fas fa-bezier-curve"></i>
                 {{ system.architecture }}
             </span>
             {% endif %}
-            <span class="health-live-dot" id="health-live-dot" title="Last data received"></span>
+            <span class="live-dot" id="health-live-dot" title="Last data received"></span>
             <details class="eas-units-disclosure" id="sys-health-units-disclosure">
                 <summary class="btn btn-sm btn-outline-light" title="Display units (lat/lon, altitude, speed, distance)">
                     <i class="fas fa-ruler"></i> Units
                 </summary>
                 <div class="eas-units-popover" id="sys-health-units-panel"></div>
             </details>
-        </div>
 {% endset %}
 {% include 'components/page_header.html' %}
 
@@ -958,8 +851,8 @@
        on every poll and seeded with server-rendered initial
        values below for first-paint.
        ============================================================ #}
-    <section class="health-status-strip" aria-label="System health at a glance">
-        <div class="health-status-tile sev-unknown" id="hs-strip-cpu">
+    <section class="status-strip" aria-label="System health at a glance">
+        <div class="status-tile sev-unknown" id="hs-strip-cpu">
             <div class="lbl"><i class="fas fa-microchip"></i> CPU</div>
             <div class="val">
                 {% if cpu and cpu.cpu_usage_percent is not none %}{{ "%.1f"|format(cpu.cpu_usage_percent) }}%{% else %}—{% endif %}
@@ -968,7 +861,7 @@
                 {% if cpu and cpu.total_cores %}{{ cpu.total_cores }} cores{% if cpu.current_frequency %} · {{ "%.0f"|format(cpu.current_frequency) }} MHz{% endif %}{% else %}awaiting data…{% endif %}
             </div>
         </div>
-        <div class="health-status-tile sev-unknown" id="hs-strip-memory">
+        <div class="status-tile sev-unknown" id="hs-strip-memory">
             <div class="lbl"><i class="fas fa-memory"></i> Memory</div>
             <div class="val">
                 {% if memory and memory.percentage is not none %}{{ "%.1f"|format(memory.percentage) }}%{% else %}—{% endif %}
@@ -977,7 +870,7 @@
                 {% if memory and memory.total %}{{ format_bytes(memory.used) }} / {{ format_bytes(memory.total) }}{% else %}awaiting data…{% endif %}
             </div>
         </div>
-        <div class="health-status-tile sev-unknown" id="hs-strip-storage">
+        <div class="status-tile sev-unknown" id="hs-strip-storage">
             {% set strip_root = namespace(found=false, pct=0, used=0, total=0) %}
             {% if disk %}
                 {% for partition in disk %}
@@ -997,7 +890,7 @@
                 {% if strip_root.found %}{{ format_bytes(strip_root.used) }} / {{ format_bytes(strip_root.total) }}{% else %}awaiting data…{% endif %}
             </div>
         </div>
-        <div class="health-status-tile sev-unknown" id="hs-strip-load">
+        <div class="status-tile sev-unknown" id="hs-strip-load">
             <div class="lbl"><i class="fas fa-tachometer-alt"></i> Load Avg</div>
             <div class="val">
                 {% if cpu and cpu.load_average %}{{ "%.2f"|format(cpu.load_average[0]) }}{% else %}—{% endif %}
@@ -1006,19 +899,19 @@
                 {% if cpu and cpu.load_average %}{{ "%.2f"|format(cpu.load_average[0]) }} / {{ "%.2f"|format(cpu.load_average[1]) }} / {{ "%.2f"|format(cpu.load_average[2]) }}{% else %}1m / 5m / 15m{% endif %}
             </div>
         </div>
-        <div class="health-status-tile sev-unknown" id="hs-strip-temp">
+        <div class="status-tile sev-unknown" id="hs-strip-temp">
             <div class="lbl"><i class="fas fa-thermometer-half"></i> Temp</div>
             <div class="val">—</div>
             <div class="sub">awaiting sensors…</div>
         </div>
-        <div class="health-status-tile sev-unknown" id="hs-strip-uptime">
+        <div class="status-tile sev-unknown" id="hs-strip-uptime">
             <div class="lbl"><i class="fas fa-clock"></i> Uptime</div>
             <div class="val">
                 {% if system and system.uptime_human %}{{ system.uptime_human }}{% elif system and system.uptime_seconds %}{{ (system.uptime_seconds // 86400) }}d{% else %}—{% endif %}
             </div>
             <div class="sub">since boot</div>
         </div>
-        <div class="health-status-tile sev-unknown" id="hs-strip-smart">
+        <div class="status-tile sev-unknown" id="hs-strip-smart">
             <div class="lbl"><i class="fas fa-heartbeat"></i> S.M.A.R.T.</div>
             {% if smart and smart.available and smart.devices %}
                 {% set strip_smart = namespace(passed=0, failed=0, warning=0) %}

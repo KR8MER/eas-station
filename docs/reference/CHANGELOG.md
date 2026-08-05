@@ -8,6 +8,60 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.130.0] - 2026-08-05 - Uniform chrome on the monitoring pages
+
+System Health and the GNSS & Time dashboard show the same *kind* of thing — a
+header with live status pills, a heartbeat dot, and a strip of severity-tinted
+metric tiles — but each had grown a private copy of that chrome under
+`health-*` and `gps-*` prefixes, and the copies had drifted. The two pages now
+share one implementation.
+
+### Changed
+- **The GNSS dashboard uses the standard page header.** It was the last page
+  still hand-rolling its own (`.gps-dash-header`), which is why it opened
+  looking unlike the rest of the UI — AGENTS.md requires the shared
+  `components/page_header.html` and ~59 other templates already use it. Every
+  control it carried is preserved, moved into the header's actions slot: the
+  lock/fix/stratum pills, the heartbeat dot, the Simple/Engineering toggle,
+  the refresh-interval selector, Units and Settings. The header is also
+  hoisted out of the page's `container-fluid`, matching System Health — nested
+  inside it, the container's gutters inset the header so the two pages' headers
+  did not line up.
+- **Status strip, pills and heartbeat dot are now one shared component**
+  (`.status-strip` / `.status-tile` / `.status-pill` / `.live-dot`) defined in
+  `static/css/styles.css` and consumed by both pages, replacing roughly 190
+  lines of duplicated per-page CSS. Element IDs are unchanged, so the page
+  JavaScript — which resolves tiles and pills by ID — is unaffected.
+- **The GNSS page's view toggle and refresh selector** were restyled for the
+  header gradient. They previously used page-surface tokens (`--text-muted`,
+  `--border-color`) that are not legible as white-on-gradient, and the active
+  toggle chip's blue/purple gradient muddied the theme gradient underneath it.
+
+### Fixed
+- **Drift between the two copies.** The strips disagreed on their background
+  token — System Health used `--surface-color`, the GNSS page used
+  `--bg-secondary` — so one strip could paint differently from the other under
+  the same theme. The pills also used two different greens for "OK" (`#6ee07a`
+  vs `#3fb950`) and two different idle colours for the heartbeat dot. The
+  shared component still keeps two palettes deliberately, because tiles sit on
+  the page surface and pills sit on the header gradient, but each is now
+  defined exactly once.
+
+### Added
+- `tests/test_monitoring_pages_uniform_chrome.py` — 39 tests pinning the shared
+  chrome: both pages must include the header component and must not hand-roll
+  one, both must use the shared strip/pill/dot classes, none of the ten retired
+  page-private class names may return, and neither page may redefine a shared
+  class locally. Verified to fail (23 of 39) against the pre-change templates.
+
+### Verification
+Rendered both pages in Chromium at 1440px, 360px and 320px. The two headers
+are now geometrically identical (x=0, width=1440, height=213 at 1440px) and the
+status strips align exactly (x=14, width=1412); the GNSS strip stays taller by
+design, because its Sync and PPS Lock tiles keep their emphasis via the shared
+`.status-tile.is-primary` modifier. No horizontal document scrolling at any of
+the three widths on either page. All 20 themes still pass the contrast audit.
+
 ## [2.129.1] - 2026-08-05 - System Health and GNSS dashboard fixes
 
 A bug-fix pass over the two monitoring pages. Several of these are cases
