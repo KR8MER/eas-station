@@ -8,6 +8,49 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.128.7] - 2026-08-05 - Audio monitor: honest labels, visible stream failures
+
+### Removed
+- **The per-source player's MP3 claims, which were wrong in both directions.**
+  `/api/audio/stream/<source>` responds `mimetype='audio/wav'` and writes a
+  RIFF header — uncompressed PCM at the source's native rate — while the UI
+  advertised "MP3 Streaming @ 128 kbps" and "Audio compressed to MP3 format
+  (10x more efficient than WAV)". Replaced with an accurate one-line note.
+
+### Fixed
+- **A decoder feed that died mid-listen reported nothing.** `onPlaying()`
+  removed both the `playing` and `error` listeners, so once playback started
+  nothing was watching. If the audio service restarted or the source stopped,
+  the player went silent while the button still read "Stop" and no message
+  appeared — the feed just seemed to stop working. Playback failures are now
+  watched for the life of the stream, reset the button, and report why.
+  `stalled` is deliberately *not* treated as terminal: browsers fire it after
+  a few seconds without data, which a live feed hits on ordinary jitter, so
+  reacting to it would tear down healthy streams. Only `error` and `ended`
+  are terminal — a live stream has no natural end, so `ended` means the
+  server closed the connection.
+- **Stopping deliberately no longer raises a "stream ended" alert.**
+  `removeAttribute('src')` + `load()` fire `error`/`ended` during teardown,
+  which would trip the new watcher; the handler is detached first.
+- **A stream that never produced a frame hung the button on "Loading…"
+  forever.** Added a 20s startup watchdog that diagnoses and resets. Every
+  path that concludes the start attempt cancels it.
+- **A missing ffmpeg was reported as an audio-source problem.** The decoder
+  stream encodes 16 kHz PCM to MP3 via ffmpeg inside the response generator.
+  By the time the generator runs, `Response()` has already sent the headers,
+  so a missing ffmpeg simply ended the generator and the browser received
+  "200 OK" with an empty body — a generic media error that the UI attributed
+  to the audio source, the one thing that was not wrong. ffmpeg is now
+  pre-flighted in the request phase, where a status code can still be chosen,
+  and returns a 503 naming the real cause.
+
+### Tooling
+- New `tests/test_audio_monitor_decoder_feed.py` pins the stream labelling
+  against the endpoint's actual mimetype, the client-side failure handling
+  (post-start watcher, no `stalled` teardown, watchdog cancellation on all
+  three paths, detach-before-teardown ordering), and the ffmpeg pre-flight's
+  placement ahead of the streaming generator.
+
 ## [2.128.6] - 2026-08-05 - Test surfaces that report a real verdict
 
 Audit of the test and diagnostic suites exposed in the web UI, checking that

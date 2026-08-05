@@ -1637,6 +1637,24 @@ def main():
                         )
                     }), 503
 
+                # Pre-flight the encoder while we can still choose a status code.
+                # The generator below cannot: once Response() starts streaming the
+                # headers are already sent, so a missing ffmpeg simply ended the
+                # generator and the browser received "200 OK" with an empty body.
+                # The player reported a generic media error and the UI blamed the
+                # audio source — the one thing that was not wrong.
+                import shutil as _shutil
+
+                if _shutil.which('ffmpeg') is None:
+                    logger.error("ffmpeg not found; cannot stream EAS decoder audio")
+                    return jsonify({
+                        'error': (
+                            'ffmpeg is not installed on the server, so the decoder '
+                            'feed cannot be encoded. Install ffmpeg and restart the '
+                            'audio service.'
+                        )
+                    }), 503
+
                 def generate_eas_decoder_mp3():
                     """Stream all active EAS decoder sources mixed together as MP3.
 

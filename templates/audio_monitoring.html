@@ -687,10 +687,7 @@ function renderAudioSources(fullRender = true) {
                             </audio>
                             <div class="audio-player-status small mt-2 text-muted" id="player-status-${source.name}"></div>
                             <small class="text-muted d-block mt-1">
-                                <i class="fas fa-info-circle"></i> MP3 Streaming @ 128 kbps
-                                <span class="d-block small text-muted mt-1">
-                                    Audio compressed to MP3 format (10x more efficient than WAV).
-                                </span>
+                                <i class="fas fa-info-circle"></i> Live stream at the source's native sample rate
                             </small>
                         ` : `
                             <div class="alert alert-secondary mb-0">
@@ -2605,19 +2602,57 @@ function toggleEASDecoderAudio(button) {
         // diagnoseAndShowError(), producing two overlapping error alerts.
         var errorHandled = false;
 
+        // Startup watchdog: if neither 'playing' nor 'error' ever fires — the
+        // server accepted the connection but never produced a decodable frame —
+        // the button used to sit on "Loading..." forever with no explanation.
+        var startupTimer = setTimeout(function () {
+            if (errorHandled || !audio.paused) { return; }
+            errorHandled = true;
+            audio.removeEventListener('playing', onPlaying);
+            audio.removeEventListener('error',   onError);
+            diagnoseAndShowError('Stream did not start within 20 seconds.');
+        }, 20000);
+
         // One-shot event listeners registered before play() so we never miss them
         function onPlaying() {
+            clearTimeout(startupTimer);
             audio.removeEventListener('playing', onPlaying);
             audio.removeEventListener('error',   onError);
             button.innerHTML = '<i class="fas fa-stop me-1"></i> Stop';
             button.classList.remove('btn-warning');
             button.classList.add('btn-danger');
             button.disabled = false;
+
+            // Keep watching once playback has begun. Previously both listeners
+            // were removed here, so a stream that died mid-listen (audio service
+            // restarted, source stopped, ffmpeg exited) left the player silent
+            // with the button still reading "Stop" and no message at all — the
+            // failure mode that makes the feed look like it "just stops working".
+            // Only terminal events tear the player down. 'stalled' is
+            // deliberately NOT included: the browser fires it after a few
+            // seconds without new data, which a live feed hits routinely on
+            // ordinary network jitter, and reacting to it would kill healthy
+            // streams. 'error' and 'ended' are unambiguous — a live stream has
+            // no natural end, so 'ended' means the server closed the connection.
+            function onDrop() {
+                audio.removeEventListener('error', onDrop);
+                audio.removeEventListener('ended', onDrop);
+                delete audio._easDropHandler;
+                diagnoseAndShowError(
+                    'Stream ended unexpectedly. The audio service or source may have stopped.'
+                );
+            }
+            audio.addEventListener('error', onDrop);
+            audio.addEventListener('ended', onDrop);
+            // Remember them so the Stop button can detach cleanly and not fire
+            // a spurious "stream ended" alert on a deliberate stop.
+            audio._easDropHandler = onDrop;
         }
 
         function onError() {
             if (errorHandled) { return; }
             errorHandled = true;
+            clearTimeout(startupTimer);
             audio.removeEventListener('playing', onPlaying);
             audio.removeEventListener('error',   onError);
             console.error('EAS decoder audio error:', audio.error);
@@ -2633,6 +2668,7 @@ function toggleEASDecoderAudio(button) {
             playPromise.catch(function(err) {
                 if (errorHandled) { return; }
                 errorHandled = true;
+                clearTimeout(startupTimer);
                 audio.removeEventListener('playing', onPlaying);
                 audio.removeEventListener('error',   onError);
                 console.error('EAS decoder play() rejected:', err);
@@ -2653,6 +2689,17 @@ function toggleEASDecoderAudio(button) {
         button.classList.remove('btn-danger', 'btn-warning');
         button.classList.add('btn-primary');
         button.disabled = false;
+
+        // Detach the drop watcher before tearing the element down. Otherwise
+        // removeAttribute('src') + load() fire 'error'/'ended' on the way out
+        // and the user gets a "stream ended unexpectedly" alert for a stop
+        // they asked for.
+        if (audio._easDropHandler) {
+            audio.removeEventListener('error', audio._easDropHandler);
+            audio.removeEventListener('ended', audio._easDropHandler);
+            delete audio._easDropHandler;
+        }
+
         audio.pause();
         audio.removeAttribute('src');
         audio.load();
