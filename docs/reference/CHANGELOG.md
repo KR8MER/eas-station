@@ -8,6 +8,59 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.129.0] - 2026-08-05 - Faster VU meters for less CPU
+
+The VU meters were throttled to ~15 fps specifically to keep CPU down. Rather
+than trade responsiveness against load, this reworks what each update costs so
+both improve: the refresh rate doubles to ~30 fps while the per-frame work
+drops.
+
+### Changed
+- **One shared `AudioContext` instead of one per source.** Every
+  `AudioContext` carries its own audio render thread, so a context per player
+  multiplied that fixed cost by the number of players on the page.
+- **Time-domain sampling instead of an FFT.** `getByteFrequencyData()` runs a
+  transform on every call and returns spectral magnitudes — which are not
+  signal amplitude, so the previous peak/RMS figures were measuring the wrong
+  quantity *and* paying for a transform to do it.
+  `getByteTimeDomainData()` copies the sample buffer: cheaper, and the correct
+  input for a level meter.
+- **Frame-rate-independent ballistics.** Attack and release are now time
+  constants applied against the real elapsed interval. The previous fixed
+  per-frame coefficients meant the decay rate changed with the frame rate:
+  measured over the same half-second of silence, the old release landed
+  anywhere between roughly −80 dB and the −120 dB floor across 10–144 fps.
+  That coupling is what made raising the rate risky; the new curve holds to
+  within 3 dB across the same range. The elapsed interval is clamped so the
+  first frame after a hidden tab resumes cannot apply a multi-second decay in
+  one step.
+- **DOM writes only on change.** Bar widths are quantised to 0.1% and written
+  only when they differ; the dB text labels refresh at ~8 fps rather than with
+  every frame. Style and text writes trigger layout and cost far more than the
+  sampling.
+- **Paused, fully decayed sources are skipped entirely** rather than being
+  re-analysed and re-rendered with identical values every frame.
+- The loop remains `requestAnimationFrame` — display-capped, and suspended
+  outright while the tab is hidden. No timer-driven spin was introduced.
+
+### Fixed
+- **Meters for replaced audio elements ran forever.** The source list
+  re-renders on a timer and rebuilds its `<audio>` elements, but the old
+  meters stayed in the map — analysed on every frame, against elements no
+  longer in the document, each holding its own `AudioContext` open. Detached
+  meters are now pruned and their nodes released.
+- **Duplicate listeners accumulated on every re-render.**
+  `enableRealtimeVUMeters()` is called after each render and re-registered its
+  `playing`/`ended` handlers each time; they are now bound once per element.
+
+### Tooling
+- New `tests/test_realtime_vu_meters.py` pins the static guarantees (no FFT
+  call, single context, rAF-driven, pruning and bind guards present,
+  write-elision caches intact) and executes the module under node to verify
+  decay is frame-rate independent, the fill/label helpers hold at their
+  bounds, and the public API the page calls is preserved. The node-backed
+  cases skip cleanly if node is unavailable.
+
 ## [2.128.7] - 2026-08-05 - Audio monitor: honest labels, visible stream failures
 
 ### Removed
