@@ -1486,7 +1486,24 @@ def register(app: Flask, logger) -> None:
         forwarded = sum(1 for item in results if item.status == AlertSelfTestStatus.FORWARDED)
         decode_errors = sum(1 for item in results if item.status == AlertSelfTestStatus.DECODE_ERROR)
 
-        if require_match and forwarded == 0:
+        # A self-test that cannot fail is not a test. `decode_errors` was
+        # counted and reported in its own tile, but never consulted here, so
+        # the verdict was `True` on every run unless the caller opted into
+        # `require_match` — a run where every sample failed to decode still
+        # rendered a green PASS. A decode error means the SAME header could
+        # not be recovered from the audio, which is exactly the pipeline
+        # failure this test exists to catch. FILTERED and SUPPRESSED_DUPLICATE
+        # stay passing: those are correct outcomes, not faults.
+        if not results:
+            success = False
+            error = "No audio samples were processed."
+        elif decode_errors:
+            success = False
+            error = (
+                f"{decode_errors} of {len(results)} sample(s) failed to decode a "
+                "SAME header."
+            )
+        elif require_match and forwarded == 0:
             success = False
             error = "No alerts matched the configured FIPS codes."
         else:

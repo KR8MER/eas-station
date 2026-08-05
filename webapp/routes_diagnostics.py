@@ -77,9 +77,48 @@ def _run_command(cmd: List[str], timeout: int = 15) -> Tuple[int, str, str]:
 # Individual checks
 # --------------------------------------------------------------------------- #
 
+def _systemd_unavailable_reason() -> Optional[str]:
+    """Return why systemd cannot be queried here, or ``None`` if it can.
+
+    Checking that the ``systemctl`` binary exists is not enough — it is
+    present in plenty of environments where the bus is not, and there it
+    exits non-zero on every query with an empty stdout. ``is-system-running``
+    is the probe that actually touches the bus: it reports ``offline`` when
+    systemd is not PID 1, while a healthy host answers ``running`` (and a host
+    with a failed unit answers ``degraded``, which is still queryable — so the
+    exit code alone cannot be the signal).
+    """
+    code, stdout, stderr = _run_command(["systemctl", "is-system-running"])
+    if code == 127:
+        return "`systemctl` is not installed"
+
+    state = stdout.strip().lower()
+    if state in {"offline", "unknown"}:
+        return f"systemd reports '{state}' (not running as init here)"
+
+    combined = f"{stderr} {stdout}".lower()
+    for marker in ("not been booted with systemd", "failed to connect to bus"):
+        if marker in combined:
+            return stderr.strip().splitlines()[0] if stderr.strip() else marker
+
+    return None
+
+
 def check_services_running() -> CheckResult:
     """Verify each EAS Station systemd unit is active."""
     out = _empty_result()
+
+    # Establish that systemd is actually reachable before drawing conclusions
+    # from it. Every `is-active` probe below returns an empty state when the
+    # bus is down, which reads as "unknown" — and the per-unit branch reported
+    # that as a hard failure. On any host where systemd cannot be queried (a
+    # container, or a sandboxed web user without bus access) the check failed
+    # every unit regardless of whether the services were running. That is
+    # worse than no check: it buries real failures in a wall of false ones.
+    unavailable = _systemd_unavailable_reason()
+    if unavailable:
+        out["info"].append(f"Cannot verify service state: {unavailable}")
+        return out
 
     code, stdout, _ = _run_command(["systemctl", "is-active", "eas-station.target"])
     target_state = stdout.strip() or "unknown"

@@ -8,6 +8,60 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.128.6] - 2026-08-05 - Test surfaces that report a real verdict
+
+Audit of the test and diagnostic suites exposed in the web UI, checking that
+each one's verdict actually reflects what it measured. Two did not — in
+opposite directions.
+
+### Fixed
+- **The Services diagnostic failed every unit it could not query.**
+  `check_services_running()` runs `systemctl is-active` per unit. When systemd
+  is unreachable, each probe returns an empty state, which the per-unit branch
+  reported as a hard failure — so the Diagnostics page showed all ten services
+  red regardless of whether they were running, burying any real failure among
+  false ones. It now probes reachability once with `systemctl is-system-running`
+  and reports a single informational line instead. Checking only that the
+  `systemctl` binary exists is not sufficient: the binary is present in images
+  where the bus is not, and there it exits non-zero on every query — which is
+  exactly the situation this bug appeared in.
+- **The alert self-test could not fail.** `run_alert_self_test` computed
+  `decode_error_count`, displayed it in its own tile, and then ignored it when
+  setting `success`. Unless the caller opted into `require_match`, the verdict
+  was `True` on every run — a test where every sample failed to decode still
+  rendered a green **PASS**. A decode error means the SAME header could not be
+  recovered from the audio, which is the precise failure this self-test exists
+  to surface. Decode errors and an empty result set now fail the run;
+  `FILTERED` and `SUPPRESSED_DUPLICATE` continue to pass, since those are
+  correct outcomes rather than faults.
+
+### Changed
+- Raised the audio pipeline suite's run budget from 180s to 240s and made the
+  timeout message actionable. The route runs pytest synchronously in the
+  gunicorn worker, which systemd starts with `--timeout 300`, so the ceiling
+  has to stay below that — overrunning gunicorn kills the worker and returns a
+  502 with no results, which is worse than a reported timeout. The suite takes
+  ~35s on a fast x86 host, but on the Raspberry Pi deployment target 180s was
+  close enough to the real runtime for a full run to time out and report
+  FAILED regardless of how the tests did.
+
+### Verified (no change needed)
+- The audio pipeline suite genuinely runs pytest and parses its JUnit XML:
+  189 tests across 21 files, correct per-module attribution, working
+  single-module runs, and path-traversal input rejection.
+- The remaining diagnostic checks are honest — Audio Service, Audio Devices
+  and Icecast all skip with an explicit informational note when their feature
+  is disabled, rather than reporting a failure.
+
+### Tooling
+- New `tests/test_diagnostics_service_check.py` covers the unreachable-bus,
+  missing-binary, healthy-host, uninstalled-unit and `degraded` cases. The
+  `degraded` case matters specifically: `is-system-running` exits non-zero for
+  it, so keying the probe off the exit code would skip per-unit checks on
+  exactly the hosts that have a failed unit worth reporting.
+- Extended `tests/test_alert_self_test_routes.py` with the decode-error,
+  all-forwarded, filtered/duplicate, `require_match` and empty-result verdicts.
+
 ## [2.128.5] - 2026-08-05 - Restore two panels that rendered into nothing
 
 Both panels shipped as scripts that were written defensively and therefore
