@@ -8,6 +8,40 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.128.5] - 2026-08-05 - Restore two panels that rendered into nothing
+
+Both panels shipped as scripts that were written defensively and therefore
+failed silently: each wrote into a container guarded by `if (element)`, and no
+element carried the id. A guarded write to a missing element logs nothing and
+shows nothing — the feature is simply absent.
+
+### Fixed
+- **System Health "Service Details" never appeared.** The refresh script built
+  the full per-service card with `renderSystemdDetails()` and assigned it to
+  `getElementById('systemd-details').innerHTML`, but no element declared that
+  id, so the card was rendered and discarded on every refresh cycle. Added the
+  container as a full-width row under Resource Usage, with a server-rendered
+  first paint (matching the sibling `smart-card` / `dependencies-card`
+  pattern) that the refresh then replaces. Covers all three states the script
+  handles: populated, systemd unavailable (shows the reported reason), and
+  available-but-empty.
+- **The radio receiver's "Service Configuration" summary never appeared.**
+  `showConfigSummary()` runs whenever a service type is picked and populates
+  six fields behind an `if (summary)` guard; none of the seven ids
+  (`configSummary`, `summaryModulation`, `summarySampleRate`,
+  `summaryBandwidth`, `summaryAudio`, `summaryStereo`, `summaryRBDS`) existed.
+  Added the panel to the Add/Edit Receiver modal, hidden until a service type
+  is selected since the script is what reveals it. Sample rate is read from
+  the hardware-populated dropdown rather than the service config, which
+  deliberately omits it.
+
+### Tooling
+- New `tests/test_health_and_radio_panels.py`: asserts every id the two
+  scripts address exists, that the radio panel starts hidden, that no
+  `getElementById()` target in `admin/radio.html` is unbacked, and renders the
+  health page across all three systemd states to check row content, status
+  badge mapping, category labels and the `table-responsive` wrapper.
+
 ## [2.128.4] - 2026-08-05 - Broken URL targets and a shadowed module
 
 A sweep for URL targets that do not resolve — every literal `url_for()` and

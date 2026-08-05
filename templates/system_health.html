@@ -1746,6 +1746,71 @@
                 </div>
             </div>
         </div>
+
+        <!-- Service Details -->
+        {#  renderSystemdDetails() in the refresh script has always built this
+            card, but no container with this id existed, so its output was
+            discarded and the per-service breakdown never appeared. The markup
+            below is the server-rendered first paint; the refresh replaces it.
+            Keep the two in sync — same columns, same badge mapping. #}
+        <div class="row mb-4">
+            <div class="col-12" id="systemd-details">
+                <div class="card health-card">
+                    <div class="card-body">
+                        <h5><i class="fas fa-server section-icon"></i> Service Details</h5>
+                        {% set systemd_detail = systemd or {} %}
+                        {% set detail_services = systemd_detail.services or [] %}
+                        {% if systemd_detail.available and detail_services %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover container-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Service</th>
+                                        <th scope="col">Status</th>
+                                        <th scope="col">State</th>
+                                        <th scope="col">Category</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for service in detail_services %}
+                                    {% set active_state = (service.active_state or '')|lower %}
+                                    {% if active_state == 'active' %}
+                                        {% set state_badge = 'success' %}{% set state_label = 'Active' %}
+                                    {% elif active_state == 'failed' %}
+                                        {% set state_badge = 'danger' %}{% set state_label = 'Failed' %}
+                                    {% elif active_state == 'inactive' %}
+                                        {% set state_badge = 'secondary' %}{% set state_label = 'Inactive' %}
+                                    {% elif active_state == 'activating' %}
+                                        {% set state_badge = 'warning' %}{% set state_label = 'Starting' %}
+                                    {% else %}
+                                        {% set state_badge = 'secondary' %}{% set state_label = active_state|capitalize %}
+                                    {% endif %}
+                                    <tr>
+                                        <td><strong>{{ service.display_name or service.name or 'Unknown' }}</strong></td>
+                                        <td><span class="badge bg-{{ state_badge }} status-badge status-badge-plain">{{ state_label }}</span></td>
+                                        <td><span class="metric-value">{{ service.sub_state or '—' }}</span></td>
+                                        <td><span class="badge bg-info">{{ 'EAS Station™' if service.is_eas_service else 'Dependency' }}</span></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-muted mb-0">
+                            {%- if systemd_detail.available -%}
+                                No systemd services detected.
+                            {%- elif systemd_detail.error -%}
+                                Service details unavailable: {{ systemd_detail.error }}
+                            {%- else -%}
+                                Service details unavailable.
+                            {%- endif -%}
+                        </p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="health-section-head">
             <h2>Hardware Subsystems</h2>
             <span class="rule"></span>
