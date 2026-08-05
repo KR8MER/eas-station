@@ -8,6 +8,57 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.129.1] - 2026-08-05 - System Health and GNSS dashboard fixes
+
+A bug-fix pass over the two monitoring pages. Several of these are cases
+where one page already solved a problem correctly and the other hadn't;
+in each case the better-behaved page set the pattern.
+
+### Fixed
+- **`formatUptime` was declared twice in `system_health.html`.** Both
+  declarations sat at brace depth 0 in the same `<script>`, so the later
+  one silently won and the earlier 24 lines were dead code. The surviving
+  version dropped minutes for any uptime over a day, while the server's
+  first paint uses Python's `format_uptime()` — so a machine up for
+  `1d 10h 17m` rendered that on load and then reformatted itself to
+  `1d 10h` on the first poll. There is now one definition, and it matches
+  the Python formatter.
+- **System Health never refreshed after a hidden tab regained focus.**
+  Polling correctly pauses on `document.hidden`, but nothing resumed it
+  on return, so a backgrounded tab showed arbitrarily stale readings with
+  no cue that they were stale. Added the `visibilitychange` handler the
+  GNSS dashboard already had.
+- **The GNSS dashboard's trends timer ignored `document.hidden`.** Its
+  sibling `fetchOnce()` has guarded on it since the guard was added; the
+  trends re-fetch kept hitting the Redis-backed trends endpoint in
+  background tabs regardless. Guarded, and paired with a refocus re-seed
+  so the charts don't sit on a stale right edge.
+- **A failing GNSS telemetry feed was reported only to the console.**
+  Every card would freeze on its last good values with nothing but a
+  no-longer-pulsing heartbeat dot to indicate the readings were no longer
+  live — too subtle for a page used to confirm timing integrity. Failures
+  now raise a banner stating the values are last-known, not live.
+  Non-2xx responses are treated as failures rather than being parsed as a
+  valid snapshot.
+
+### Accessibility
+- **All 15 `<canvas>` elements on System Health now carry an accessible
+  name** (`role="img"` plus `aria-label`); previously none did, against
+  22 of 23 on the GNSS dashboard. `role="img"` is included because canvas
+  has no implicit ARIA role, and an `aria-label` on a roleless element
+  can be ignored outright.
+
+### Added
+- **A "Full GNSS Dashboard" link on the System Health GPS card.** The
+  only route to the detailed dashboard was the navigation menu. Added to
+  both the server-rendered and JS-rendered copies of the card so it
+  survives a refresh.
+- `tests/test_system_health_gps_ui_fixes.py` — 13 regression tests, each
+  verified to fail against the pre-fix templates. Includes a check that
+  executes the template's `formatUptime` under Node and compares its
+  output against `format_uptime()` across a range of durations, so the
+  two formatters cannot drift apart again.
+
 ## [2.129.0] - 2026-08-05 - Faster VU meters for less CPU
 
 The VU meters were throttled to ~15 fps specifically to keep CPU down. Rather

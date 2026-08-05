@@ -1463,6 +1463,13 @@
         </a>
     </div>
 
+    <!-- Telemetry-feed failure banner.  Without this a failing
+         /admin/api/gps-dashboard/data leaves every card frozen on its
+         last good values, and the only cue is the heartbeat dot no
+         longer pulsing — far too subtle for a page used to confirm
+         timing integrity. -->
+    <div class="alert alert-danger d-none mt-2 mb-0" id="gps-dash-error" role="alert" aria-live="polite"></div>
+
     <!-- ============================================================
          PERSISTENT TOP STATUS STRIP — at-a-glance system health.
          Seven tiles, severity-tinted (green/amber/red/blue), each
@@ -6727,6 +6734,19 @@
         renderNmeaInspector(gps.recent_sentences || []);
     }
 
+    // ── Telemetry-feed error banner.  Both helpers are idempotent so
+    //    they can be called on every poll without churning the DOM.
+    function showFeedError(message) {
+        var el = document.getElementById('gps-dash-error');
+        if (!el) return;
+        if (el.textContent !== message) el.textContent = message;
+        el.classList.remove('d-none');
+    }
+    function hideFeedError() {
+        var el = document.getElementById('gps-dash-error');
+        if (el) el.classList.add('d-none');
+    }
+
     // ── Polling.  Configurable interval; "0" means paused.
     var timer = null;
     function fetchOnce() {
@@ -6736,15 +6756,21 @@
         // refresh so the dashboard never shows stale data when refocused.
         if (typeof document !== 'undefined' && document.hidden) return;
         fetch('/admin/api/gps-dashboard/data', { credentials: 'same-origin' })
-            .then(function (r) { return r.json(); })
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
             .then(function (data) {
                 render(data);
+                hideFeedError();
                 // Pulse the heartbeat dot so the operator can see
                 // that fresh telemetry arrived without any fanfare.
                 flashEl(document.getElementById('gps-live-dot'));
             })
             .catch(function (err) {
                 console.warn('GPS dashboard fetch failed:', err);
+                showFeedError('Unable to refresh GNSS telemetry — the values '
+                    + 'below are the last good readings, not live.');
             });
     }
     function schedule(intervalMs) {
@@ -6893,9 +6919,24 @@
         // end to avoid hammering Redis (or starving the operator of
         // updates).
         setInterval(function () {
+            // Same reasoning as fetchOnce(): a hidden tab can't show the
+            // result, and this endpoint is Redis-backed. The
+            // visibilitychange handler below re-seeds on return.
+            if (typeof document !== 'undefined' && document.hidden) return;
             if (!TS_CURRENT_TIER || TS_CURRENT_TIER === 'raw') return;
             fetchTrends(TS_CURRENT_WINDOW);
         }, Math.min(300_000, Math.max(60_000, (TS_CURRENT_BUCKET_S * 1000) / 3)));
+
+        // Pair the guard above with an immediate re-seed on refocus so
+        // the charts don't sit on a stale right edge after the tab has
+        // been in the background.
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', function () {
+                if (document.hidden) return;
+                if (!TS_CURRENT_TIER || TS_CURRENT_TIER === 'raw') return;
+                fetchTrends(TS_CURRENT_WINDOW);
+            });
+        }
         fetchTrends(TS_CURRENT_WINDOW).then(fetchOnce);
 
         // ============================================================
