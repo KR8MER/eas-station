@@ -8,6 +8,50 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.138.0] - 2026-08-06 - Large-file refactor, phase 2e: NMEA sentence parsing
+
+The first **collaborator extraction** in this effort rather than pure motion.
+Behaviour is unchanged, but unlike 2a–2d the code is deliberately restructured,
+so it was verified by characterization rather than by AST comparison.
+
+### Changed
+- **`GPSManager._handle_sentence` (246 lines, 50 `self` references) became
+  `app_core/gps/nmea.py` (326 lines) plus a 30-line orchestrator.** The seam is
+  *what the sentence says* vs. *what the manager does about it*: `apply_gga` /
+  `apply_rmc` / `apply_gsv` / `apply_gsa` are pure functions over
+  `(fix, msg, state)`, with cross-sentence accumulators in `NMEAParseState` and
+  everything else a sentence implies — satellite-history updates, the 3D-fix
+  holdover anchor, a usable UTC datetime — returned in a `SentenceEffects` for
+  the manager to apply. The system-clock sync policy moved to its own
+  `_queue_time_sync`. `gps_manager.py`: 2893 → **2313** lines.
+- **`_FIX_QUALITY` and `_safe_int` moved to `app_core/gps/nmea.py`**, the NMEA
+  path having been their only consumer. Both are re-exported from
+  `gps_manager` so existing imports keep resolving.
+
+### Added
+- **`tests/test_gps_nmea_sentences.py` (19 tests).** These rules were
+  previously reachable only by constructing a whole `GPSManager`; each is now
+  asserted directly. Coverage includes the two multi-constellation bugs the
+  code exists to prevent — a GLGSV group wiping the GPGSV bucket, and an empty
+  GLGSA clearing the GSA per-cycle union — plus fix-quality mapping, the
+  minimum-satellite status threshold, blank-field handling and per-type
+  sentence counters. Both multi-constellation guards were mutation-checked:
+  reverting the bucketing and the union each failed exactly one test.
+
+### Verification
+- A characterization harness was built **before** the refactor: a 28-sentence
+  multi-GNSS stream (full cycles, multi-constellation GSV groups, several GSAs
+  per cycle, no-fix → 2D → 3D transitions, empty GLGSA, malformed fields,
+  out-of-order GSV group numbers) snapshotting every piece of mutated state
+  after each sentence — fix dict, GSV buckets, GSA accumulator and cycle flag,
+  pending time sync, per-PRN satellite history, 3D-fix anchor. The baseline was
+  confirmed discriminating (28 frames, 28 distinct states), and after the
+  refactor the diff was **0 differing frames of 28** with wall-clock timestamps
+  scrubbed. Full suite: 1992 passed, 67 xfailed, 0 failures.
+- Deferring the effects until after the parse was checked, not assumed: none of
+  `_record_sat_seen`, `_record_sat_used` or `_mark_3d_fix` reads the fix
+  dictionary, so there is no read-after-write ordering hazard.
+
 ## [2.137.0] - 2026-08-06 - Large-file refactor, phase 2d: GPS timing statistics
 
 Continues the effort tracked in

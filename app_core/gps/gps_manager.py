@@ -61,6 +61,7 @@ from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional, Set, Tuple
 
 from . import ubx
+from .nmea import _FIX_QUALITY, NMEAParseState, _safe_int, apply_sentence  # noqa: F401
 from .sysprobe import read_cpu_temp_c, safe_read
 from .timing_stats import (
     compute_allan_deviation,
@@ -105,30 +106,9 @@ REDIS_LAST_3D_KEY = "gps:last_3d_fix_at"
 # configuration notes.  We map the code at face value here; the diagnostic
 # is documented so the dashboard's fix-quality readout isn't mistaken for a
 # fault.
-_FIX_QUALITY = {
-    0: "no_fix",
-    1: "gps_fix",
-    2: "dgps_fix",
-    3: "pps_fix",
-    4: "rtk_fix",
-    5: "float_rtk",
-    6: "estimated",
-    7: "manual",
-    8: "simulation",
-}
-
-
-def _safe_int(val) -> Optional[int]:
-    """Convert a value to int, returning None for empty/None/invalid values."""
-    if val is None:
-        return None
-    s = str(val).strip()
-    if not s:
-        return None
-    try:
-        return int(float(s))
-    except (ValueError, TypeError):
-        return None
+# ``_FIX_QUALITY`` and ``_safe_int`` now live in ``.nmea`` alongside the
+# sentence handlers that were their only consumers. They are imported at the
+# top of this module and re-exported here so existing import paths still work.
 
 
 # How often (seconds) to update the system clock from GPS when use_for_time=True.
@@ -275,15 +255,14 @@ class GPSManager:
         # shared a single buffer, the start of GLGSV (msg_num==1) would wipe
         # the GPGSV satellites we just accumulated, leaving the published
         # satellites_in_view empty — reader thread only, no lock needed.
-        self._gsv_buffer: Dict[str, Dict[int, Dict[str, Any]]] = {}
-        # GSA per-cycle accumulator. Multi-GNSS receivers emit one GSA per
-        # constellation (e.g. $GPGSA, $GLGSA, $GAGSA, or several $GNGSA in a
-        # row). We union active PRNs across all GSA sentences within a single
-        # NMEA cycle so the "used" count reflects the full multi-constellation
-        # solution. The accumulator is reset on the next GGA (which marks the
-        # start of a new cycle) — reader thread only, no lock needed.
-        self._gsa_accumulator: Set[int] = set()
-        self._gsa_cycle_started: bool = False
+        # ...and the GSA per-cycle accumulator. Multi-GNSS receivers emit one
+        # GSA per constellation (e.g. $GPGSA, $GLGSA, $GAGSA, or several $GNGSA
+        # in a row). We union active PRNs across all GSA sentences within a
+        # single NMEA cycle so the "used" count reflects the full
+        # multi-constellation solution. The accumulator is reset on the next
+        # GGA (which marks the start of a new cycle).
+        # Both live in NMEAParseState — reader thread only, no lock needed.
+        self._nmea_state = NMEAParseState()
         # Per-PRN tracking history — keyed by ``"<talker><prn:02d>"`` (e.g.
         # ``"GP05"``).  Populated whenever a satellite shows up in GSV /
         # GSA, used by the dashboard's "Almanac & Ephemeris staleness"
@@ -1501,251 +1480,53 @@ class GPSManager:
         return None
 
     def _handle_sentence(self, msg) -> None:
-        """Update internal fix state from a parsed NMEA sentence."""
+        """Update internal fix state from a parsed NMEA sentence.
+
+        The sentence-to-field mapping lives in ``.nmea``; this method owns the
+        lock, the satellite-history bookkeeping and the clock-sync policy. The
+        effects returned by ``apply_sentence`` are applied after the parse —
+        safe because none of the three handlers below read ``self._fix``.
+        """
         now_iso = datetime.now(timezone.utc).isoformat()
 
         with self._lock:
             self._fix["last_sentence_at"] = now_iso
             self._fix["timestamp"] = now_iso
 
-            sentence_type = msg.sentence_type
+            effects = apply_sentence(
+                self._fix,
+                msg,
+                min_satellites=self._min_satellites,
+                state=self._nmea_state,
+            )
 
-            # Per-type counter (cumulative); the UI computes arrival rates
-            # from poll-to-poll deltas.
-            counts = self._fix.get("sentence_counts") or {}
-            counts[sentence_type] = counts.get(sentence_type, 0) + 1
-            self._fix["sentence_counts"] = counts
-
-            if sentence_type == "GGA":
-                # GGA marks the start of a new NMEA cycle. The next GSA we see
-                # will start a fresh accumulation; we keep the previously
-                # published active_satellite_prns until that GSA arrives so
-                # the UI doesn't briefly flicker to "0 used" on every cycle.
-                self._gsa_cycle_started = False
-
-                # Global Positioning System Fix Data
-                fix_qual = int(msg.gps_qual) if msg.gps_qual else 0
-                has_fix = fix_qual > 0
-                num_sats = int(msg.num_sats) if msg.num_sats else 0
-
-                self._fix["has_fix"] = has_fix
-                self._fix["fix_quality"] = _FIX_QUALITY.get(fix_qual, "unknown")
-                self._fix["satellites"] = num_sats
-                if has_fix and num_sats >= self._min_satellites:
-                    new_status = "fix"
-                elif has_fix:
-                    new_status = "acquiring"
-                else:
-                    # No fix yet — show "acquiring" when we already have satellites
-                    # in view from the previous GSV cycle (typical NMEA order is
-                    # GGA → GSA → GSV, so satellites_in_view reflects last cycle).
-                    sats_tracked = len(self._fix.get("satellites_in_view", []))
-                    new_status = "acquiring" if sats_tracked > 0 else "no_fix"
-                self._fix["status"] = new_status
-
-                if has_fix and msg.latitude and msg.longitude:
-                    self._fix["latitude"] = msg.latitude
-                    self._fix["longitude"] = msg.longitude
-
-                if msg.altitude:
-                    try:
-                        self._fix["altitude_m"] = float(msg.altitude)
-                    except (ValueError, TypeError):
-                        pass
-
-                if msg.horizontal_dil:
-                    try:
-                        self._fix["hdop"] = float(msg.horizontal_dil)
-                    except (ValueError, TypeError):
-                        pass
-
-                if msg.timestamp:
-                    self._fix["gps_utc_time"] = str(msg.timestamp)
-
-                # Geoid separation (height of MSL above WGS-84 ellipsoid).
-                # Useful for users converting our MSL-altitude to ellipsoid
-                # height (or vice versa) without looking up a geoid model.
-                geo_sep = getattr(msg, "geo_sep", None)
-                if geo_sep not in (None, ""):
-                    try:
-                        self._fix["geoid_separation_m"] = float(geo_sep)
-                    except (ValueError, TypeError):
-                        pass
-
-                # DGPS correction age and reference station ID — only emitted
-                # when the receiver is using DGPS/SBAS corrections.
-                dgps_age = getattr(msg, "age_gps_data", None)
-                if dgps_age not in (None, ""):
-                    try:
-                        self._fix["dgps_age_s"] = float(dgps_age)
-                    except (ValueError, TypeError):
-                        pass
-                ref_id = getattr(msg, "ref_station_id", None)
-                if ref_id not in (None, ""):
-                    self._fix["dgps_station_id"] = str(ref_id)
-
-            elif sentence_type == "RMC":
-                # Recommended Minimum Navigation Information
-                if msg.status == "A":  # Active (valid fix)
-                    if msg.latitude and msg.longitude:
-                        self._fix["latitude"] = msg.latitude
-                        self._fix["longitude"] = msg.longitude
-                    if msg.spd_over_grnd:
-                        try:
-                            self._fix["speed_knots"] = float(msg.spd_over_grnd)
-                        except (ValueError, TypeError):
-                            pass
-                    if msg.true_course:
-                        try:
-                            self._fix["track_angle"] = float(msg.true_course)
-                        except (ValueError, TypeError):
-                            pass
-                    # Magnetic variation (degrees + E/W direction).
-                    # Diagnostic-only — useful for users with a magnetic
-                    # compass to derive true-vs-magnetic offset at the
-                    # current location.
-                    mag_var = getattr(msg, "mag_variation", None)
-                    if mag_var not in (None, ""):
-                        try:
-                            self._fix["magnetic_variation"] = float(mag_var)
-                        except (ValueError, TypeError):
-                            pass
-                    mag_var_dir = getattr(msg, "mag_var_dir", None)
-                    if mag_var_dir not in (None, ""):
-                        self._fix["magnetic_variation_dir"] = str(mag_var_dir)
-                    if msg.datestamp and msg.timestamp:
-                        try:
-                            dt = datetime.combine(msg.datestamp, msg.timestamp)
-                            self._fix["gps_utc_time"] = dt.isoformat() + "Z"
-                            # Queue a system-clock sync if enabled and due
-                            if self._use_for_time and self._pending_time_sync is None:
-                                now_mono = time.monotonic()
-                                if (
-                                    not self._time_synced
-                                    or (now_mono - self._last_time_sync_mono) >= _TIME_SYNC_INTERVAL_S
-                                ):
-                                    self._pending_time_sync = dt.replace(
-                                        tzinfo=timezone.utc
-                                    )
-                        except Exception:
-                            self._fix["gps_utc_time"] = str(msg.timestamp)
-
-            elif sentence_type == "GSV":
-                # Satellites in View — parse per-satellite PRN/elevation/azimuth/SNR.
-                # Multi-GNSS receivers send one GSV group per constellation
-                # (e.g. $GPGSV,3,1.. → 3,2 → 3,3 then $GLGSV,1,1..). We must
-                # bucket per-talker so the start of one constellation's group
-                # doesn't wipe another's — and union the buckets when
-                # publishing so satellites_in_view reflects all visible sats.
-                try:
-                    talker = getattr(msg, "talker", None) or "GN"
-                    total_msgs = int(msg.num_messages) if msg.num_messages else 1
-                    msg_num = int(msg.msg_num) if msg.msg_num else 1
-                    if msg_num == 1:
-                        self._gsv_buffer[talker] = {}
-                    bucket = self._gsv_buffer.setdefault(talker, {})
-                    for i in range(1, 5):
-                        prn_raw = getattr(msg, "sv_prn_num_%d" % i, None)
-                        if not prn_raw:
-                            break
-                        try:
-                            prn = int(prn_raw)
-                        except (ValueError, TypeError):
-                            continue
-                        snr_val = _safe_int(getattr(msg, "snr_%d" % i, None))
-                        bucket[prn] = {
-                            "prn": prn,
-                            "constellation": talker,
-                            "elevation": _safe_int(
-                                getattr(msg, "elevation_deg_%d" % i, None)
-                            ),
-                            "azimuth": _safe_int(
-                                getattr(msg, "azimuth_%d" % i, None)
-                            ),
-                            "snr": snr_val,
-                        }
-                        # Per-PRN history — dashboard's "Almanac &
-                        # Ephemeris staleness" panel reads this to show
-                        # how long each satellite has been visible and
-                        # when it was last contributing to a fix.
-                        self._record_sat_seen(talker, prn, snr_val)
-                    if msg_num >= total_msgs:
-                        merged: Dict[int, Dict[str, Any]] = {}
-                        for tbucket in self._gsv_buffer.values():
-                            merged.update(tbucket)
-                        self._fix["satellites_in_view"] = sorted(
-                            merged.values(),
-                            key=lambda s: s["prn"],
-                        )
-                except Exception:
-                    pass
-
-            elif sentence_type == "GSA":
-                # GPS DOP and Active Satellites. Multi-GNSS receivers emit one
-                # GSA per constellation per cycle, so we accumulate PRNs across
-                # all GSAs in the current cycle (reset on each GGA) and publish
-                # the union as active_satellite_prns. Without this, the last
-                # GSA of the cycle silently overwrites the earlier ones — and
-                # if it happens to carry no active sats (e.g. an empty GLGSA
-                # with no GLONASS lock), the UI shows "0 used" even though
-                # GPGSA reported 8+ active sats moments earlier.
-                try:
-                    this_gsa = []
-                    for i in range(1, 13):
-                        prn_raw = getattr(msg, "sv_id%02d" % i, None)
-                        if prn_raw and str(prn_raw).strip():
-                            try:
-                                this_gsa.append(int(prn_raw))
-                            except (ValueError, TypeError):
-                                pass
-                    if not self._gsa_cycle_started:
-                        self._gsa_accumulator = set()
-                        self._gsa_cycle_started = True
-                    self._gsa_accumulator.update(this_gsa)
-                    self._fix["active_satellite_prns"] = sorted(
-                        self._gsa_accumulator
-                    )
-                    # Mark each PRN reported in this GSA as currently
-                    # used-in-fix.  GSA carries the talker that sourced
-                    # it (GPGSA, GLGSA, …) so we can disambiguate in
-                    # the rare case where two constellations re-use the
-                    # same PRN number.
-                    gsa_talker = getattr(msg, "talker", None) or "GN"
-                    for used_prn in this_gsa:
-                        self._record_sat_used(gsa_talker, used_prn)
-                    # Fix mode: 1=no fix, 2=2D, 3=3D
-                    fix_mode_raw = getattr(msg, "mode_fix_type", None)
-                    if fix_mode_raw is not None:
-                        try:
-                            mode_int = int(fix_mode_raw)
-                            self._fix["fix_mode"] = mode_int
-                            # Holdover anchor — the wall-clock instant of
-                            # the most recent 3D fix.  Used by get_status()
-                            # to compute holdover_s once the receiver loses
-                            # lock.  We capture at any 3D fix in the stream
-                            # so even brief reacquisitions reset the timer.
-                            if mode_int == 3:
-                                self._mark_3d_fix()
-                        except (ValueError, TypeError):
-                            pass
-                    # Position dilution of precision
-                    pdop_raw = getattr(msg, "pdop", None)
-                    if pdop_raw:
-                        try:
-                            self._fix["pdop"] = float(pdop_raw)
-                        except (ValueError, TypeError):
-                            pass
-                    vdop_raw = getattr(msg, "vdop", None)
-                    if vdop_raw:
-                        try:
-                            self._fix["vdop"] = float(vdop_raw)
-                        except (ValueError, TypeError):
-                            pass
-                except Exception:
-                    pass
+            for talker, prn, snr_val in effects.sats_seen:
+                self._record_sat_seen(talker, prn, snr_val)
+            for talker, prn in effects.sats_used:
+                self._record_sat_used(talker, prn)
+            if effects.saw_3d_fix:
+                self._mark_3d_fix()
+            if effects.utc_datetime is not None:
+                self._queue_time_sync(effects.utc_datetime)
 
         # Publish to Redis after releasing lock
         self._publish_current_fix()
+
+    def _queue_time_sync(self, gps_dt: datetime) -> None:
+        """Queue a system-clock sync from a GPS-supplied UTC datetime.
+
+        Only when ``use_for_time`` is enabled, nothing is already queued, and
+        either we have never synced or the sync interval has elapsed. Caller
+        holds ``self._lock``.
+        """
+        if not self._use_for_time or self._pending_time_sync is not None:
+            return
+        now_mono = time.monotonic()
+        if (
+            not self._time_synced
+            or (now_mono - self._last_time_sync_mono) >= _TIME_SYNC_INTERVAL_S
+        ):
+            self._pending_time_sync = gps_dt
 
     def _publish_current_fix(self, force: bool = False) -> None:
         """Write the current fix dict to Redis.
