@@ -1,334 +1,124 @@
 {% extends "base.html" %}
 
+{#  Site map / quick access.
+
+    Rendered entirely from the navigation registry
+    (webapp/navigation/registry.py) so it can never drift from the navbar the
+    way the old hand-written copy did. Links the current user cannot access are
+    filtered out before they reach this template. #}
+
 {% block title %}Site Navigation - Quick Access{% endblock %}
+
+{% block extra_css %}
+<style>
+    .sitemap-group-title {
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-secondary, #6c757d);
+        margin: 1rem 0 0.6rem;
+    }
+    .sitemap-group-title:first-child { margin-top: 0; }
+    .sitemap-link {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        padding: 0.7rem 0.9rem;
+        height: 100%;
+        border-radius: var(--radius-md, 8px);
+        border: 1px solid var(--border-color, #dee2e6);
+        background: var(--surface-color, var(--bg-color));
+        color: var(--text-color);
+        text-decoration: none;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+    }
+    .sitemap-link:hover {
+        border-color: var(--primary-color);
+        box-shadow: 0 4px 14px var(--shadow-color, rgba(0,0,0,0.10));
+        transform: translateY(-2px);
+        color: var(--text-color);
+        text-decoration: none;
+    }
+    .sitemap-link i {
+        color: var(--primary-color);
+        font-size: 1rem;
+        width: 1.25rem;
+        text-align: center;
+        margin-top: 0.15rem;
+        flex-shrink: 0;
+    }
+    .sitemap-link-title {
+        font-weight: 600;
+        font-size: 0.9rem;
+        line-height: 1.3;
+    }
+    .sitemap-link-desc {
+        font-size: 0.78rem;
+        color: var(--text-secondary, #6c757d);
+        line-height: 1.35;
+        margin: 0.15rem 0 0;
+    }
+    .sitemap-count {
+        font-size: 0.72rem;
+        font-weight: 600;
+        opacity: 0.85;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 {% set header_icon = 'fas fa-sitemap' %}
 {% set header_title = 'Site Navigation' %}
-{% set header_subtitle = 'Quick access to all features and pages organized by category' %}
+{% set header_subtitle = 'Every page you can reach, grouped exactly as the menus are' %}
 {% include 'components/page_header.html' %}
+
 <div class="container-fluid mt-4">
 
-    <!-- Core Operations -->
-    <div class="card mb-4">
-        <div class="card-header bg-primary text-white">
-            <h5 class="mb-0"><i class="fas fa-gauge-high me-2"></i>Core Operations</h5>
-        </div>
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-3">
-                    <a href="/" class="btn btn-outline-primary w-100 text-start">
-                        <i class="fas fa-gauge-high me-2"></i>Dashboard
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/alerts" class="btn btn-outline-primary w-100 text-start">
-                        <i class="fas fa-bell me-2"></i>Active Alerts
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/stats" class="btn btn-outline-primary w-100 text-start">
-                        <i class="fas fa-chart-bar me-2"></i>Statistics
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/system_health" class="btn btn-outline-primary w-100 text-start">
-                        <i class="fas fa-heartbeat me-2"></i>System Health
-                    </a>
-                </div>
-            </div>
+    <div class="alert alert-info d-flex align-items-center">
+        <i class="fas fa-keyboard me-2"></i>
+        <div>
+            <strong>Tip:</strong> press <kbd>Ctrl</kbd>+<kbd>K</kbd>
+            (<kbd>&#8984;</kbd>+<kbd>K</kbd> on macOS) anywhere in the app to jump
+            straight to any of these pages without opening a menu.
         </div>
     </div>
 
-    <!-- Broadcasting -->
+    {% for section in (nav_sections if nav_sections is defined else []) %}
+        {% if section.groups %}
     <div class="card mb-4">
-        <div class="card-header bg-success text-white">
-            <h5 class="mb-0"><i class="fas fa-tower-broadcast me-2"></i>Broadcasting</h5>
+        <div class="card-header bg-{{ section.accent }} {{ 'text-dark' if section.accent == 'warning' else 'text-white' }}">
+            <h5 class="mb-0 d-flex align-items-center justify-content-between">
+                <span><i class="{{ section.icon }} me-2"></i>{{ section.label }}</span>
+                <span class="sitemap-count">{{ section.item_count }} page{{ '' if section.item_count == 1 else 's' }}</span>
+            </h5>
+            {% if section.description %}
+            <small class="d-block mt-1 opacity-75">{{ section.description }}</small>
+            {% endif %}
         </div>
         <div class="card-body">
+            {% for group in section.groups %}
+            <div class="sitemap-group-title">{{ group.label }}</div>
             <div class="row g-3">
-                <div class="col-md-3">
-                    <a href="{{ url_for('eas.workflow_home') }}" class="btn btn-outline-success w-100 text-start">
-                        <i class="fas fa-broadcast-tower me-2"></i>Broadcast Builder
+                {% for item in group.items %}
+                <div class="col-sm-6 col-lg-4 col-xxl-3">
+                    <a href="{{ item.url }}" class="sitemap-link">
+                        <i class="{{ item.icon }}"></i>
+                        <span>
+                            <span class="sitemap-link-title">{{ item.label }}</span>
+                            {% if item.description %}
+                            <p class="sitemap-link-desc">{{ item.description }}</p>
+                            {% endif %}
+                        </span>
                     </a>
                 </div>
-                <div class="col-md-3">
-                    <a href="{{ url_for('rwt_schedule_page') }}" class="btn btn-outline-success w-100 text-start">
-                        <i class="fas fa-calendar-check me-2"></i>Weekly Tests
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="{{ url_for('audio_history') }}" class="btn btn-outline-success w-100 text-start">
-                        <i class="fas fa-history me-2"></i>Broadcast History
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="{{ url_for('displays_control') }}" class="btn btn-outline-success w-100 text-start">
-                        <i class="fas fa-tv me-2"></i>Display Controls
-                    </a>
-                </div>
+                {% endfor %}
             </div>
-            <div class="row g-3 mt-2">
-                <div class="col-md-3">
-                    <a href="{{ url_for('led_control') }}" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-tv me-2"></i>LED Sign
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="{{ url_for('vfd_control') }}" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-desktop me-2"></i>VFD Display
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="{{ url_for('screens_page') }}" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-display me-2"></i>OLED Screens
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="{{ url_for('displays_preview_page') }}" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-eye me-2"></i>Preview
-                    </a>
-                </div>
-            </div>
+            {% endfor %}
         </div>
     </div>
+        {% endif %}
+    {% endfor %}
 
-    <!-- Monitoring -->
-    <div class="card mb-4">
-        <div class="card-header bg-info text-white">
-            <h5 class="mb-0"><i class="fas fa-satellite-dish me-2"></i>Monitoring</h5>
-        </div>
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-3">
-                    <a href="/audio/received" class="btn btn-outline-info w-100 text-start">
-                        <i class="fas fa-radio me-2"></i>Received Alerts
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/audio-monitor" class="btn btn-outline-info w-100 text-start">
-                        <i class="fas fa-headphones me-2"></i>Live Audio
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/diagnostics" class="btn btn-outline-info w-100 text-start">
-                        <i class="fas fa-stethoscope me-2"></i>Diagnostics
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/logs" class="btn btn-outline-info w-100 text-start">
-                        <i class="fas fa-file-alt me-2"></i>Logs &amp; Reports
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Hardware -->
-    <div class="card mb-4">
-        <div class="card-header bg-warning text-dark">
-            <h5 class="mb-0"><i class="fas fa-microchip me-2"></i>Hardware</h5>
-        </div>
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-3">
-                    <a href="/admin/radio" class="btn btn-outline-warning w-100 text-start">
-                        <i class="fas fa-signal me-2"></i>SDR Receivers
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/admin/audio-sources" class="btn btn-outline-warning w-100 text-start">
-                        <i class="fas fa-stream me-2"></i>Audio Streams
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/admin/audio/archives" class="btn btn-outline-warning w-100 text-start">
-                        <i class="fas fa-archive me-2"></i>Audio Archives
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/admin/gpio" class="btn btn-outline-warning w-100 text-start">
-                        <i class="fas fa-plug me-2"></i>GPIO & Relays
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/admin/hardware" class="btn btn-outline-warning w-100 text-start">
-                        <i class="fas fa-cog me-2"></i>Hardware Settings
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Analytics & Testing -->
-    <div class="card mb-4">
-        <div class="card-header bg-secondary text-white">
-            <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Analytics & Testing</h5>
-        </div>
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-3">
-                    <a href="/analytics" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-chart-line me-2"></i>Analytics Dashboard
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="{{ url_for('audio_tests_dashboard') }}" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-flask me-2"></i>Audio Tests
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="{{ url_for('alert_verification') }}" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-shield-check me-2"></i>Alert Verification
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/logs?type=compliance" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-clipboard-check me-2"></i>FCC Compliance
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Administration -->
-    <div class="card mb-4">
-        <div class="card-header bg-dark text-white">
-            <h5 class="mb-0"><i class="fas fa-sliders me-2"></i>Administration</h5>
-        </div>
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-3">
-                    <a href="/admin" class="btn btn-outline-dark w-100 text-start">
-                        <i class="fas fa-sliders me-2"></i>Admin Dashboard
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/admin/users" class="btn btn-outline-dark w-100 text-start">
-                        <i class="fas fa-users me-2"></i>User Management
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/security/settings" class="btn btn-outline-dark w-100 text-start">
-                        <i class="fas fa-shield-halved me-2"></i>Security Settings
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/admin/backups" class="btn btn-outline-dark w-100 text-start">
-                        <i class="fas fa-database me-2"></i>Backups
-                    </a>
-                </div>
-            </div>
-            <div class="row g-3 mt-2">
-                <div class="col-md-3">
-                    <a href="/admin/network" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-network-wired me-2"></i>Network Settings
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/admin/tailscale" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-shield-alt me-2"></i>Tailscale VPN
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/admin/environment" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-code me-2"></i>Environment
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/logs?type=audit" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-clipboard-list me-2"></i>Audit Log
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/admin/operations" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-cogs me-2"></i>Operations Report
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Configuration -->
-    <div class="card mb-4">
-        <div class="card-header bg-primary">
-            <h5 class="mb-0"><i class="fas fa-cog me-2"></i>Configuration</h5>
-        </div>
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-3">
-                    <a href="/admin/poller" class="btn btn-outline-primary w-100 text-start">
-                        <i class="fas fa-clock me-2"></i>Alert Poller
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/admin/notifications" class="btn btn-outline-primary w-100 text-start">
-                        <i class="fas fa-bell me-2"></i>Notifications
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/admin/tts" class="btn btn-outline-primary w-100 text-start">
-                        <i class="fas fa-volume-up me-2"></i>Text-to-Speech
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/admin/icecast" class="btn btn-outline-primary w-100 text-start">
-                        <i class="fas fa-broadcast-tower me-2"></i>Icecast Streaming
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/settings/stream-profiles" class="btn btn-outline-primary w-100 text-start">
-                        <i class="fas fa-sliders-h me-2"></i>Stream Profiles
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Help & Documentation -->
-    <div class="card mb-4">
-        <div class="card-header bg-light">
-            <h5 class="mb-0"><i class="fas fa-circle-question me-2"></i>Help & Documentation</h5>
-        </div>
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-3">
-                    <a href="{{ url_for('docs_index') }}" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-book me-2"></i>Documentation
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="{{ url_for('help_page') }}" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-life-ring me-2"></i>Help & Support
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="{{ url_for('about_page') }}" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-circle-info me-2"></i>About
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="{{ url_for('support_page') }}" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-heart me-2"></i>Support the Project
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="/help/version" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-code-branch me-2"></i>Version Info
-                    </a>
-                </div>
-                <div class="col-md-3">
-                    <a href="{{ url_for('style_guide_page') }}" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-palette me-2"></i>UI Style Guide
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="alert alert-info">
-        <i class="fas fa-lightbulb me-2"></i>
-        <strong>Tip:</strong> Bookmark this page for quick access to all EAS Station™ features. You can also use the navigation menu at the top of every page.
-    </div>
 </div>
 {% endblock %}

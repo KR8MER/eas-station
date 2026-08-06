@@ -184,6 +184,7 @@ nav:
       - Design Standards: architecture/DESIGN_STANDARDS.md
   - Frontend:
       - User Interface Guide: frontend/USER_INTERFACE_GUIDE.md
+      - Navigation System: frontend/NAVIGATION.md
       - Component Library: frontend/COMPONENT_LIBRARY.md
       - JavaScript API: frontend/JAVASCRIPT_API.md
       - SDR Frequency Validation: frontend/SDR_FREQUENCY_VALIDATION.md

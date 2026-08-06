@@ -1,0 +1,306 @@
+<!-- Navbar behaviour. Split out of navbar.html to keep that template within the
+     size guidance in AGENTS.md; included at the end of the navbar markup.
+       1. Scroll-aware shrink + active-page marker
+       2. System health indicator + WebSocket live indicator
+       3. Stack-light controller (mirrors the physical ANDONT tower light) -->
+
+<!-- Header polish behaviour: scroll-aware shrink (#3) + active-page marker (#2) -->
+<script>
+(function () {
+    'use strict';
+
+    // ── Scroll-aware navbar (#3) ──────────────────────────────────────────
+    // Toggle the existing `.scrolled` style (defined in styles.css) once the
+    // page is scrolled, shrinking the navbar and deepening its shadow.
+    var nav = document.getElementById('mainNavbar');
+    if (nav) {
+        var onScroll = function () {
+            nav.classList.toggle('scrolled', window.scrollY > 10);
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
+    }
+
+    // ── Active-page indicator (#2) ────────────────────────────────────────
+    // Mark the top-level nav item that best matches the current path (either
+    // its own href or one of its dropdown items). Longest-prefix wins so a
+    // deep page lights up its parent menu rather than the "/" Dashboard link.
+    document.addEventListener('DOMContentLoaded', function () {
+        var path = window.location.pathname.replace(/\/+$/, '') || '/';
+        var topLinks = document.querySelectorAll(
+            '.navbar .primary-nav > .nav-item > .nav-link');
+        var best = null, bestLen = -1;
+
+        topLinks.forEach(function (link) {
+            var item = link.closest('.nav-item');
+            var hrefs = [];
+            var own = link.getAttribute('href');
+            if (own && own !== '#') hrefs.push(own);
+            item.querySelectorAll('.dropdown-item[href]').forEach(function (a) {
+                var h = a.getAttribute('href');
+                if (h && h !== '#') hrefs.push(h);
+            });
+
+            hrefs.forEach(function (href) {
+                var p;
+                try {
+                    p = new URL(href, window.location.origin)
+                        .pathname.replace(/\/+$/, '') || '/';
+                } catch (e) { return; }
+                var match = (p === '/')
+                    ? (path === '/')
+                    : (path === p || path.indexOf(p + '/') === 0);
+                if (match && p.length > bestLen) { best = link; bestLen = p.length; }
+            });
+        });
+
+        if (best) {
+            best.classList.add('active');
+            best.setAttribute('aria-current', 'page');
+        }
+    });
+})();
+</script>
+
+<!-- System Health Update Script -->
+<script>
+// Update system health indicator
+function updateSystemHealth(status = 'good', message = 'System OK') {
+    const dot = document.getElementById('system-health-dot');
+    const text = document.getElementById('system-health-text');
+    const indicator = document.getElementById('system-health-indicator');
+
+    if (dot && text && indicator) {
+        // Remove existing classes
+        dot.classList.remove('health-good', 'health-warning', 'health-danger');
+        indicator.classList.remove('status-healthy', 'status-degraded', 'status-critical');
+
+        // Add new status class
+        dot.classList.add(`health-${status}`);
+
+        if (status === 'good') {
+            indicator.classList.add('status-healthy');
+        } else if (status === 'warning') {
+            indicator.classList.add('status-degraded');
+        } else {
+            indicator.classList.add('status-critical');
+        }
+
+        text.textContent = message;
+        indicator.title = message;
+    }
+}
+
+// WebSocket live indicator
+(function() {
+    const indicator = document.getElementById('ws-live-indicator');
+    const dot = document.getElementById('ws-indicator-dot');
+    const text = document.getElementById('ws-indicator-text');
+
+    function setLive() {
+        if (!indicator) return;
+        indicator.className = 'ws-indicator ws-indicator--live';
+        indicator.title = 'Real-time updates active';
+        if (text) text.textContent = 'Live';
+    }
+
+    function setReconnecting() {
+        if (!indicator) return;
+        indicator.className = 'ws-indicator ws-indicator--reconnecting';
+        indicator.title = 'Reconnecting to real-time updates…';
+        if (text) text.textContent = 'Reconnecting…';
+    }
+
+    function setPolling() {
+        if (!indicator) return;
+        indicator.className = 'ws-indicator ws-indicator--polling';
+        indicator.title = 'Using polling fallback (WebSocket unavailable)';
+        if (text) text.textContent = 'Polling';
+    }
+
+    window.addEventListener('eas-websocket-connected', setLive);
+    window.addEventListener('eas-websocket-disconnected', function(e) {
+        const reason = e.detail && e.detail.reason;
+        // transport close is a brief reconnect attempt; io server disconnect means server closed it
+        if (reason === 'io server disconnect' || reason === 'transport error') {
+            setPolling();
+        } else {
+            setReconnecting();
+        }
+    });
+
+    // Show polling state if Socket.IO is not available at all
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+            if (typeof io === 'undefined') {
+                setPolling();
+            }
+        }, 1500);
+    });
+})();
+
+// Check system health on load
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+        fetch('/api/health')
+            .then(response => response.json())
+            .then(data => {
+                updateSystemHealth(data.status, data.message);
+            })
+            .catch(() => {
+                updateSystemHealth('warning', 'Health Check Failed');
+            });
+    }, 1000);
+});
+
+// ── Stack-light controller ────────────────────────────────────────────────────
+// Mirrors services/gpio/alert_indicators.py:resolve_tower_state — the physical
+// ANDONT 7-color USB stack light is a single lamp showing ONE colour at a time,
+// chosen by priority: fault > on-air/alert > test > incoming/degraded > standby.
+// Default state colours match the GPIO guide's tower-light state table:
+//   fault=magenta, test=cyan, alert=red, incoming=yellow, standby=green.
+(function () {
+    'use strict';
+
+    // SAME event codes that are routine tests, not live alerts (TEST_EVENT_CODES).
+    var TEST_EVENT_CODES = { RWT: 1, RMT: 1, NPT: 1, DMO: 1 };
+
+    // All ANDONT colour classes — used to clear before applying the resolved one.
+    var COLOR_CLASSES = ['sl-c-off', 'sl-c-green', 'sl-c-blue', 'sl-c-red',
+                         'sl-c-cyan', 'sl-c-yellow', 'sl-c-magenta', 'sl-c-white'];
+
+    var _healthStatus    = 'unknown';  // 'healthy' | 'degraded' | 'critical' | 'unknown'
+    var _broadcastActive = false;
+    var _eventCode       = '';
+    var _activeAlerts    = 0;          // count of unexpired alerts in system
+
+    // Resolve the single active state → {color, flash, buzzer, label}.
+    function _resolve() {
+        var critical = _healthStatus === 'critical';
+        var degraded = _healthStatus === 'degraded';
+        var healthy  = _healthStatus === 'healthy';
+
+        // 1. Fault — pipeline/Redis unreachable (magenta, flashing, no buzzer)
+        if (critical && !_broadcastActive) {
+            return { color: 'magenta', flash: true, buzzer: false, label: 'System fault' };
+        }
+        // 2. On-air broadcast / live alert
+        if (_broadcastActive) {
+            var code = (_eventCode || '').toUpperCase();
+            if (TEST_EVENT_CODES[code]) {
+                // Routine test — cyan, flashing, never buzzer.
+                return { color: 'cyan', flash: true, buzzer: false,
+                         label: 'On-air — routine test (' + code + ')' };
+            }
+            // Real active alert — red, flashing, buzzer.
+            return { color: 'red', flash: true, buzzer: true,
+                     label: 'On-air — broadcasting' + (code ? ' (' + code + ')' : '') };
+        }
+        // 3. Incoming alert in system → yellow, flashing
+        if (_activeAlerts > 0) {
+            return { color: 'yellow', flash: true, buzzer: false,
+                     label: _activeAlerts + ' active alert' + (_activeAlerts !== 1 ? 's' : '') };
+        }
+        // Degraded health → steady yellow (soft warning)
+        if (degraded) {
+            return { color: 'yellow', flash: false, buzzer: false, label: 'System degraded' };
+        }
+        // 4. Standby — healthy & monitoring → green, steady
+        if (healthy) {
+            return { color: 'green', flash: false, buzzer: false, label: 'Standby — healthy' };
+        }
+        return { color: 'off', flash: false, buzzer: false, label: 'Status unknown' };
+    }
+
+    function _render() {
+        var state = _resolve();
+        var tower = document.getElementById('slTower');
+        if (!tower) return;
+
+        for (var i = 0; i < COLOR_CLASSES.length; i++) {
+            tower.classList.remove(COLOR_CLASSES[i]);
+        }
+        tower.classList.add('sl-c-' + state.color);
+        tower.classList.toggle('sl-flash', !!state.flash && state.color !== 'off');
+        tower.classList.toggle('sl-buzzer-on', !!state.buzzer);
+        tower.dataset.slColor = state.color;
+        tower.title = 'Station status light · ' + state.label;
+        tower.setAttribute('aria-label', 'Station status light: ' + state.label);
+
+        // ── "On Air" navbar glow (#5) — pulse the whole header red whenever a
+        // broadcast is live, mirroring the stack light's on-air state. ──
+        var navEl = document.getElementById('mainNavbar');
+        if (navEl) navEl.classList.toggle('navbar-on-air', !!_broadcastActive);
+    }
+
+    function _applyBroadcastState(data) {
+        _broadcastActive = !!(data && data.active);
+        _eventCode = (data && (data.event_code || data.label)) || '';
+        if (data && typeof data.active_alert_count === 'number') {
+            _activeAlerts = data.active_alert_count;
+        }
+        _render();
+    }
+
+    // Fetch broadcast state immediately so the red light reflects an
+    // in-progress broadcast on the very first paint, instead of waiting
+    // up to one second for the next WebSocket push.  This also covers the
+    // case where the WebSocket fails to establish at all.
+    function _fetchBroadcastStateOnce() {
+        fetch('/api/broadcast/state', { cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) { if (data) _applyBroadcastState(data); })
+            .catch(function () { /* non-fatal */ });
+    }
+
+    // Subscribe to WebSocket events.  websocket.js loads after navbar.html is
+    // parsed, so window.EASWebSocket is not yet defined when this IIFE runs.
+    // Defer until DOMContentLoaded, by which point all <script> tags in
+    // base.html have been evaluated and EASWebSocket is guaranteed to exist.
+    document.addEventListener('DOMContentLoaded', function () {
+        // Always fire one HTTP fetch at load — independent of WebSocket state.
+        _fetchBroadcastStateOnce();
+
+        if (window.EASWebSocket && window.EASWebSocket.subscribe) {
+            // Pass a fallbackFn so the red light keeps tracking the airchain
+            // even when the WebSocket connection drops (polls /api/broadcast/state).
+            window.EASWebSocket.subscribe(
+                'broadcast_state_update',
+                _applyBroadcastState,
+                {
+                    fallbackFn: window.EASWebSocket.createPollingFallback(
+                        '/api/broadcast/state', _applyBroadcastState
+                    ),
+                    fallbackInterval: 1500,
+                }
+            );
+
+            // Subscribe to system health (60 s)
+            window.EASWebSocket.subscribe('system_health_update', function (data) {
+                _healthStatus = (data && data.status) ? data.status : 'unknown';
+                _render();
+            });
+        }
+    });
+
+    // Seed health from the on-load fetch that already fires above
+    var _origUpdate = window.updateSystemHealth;
+    window.updateSystemHealth = function (status, message) {
+        if (_origUpdate) _origUpdate(status, message);
+        // Map health indicator classes to our internal state
+        if (status === 'good' || status === 'healthy') {
+            _healthStatus = 'healthy';
+        } else if (status === 'warning' || status === 'degraded') {
+            _healthStatus = 'degraded';
+        } else if (status === 'danger' || status === 'critical') {
+            _healthStatus = 'critical';
+        } else {
+            _healthStatus = 'unknown';
+        }
+        _render();
+    };
+
+    // Initial render with unknown state — green lights once health resolves
+    _render();
+}());
+</script>

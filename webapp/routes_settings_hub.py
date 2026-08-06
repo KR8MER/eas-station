@@ -19,11 +19,16 @@ Repository: https://github.com/KR8MER/eas-station
 
 from __future__ import annotations
 
-"""Unified Settings hub page - a single page listing all settings sections."""
+"""Unified Settings hub page - a single page listing all settings sections.
+
+The card list comes from the `settings` section of the navigation registry
+(``webapp/navigation/registry.py``), injected into every template as
+``nav_section_map`` and already filtered to the current user's permissions.
+This route therefore has nothing to compute — adding a settings page means
+editing the registry, not this file or the template.
+"""
 
 from flask import Flask, render_template
-
-from app_core.auth.roles import has_permission
 
 
 def register(app: Flask, logger) -> None:
@@ -32,22 +37,4 @@ def register(app: Flask, logger) -> None:
     @app.route("/settings")
     def settings_hub():
         """Render the unified settings hub page."""
-
-        can_view_system_config = has_permission("system.view_config")
-        can_manage_config = has_permission("system.configure")
-        can_view_gpio = has_permission("gpio.view")
-        can_manage_users = has_permission("system.manage_users")
-        can_view_users = has_permission("system.view_users") or can_manage_users
-        can_manage_receivers = has_permission("receivers.view")
-        can_view_logs = has_permission("logs.view")
-
-        return render_template(
-            "settings_hub.html",
-            can_view_system_config=can_view_system_config,
-            can_manage_config=can_manage_config,
-            can_view_gpio=can_view_gpio,
-            can_manage_users=can_manage_users,
-            can_view_users=can_view_users,
-            can_manage_receivers=can_manage_receivers,
-            can_view_logs=can_view_logs,
-        )
+        return render_template("settings_hub.html")

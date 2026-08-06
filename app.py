@@ -1072,6 +1072,13 @@ def _inject_global_vars_wrapper():
     return inject_global_vars(app)
 
 
+@app.context_processor
+def _inject_navigation_wrapper():
+    """Inject the declarative navigation tree (webapp/navigation) into templates."""
+    from webapp.navigation import inject_navigation
+    return inject_navigation()
+
+
 # =============================================================================
 # JINJA2 FILTERS
 # =============================================================================

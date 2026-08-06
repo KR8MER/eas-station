@@ -8,6 +8,76 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.131.0] - 2026-08-06 - One navigation registry, and a menu tree that makes sense
+
+The navbar, the `/settings` hub and the `/navigation` site map were three
+independently hand-maintained copies of the same menu, and they had drifted
+apart. They now all render from a single declarative registry.
+
+### Added
+- **`webapp/navigation/` — the navigation registry.** `registry.py` holds the
+  whole menu tree as data (`NavSection` → `NavGroup` → `NavItem`); `types.py`
+  holds the node types and the permission-filtering logic. A context processor
+  injects the already-filtered tree into every template as `nav_sections`,
+  `nav_section_map` and `nav_user_menu`. **Adding a page is now one `NavItem`**
+  — it appears in the navbar, the settings hub and the site map at once.
+- **`docs/frontend/NAVIGATION.md`** documenting the registry, the node types,
+  the permission model and the rendered-DOM contract that the Ctrl+K command
+  palette depends on.
+- **`tests/test_navigation_registry.py`** (20 tests): every link resolves to a
+  real route, every permission name is a real `PermissionDefinition`, empty
+  groups and sections are pruned, and no hardcoded `href` has crept back into
+  the three navigation templates.
+
+### Changed
+- **All tests and diagnostics are in one place.** Test pages were spread across
+  three dropdowns — Weekly Tests under *Broadcast*, Audio Tests and Alert
+  Verification under *Tools*, SDR Diagnostics under *Monitor* — so checking
+  whether the station was healthy meant opening three menus. They are now one
+  **Diagnostics** section with *Tests & Verification* and *System Health*
+  groups. A test asserts no other section carries a test page.
+- **The *Tools* junk drawer is gone.** Its four unrelated groups
+  (Observability, Analytics, Testing, Data Continuity) split into **Diagnostics**
+  (tests + health) and **Reports** (logs, analytics, security, exports). The
+  former top-level *Logs* menu folded into Reports as its Logs group.
+- **Settings is a direct link, not a two-item dropdown.** It previously held
+  exactly one link (to `/settings`) plus a button opening the Display Units
+  modal. It now goes straight to the hub, which renders the registry's settings
+  groups as cards.
+- **Display Units moved to the user menu.** Unit preferences are per-browser
+  personalization stored in `localStorage`, not station configuration, so they
+  belong next to Security Settings under your username rather than in Settings.
+- **Top-level sections are now** Dashboard · Monitor (what comes in) ·
+  Broadcast (what goes out) · Diagnostics (is it working) · Reports (what
+  happened) · Settings · Help.
+- **`templates/components/navbar.html` went from 1268 lines to ~200.** The
+  scoped CSS and behaviour moved into `navbar_styles.html` and
+  `navbar_scripts.html`, included at the end of it, bringing all three within
+  the size guidance in `AGENTS.md`.
+- `templates/settings_hub.html` and `templates/site_navigation.html` render
+  from the registry instead of hardcoded markup; `webapp/routes_settings_hub.py`
+  no longer computes permission flags, because the registry already has.
+- `AGENTS.md` now directs agents to the registry — the "Changing the Navbar"
+  and "Creating New Pages" sections previously told them to hand-edit the
+  navbar template.
+
+### Fixed
+- **Dead permission gate.** Part of the Tools menu was gated on
+  `analytics_manage`, which is not a member of `PermissionDefinition` and so
+  always evaluated to `False`. The registry only accepts real permission names,
+  and a test enforces it.
+- **Site map / settings hub drift.** The site map linked `/admin/users` while
+  the hub linked `/admin/rbac` — two different pages, each surface aware of only
+  one. Both are now present and distinctly labelled (*User Accounts* and
+  *Roles & Permissions*).
+- **Pages reachable only from the site map.** LED Sign, VFD Display and OLED
+  Screens existed on `/navigation` but appeared in no menu; they are now in
+  Broadcast → Display Outputs.
+- **Stale menu paths in the docs.** `templates/help.html` and
+  `docs/guides/HARDWARE_QUICKSTART.md` pointed at menu locations that no longer
+  existed (`Tools → Analytics → Security Center`, `Tools → GPIO Control`,
+  `Monitor → Radio Monitoring → Received Alerts`).
+
 ## [2.130.0] - 2026-08-05 - Uniform chrome on the monitoring pages
 
 System Health and the GNSS & Time dashboard show the same *kind* of thing — a
