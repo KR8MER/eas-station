@@ -281,8 +281,7 @@
 
                                     <h5 class="mt-3">Where to change them</h5>
                                     <ol>
-                                        <li><strong>Settings → Personalization → Display Units</strong> in the top navigation bar opens the global picker from any page.</li>
-                                        <li><strong>Help → Display Units</strong> exposes the same picker even when not signed in.</li>
+                                        <li><strong>Your username menu (top-right) → Display Units</strong> opens the global picker from any page. Unit choices are personal to your browser, which is why they live in your account menu rather than under Settings.</li>
                                         <li>Each affected page also has an inline <em>Units</em> button:
                                             <ul>
                                                 <li><a href="/admin/gps-dashboard">GPS &amp; Time Dashboard</a> — header, right-hand side.</li>
@@ -375,7 +374,7 @@
                                     <p>Every audit log entry — logins, configuration changes, alerts received, EAS broadcasts, manual activations — is hash-chained to the entry before it and signed with the station's Ed25519 key. Any edit, deletion, or insertion (even directly against the database) is cryptographically detectable.</p>
                                     <ul>
                                         <li>Navigate to <strong>System Logs → Audit</strong> tab (<code>/logs?type=audit</code>).</li>
-                                        <li><strong>To see who changed a setting:</strong> use the <strong>Logs → Configuration Changes</strong> menu shortcut, or pick <strong>Configuration Changes</strong> in the <strong>Audit Action</strong> dropdown on the Audit tab. This shows every <code>config.updated</code> event with the user, timestamp, IP address, and which fields changed. The filter is preserved in CSV/PDF exports.</li>
+                                        <li><strong>To see who changed a setting:</strong> use the <strong>Reports → Logs → Configuration Changes</strong> menu shortcut, or pick <strong>Configuration Changes</strong> in the <strong>Audit Action</strong> dropdown on the Audit tab. This shows every <code>config.updated</code> event with the user, timestamp, IP address, and which fields changed. The filter is preserved in CSV/PDF exports.</li>
                                         <li>In the <strong>Chain Integrity</strong> card, choose a scope (entire chain, or the newest N rows on very large logs) and click <strong>Verify Chain Integrity</strong>.</li>
                                         <li>A <span class="text-success fw-semibold">green result</span> proves the log has not been modified; a <span class="text-danger fw-semibold">red result</span> reports the first bad row and why it failed.</li>
                                         <li>Expand any entry's details to see its <code>entry_hash</code>, <code>prev_hash</code>, and <code>signature</code>.</li>
@@ -383,7 +382,7 @@
                                     </ul>
                                     <div class="alert alert-warning">
                                         <i class="fas fa-key me-2"></i>
-                                        <strong>Ephemeral key warning:</strong> if verification warns that an ephemeral signing key is in use, the station has no persistent key and signatures will not survive a restart. The installer normally provisions one at <code>/opt/eas-station/secrets/audit_signing.key</code>; the path is configurable under <strong>Settings → Environment → Core Settings</strong>.
+                                        <strong>Ephemeral key warning:</strong> if verification warns that an ephemeral signing key is in use, the station has no persistent key and signatures will not survive a restart. The installer normally provisions one at <code>/opt/eas-station/secrets/audit_signing.key</code>; the path is configurable under <strong>Settings → Configuration → Environment Variables</strong>.
                                     </div>
                                     <div class="alert alert-light">
                                         <i class="fas fa-book me-2"></i>
@@ -403,7 +402,7 @@
                             </h2>
                             <div id="securityCenterCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
                                 <div class="accordion-body">
-                                    <p>The <strong>Security Center</strong> (<strong>Tools → Analytics → Security Center</strong>, <code>/security/center</code>) brings four related security views together on one tabbed page:</p>
+                                    <p>The <strong>Security Center</strong> (<strong>Reports → Security → Security Center</strong>, <code>/security/center</code>) brings four related security views together on one tabbed page:</p>
                                     <ul>
                                         <li><strong>Traffic</strong> — the full Traffic Analytics dashboard (described below), embedded inline.</li>
                                         <li><strong>Malicious Logins</strong> — SQL/command-injection login attempts, with per-IP attack statistics and a one-click <strong>Ban</strong> button for any attacking source.</li>
@@ -491,7 +490,7 @@
                                     <h6><i class="fas fa-filter me-2"></i>Filtering the Received Alerts List</h6>
                                     <p>
                                         The <a href="/audio/received"><strong>Received Alerts</strong></a> page
-                                        (<code>Monitor → Radio Monitoring → Received Alerts</code>) supports
+                                        (<code>Monitor → Alerts → Received Alerts</code>) supports
                                         multi-select filtering with include/exclude modes:
                                     </p>
                                     <ul>
@@ -515,7 +514,7 @@
                                         Busy monitoring sources can record thousands of received alerts, and the raw
                                         WAV audio captured with each one is the largest storage cost. The
                                         <strong>Alert Purge</strong> page
-                                        (<a href="/admin/alert-purge/"><code>Admin → Operations → Alert Purge</code></a>,
+                                        (<a href="/admin/alert-purge/"><code>Settings → Admin Dashboard → Alert Purge</code></a>,
                                         also reachable from the <strong>Purge</strong> button on the Received Alerts page)
                                         is the single place to clean this up.
                                     </p>
@@ -542,7 +541,7 @@
                                     <h6><i class="fas fa-map-marked-alt me-2"></i>US County Boundaries (IPAWS SAME Coverage)</h6>
                                     <p>
                                         The <strong>County Boundaries</strong> page
-                                        (<a href="/admin/county_boundaries"><code>Admin → County Boundaries</code></a>)
+                                        (<a href="/admin/county_boundaries"><code>Settings → Data &amp; Storage → County Boundaries</code></a>)
                                         manages the Census TIGER/Line county shapefile used to draw highlighted county
                                         outlines on IPAWS alert coverage maps. IPAWS/NWS alerts carry 6-digit SAME
                                         geocodes (e.g. <code>039137</code>) instead of polygon geometry; EAS Station™
@@ -855,7 +854,7 @@
 
                                     <h6><i class="fas fa-cog me-2"></i>Accessing Weekly Test Automation</h6>
                                     <ol>
-                                        <li>Navigate to <strong>Broadcast → Weekly Test Automation</strong> from the navigation menu</li>
+                                        <li>Navigate to <strong>Diagnostics → Tests &amp; Verification → Weekly Test Schedule</strong> from the navigation menu</li>
                                         <li>Or visit <code>/rwt-schedule</code> directly</li>
                                     </ol>
 

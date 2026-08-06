@@ -40,7 +40,7 @@ Format: `PIN:NAME:ACTIVE_HIGH` (comma-separated)
 
 ### Verify GPIO is Working
 
-1. Go to **Tools → GPIO Control** (if available)
+1. Go to **Settings → Hardware → GPIO & Relays**
 2. Test individual pins
 3. Check **Logs → Hardware Service** for initialization messages
 
@@ -334,7 +334,7 @@ Check with: `i2cdetect -y 1`
 After hardware is configured:
 
 1. **Configure Screens**: Logs & Monitoring → Screen Management
-2. **Test GPIO**: Tools → GPIO Control
+2. **Test GPIO**: Settings → Hardware → GPIO & Relays
 3. **Set Up Alerts**: Configure → Alert Sources
 4. **Monitor Status**: Dashboard → System Health
 

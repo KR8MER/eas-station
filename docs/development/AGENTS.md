@@ -55,9 +55,12 @@ When implementing ANY new feature:
 
 2. **Navigation Access Required**
    - Every new page must be accessible from the navigation menu
-   - Add appropriate menu items in `templates/base.html`
-   - Consider: Which dropdown menu does this belong in? (Operations, Analytics, Admin, Settings)
-   - If creating a new major feature, create a new navigation section
+   - Add a `NavItem` to `webapp/navigation/registry.py` — never to a template
+   - Consider which section it belongs in:
+     **Monitor** (what comes in) · **Broadcast** (what goes out) ·
+     **Diagnostics** (tests & health) · **Reports** (logs, analytics, exports) ·
+     **Settings** (configuration) · **Help**
+   - If creating a new major feature area, add a new `NavSection`
 
 3. **Documentation Requirements**
    - Document the UI access path: "Navigate to Operations → GPIO Control"
@@ -577,7 +580,9 @@ Every time you add a `{% block … %}` to a child template, cross-check the name
 | Element | Active File | Lines | Status |
 |---------|------------|-------|--------|
 | **Base Template** | `templates/base.html` | 163 | ✅ All pages extend this |
-| **Navbar** | `templates/components/navbar.html` | 420+ | ✅ Included in base.html (renamed from navbar_new.html) |
+| **Navbar** | `templates/components/navbar.html` | ~200 | ✅ Included in base.html — renders from the nav registry, no links hardcoded |
+| **Navbar styles/scripts** | `templates/components/navbar_styles.html`, `navbar_scripts.html` | ~350 / ~290 | ✅ Split out of navbar.html; included at the end of it |
+| **Navigation tree** | `webapp/navigation/registry.py` | ~600 | ✅ **Single source of truth** for navbar + `/settings` + `/navigation` |
 | **Page Header** | `templates/components/page_header.html` | ~55 | ✅ Every page's header — set `header_*` vars and include it |
 | **Footer** | Inline in `templates/base.html` | 103-144 | ✅ Inline in base template |
 | **System Banner** | Inline in `templates/base.html` | 72-81 | ✅ Inline in base template |
@@ -588,17 +593,44 @@ Every time you add a `{% block … %}` to a child template, cross-check the name
 | File | Status | Action Required |
 |------|--------|----------------|
 | `templates/base.html` | ✅ Active base template | Extend this for new pages |
-| `templates/components/navbar.html` | ✅ Active navbar | Add navigation links here |
+| `templates/components/navbar.html` | ✅ Active navbar | Renders from the registry — do NOT add links here |
 | `components/footer.html` | ❌ Was deleted (not included) | Already removed |
 | `templates/partials/page_header.html` | ❌ Deleted duplicate | Use `templates/components/page_header.html` instead |
 
 #### When Making Changes to Page Elements
 
-**Changing the Navbar:**
-- ✅ Edit: `templates/components/navbar.html`
-- ❌ Don't edit: `templates/components/navbar_old.html` (deprecated)
+**Changing the Navigation (adding, moving or removing a page):**
+- ✅ Edit: **`webapp/navigation/registry.py`** — this is the only place menu entries live
+- ❌ Don't edit: `templates/components/navbar.html` (renders the registry in a loop)
+- ❌ Don't edit: `templates/settings_hub.html` or `templates/site_navigation.html` (same registry)
 - ❌ Don't edit: `components/navbar.html` (wrong location)
-- **Features**: Bootstrap 5 navbar, dropdowns, health indicator, theme selector (palette icon), quick theme toggle
+
+One `NavItem` in the registry appears in **all three** surfaces at once — the
+navbar dropdown, the `/settings` hub cards and the `/navigation` site map — and
+is filtered by its `permissions` tuple automatically. That is the whole point:
+these three used to be hand-maintained copies and had drifted apart.
+
+```python
+# webapp/navigation/registry.py — inside the right NavGroup
+NavItem(
+    label="My Feature",
+    icon="fas fa-star",
+    href="/my-feature",              # or endpoint="blueprint.view_name"
+    description="One line shown on the hub card and site map.",
+    permissions=(SYSTEM_CONFIGURE,), # any-of; omit for no permission gate
+),
+```
+
+Run `python -m pytest tests/test_navigation_registry.py -q` afterwards — it
+verifies the target route exists, the permission names are real, and that no
+hardcoded links crept back into the templates.
+
+**Changing navbar chrome** (health indicator, clock, stack light, theme
+buttons): edit `templates/components/navbar.html` for markup,
+`navbar_styles.html` for CSS, `navbar_scripts.html` for behaviour.
+
+⚠️ Jinja parses its tags **inside HTML comments too** — never write a literal
+`{%` … `%}` tag in a navbar comment or the template will fail to compile.
 
 **Changing the Footer:**
 - ✅ Edit: `templates/base.html` (lines 103-144)
@@ -625,7 +657,7 @@ Every time you add a `{% block … %}` to a child template, cross-check the name
   {% endset %}
   {% include 'components/page_header.html' %}
   ```
-- ✅ Add navigation link to `templates/components/navbar.html`
+- ✅ Add the page to `webapp/navigation/registry.py` (NOT to the navbar template)
 - ❌ Never create alternate base templates — extend `base.html`
 
 #### Quick Verification
@@ -1980,3 +2012,4 @@ Only suggest deployment/cache fixes if:
 - 2026-03-26: Added "Alembic Migration Rules" section to Database Guidelines after an agent used a filename prefix instead of the actual revision ID as `down_revision`, creating a divergent migration head. New section covers: revision ID vs. filename distinction, finding the current head, migration file checklist, the idempotent template, chain-validation script, and merge-migration syntax. The same head-check script was added to the Pre-Commit Checklist so it runs automatically before every commit. The "Create Database Migration" step in the Configuration System section was also updated with the critical warning.
 - 2026-03-26: Documented the six valid `{% block %}` names defined in `base.html` after an agent wrote `{% block extra_js %}` (non-existent) instead of `{% block scripts %}`, causing Jinja2 to silently discard the entire JavaScript section of the TTS Pronunciation Dictionary page, making all save/edit/delete operations non-functional. Added a block-name reference table and explicit ❌/✅ example to the Template Standards section. Extended the pre-commit template-validation script to also flag unknown block names in child templates (`VALID_BASE_BLOCKS` check), producing a clear error message suggesting `scripts` when `extra_js` is found. Removed a stray duplicate of the validation script that had accumulated below the Pre-Commit Checklist.
 - 2026-08-01: Standardized page headers across the whole UI. `templates/components/page_header.html` is now the single canonical header component — pages set `header_icon`/`header_title`/`header_subtitle`/`header_actions` and include it. Converted 27 templates that hand-rolled `.page-header` markup, deleted the unused duplicate `templates/partials/page_header.html`, promoted the dashboard's header action-button polish into global `styles.css` (frosted icon tile, pill buttons with hover lift), and updated the Style Guide and the "Creating New Pages" checklist to require the component. Hero pages were standardized in the same pass: About/Attribution/Support now use `partials/hero.html` (new optional `hero_extra` slot) instead of hand-rolled `.about-hero` markup, the Admin panel moved to the standard gradient page header, dead `.about-hero*`/`.about-chip*` CSS aliases were removed, and a light-theme contrast bug (global `h1` color overriding the hero's white title) was fixed. A follow-up pass converted all 32 `templates/admin/*` pages plus the Security Center off the third `admin-page-header` system (dead CSS removed from `admin.css`), standardized Help/Privacy/SMS-Policy/Version on the hero component, deleted six orphaned templates, registered the missing `/style-guide` route, and added Yellow-theme dark-ink overrides for the standard page header. A CSS consolidation pass then promoted copy-pasted per-page rules into `styles.css` as shared utilities (`.status-badge` variants, inline `.spinner`, `.snr-s0`–`.snr-s5` scale) and deleted three more unused component templates (`status_badge`, `metric_card`, `stat_card`).
+- 2026-08-06: Replaced hand-written navigation with a declarative registry. `templates/components/navbar.html` (1268 lines, 48 inline `{% if can_view_* %}` permission tests), `templates/settings_hub.html` (393 lines of hardcoded cards) and `templates/site_navigation.html` (334 lines of hardcoded buttons) were three independent copies of the same menu that had drifted — the site map linked `/admin/users` while the hub linked `/admin/rbac`, the site map listed LED/VFD/OLED pages the navbar never showed, and the navbar gated items on `analytics_manage`, a permission that does not exist in `PermissionDefinition` and therefore always evaluated False. All three now render from `webapp/navigation/registry.py` via the `nav_sections` / `nav_user_menu` context processor; permission filtering happens once, in Python, and empty groups/sections are pruned automatically. The IA was reorganized at the same time: test pages that had been scattered across three dropdowns (Weekly Tests under Broadcast, Audio Tests and Alert Verification under Tools, SDR Diagnostics under Monitor) are consolidated into one **Diagnostics** section; the **Tools** junk drawer was split into **Diagnostics** and **Reports**; the two-item **Settings** dropdown became a direct link to the `/settings` hub, with Display Units moved to the user menu where per-browser personalization belongs. `templates/components/navbar_styles.html` and `navbar_scripts.html` were split out to bring the navbar template back under the size guidance. Regression tests live in `tests/test_navigation_registry.py` — they assert every link resolves to a real route, every permission name is real, and that hardcoded `href`s have not crept back into the three templates. **When adding a page, edit the registry, never the templates.**
