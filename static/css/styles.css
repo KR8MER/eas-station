@@ -5894,11 +5894,14 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
         height: 52px;
     }
 
+    /* No negative horizontal margin here. The standard header is normally a
+       direct child of the unpadded .page-shell, so a -0.125rem bleed makes it
+       wider than the viewport and scrolls the whole document sideways. The
+       .page-header-gradient variant never had one, which is why only pages on
+       the standard header overflowed. */
     .page-header {
         padding: 1.25rem 1rem;
         margin-bottom: 1.25rem;
-        margin-left: -0.125rem;
-        margin-right: -0.125rem;
         border-radius: var(--radius-lg);
     }
 

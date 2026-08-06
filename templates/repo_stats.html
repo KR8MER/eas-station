@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Repository Statistics - EAS Station™{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<style>
+    .repo-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem 1.5rem;
+        align-items: center;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .repo-chart {
+        position: relative;
+        height: 340px;
+    }
+
+    .repo-chart-tall {
+        height: 460px;
+    }
+
+    .repo-lang-bar {
+        background: var(--border-color);
+        border-radius: 4px;
+        height: 8px;
+        overflow: hidden;
+        min-width: 80px;
+    }
+
+    .repo-lang-bar > span {
+        display: block;
+        height: 100%;
+        border-radius: 4px;
+        background: linear-gradient(90deg, var(--chart-primary-start), var(--chart-primary-end));
+    }
+
+    @media (max-width: 767.98px) {
+        .repo-chart { height: 280px; }
+        .repo-chart-tall { height: 380px; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include 'repo_stats/_content.html' %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='vendor/chartjs/chart.min.js') }}"></script>
+{% include 'repo_stats/_scripts.html' %}
+{% endblock %}

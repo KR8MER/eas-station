@@ -15,7 +15,6 @@
 | `validate_imports.py` | Check all imports load correctly | `python3 scripts/validate_imports.py` |
 | `zone_derive_helper.py` | Derive FIPS/SAME zone codes | `python3 scripts/zone_derive_helper.py` |
 | `fips_lookup_helper.py` | Look up FIPS county codes | `python3 scripts/fips_lookup_helper.py` |
-| `generate_repo_stats.py` | Generate repository statistics page | `python3 scripts/generate_repo_stats.py` |
 | `setup_smart_monitoring.sh` | Configure S.M.A.R.T. disk monitoring | `sudo bash scripts/setup_smart_monitoring.sh` |
 | `setup_postal.sh` | Set up Postfix local mail relay | `sudo bash scripts/setup_postal.sh` |
 | `restart_services.sh` | Restart all EAS Station™ services | `sudo bash scripts/restart_services.sh` |

@@ -1,0 +1,290 @@
+{# Repository Statistics — page body. Data comes from app_utils/repo_stats.py. #}
+{% set project = stats.buckets.project %}
+{% set docs = stats.buckets.docs %}
+{% set vendored = stats.buckets.vendored %}
+{% set components = stats.components %}
+
+{% set header_icon = 'fas fa-chart-pie' %}
+{% set header_title = 'Repository Statistics' %}
+{% set header_subtitle = 'Live analysis of this checkout — first-party code counted separately from vendored third-party assets' %}
+{% set header_actions %}
+    <a href="/repo-stats?refresh=1" class="btn btn-outline-light">
+        <i class="fas fa-rotate me-1"></i>Recalculate
+    </a>
+    {# The JSON endpoint sits behind the deny-by-default API gate, so only
+       offer it to a signed-in user — an anonymous visitor would just get 401. #}
+    {% if current_user is defined and current_user and current_user.is_authenticated %}
+    <a href="/api/repo-stats" class="btn btn-outline-light">
+        <i class="fas fa-code me-1"></i>JSON
+    </a>
+    {% endif %}
+    <a href="/docs" class="btn btn-outline-light">
+        <i class="fas fa-book me-1"></i>Documentation
+    </a>
+{% endset %}
+{% include 'components/page_header.html' %}
+
+<div class="container-fluid mt-3">
+
+    <div class="repo-meta">
+        <span><i class="far fa-clock me-1"></i>Calculated {{ stats.generated_at }}</span>
+        <span>
+            <i class="fas fa-folder-tree me-1"></i>
+            {% if stats.file_source == 'git' %}
+                Tracked files from <code>git ls-files</code>
+            {% else %}
+                Filesystem walk (git unavailable)
+            {% endif %}
+        </span>
+        <span><i class="fas fa-stopwatch me-1"></i>{{ stats.duration_ms }} ms</span>
+        <span><i class="fas fa-clock-rotate-left me-1"></i>Cached up to 10 min</span>
+    </div>
+
+    <!-- First-party project totals -->
+    <section class="mb-4">
+        <div class="eas-section-head">
+            <span class="eas-section-icon ico-primary"><i class="fas fa-code"></i></span>
+            <div>
+                <h2 class="eas-section-title">First-Party Code</h2>
+                <p class="eas-section-sub mb-0">Excludes vendored libraries and documentation.</p>
+            </div>
+        </div>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number">{{ '{:,}'.format(project.files) }}</div>
+                <div class="stat-label">Source Files</div>
+            </div>
+            <div class="stat-card stat-card-info">
+                <div class="stat-number">{{ '{:,}'.format(project.code) }}</div>
+                <div class="stat-label">Lines of Code</div>
+            </div>
+            <div class="stat-card stat-card-purple">
+                <div class="stat-number">{{ '{:,}'.format(project.comments) }}</div>
+                <div class="stat-label">Comment Lines</div>
+            </div>
+            <div class="stat-card stat-card-success">
+                <div class="stat-number">{{ '{:,}'.format(stats.routes.total) }}</div>
+                <div class="stat-label">Registered Routes</div>
+            </div>
+            <div class="stat-card stat-card-warning">
+                <div class="stat-number">{{ '{:,}'.format(components.templates) }}</div>
+                <div class="stat-label">Templates</div>
+            </div>
+            <div class="stat-card stat-card-danger">
+                <div class="stat-number">{{ '{:,}'.format(components.tests) }}</div>
+                <div class="stat-label">Test Modules</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- What is and is not counted -->
+    <section class="mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="h5 mb-0"><i class="fas fa-scale-balanced me-2"></i>What Gets Counted</h3>
+            </div>
+            <div class="card-body">
+                <p class="text-secondary">
+                    Every tracked file lands in exactly one bucket. Only <strong>first-party</strong>
+                    figures appear in the headline tiles above — vendored third-party code is reported
+                    here rather than silently inflating the totals.
+                </p>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Bucket</th>
+                                <th>What it holds</th>
+                                <th class="text-end">Files</th>
+                                <th class="text-end">Total Lines</th>
+                                <th class="text-end d-none d-sm-table-cell">Code</th>
+                                <th class="text-end d-none d-md-table-cell">Comments</th>
+                                <th class="text-end d-none d-md-table-cell">Blank</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="status-badge success">First-party</span></td>
+                                <td class="text-break-anywhere">Python, templates, JS, CSS, shell, SQL, systemd units</td>
+                                <td class="text-end">{{ '{:,}'.format(project.files) }}</td>
+                                <td class="text-end">{{ '{:,}'.format(project.total) }}</td>
+                                <td class="text-end d-none d-sm-table-cell">{{ '{:,}'.format(project.code) }}</td>
+                                <td class="text-end d-none d-md-table-cell">{{ '{:,}'.format(project.comments) }}</td>
+                                <td class="text-end d-none d-md-table-cell">{{ '{:,}'.format(project.blank) }}</td>
+                            </tr>
+                            <tr>
+                                <td><span class="status-badge info">Documentation</span></td>
+                                <td class="text-break-anywhere">Markdown and plain-text files</td>
+                                <td class="text-end">{{ '{:,}'.format(docs.files) }}</td>
+                                <td class="text-end">{{ '{:,}'.format(docs.total) }}</td>
+                                <td class="text-end d-none d-sm-table-cell">{{ '{:,}'.format(docs.code) }}</td>
+                                <td class="text-end d-none d-md-table-cell">{{ '{:,}'.format(docs.comments) }}</td>
+                                <td class="text-end d-none d-md-table-cell">{{ '{:,}'.format(docs.blank) }}</td>
+                            </tr>
+                            <tr>
+                                <td><span class="status-badge secondary">Vendored</span></td>
+                                <td class="text-break-anywhere"><code>static/vendor/</code>, <code>node_modules/</code>, minified bundles</td>
+                                <td class="text-end">{{ '{:,}'.format(vendored.files) }}</td>
+                                <td class="text-end">{{ '{:,}'.format(vendored.total) }}</td>
+                                <td class="text-end d-none d-sm-table-cell">{{ '{:,}'.format(vendored.code) }}</td>
+                                <td class="text-end d-none d-md-table-cell">{{ '{:,}'.format(vendored.comments) }}</td>
+                                <td class="text-end d-none d-md-table-cell">{{ '{:,}'.format(vendored.blank) }}</td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr class="fw-bold">
+                                <td colspan="2">All tracked files</td>
+                                <td class="text-end">{{ '{:,}'.format(stats.total_files) }}</td>
+                                <td class="text-end">{{ '{:,}'.format(project.total + docs.total + vendored.total) }}</td>
+                                <td class="text-end d-none d-sm-table-cell">&mdash;</td>
+                                <td class="text-end d-none d-md-table-cell">&mdash;</td>
+                                <td class="text-end d-none d-md-table-cell">&mdash;</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="row g-3 mb-4">
+        <div class="col-lg-5">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h3 class="h5 mb-0"><i class="fas fa-chart-pie me-2"></i>Code Composition</h3>
+                </div>
+                <div class="card-body">
+                    <div class="repo-chart"><canvas id="codeCompositionChart"></canvas></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h3 class="h5 mb-0"><i class="fas fa-language me-2"></i>Lines of Code by Language</h3>
+                </div>
+                <div class="card-body">
+                    <div class="repo-chart"><canvas id="linesByLanguageChart"></canvas></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Language detail -->
+    <section class="mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="h5 mb-0"><i class="fas fa-table me-2"></i>Language Breakdown</h3>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Language</th>
+                                <th class="text-end">Files</th>
+                                <th class="text-end">Total</th>
+                                <th class="text-end">Code</th>
+                                <th class="text-end d-none d-sm-table-cell">Comments</th>
+                                <th class="d-none d-md-table-cell">Share of Code</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for lang in project.languages %}
+                            <tr>
+                                <td class="text-break-anywhere"><strong>{{ lang.name }}</strong></td>
+                                <td class="text-end">{{ '{:,}'.format(lang.files) }}</td>
+                                <td class="text-end">{{ '{:,}'.format(lang.total) }}</td>
+                                <td class="text-end">{{ '{:,}'.format(lang.code) }}</td>
+                                <td class="text-end d-none d-sm-table-cell">{{ '{:,}'.format(lang.comments) }}</td>
+                                {% set share = (lang.code / project.code * 100) if project.code else 0 %}
+                                <td class="d-none d-md-table-cell">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="repo-lang-bar flex-grow-1">
+                                            <span style="width: {{ '%.1f'|format(share) }}%;"></span>
+                                        </div>
+                                        <small class="text-secondary">{{ '%.1f'|format(share) }}%</small>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="6" class="text-center text-secondary">No source files found.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Routes -->
+    <section class="mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h3 class="h5 mb-0"><i class="fas fa-route me-2"></i>Routes by Module</h3>
+                <span class="status-badge status-badge-plain {{ 'success' if stats.routes.source == 'url_map' else 'warning' }}">
+                    {% if stats.routes.source == 'url_map' %}
+                        Live URL map
+                    {% else %}
+                        Source scan (app not loaded)
+                    {% endif %}
+                </span>
+            </div>
+            <div class="card-body">
+                <p class="text-secondary">
+                    {{ '{:,}'.format(stats.routes.total) }} routes registered
+                    {%- if stats.routes.source == 'url_map' %}, read from the running application's URL map
+                    (the authoritative list, blueprint-registered routes included){% endif %}.
+                    Showing the {{ stats.routes.by_module[:15] | length }} busiest modules.
+                </p>
+                <div class="repo-chart repo-chart-tall"><canvas id="routesByModuleChart"></canvas></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Component inventory -->
+    <section class="mb-4">
+        <div class="eas-section-head">
+            <span class="eas-section-icon ico-primary"><i class="fas fa-sitemap"></i></span>
+            <div>
+                <h2 class="eas-section-title">Component Inventory</h2>
+                <p class="eas-section-sub mb-0">Structural pieces of the application.</p>
+            </div>
+        </div>
+        <div class="stats-grid">
+            <div class="stat-card stat-card-info">
+                <div class="stat-number">{{ '{:,}'.format(components.blueprints) }}</div>
+                <div class="stat-label">Flask Blueprints</div>
+            </div>
+            <div class="stat-card stat-card-purple">
+                <div class="stat-number">{{ '{:,}'.format(components.models) }}</div>
+                <div class="stat-label">Database Models</div>
+            </div>
+            <div class="stat-card stat-card-success">
+                <div class="stat-number">{{ '{:,}'.format(components.migrations) }}</div>
+                <div class="stat-label">Alembic Migrations</div>
+            </div>
+            <div class="stat-card stat-card-warning">
+                <div class="stat-number">{{ '{:,}'.format(components.systemd_units) }}</div>
+                <div class="stat-label">systemd Units</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ '{:,}'.format(components.scripts) }}</div>
+                <div class="stat-label">Operator Scripts</div>
+            </div>
+            <div class="stat-card stat-card-danger">
+                <div class="stat-number">{{ '{:,}'.format(stats.directories) }}</div>
+                <div class="stat-label">Directories</div>
+            </div>
+        </div>
+    </section>
+
+</div>
+
+<script id="repoStatsData" type="application/json">
+{{ {
+    'composition': {'code': project.code, 'comments': project.comments, 'blank': project.blank},
+    'languages': project.languages[:10],
+    'routes': stats.routes.by_module[:15]
+} | tojson }}
+</script>

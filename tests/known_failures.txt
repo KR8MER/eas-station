@@ -120,9 +120,6 @@ tests/test_radio_drivers.py::test_external_lna_disables_agc_and_biases_gain_down
 # tests/test_radio_manager.py (1) — Needs SDR hardware or a live radio manager.
 tests/test_radio_manager.py::test_receiver_config_preserves_auto_start_flag
 
-# tests/test_repo_statistics.py (1) — Asserts on repository statistics that drift with the working tree.
-tests/test_repo_statistics.py::test_workflow_file
-
 # tests/test_stream_auth.py (2) — Needs an outbound stream endpoint to authenticate against.
 tests/test_stream_auth.py::test_restart_skipped_when_auth_fatal
 tests/test_stream_auth.py::test_stderr_pump_marks_403_fatal
