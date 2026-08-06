@@ -79,7 +79,7 @@ def test_add_pin_uses_null_backend_when_hardware_unavailable(monkeypatch):
     controller._gpiozero_available = False
 
     monkeypatch.setattr(
-        gpio,
+        gpio.controller,
         "_create_gpio_backend",
         lambda exclude=None: gpio._NullGPIOBackend(),
     )
@@ -94,7 +94,7 @@ def _null_controller(monkeypatch):
     controller = GPIOController()
     controller._gpiozero_available = False
     monkeypatch.setattr(
-        gpio,
+        gpio.controller,
         "_create_gpio_backend",
         lambda exclude=None: gpio._NullGPIOBackend(),
     )
@@ -159,8 +159,8 @@ def test_load_gpio_pin_configs_from_database(monkeypatch):
         "25": {"name": "Backup Relay", "active_high": False, "hold_seconds": 3, "watchdog_seconds": 180},
     }
 
-    monkeypatch.setattr(gpio, "_GPIO_SETTINGS_AVAILABLE", True)
-    monkeypatch.setattr(gpio, "get_gpio_settings", lambda: {"pin_map": pin_map, "behavior_matrix": {}})
+    monkeypatch.setattr(gpio.config_loaders, "_GPIO_SETTINGS_AVAILABLE", True)
+    monkeypatch.setattr(gpio.config_loaders, "get_gpio_settings", lambda: {"pin_map": pin_map, "behavior_matrix": {}})
 
     configs = load_gpio_pin_configs_from_db()
 
@@ -198,8 +198,8 @@ def test_reserved_oled_pins_rejected(monkeypatch, caplog):
         "14": {"name": "Serial", "active_high": True, "hold_seconds": 1, "watchdog_seconds": 60},
     }
 
-    monkeypatch.setattr(gpio, "_GPIO_SETTINGS_AVAILABLE", True)
-    monkeypatch.setattr(gpio, "get_gpio_settings", lambda: {"pin_map": pin_map, "behavior_matrix": {}})
+    monkeypatch.setattr(gpio.config_loaders, "_GPIO_SETTINGS_AVAILABLE", True)
+    monkeypatch.setattr(gpio.config_loaders, "get_gpio_settings", lambda: {"pin_map": pin_map, "behavior_matrix": {}})
 
     test_logger = logging.getLogger("gpio-test")
     with caplog.at_level(logging.ERROR, logger="gpio-test"):
@@ -218,8 +218,8 @@ def test_load_gpio_behavior_matrix_from_database(monkeypatch):
         "bad": ["unknown"],
     }
 
-    monkeypatch.setattr(gpio, "_GPIO_SETTINGS_AVAILABLE", True)
-    monkeypatch.setattr(gpio, "get_gpio_settings", lambda: {"pin_map": {}, "behavior_matrix": behavior_matrix})
+    monkeypatch.setattr(gpio.config_loaders, "_GPIO_SETTINGS_AVAILABLE", True)
+    monkeypatch.setattr(gpio.config_loaders, "get_gpio_settings", lambda: {"pin_map": {}, "behavior_matrix": behavior_matrix})
 
     matrix = load_gpio_behavior_matrix_from_db()
 
@@ -274,7 +274,7 @@ def test_gpio_state_includes_output_verification(monkeypatch):
     controller = GPIOController()
     controller._gpiozero_available = False
     monkeypatch.setattr(
-        gpio,
+        gpio.controller,
         "_create_gpio_backend",
         lambda exclude=None: gpio._NullGPIOBackend(),
     )
@@ -602,14 +602,14 @@ def test_null_neopixel_strip_tracks_pixel_values():
 
 def test_make_neo_color_without_rpi_ws281x(monkeypatch):
     """_make_neo_color should pack RGB correctly even without the real library."""
-    monkeypatch.setattr(gpio, "NeopixelColor", None)
+    monkeypatch.setattr(gpio.neopixel, "NeopixelColor", None)
     packed = _make_neo_color(255, 128, 0)
     assert packed == (255 << 16) | (128 << 8) | 0
 
 
 def test_neopixel_controller_starts_in_null_mode(monkeypatch):
     """NeopixelController should start cleanly when rpi_ws281x is unavailable."""
-    monkeypatch.setattr(gpio, "_NEOPIXEL_LIB_AVAILABLE", False)
+    monkeypatch.setattr(gpio.neopixel, "_NEOPIXEL_LIB_AVAILABLE", False)
 
     config = NeopixelConfig(gpio_pin=18, num_pixels=3, brightness=64)
     ctrl = NeopixelController(config)
@@ -621,7 +621,7 @@ def test_neopixel_controller_starts_in_null_mode(monkeypatch):
 
 def test_neopixel_controller_set_color(monkeypatch):
     """set_color should push the colour to every pixel."""
-    monkeypatch.setattr(gpio, "_NEOPIXEL_LIB_AVAILABLE", False)
+    monkeypatch.setattr(gpio.neopixel, "_NEOPIXEL_LIB_AVAILABLE", False)
 
     config = NeopixelConfig(gpio_pin=18, num_pixels=4, brightness=128)
     ctrl = NeopixelController(config)
@@ -634,7 +634,7 @@ def test_neopixel_controller_set_color(monkeypatch):
 
 def test_neopixel_controller_standby_and_off(monkeypatch):
     """set_standby and off should use the configured standby colour and black."""
-    monkeypatch.setattr(gpio, "_NEOPIXEL_LIB_AVAILABLE", False)
+    monkeypatch.setattr(gpio.neopixel, "_NEOPIXEL_LIB_AVAILABLE", False)
 
     config = NeopixelConfig(
         gpio_pin=18, num_pixels=2, brightness=128, standby_color=(0, 5, 0)
@@ -652,7 +652,7 @@ def test_neopixel_controller_standby_and_off(monkeypatch):
 
 def test_neopixel_controller_start_and_end_alert(monkeypatch):
     """start_alert should show the alert colour; end_alert restores standby."""
-    monkeypatch.setattr(gpio, "_NEOPIXEL_LIB_AVAILABLE", False)
+    monkeypatch.setattr(gpio.neopixel, "_NEOPIXEL_LIB_AVAILABLE", False)
 
     config = NeopixelConfig(
         gpio_pin=18,
@@ -678,7 +678,7 @@ def test_neopixel_controller_flash_and_stop(monkeypatch):
     """Flash pattern should toggle the strip; stop_flash cleans up the thread."""
     import time
 
-    monkeypatch.setattr(gpio, "_NEOPIXEL_LIB_AVAILABLE", False)
+    monkeypatch.setattr(gpio.neopixel, "_NEOPIXEL_LIB_AVAILABLE", False)
 
     config = NeopixelConfig(
         gpio_pin=18,
@@ -704,7 +704,7 @@ def test_neopixel_controller_flash_and_stop(monkeypatch):
 
 def test_neopixel_controller_cleanup(monkeypatch):
     """cleanup should stop flash and turn the strip off."""
-    monkeypatch.setattr(gpio, "_NEOPIXEL_LIB_AVAILABLE", False)
+    monkeypatch.setattr(gpio.neopixel, "_NEOPIXEL_LIB_AVAILABLE", False)
 
     config = NeopixelConfig(gpio_pin=18, num_pixels=2, brightness=128)
     ctrl = NeopixelController(config)
@@ -720,7 +720,7 @@ def test_neopixel_controller_cleanup(monkeypatch):
 
 def test_neopixel_controller_get_status(monkeypatch):
     """get_status should return a dict with all expected keys."""
-    monkeypatch.setattr(gpio, "_NEOPIXEL_LIB_AVAILABLE", False)
+    monkeypatch.setattr(gpio.neopixel, "_NEOPIXEL_LIB_AVAILABLE", False)
 
     config = NeopixelConfig(
         gpio_pin=18,
@@ -744,7 +744,7 @@ def test_neopixel_controller_get_status(monkeypatch):
 
 def test_load_neopixel_config_disabled(monkeypatch):
     """load_neopixel_config_from_db should return None when disabled."""
-    monkeypatch.setattr(gpio, "_GPIO_SETTINGS_AVAILABLE", True)
+    monkeypatch.setattr(gpio.config_loaders, "_GPIO_SETTINGS_AVAILABLE", True)
 
     fake_settings = {
         "enabled": False,
@@ -772,7 +772,7 @@ def test_load_neopixel_config_disabled(monkeypatch):
 
 def test_load_neopixel_config_enabled(monkeypatch):
     """load_neopixel_config_from_db should return NeopixelConfig when enabled."""
-    monkeypatch.setattr(gpio, "_GPIO_SETTINGS_AVAILABLE", True)
+    monkeypatch.setattr(gpio.config_loaders, "_GPIO_SETTINGS_AVAILABLE", True)
 
     fake_settings = {
         "enabled": True,
@@ -966,7 +966,7 @@ def test_tower_light_cleanup_closes_serial():
 
 def test_load_tower_light_config_disabled(monkeypatch):
     """load_tower_light_config_from_db should return None when disabled."""
-    monkeypatch.setattr(gpio, "_GPIO_SETTINGS_AVAILABLE", True)
+    monkeypatch.setattr(gpio.config_loaders, "_GPIO_SETTINGS_AVAILABLE", True)
 
     fake_settings = {
         "enabled": False,
@@ -990,7 +990,7 @@ def test_load_tower_light_config_disabled(monkeypatch):
 
 def test_load_tower_light_config_enabled(monkeypatch):
     """load_tower_light_config_from_db should return TowerLightConfig when enabled."""
-    monkeypatch.setattr(gpio, "_GPIO_SETTINGS_AVAILABLE", True)
+    monkeypatch.setattr(gpio.config_loaders, "_GPIO_SETTINGS_AVAILABLE", True)
 
     fake_settings = {
         "enabled": True,
@@ -1122,7 +1122,7 @@ def test_adafruit_custom_standby_segment():
 
 def test_load_tower_light_config_andont_colors(monkeypatch):
     """Protocol and state colours load from settings with invalid values clamped."""
-    monkeypatch.setattr(gpio, "_GPIO_SETTINGS_AVAILABLE", True)
+    monkeypatch.setattr(gpio.config_loaders, "_GPIO_SETTINGS_AVAILABLE", True)
 
     fake_settings = {
         "enabled": True,

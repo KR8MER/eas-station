@@ -59,9 +59,9 @@ def test_gpio_behavior_matrix_database_save(monkeypatch):
     assert "22" in parsed
 
     # Mock database settings to return the serialized matrix
-    monkeypatch.setattr(gpio, "_GPIO_SETTINGS_AVAILABLE", True)
+    monkeypatch.setattr(gpio.config_loaders, "_GPIO_SETTINGS_AVAILABLE", True)
     monkeypatch.setattr(
-        gpio,
+        gpio.config_loaders,
         "get_gpio_settings",
         lambda: {"pin_map": {}, "behavior_matrix": parsed},
     )
@@ -85,9 +85,9 @@ def test_gpio_behavior_matrix_empty_handling(monkeypatch):
     from app_utils.gpio import load_gpio_behavior_matrix_from_db
 
     # Test with empty dict from database
-    monkeypatch.setattr(gpio, "_GPIO_SETTINGS_AVAILABLE", True)
+    monkeypatch.setattr(gpio.config_loaders, "_GPIO_SETTINGS_AVAILABLE", True)
     monkeypatch.setattr(
-        gpio,
+        gpio.config_loaders,
         "get_gpio_settings",
         lambda: {"pin_map": {}, "behavior_matrix": {}},
     )
@@ -96,7 +96,7 @@ def test_gpio_behavior_matrix_empty_handling(monkeypatch):
 
     # Test with None behavior_matrix
     monkeypatch.setattr(
-        gpio,
+        gpio.config_loaders,
         "get_gpio_settings",
         lambda: {"pin_map": {}, "behavior_matrix": None},
     )
@@ -160,9 +160,9 @@ def test_gpio_behavior_matrix_with_single_behavior(monkeypatch):
     # Simulate what the UI sends - single behavior in array
     behavior_matrix = {"17": ["duration_of_alert"], "18": ["playout"]}
 
-    monkeypatch.setattr(gpio, "_GPIO_SETTINGS_AVAILABLE", True)
+    monkeypatch.setattr(gpio.config_loaders, "_GPIO_SETTINGS_AVAILABLE", True)
     monkeypatch.setattr(
-        gpio,
+        gpio.config_loaders,
         "get_gpio_settings",
         lambda: {"pin_map": {}, "behavior_matrix": behavior_matrix},
     )
@@ -180,7 +180,7 @@ def test_gpio_behavior_matrix_database_unavailable(monkeypatch):
     from app_utils.gpio import load_gpio_behavior_matrix_from_db
 
     # Simulate database settings not available
-    monkeypatch.setattr(gpio, "_GPIO_SETTINGS_AVAILABLE", False)
+    monkeypatch.setattr(gpio.config_loaders, "_GPIO_SETTINGS_AVAILABLE", False)
 
     matrix = load_gpio_behavior_matrix_from_db()
     assert matrix == {}

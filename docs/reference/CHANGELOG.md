@@ -8,6 +8,65 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.136.0] - 2026-08-06 - Large-file refactor, phase 2c: GPIO
+
+Continues the effort tracked in
+`docs/development/LARGE_FILE_REFACTOR_PLAN.md`. Pure motion — no behaviour was
+altered. This completes the library-code splits; everything remaining is either
+Flask-coupled or on the alert path.
+
+### Changed
+- **`app_utils/gpio.py` (3149 lines) became the `app_utils/gpio/` package.**
+  Four independent subsystems shared one file: the GPIO backend abstraction
+  (lgpio / sysfs / null behind one Protocol, plus gpiozero pin-factory setup),
+  the `GPIOController` and its behaviour manager, the NeoPixel strip
+  controller, and the USB tower-light controller. New layout: `pin_types.py`
+  (166), `backends.py` (426), `tower_light.py` (410), `neopixel.py` (336),
+  `controller.py` (1003), `behavior.py` (546) and `config_loaders.py` (440),
+  with an acyclic dependency graph. Each optional-dependency probe now sits
+  with its only consumer — `get_gpio_settings` / `_GPIO_SETTINGS_AVAILABLE`
+  with the database loaders, `PixelStrip` / `NeopixelColor` /
+  `_NEOPIXEL_LIB_AVAILABLE` with the NeoPixel controller. The package
+  `__init__.py` re-exports all 72 names the single-file module exposed, so
+  `from app_utils.gpio import …` is unchanged for `app_core/gpio_commands.py`,
+  `app_core/oled.py`, `app_core/websocket_push.py`,
+  `services/gpio/alert_indicators.py`, `services/gpio/init.py` and
+  `webapp/routes/system_controls.py`. Verified as pure motion by comparing
+  `ast.dump()` of every top-level definition: 28 definitions, 28 matches, zero
+  differences, plus an assertion that every non-blank line of the original
+  landed in exactly one module.
+- **The GPIO tests now patch the module that *uses* each name.** 31
+  `monkeypatch.setattr` sites across `test_gpio_controller.py`,
+  `test_gpio_behavior_matrix_save.py` and `test_gpio_activation_logging.py`
+  targeted the module object; rebinding a name on the re-exporting package
+  does not change what `config_loaders` or `neopixel` resolve from their own
+  globals. They now target `gpio.config_loaders` (`_GPIO_SETTINGS_AVAILABLE`,
+  `get_gpio_settings`), `gpio.neopixel` (`_NEOPIXEL_LIB_AVAILABLE`,
+  `NeopixelColor`), `gpio.controller` (`_create_gpio_backend`) and
+  `gpio.behavior.time` (`sleep`). No assertion changed. The retarget was
+  confirmed load-bearing rather than assumed: pointing the patches back at the
+  package fails 9 tests.
+
+### Fixed
+- **Naming the new module `types.py` shadowed the stdlib `types` module.** The
+  enums-and-dataclasses module was initially called `types.py`; any process
+  whose working directory is the package directory then resolves `import
+  types` to it, and the stdlib import chain (`dataclasses` → `re` → `enum` →
+  `types`) fails with a confusing partially-initialised-module error. It is
+  named `pin_types.py`, which is also more descriptive of its contents.
+
+### Known limitations
+- `controller.py` (1003), `behavior.py` (546) and `config_loaders.py` (440)
+  remain over the ~400-line guidance. `GPIOController` and
+  `GPIOBehaviorManager` are each a single class, so module-level splitting
+  cannot shrink them; that needs extracted collaborators and its own reviewed
+  commit.
+- `app_core/radio/demod/types.py` (added in 2.134.0) carries the same
+  stdlib-shadowing footgun described above. It is harmless in normal operation
+  — Python 3 defaults to absolute imports and the package directory is not on
+  `sys.path` — so it was left alone rather than churning already-merged code,
+  but it is noted in the refactor plan as a cleanup candidate.
+
 ## [2.135.0] - 2026-08-06 - Large-file refactor, phase 2b: the share-image renderer
 
 Continues the effort started in 2.134.0 and tracked in
