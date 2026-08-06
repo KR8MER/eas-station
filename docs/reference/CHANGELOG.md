@@ -8,6 +8,37 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.135.1] - 2026-08-06 - Fix red CI: sandbox paths and missing test schema
+
+The `Tests` workflow had been failing on `main` with `8 failed, 1962 passed,
+67 xfailed, 3 errors` from two unrelated pre-existing causes. Both are fixed
+here; no application code changes.
+
+### Fixed
+- **Tests hardcoded an agent-sandbox checkout path.** `tests/test_global_search.py`
+  passed `/home/user/eas-station/templates` as Flask's `template_folder` and
+  loaded the route under test from
+  `/home/user/eas-station/webapp/routes/global_search.py` via
+  `spec_from_file_location`; `tests/test_eas_resend_route.py` passed the same
+  prefix as Flask's `root_path`. That directory only exists inside an agent
+  sandbox — on a CI runner the tree is at `/home/runner/work/eas-station/eas-station`,
+  so the module load raised `FileNotFoundError` and all 7 global-search tests
+  failed. Both files now derive `REPO_ROOT` from
+  `Path(__file__).resolve().parents[1]`, so they resolve against whatever
+  checkout they are running from. This class of bug is invisible in the
+  environment it is written in and fails everywhere else.
+- **CI never created the database schema.** `.github/workflows/tests.yml` starts a
+  `postgis/postgis:16-3.4` service and points `DATABASE_URL` at `eas_test`, but
+  nothing built the tables, so the database held only the PostGIS extensions and
+  `tests/test_alert_active_expired_partition.py` died with
+  `UndefinedTable: relation "cap_alerts" does not exist` (1 failure + 3 errors).
+  A `Create database schema` step now runs `db.create_all()` followed by
+  `alembic stamp head`, mirroring `install.sh` and
+  `.claude/hooks/session-start.sh`. `alembic upgrade head` is deliberately not
+  used: no migration in `app_core/migrations/versions/` creates the base tables,
+  so replaying the chain against an empty database fails on the first migration
+  that references `cap_alerts`.
+
 ## [2.135.0] - 2026-08-06 - Large-file refactor, phase 2b: the share-image renderer
 
 Continues the effort started in 2.134.0 and tracked in

@@ -13,11 +13,18 @@ sure SQLAlchemy queries return empty lists when the table is absent.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
 pytest.importorskip("flask")
 pytest.importorskip("flask_sqlalchemy")
+
+# Resolve paths relative to this file rather than hardcoding a checkout
+# location: CI clones to /home/runner/work/..., a dev box to wherever the
+# operator cloned it, and an agent sandbox to /home/user/eas-station. An
+# absolute path only works on the machine it was written on.
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _build_app():
@@ -31,7 +38,7 @@ def _build_app():
     from flask import Flask
     from app_core.extensions import db
 
-    app = Flask(__name__, template_folder='/home/user/eas-station/templates')
+    app = Flask(__name__, template_folder=str(REPO_ROOT / 'templates'))
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = 'test'
@@ -75,7 +82,7 @@ def _build_app():
     import importlib.util
     spec = importlib.util.spec_from_file_location(
         'global_search_under_test',
-        '/home/user/eas-station/webapp/routes/global_search.py',
+        str(REPO_ROOT / 'webapp' / 'routes' / 'global_search.py'),
     )
     global_search = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(global_search)

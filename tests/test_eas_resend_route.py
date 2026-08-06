@@ -29,10 +29,15 @@ returning ``202`` immediately.  These tests pin that contract down.
 """
 
 import logging
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from flask import Blueprint, Flask, g
+
+# Derive the checkout location from this file; a hardcoded absolute path
+# only resolves on the machine it was written on.
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 import app_utils.eas as eas_module
 import webapp.eas.messages as messages_module
@@ -51,7 +56,7 @@ class _FakeQuery:
 
 @pytest.fixture
 def resend_app(monkeypatch):
-    app = Flask('eas-resend-test', root_path='/home/user/eas-station')
+    app = Flask('eas-resend-test', root_path=str(REPO_ROOT))
 
     @app.before_request
     def _set_user():
