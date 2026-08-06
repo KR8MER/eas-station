@@ -8,6 +8,60 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.133.1] - 2026-08-06 - Audio Archives settings survive upgrades, and the page matches the rest of the UI
+
+### Fixed
+- **Archiving settings were wiped on every service start — i.e. every upgrade.**
+  Per-source archiving settings live in
+  `AudioSourceConfigDB.config_params["archive"]`, but that JSON column also
+  holds the keys the radio→audio sync derives from each `RadioReceiver` row.
+  Both sync paths — `webapp/admin/audio_ingest.ensure_sdr_audio_monitor_source`
+  and `eas_monitoring_service.sync_radio_receiver_audio_sources` — built a fresh
+  dict and assigned it wholesale, deleting the `archive` block along with it.
+  Because the startup sync runs on every restart, archiving silently reverted to
+  off with default retention after each upgrade, and
+  `initialize_archivers()` then found nothing to start. New
+  `app_core/audio/source_config.py` defines which keys the sync owns
+  (`MANAGED_CONFIG_KEYS`) and a `merge_managed_config_params()` helper that
+  replaces those and preserves everything else; both call sites now merge
+  instead of overwrite. Regression coverage in
+  `tests/test_audio_archive_settings.py` and
+  `tests/test_radio_audio_monitoring.py`.
+- **The silence threshold was saved but never applied.** The Audio Archives page
+  exposes a `silence_threshold` field and persisted it, but neither runtime
+  consumer passed it to `AudioArchiverConfig` — so dead-air segments were
+  written to disk regardless of the setting. Both the `archiver_start` Redis
+  command handler and `initialize_archivers()` now forward it.
+- **Malformed stored settings could stop archiving from coming up.** The save
+  endpoint wrote the request body through unchanged, while the runtime reads the
+  values back with `int()`/`float()` at service start. A single unparseable
+  value made archiver startup fail with only a log line. Settings are now
+  normalised on write and on read: values are coerced and clamped to the same
+  bounds the form enforces, unknown keys are dropped, and garbage falls back to
+  the default rather than raising.
+
+### Changed
+- **The Audio Archives page now looks like the other admin pages.** It moved
+  from a bespoke `container-fluid` layout to the standard `.admin-container`,
+  the Refresh and Audio Streams buttons moved into the page header's action
+  slot, per-source panels became Bootstrap tabs inside a collapsible card, and
+  the summary bar became the same stat cards used elsewhere. Archiving state now
+  renders with the shared `.status-badge` instead of a page-local badge, the
+  page-local toast stack and its `@keyframes spin` copy were deleted in favour
+  of the global `showToast()`, "Enable archiving" became a toggle switch as
+  required for binary choices, and "Purge Old…" became a proper modal instead of
+  a `window.prompt()`.
+- **Page JavaScript moved to `static/js/pages/audio_archives.js`**, bringing the
+  template from 846 lines to 234. Cards are addressed by array index rather than
+  by interpolating source names into `onclick` attributes and `CSS.escape()`d
+  element IDs, all user-supplied values run through the shared `escapeHtml()`,
+  and handlers are attached by delegation — so a source name containing a quote
+  can no longer break the markup or the buttons.
+- **`webapp/routes_audio_archive.py` (928 lines) became the `webapp/audio_archive/`
+  package**: `fsutil.py` (archive directory scanning and formatting),
+  `config.py` (settings persistence and normalisation), `metadata.py` (ICY junk
+  detection and VAST ad-URL resolution) and `routes.py`.
+
 ## [2.133.0] - 2026-08-06 - Repository Statistics reads like the other dashboards
 
 The page worked but looked like nothing else in the app. It now uses the same

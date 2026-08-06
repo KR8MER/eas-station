@@ -261,7 +261,8 @@ def sync_radio_receiver_audio_sources(app):
     with app.app_context():
         from app_core.models import RadioReceiver, AudioSourceConfigDB, db
         from app_core.audio.ingest import AudioSourceType
-        
+        from app_core.audio.source_config import merge_managed_config_params
+
         logger.info("Syncing audio sources for radio receivers...")
         
         # Get all radio receivers that should have audio sources
@@ -326,7 +327,7 @@ def sync_radio_receiver_audio_sources(app):
                 'carrier_alarm_enabled': bool(receiver.squelch_alarm),
             }
             
-            config_params = {
+            managed_params = {
                 'sample_rate': sample_rate,
                 'channels': channels,
                 'buffer_size': buffer_size,
@@ -356,7 +357,7 @@ def sync_radio_receiver_audio_sources(app):
                 db_config = AudioSourceConfigDB(
                     name=source_name,
                     source_type=AudioSourceType.SDR.value,
-                    config_params=config_params,
+                    config_params=dict(managed_params),
                     priority=10,
                     enabled=True,
                     auto_start=receiver.auto_start,
@@ -365,15 +366,19 @@ def sync_radio_receiver_audio_sources(app):
                 db.session.add(db_config)
                 created += 1
             else:
-                # Update existing audio source if config changed
+                # Update existing audio source if config changed.  Merge rather
+                # than replace — config_params also carries user-owned settings
+                # (Audio Archives retention/format) that this startup sync must
+                # not delete, or archiving silently resets on every upgrade.
                 existing_params = db_config.config_params or {}
+                merged_params = merge_managed_config_params(existing_params, managed_params)
                 existing_rbds = existing_params.get('device_params', {}).get('enable_rbds', 'NOT_SET')
-                new_rbds = config_params.get('device_params', {}).get('enable_rbds', 'NOT_SET')
+                new_rbds = managed_params.get('device_params', {}).get('enable_rbds', 'NOT_SET')
                 logger.debug(f"Comparing configs for '{receiver.identifier}': existing_rbds={existing_rbds}, new_rbds={new_rbds}")
 
-                if existing_params != config_params:
+                if existing_params != merged_params:
                     logger.info(f"Updating audio source for receiver '{receiver.identifier}': {source_name} (rbds: {existing_rbds} -> {new_rbds})")
-                    db_config.config_params = config_params
+                    db_config.config_params = merged_params
                     db_config.enabled = True
                     db_config.auto_start = receiver.auto_start
                     db_config.description = description
@@ -761,6 +766,7 @@ def initialize_archivers(app, audio_controller):
                     max_disk_bytes=int(archive_cfg.get('max_disk_bytes', 0)),
                     format=archive_cfg.get('format', 'wav'),
                     bitrate=int(archive_cfg.get('bitrate', 128)),
+                    silence_threshold=float(archive_cfg.get('silence_threshold', 0.0)),
                 )
                 archiver = AudioArchiver(
                     source_name=source_name,
