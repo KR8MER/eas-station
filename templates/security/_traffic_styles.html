@@ -151,7 +151,8 @@
     }
     .traffic-dash-root .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     /* Multicolor browser/OS logos rendered inline in tables. */
-    .traffic-dash-root .ti-logo { width: 1.15em; height: 1.15em; vertical-align: -0.2em; object-fit: contain; }
+    /* .ti-logo now lives in styles.css as a shared utility — this page and
+       Repository Statistics both render marks from static/img/logos/. */
     /* Country flag images (4x3) — small, with a hairline border so white flags
        (e.g. JP) stay visible on light backgrounds. */
     .traffic-dash-root .ti-flag { width: 1.33em; height: 1em; vertical-align: -0.12em; object-fit: cover;

@@ -1686,6 +1686,17 @@ svg, canvas, iframe, embed, object {
     word-break: break-word;
 }
 
+/* Utility: an inline brand logo mark sized to the surrounding text.
+   Used for the true-colour SVGs under static/img/logos/ — browser and OS
+   marks on the Traffic dashboard, language marks on Repository Statistics.
+   Sized in `em` so it tracks whatever font-size the row uses. */
+.ti-logo {
+    width: 1.15em;
+    height: 1.15em;
+    vertical-align: -0.2em;
+    object-fit: contain;
+}
+
 @media (max-width: 767.98px) {
     /* Wrap long lines inside code / log blocks on phones so they stop
        pushing the page sideways.  Desktops keep the original look. */

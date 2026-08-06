@@ -39,6 +39,8 @@ from .scanner import (
     BUCKETS,
     EXCLUDE_DIRS,
     LANGUAGES,
+    LANGUAGE_GLYPHS,
+    LANGUAGE_LOGOS,
     VENDOR_DIRS,
     VENDOR_SUFFIXES,
     classify,
@@ -70,11 +72,23 @@ def _empty_bucket() -> Dict[str, object]:
 
 
 def _finalize(bucket: Dict[str, object]) -> Dict[str, object]:
-    """Derive blank lines and turn the language map into a sorted list."""
+    """Derive blank lines and turn the language map into a sorted list.
+
+    Each language carries its brand ``logo`` filename and a Font Awesome
+    ``glyph`` fallback so templates never have to hardcode either.
+    """
     bucket['blank'] = bucket['total'] - bucket['code'] - bucket['comments']
     languages = bucket.pop('by_language')
     bucket['languages'] = sorted(
-        ({'name': name, **values} for name, values in languages.items()),
+        (
+            {
+                'name': name,
+                'logo': LANGUAGE_LOGOS.get(name),
+                'glyph': LANGUAGE_GLYPHS.get(name, 'fas fa-file-code'),
+                **values,
+            }
+            for name, values in languages.items()
+        ),
         key=lambda item: item['total'],
         reverse=True,
     )
@@ -173,6 +187,8 @@ __all__ = [
     'CACHE_TTL_SECONDS',
     'EXCLUDE_DIRS',
     'LANGUAGES',
+    'LANGUAGE_GLYPHS',
+    'LANGUAGE_LOGOS',
     'VENDOR_DIRS',
     'VENDOR_SUFFIXES',
     'classify',

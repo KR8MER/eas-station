@@ -1,12 +1,20 @@
 {# Repository Statistics — Chart.js rendering. Data arrives via the
    #repoStatsData JSON block so no server values are interpolated into JS.
 
-   Theme changes are applied through Chart.defaults and the dataset objects
-   only. Never assign into `chart.options.*` — in Chart.js v3+ that is a
-   resolved-options proxy, and writing a value read back out of it (the
-   `opts.plugins.legend.labels = opts.plugins.legend.labels || {}` idiom)
-   builds a self-referential proxy chain that blows the stack on the next
-   update. #}
+   Theme changes rebuild the charts rather than mutating them, because neither
+   alternative works:
+
+     * Writing into `chart.options.*` mutates a resolved-options proxy. The
+       `opts.plugins.legend.labels = opts.plugins.legend.labels || {}` idiom
+       reads a value out of that proxy and assigns it back into itself, which
+       builds a self-referential chain and blows the stack on the next update.
+     * Setting only `Chart.defaults.*` and calling update() leaves the charts
+       stale: per-scale options are resolved once at construction and cached,
+       so tick and grid colours keep their original theme's values. That is
+       invisible until you actually switch themes — the first paint is right.
+
+   Destroying and recreating is cheap here (three static charts, no polling)
+   and is the only option that is correct in both directions. #}
 <script>
 (function () {
     'use strict';
@@ -24,9 +32,7 @@
         return;
     }
 
-    // Each entry is {chart, recolor} — recolor reapplies theme colors to the
-    // chart's datasets, which live outside the options proxy.
-    const registered = [];
+    const numberFormat = new Intl.NumberFormat();
 
     function cssVar(name, fallback) {
         const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -37,9 +43,8 @@
         const isDark = document.documentElement.getAttribute('data-theme-mode') === 'dark';
         return {
             text: cssVar('--text-color', isDark ? '#f8f9fc' : '#212529'),
-            grid: cssVar('--chart-grid', isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'),
+            grid: cssVar('--chart-grid', isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'),
             surface: cssVar('--surface-color', isDark ? '#243046' : '#ffffff'),
-            border: cssVar('--border-color', isDark ? '#40516c' : '#ced7ea'),
             primary: cssVar('--chart-primary-start', '#4361ee'),
             info: cssVar('--chart-info-start', '#4cc9f0'),
             success: cssVar('--chart-success-start', '#2dc653'),
@@ -47,159 +52,144 @@
         };
     }
 
-    function applyTheme() {
-        const colors = themeColors();
-        // Defaults drive tick/legend text and grid lines for every chart that
-        // does not override them, so nothing here touches an options proxy.
-        Chart.defaults.color = colors.text;
-        Chart.defaults.borderColor = colors.grid;
-        registered.forEach(function (entry) {
-            entry.recolor(entry.chart, colors);
-            entry.chart.update('none');
-        });
+    // A horizontal bar chart shared by the language and route breakdowns.
+    function horizontalBars(labels, values, colour, colours, unit) {
+        return {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: colour,
+                    borderRadius: 6,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: colours.surface,
+                        titleColor: colours.text,
+                        bodyColor: colours.text,
+                        borderColor: colours.grid,
+                        borderWidth: 1,
+                        callbacks: {
+                            label: function (ctx) {
+                                const n = ctx.parsed.x;
+                                return numberFormat.format(n) + ' ' + (n === 1 ? unit : unit + 's');
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        ticks: { color: colours.text, precision: 0 },
+                        grid: { color: colours.grid }
+                    },
+                    y: {
+                        ticks: { color: colours.text, font: { size: 11 } },
+                        grid: { display: false }
+                    }
+                }
+            }
+        };
     }
 
-    const colors = themeColors();
-    Chart.defaults.font.family = "'Inter', 'Segoe UI', Tahoma, sans-serif";
-    Chart.defaults.color = colors.text;
-    Chart.defaults.borderColor = colors.grid;
-    Chart.defaults.responsive = true;
-    Chart.defaults.maintainAspectRatio = false;
-
-    const numberFormat = new Intl.NumberFormat();
-
-    // --- Code composition -------------------------------------------------
-    const compositionCanvas = document.getElementById('codeCompositionChart');
-    if (compositionCanvas) {
+    function configs(colours) {
         const composition = repoData.composition;
         const total = composition.code + composition.comments + composition.blank;
-        const chart = new Chart(compositionCanvas, {
-            type: 'doughnut',
-            data: {
-                labels: ['Code', 'Comments', 'Blank'],
-                datasets: [{
-                    data: [composition.code, composition.comments, composition.blank],
-                    backgroundColor: [colors.primary, colors.info, colors.muted],
-                    borderColor: colors.surface,
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                cutout: '58%',
-                plugins: {
-                    legend: { position: 'bottom' },
-                    tooltip: {
-                        callbacks: {
-                            label: function (ctx) {
-                                const pct = total ? ((ctx.parsed / total) * 100).toFixed(1) : '0.0';
-                                return ctx.label + ': ' + numberFormat.format(ctx.parsed) + ' lines (' + pct + '%)';
-                            }
-                        }
-                    }
-                }
-            }
-        });
-        registered.push({
-            chart: chart,
-            recolor: function (instance, next) {
-                const dataset = instance.data.datasets[0];
-                dataset.backgroundColor = [next.primary, next.info, next.muted];
-                dataset.borderColor = next.surface;
-            }
-        });
-    }
-
-    // --- Lines of code by language ---------------------------------------
-    const languageCanvas = document.getElementById('linesByLanguageChart');
-    if (languageCanvas) {
         const languages = repoData.languages || [];
-        const chart = new Chart(languageCanvas, {
-            type: 'bar',
-            data: {
-                labels: languages.map(function (item) { return item.name; }),
-                datasets: [{
-                    label: 'Lines of code',
-                    data: languages.map(function (item) { return item.code; }),
-                    backgroundColor: colors.primary,
-                    borderRadius: 6,
-                    borderSkipped: false
-                }]
-            },
-            options: {
-                indexAxis: 'y',
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: function (ctx) {
-                                return numberFormat.format(ctx.parsed.x) + ' lines';
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: { beginAtZero: true },
-                    y: { grid: { display: false } }
-                }
-            }
-        });
-        registered.push({
-            chart: chart,
-            recolor: function (instance, next) {
-                instance.data.datasets[0].backgroundColor = next.primary;
-            }
-        });
-    }
-
-    // --- Routes by module -------------------------------------------------
-    const routesCanvas = document.getElementById('routesByModuleChart');
-    if (routesCanvas) {
         const routes = repoData.routes || [];
-        const chart = new Chart(routesCanvas, {
-            type: 'bar',
-            data: {
-                labels: routes.map(function (entry) {
-                    return String(entry[0]).replace(/^webapp\./, '');
-                }),
-                datasets: [{
-                    label: 'Routes',
-                    data: routes.map(function (entry) { return entry[1]; }),
-                    backgroundColor: colors.success,
-                    borderRadius: 6,
-                    borderSkipped: false
-                }]
-            },
-            options: {
-                indexAxis: 'y',
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: function (ctx) {
-                                return ctx.parsed.x + (ctx.parsed.x === 1 ? ' route' : ' routes');
+
+        return {
+            codeCompositionChart: {
+                type: 'doughnut',
+                data: {
+                    labels: ['Code', 'Comments', 'Blank'],
+                    datasets: [{
+                        data: [composition.code, composition.comments, composition.blank],
+                        backgroundColor: [colours.primary, colours.info, colours.muted],
+                        borderColor: colours.surface,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    cutout: '58%',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: colours.text, padding: 16 }
+                        },
+                        tooltip: {
+                            backgroundColor: colours.surface,
+                            titleColor: colours.text,
+                            bodyColor: colours.text,
+                            borderColor: colours.grid,
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function (ctx) {
+                                    const pct = total ? ((ctx.parsed / total) * 100).toFixed(1) : '0.0';
+                                    return ctx.label + ': ' + numberFormat.format(ctx.parsed) +
+                                           ' lines (' + pct + '%)';
+                                }
                             }
                         }
                     }
-                },
-                scales: {
-                    x: { beginAtZero: true, ticks: { precision: 0 } },
-                    y: { grid: { display: false }, ticks: { font: { size: 11 } } }
                 }
+            },
+            linesByLanguageChart: horizontalBars(
+                languages.map(function (item) { return item.name; }),
+                languages.map(function (item) { return item.code; }),
+                colours.primary, colours, 'line'
+            ),
+            routesByModuleChart: horizontalBars(
+                routes.map(function (entry) { return String(entry[0]).replace(/^webapp\./, ''); }),
+                routes.map(function (entry) { return entry[1]; }),
+                colours.success, colours, 'route'
+            )
+        };
+    }
+
+    function render() {
+        const colours = themeColors();
+        Chart.defaults.font.family = "'Inter', 'Segoe UI', Tahoma, sans-serif";
+        Chart.defaults.color = colours.text;
+        Chart.defaults.borderColor = colours.grid;
+
+        const built = configs(colours);
+        Object.keys(built).forEach(function (id) {
+            const canvas = document.getElementById(id);
+            if (!canvas) {
+                return;
             }
-        });
-        registered.push({
-            chart: chart,
-            recolor: function (instance, next) {
-                instance.data.datasets[0].backgroundColor = next.success;
+            const existing = Chart.getChart(canvas);
+            if (existing) {
+                existing.destroy();
             }
+            new Chart(canvas, built[id]);
         });
     }
 
-    // Repaint when the user switches theme.
-    new MutationObserver(applyTheme).observe(document.documentElement, {
+    render();
+
+    // Coalesce bursts of attribute changes into one rebuild.
+    let pending = null;
+    function scheduleRender() {
+        window.clearTimeout(pending);
+        pending = window.setTimeout(render, 60);
+    }
+
+    new MutationObserver(scheduleRender).observe(document.documentElement, {
         attributes: true,
         attributeFilter: ['data-theme', 'data-theme-mode']
     });
-    window.addEventListener('theme-changed', applyTheme);
+    window.addEventListener('theme-changed', scheduleRender);
 }());
 </script>

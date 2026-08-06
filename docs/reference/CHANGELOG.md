@@ -8,6 +8,41 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.133.0] - 2026-08-06 - Repository Statistics reads like the other dashboards
+
+The page worked but looked like nothing else in the app. It now uses the same
+shared components as System Health and the GNSS dashboard, and languages carry
+their brand marks.
+
+### Added
+- **Language logos.** `static/img/logos/` gained `yaml.svg`, `shell.svg`,
+  `sql.svg`, `xml.svg`, `text.svg` and `systemd.svg`, authored in the same
+  48×48 style as the existing marks, joining the Python/HTML/JS/CSS/Markdown/
+  JSON/SVG logos already there. `LANGUAGE_LOGOS` and `LANGUAGE_GLYPHS` in
+  `app_utils/repo_stats/scanner.py` map each display language to its mark and a
+  Font Awesome fallback; every language row carries both, so a missing file
+  degrades to a glyph instead of a broken image.
+- **`.ti-logo` is now a shared utility** in `styles.css`. It was scoped to
+  `.traffic-dash-root`; two pages render logo marks from `static/img/logos/`
+  now, so the page-scoped copy was removed.
+
+### Changed
+- **The page uses the shared dashboard idiom.** Live `.status-pill` chips ride
+  in the page header (file source, route source, analysis time), the headline
+  figures moved from `.stats-grid`/`.stat-card` to the `.status-strip` /
+  `.status-tile` readouts that System Health and GNSS use, and the component
+  inventory became a second strip. The page defines no tile CSS of its own.
+
+### Fixed
+- **Chart axis and tick labels were invisible on every dark theme.** Charts were
+  built once, then theme changes only updated `Chart.defaults`. Chart.js
+  resolves per-scale options at construction and caches them, so tick and grid
+  colours kept the theme that happened to be active on first paint — dark text
+  on a dark surface after switching to Dark or Coffee. The page now rebuilds its
+  charts on a theme change, which is the only approach that is correct in both
+  directions: mutating `chart.options` instead builds a self-referential proxy
+  that blows the stack. Regression tests pin down both failure modes.
+
 ## [2.132.1] - 2026-08-06 - Stop the standard page header scrolling the page sideways
 
 ### Fixed

@@ -43,6 +43,43 @@ LANGUAGES: Dict[str, str] = {
     '.timer': 'systemd',
 }
 
+#: Display language -> brand logo filename under ``static/img/logos/``.
+#: Rendered by the Repository Statistics page next to each language row, the
+#: same way the Traffic dashboard marks browsers and file types. A language
+#: with no entry falls back to a Font Awesome glyph in the template.
+LANGUAGE_LOGOS: Dict[str, str] = {
+    'Python': 'python.svg',
+    'JavaScript': 'javascript.svg',
+    'HTML': 'html.svg',
+    'CSS': 'css.svg',
+    'Markdown': 'markdown.svg',
+    'JSON': 'json.svg',
+    'SVG': 'svg.svg',
+    'YAML': 'yaml.svg',
+    'Shell': 'shell.svg',
+    'SQL': 'sql.svg',
+    'XML': 'xml.svg',
+    'Text': 'text.svg',
+    'systemd': 'systemd.svg',
+}
+
+#: Font Awesome fallback for a language with no brand logo.
+LANGUAGE_GLYPHS: Dict[str, str] = {
+    'Python': 'fab fa-python',
+    'JavaScript': 'fab fa-js',
+    'HTML': 'fab fa-html5',
+    'CSS': 'fab fa-css3-alt',
+    'Markdown': 'fab fa-markdown',
+    'Shell': 'fas fa-terminal',
+    'SQL': 'fas fa-database',
+    'YAML': 'fas fa-file-code',
+    'JSON': 'fas fa-code',
+    'XML': 'fas fa-code',
+    'SVG': 'fas fa-bezier-curve',
+    'Text': 'fas fa-file-lines',
+    'systemd': 'fas fa-gears',
+}
+
 # Path fragments that mark a file as third-party rather than ours.
 VENDOR_DIRS: Tuple[str, ...] = ('static/vendor/', 'node_modules/')
 VENDOR_SUFFIXES: Tuple[str, ...] = ('.min.js', '.min.css', '.js.map', '.css.map')
@@ -223,6 +260,8 @@ __all__ = [
     'BUCKETS',
     'EXCLUDE_DIRS',
     'LANGUAGES',
+    'LANGUAGE_GLYPHS',
+    'LANGUAGE_LOGOS',
     'VENDOR_DIRS',
     'VENDOR_SUFFIXES',
     'classify',
