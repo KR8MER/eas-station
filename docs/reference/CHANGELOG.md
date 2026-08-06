@@ -8,6 +8,33 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.138.1] - 2026-08-06 - Fix cross-constellation PRN collision in GSV parsing
+
+### Fixed
+- **A satellite could silently disappear from `satellites_in_view`.** `apply_gsv`
+  buckets each constellation's GSV group by talker, but merged those buckets
+  keyed on PRN alone. PRN numbering restarts per constellation — Galileo and
+  BeiDou both number from 1 — so a `$GAGSV` reporting PRN 5 overwrote the
+  `$GPGSV` PRN 5 and the GPS satellite vanished from the view. The surviving
+  row was corrupted as well as deduplicated: it kept whichever talker parsed
+  last, so it showed Galileo's elevation, azimuth and SNR under a single
+  undifferentiated entry. Nothing raised, and the satellite count quietly ran
+  low on exactly the multi-GNSS receivers most likely to hit it.
+
+  The merge is now keyed by `(talker, PRN)`, matching the two sibling paths
+  that already treat that pair as a satellite's identity: the GSA path via
+  `GPSManager._sat_key`, and `services/gps/trends.py`, whose per-PRN SNR map
+  is keyed `"<talker><PRN02>"` — that map was losing the same satellite one
+  step downstream, and is now correct for free.
+
+  `satellites_in_view` can consequently carry two entries sharing a `prn` with
+  different `constellation` values. This is not a new shape: the gpsd ingest
+  path (`GPSManager._handle_gpsd_sky`) has always published it, so every
+  dashboard consumer already handles it — all of them iterate the array, and
+  none dedupe on `prn` or use it as a DOM id. Publish order is unchanged in
+  the common case, since PRN remains the primary sort key and talker only
+  breaks ties.
+
 ## [2.138.0] - 2026-08-06 - Large-file refactor, phase 2e: NMEA sentence parsing
 
 The first **collaborator extraction** in this effort rather than pure motion.

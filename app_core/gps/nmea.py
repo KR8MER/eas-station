@@ -197,6 +197,13 @@ def apply_gsv(
     talker so the start of one constellation's group doesn't wipe another's,
     and union the buckets when publishing so ``satellites_in_view`` reflects
     every visible satellite.
+
+    A satellite's identity is ``(talker, PRN)``, never the PRN alone — PRN
+    numbering restarts per constellation, so the same number means different
+    satellites under different talkers. ``satellites_in_view`` can therefore
+    carry two entries sharing a ``prn`` with different ``constellation``
+    values; consumers must key on both. The gpsd ingest path
+    (``GPSManager._handle_gpsd_sky``) has always published that shape.
     """
     effects = SentenceEffects()
     try:
@@ -227,10 +234,23 @@ def apply_gsv(
             # and when it last contributed to a fix.
             effects.sats_seen.append((talker, prn, snr_val))
         if msg_num >= total_msgs:
-            merged: Dict[int, Dict[str, Any]] = {}
-            for tbucket in state.gsv_buffer.values():
-                merged.update(tbucket)
-            fix["satellites_in_view"] = sorted(merged.values(), key=lambda s: s["prn"])
+            # Key the cross-talker merge by (talker, PRN), not PRN alone.
+            # PRN numbering is per-constellation and overlaps: Galileo and
+            # BeiDou both number from 1, so a $GAGSV reporting PRN 5 collides
+            # with the $GPGSV PRN 5 and one satellite silently disappears from
+            # the view. This mirrors the GSA path, which disambiguates the same
+            # way via GPSManager._sat_key, and services/gps/trends.py, which
+            # already keys its per-PRN SNR map by "<talker><PRN02>".
+            merged: Dict[Tuple[str, int], Dict[str, Any]] = {}
+            for tname, tbucket in state.gsv_buffer.items():
+                for bprn, sat in tbucket.items():
+                    merged[(tname, bprn)] = sat
+            # Sort by PRN first so the published order is unchanged in the
+            # common case where every PRN is unique; talker only breaks ties.
+            fix["satellites_in_view"] = sorted(
+                merged.values(),
+                key=lambda s: (s["prn"], s.get("constellation") or ""),
+            )
     except Exception:
         pass
     return effects
