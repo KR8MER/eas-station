@@ -34,7 +34,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from app_core.radio.demod.kernels import (
+from .kernels import (
     _NUMBA_AVAILABLE,
     _RBDS_SYNDROMES,
     _calc_syndrome_numba,
@@ -42,16 +42,16 @@ from app_core.radio.demod.kernels import (
     _mm_timing_loop_numba,
     _presync_scan_numba,
 )
-from app_core.radio.demod.dsp import (
+from .dsp import (
     design_fir_bandpass,
     design_fir_lowpass,
     resample_to,
 )
-from app_core.radio.demod.types import (
+from .types import (
     RBDSData,
     RBDSDecoderStats,
 )
-from app_core.radio.demod.rbds_decoder import RBDSDecoder
+from .rbds_decoder import RBDSDecoder
 
 logger = logging.getLogger(__name__)
 

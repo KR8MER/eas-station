@@ -27,7 +27,7 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 from scipy.signal import oaconvolve
 
-from app_core.radio.demod.dsp import (
+from .dsp import (
     StreamingResampler,
     design_fir_bandpass,
     design_fir_lowpass,
@@ -36,13 +36,13 @@ from app_core.radio.demod.dsp import (
     fm_discriminator_declick,
     resample_to,
 )
-from app_core.radio.demod.types import (
+from .types import (
     DemodulatorConfig,
     DemodulatorStatus,
     RBDSData,
     RBDSDecoderStats,
 )
-from app_core.radio.demod.rbds_worker import RBDSWorker
+from .rbds_worker import RBDSWorker
 
 logger = logging.getLogger(__name__)
 

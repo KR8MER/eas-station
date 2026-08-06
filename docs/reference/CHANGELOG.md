@@ -8,6 +8,78 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.135.0] - 2026-08-06 - Large-file refactor, phase 2b: the share-image renderer
+
+Continues the effort started in 2.134.0 and tracked in
+`docs/development/LARGE_FILE_REFACTOR_PLAN.md`. Pure motion again — no
+behaviour was altered.
+
+### Changed
+- **`app_utils/image_export.py` (3391 lines) became the `app_utils/image_export/`
+  package.** The alert share-image renderer mixed thirteen concerns in one
+  file: brand logo, canvas layouts, colour palette, font loading, the ALL-CAPS
+  humanizer, threat icons, event theming, drawing primitives, weather particle
+  effects, OSM tile fetching, map rendering, info-panel drawers and the
+  top-level composer. New layout: `logo.py` (71), `layout.py` (145),
+  `palette.py` (62), `fonts.py` (116), `text.py` (252), `icons.py` (81),
+  `theme.py` (435), `drawing.py` (143), `weather_fx.py` (429), `tiles.py`
+  (257), `maps.py` (731), `panels.py` (577) and `render.py` (492), with an
+  acyclic dependency graph generated from the actual imports. The package
+  `__init__.py` re-exports all 125 names the single-file module exposed
+  (including `logger`), so `from app_utils.image_export import …` is unchanged
+  for `app_core/notifications/alert_image.py` and `webapp/admin/api.py`.
+  Verified as pure motion by comparing `ast.dump()` of every top-level
+  definition: 68 definitions, 68 matches, zero differences. The slicing step
+  additionally asserted that every non-blank line of the original landed in
+  exactly one module, so nothing was silently dropped.
+- **`tests/test_image_export_themes.py` was updated for the package split** —
+  the existing 120 assertions are unchanged - only how the module is loaded and patched - plus three new tests pinning asset paths (see Fixed).
+  The test deliberately loads the renderer by file path to avoid importing all
+  of `app_utils`; loading a package that way needs `submodule_search_locations`
+  on the spec, or its relative imports resolve back through `app_utils` and
+  undo the isolation. Nine `monkeypatch.setattr` calls also had to move to the
+  module that *calls* the patched name (`tiles` for `_http`, `maps` for
+  `_fetch_tile`/`_fetch_county_outlines`, `render` for `_render_map`) —
+  rebinding a name on the re-exporting package does not change what
+  `maps._render_map` resolves from its own globals. The retarget was confirmed
+  load-bearing rather than assumed: pointing the patches back at the package
+  makes 5 tests fail.
+- **`app_core/radio/demod/` now uses relative intra-package imports**, matching
+  `webapp/audio_archive/`, `app_core/flask/`, `app_core/config/`,
+  `app_core/database/` and the new `image_export/`. Beyond consistency this is
+  what allows a package to be loaded standalone by file path in tests.
+
+### Fixed
+- **The brand logo would have disappeared from every share image, silently.**
+  `_LOGO_PATH` and `_TILE_DISK_CACHE_DIR_DEFAULT` are built by walking two
+  directories up from `__file__`. That reached the repository root while the
+  renderer was a single `app_utils/image_export.py`; inside the package every
+  module sits one level deeper, so both resolved one short — the logo path
+  became `app_utils/static/img/…` (nonexistent, and `_load_logo()` swallows the
+  error and renders the card without a logo) and OSM tiles cached into
+  `app_utils/data/tile-cache`, colliding with the directory 2.134.0 had just
+  created for the FIPS table. This is the one way a verbatim move can still
+  change behaviour: the code is genuinely identical, so the AST comparison
+  cannot see it. Both constants now derive from a named `_REPO_ROOT` with a
+  comment explaining the depth, and `tests/test_image_export_themes.py` gained
+  three tests pinning the resolved paths and asserting the logo actually loads.
+  The refactor plan's ground rules gained a rule to audit `__file__`-relative
+  paths before any future split.
+
+### Known limitations
+- `maps.py` (731), `panels.py` (577) and `render.py` (492) remain over the
+  ~400-line guidance. They are coherent single concerns rather than mixed
+  ones, and splitting them further would mean carving up `_render_map` and
+  `generate_alert_image` themselves — a behaviour-adjacent change that belongs
+  in its own commit.
+- Two pre-existing issues were found and deliberately left alone, since fixing
+  either changes behaviour: `maps.py` carries an unused `shadow` local (F841,
+  present identically in the monolith), and
+  `test_render_map_draws_counties_and_scale_bar` asserts only the output
+  image's size and mode — despite its name and docstring it never checks that
+  county outlines or the scale bar were actually drawn, so it passes whether or
+  not its stubs take effect.
+
 ## [2.134.0] - 2026-08-06 - Large-file refactor, phase 1: FIPS data and the demodulator
 
 `docs/development/AGENTS.md` asks for Python modules under ~400 lines. The tree

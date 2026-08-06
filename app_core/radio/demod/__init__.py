@@ -46,7 +46,7 @@ This package was split out of the former single-file
 # __all__, but `app_core.radio.demodulation` and callers that predate the
 # package split reach for them by name (webapp/routes_monitoring reads
 # _NUMBA_AVAILABLE for the diagnostics page).
-from app_core.radio.demod.kernels import (  # noqa: F401
+from .kernels import (  # noqa: F401
     _NUMBA_AVAILABLE,
     _RBDS_SYNDROMES,
     _calc_syndrome_numba,
@@ -58,7 +58,7 @@ from app_core.radio.demod.kernels import (  # noqa: F401
     jit,
     prange,
 )
-from app_core.radio.demod.dsp import (
+from .dsp import (
     StreamingResampler,
     design_fir_bandpass,
     design_fir_lowpass,
@@ -67,23 +67,23 @@ from app_core.radio.demod.dsp import (
     fm_discriminator_declick,
     resample_to,
 )
-from app_core.radio.demod.rbds_constants import (
+from .rbds_constants import (
     RBDS_LANGUAGE_CODES,
     RT_PLUS_AID,
     RT_PLUS_CONTENT_TYPES,
     pi_to_call_sign,
 )
-from app_core.radio.demod.types import (
+from .types import (
     DemodulatorConfig,
     DemodulatorStatus,
     RBDSData,
     RBDSDecoderStats,
 )
-from app_core.radio.demod.rbds_decoder import RBDSDecoder
-from app_core.radio.demod.rbds_worker import RBDSWorker
-from app_core.radio.demod.fm import FMDemodulator
-from app_core.radio.demod.am import AMDemodulator
-from app_core.radio.demod.factory import create_demodulator
+from .rbds_decoder import RBDSDecoder
+from .rbds_worker import RBDSWorker
+from .fm import FMDemodulator
+from .am import AMDemodulator
+from .factory import create_demodulator
 
 __all__ = [
     # Configuration and payload types

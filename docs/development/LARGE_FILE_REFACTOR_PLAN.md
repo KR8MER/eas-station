@@ -36,6 +36,17 @@ These are what make a split reviewable and safe. Follow them on every file.
 5. **Run the tests that cover the file** before and after, and name them in the
    commit message. If a file has no coverage, that is worth knowing before it is
    moved.
+6. **Audit every `__file__`-relative path before moving a module.** This is the
+   one way "identical code" can still change behaviour: a module in a new
+   package sits one directory deeper, so
+   `os.path.dirname(os.path.dirname(__file__))` now points somewhere else.
+   AST-equality checking cannot catch it — the code really is identical, it
+   just means something different. Grep for `__file__` in the file you are
+   about to split, and assert the resolved values against the pre-split module
+   afterwards. This bit Phase 2b: the brand logo path and the tile disk-cache
+   path both silently resolved one level short of the repository root, and
+   neither failure raises — `_load_logo()` swallows the error and renders a
+   card with no logo. Both are now pinned by tests.
 6. **Follow the existing naming convention.** When a module is superseded, the
    old one is renamed with an `_old` suffix — never `_new` for the replacement.
    In practice most splits here need no rename because the original path stays
@@ -82,7 +93,7 @@ code with no Flask involvement, which makes them the safest of the big splits.
 | File | Lines | Planned layout | Status |
 | --- | ---: | --- | --- |
 | `app_core/radio/demodulation.py` | 5355 | `app_core/radio/demod/` package | ✅ landed (shim now 95 lines) |
-| `app_utils/image_export.py` | 3391 | `app_utils/image_export/` package | Planned |
+| `app_utils/image_export.py` | 3391 | `app_utils/image_export/` package | ✅ landed |
 | `app_utils/gpio.py` | 3149 | `app_utils/gpio/` package | Planned |
 | `app_core/gps/gps_manager.py` | 2893 | split manager / NMEA parsing / survey | Planned |
 | `app_core/radio/drivers.py` | 2187 | one module per driver family | Planned |
@@ -138,19 +149,94 @@ behaviour-adjacent change and belongs in its own commit with its own review.
 Tracked as Phase 2a-ii. `fm.py` (795) needs the same treatment, at lower
 priority.
 
-### 2b. `app_utils/image_export.py` → `app_utils/image_export/`
+### 2b. `app_utils/image_export.py` → `app_utils/image_export/` ✅
 
-The alert share-image renderer. Seams are already visible in the section
-comments:
+The alert share-image renderer, whose seams were already marked by section
+comments in the file.
 
-| New module | Contents |
-| --- | --- |
-| `theme.py` | `_Theme`, `_resolve_theme`, `_resolve_tier`, urgency/softening helpers |
-| `fonts.py` | font loading, `_tw`/`_th`/`_truncate`, `_draw_pill`, caps humanisation |
-| `weather_fx.py` | lightning/snow/rain/sun/ember/wind/haze overlay painters |
-| `maps.py` | slippy-tile math, tile memory+disk cache, `_fetch_tile`, `_render_map`, storm track, county outlines, scale bar |
-| `icons.py` | `_icon_wind`, `_icon_hail`, `_icon_tornado` and friends |
-| `render.py` | `generate_alert_image`, layout, section headers |
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `logo.py` | 71 | Brand logo raster and its cache |
+| `layout.py` | 145 | `_Layout` and the landscape/square/portrait/story presets, plus the backwards-compatible `FB_WIDTH`-style constants |
+| `palette.py` | 62 | Colour palette, severity/threat colour maps, `_darken`, `_pct_bar_color` |
+| `fonts.py` | 116 | Font loading and caching, `_tw`/`_th`/`_truncate` |
+| `text.py` | 252 | Local-time formatting and the ALL-CAPS → sentence-case humanizer |
+| `icons.py` | 81 | `_icon_wind`, `_icon_hail`, `_icon_tornado`, `_ICON_FN` |
+| `theme.py` | 435 | Hazard-family themes, tier badges, urgency heat |
+| `drawing.py` | 143 | `_draw_pill`, `_composite`, `_round_image_corners`, `_section_header`, `_card_row` |
+| `weather_fx.py` | 429 | Lightning, snow, rain, sun, embers, wind, haze, `_draw_themed_header` |
+| `tiles.py` | 257 | Slippy-tile maths, bbox/centroid/zoom, memory LRU + disk cache, `_fetch_tile` |
+| `maps.py` | 731 | `_render_map`, storm track, county outlines, SAME union geometry, scale bar |
+| `panels.py` | 577 | The seven info-panel section drawers |
+| `render.py` | 492 | `generate_alert_image` |
+
+Dependency graph, generated from the actual imports and verified acyclic:
+
+```
+logo, layout, palette, fonts, text, icons   leaves
+theme       -> palette
+drawing     -> fonts, palette
+weather_fx  -> drawing, layout, theme
+tiles       -> layout
+maps        -> fonts, layout, palette, theme, tiles
+panels      -> drawing, fonts, icons, palette, text
+render      -> drawing, fonts, layout, logo, maps, palette, panels,
+               text, theme, weather_fx
+```
+
+Here the package `__init__.py` *is* the compatibility shim — it re-exports all
+125 names the single-file module exposed (including `logger`), so
+`from app_utils.image_export import …` is unchanged for
+`app_core/notifications/alert_image.py` and `webapp/admin/api.py`.
+
+**Verification.** 68 top-level definitions, 68 `ast.dump()` matches, zero
+differences. The slicing script also asserted that every non-blank line of the
+original landed in exactly one module — nothing silently dropped.
+`tests/test_image_export_themes.py` passes (123 tests, up from 120).
+
+**One real bug was introduced and caught.** `_LOGO_PATH` and
+`_TILE_DISK_CACHE_DIR_DEFAULT` are built by walking up two directories from
+`__file__`. That was the repository root when the renderer was a single
+`app_utils/image_export.py`; inside the package every module is one level
+deeper, so both resolved one short — the share card rendered with **no brand
+logo**, and OSM tiles cached into `app_utils/data/tile-cache` (colliding with
+the directory Phase 1 had just created for the FIPS table). Neither failure
+raises, and the 120 existing tests all still passed. It surfaced only because
+a stray `app_utils/data/tile-cache/` appeared in `git status`. Both constants
+now derive from a named `_REPO_ROOT` with a comment explaining the depth, and
+three tests pin the resolved paths — verified to fail without the fix.
+
+**The test needed two changes, and they are worth understanding before the next
+split.** Both come from the same fact: a package has more than one namespace
+where the module had one.
+
+1. The test deliberately loads the renderer by file path rather than importing
+   it, to avoid pulling in the whole `app_utils` package. Loading a *package*
+   that way needs `submodule_search_locations` on the spec, otherwise its
+   `from .theme import …` internal imports resolve back through `app_utils` and
+   undo the isolation.
+2. Nine `monkeypatch.setattr(image_export, …)` calls had to move to the module
+   that *calls* the patched name (`tiles` for `_http`, `maps` for `_fetch_tile`
+   and `_fetch_county_outlines`, `render` for `_render_map`). Rebinding a name
+   on the re-exporting package does not change what `maps._render_map` sees in
+   its own globals. This was verified to be load-bearing rather than assumed:
+   pointing the patches back at the package makes 5 tests fail.
+
+**Pre-existing issues found, deliberately left alone** (fixing them is a
+behaviour change and does not belong in a pure-motion commit):
+`maps.py` has an unused `shadow` local (F841, present in the monolith), and
+`test_render_map_draws_counties_and_scale_bar` asserts only the output image's
+size and mode — despite its name and docstring it never checks that county
+outlines or the scale bar were drawn, so it passes whether or not its stubs
+take effect.
+
+### Import style
+
+Both packages use **relative** intra-package imports (`from .theme import …`),
+matching `webapp/audio_archive/`, `app_core/flask/`, `app_core/config/` and
+`app_core/database/`. Beyond consistency this is what lets a test load the
+package standalone, as `tests/test_image_export_themes.py` does. `demod/` was
+converted from absolute to relative in the same release for this reason.
 
 ### 2c. `app_utils/gpio.py` → `app_utils/gpio/`
 
@@ -217,16 +303,25 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | Date | Version | What landed |
 | --- | --- | --- |
 | 2026-08-06 | 2.134.0 | Plan written. Phase 1 (`fips_codes.py`, 3887 → 673) and Phase 2a (`demodulation.py`, 5355 → 9 modules + a 95-line shim). ~7,500 lines of oversized module retired. Follow-up Phase 2a-ii opened for `RBDSWorker`/`RBDSDecoder`. |
+| 2026-08-06 | 2.135.0 | Phase 2b (`image_export.py`, 3391 → 13 modules + a re-exporting `__init__`). `demod/` converted to relative imports to match the repo convention. Largest remaining Python module is now `poller/cap_poller.py` at 3996. |
 
 ## Next up
 
-Phase 2b (`app_utils/image_export.py`) is the recommended next step: it is
-library code with no Flask or database involvement, its seams are already
-marked by section comments in the file, and it has the same "move verbatim
-behind a shim" shape as the two splits that just landed.
+**Phase 2c — `app_utils/gpio.py` (3149).** Four independent subsystems share
+one file (backend abstraction, `GPIOController` + behaviour matrix, NeoPixel,
+tower light), so the seams are clean. It is the last of the big library-code
+splits; after it, everything remaining is either Flask-coupled (Phase 3) or on
+the alert path (Phase 4).
 
-Phase 3 needs one decision before it starts — whether `webapp/admin/audio_ingest.py`
-should follow `webapp/audio_archive/` exactly (helpers in topic modules,
-`routes.py` holding only handlers) or keep its `register_*_routes(app, logger)`
-entry point. The latter is how the admin package is wired today, so the split
-should preserve it and only move helpers out.
+**Before Phase 3 starts**, decide whether `webapp/admin/audio_ingest.py` should
+follow `webapp/audio_archive/` exactly (helpers in topic modules, `routes.py`
+holding only handlers) or keep its `register_*_routes(app, logger)` entry
+point. The latter is how the admin package is wired today, so the split should
+preserve it and only move helpers out.
+
+**Carry the two test lessons from Phase 2b forward.** Any module that tests
+load by file path needs `submodule_search_locations` once it becomes a package,
+and any name a test monkeypatches has to be patched on the module that *calls*
+it, not on the package that re-exports it. Check for both before splitting —
+and verify the retarget is load-bearing by confirming the tests fail without
+it, rather than assuming.

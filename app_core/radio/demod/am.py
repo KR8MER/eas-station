@@ -25,10 +25,10 @@ from typing import Optional, Tuple
 
 import numpy as np
 
-from app_core.radio.demod.dsp import (
+from .dsp import (
     resample_to,
 )
-from app_core.radio.demod.types import (
+from .types import (
     DemodulatorConfig,
     DemodulatorStatus,
 )

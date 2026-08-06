@@ -31,7 +31,7 @@ from typing import Tuple
 
 import numpy as np
 
-from app_core.radio.demod.kernels import (
+from .kernels import (
     _NUMBA_AVAILABLE,
     _fm_discriminator_declick_numba,
     _fm_discriminator_numba,

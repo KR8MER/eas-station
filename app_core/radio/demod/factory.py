@@ -22,11 +22,11 @@ from __future__ import annotations
 """Demodulator factory - maps a modulation type onto a demodulator class."""
 
 
-from app_core.radio.demod.types import (
+from .types import (
     DemodulatorConfig,
 )
-from app_core.radio.demod.fm import FMDemodulator
-from app_core.radio.demod.am import AMDemodulator
+from .fm import FMDemodulator
+from .am import AMDemodulator
 
 
 def create_demodulator(config: DemodulatorConfig):

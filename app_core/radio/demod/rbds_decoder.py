@@ -27,13 +27,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
 
-from app_core.radio.demod.rbds_constants import (
+from .rbds_constants import (
     RBDS_LANGUAGE_CODES,
     RT_PLUS_AID,
     RT_PLUS_CONTENT_TYPES,
     pi_to_call_sign,
 )
-from app_core.radio.demod.types import (
+from .types import (
     RBDSData,
 )
 
