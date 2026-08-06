@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Shell script">
+  <rect width="48" height="48" rx="6" fill="#2B2B2B"/>
+  <path d="M11 16l8 8-8 8" fill="none" stroke="#4EAA25" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M23 33h14" stroke="#4EAA25" stroke-width="3.4" stroke-linecap="round"/>
+</svg>

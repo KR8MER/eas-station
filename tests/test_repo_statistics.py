@@ -244,6 +244,97 @@ def test_page_uses_only_defined_css_variables():
     assert not undefined, f'page references undefined CSS variables: {undefined}'
 
 
+# ---------------------------------------------------------------------------
+# Language logos and the shared dashboard idiom
+# ---------------------------------------------------------------------------
+
+LOGO_DIR = REPO_ROOT / 'static' / 'img' / 'logos'
+
+
+def test_every_mapped_language_logo_file_exists():
+    """A missing SVG renders as a broken image, so pin the files down."""
+    missing = [
+        f'{language} -> {filename}'
+        for language, filename in repo_stats.LANGUAGE_LOGOS.items()
+        if not (LOGO_DIR / filename).is_file()
+    ]
+    assert not missing, f'mapped logos with no file under static/img/logos/: {missing}'
+
+
+def test_every_tracked_language_has_a_logo_or_glyph():
+    """No language may render with a bare, unlabelled cell."""
+    languages = set(repo_stats.LANGUAGES.values())
+    unmarked = sorted(
+        name for name in languages
+        if name not in repo_stats.LANGUAGE_LOGOS
+        and name not in repo_stats.LANGUAGE_GLYPHS
+    )
+    assert not unmarked, f'languages with neither a logo nor a glyph: {unmarked}'
+
+
+def test_language_entries_carry_logo_and_glyph():
+    stats = repo_stats.compute_stats()
+    languages = stats['buckets']['project']['languages']
+    assert languages
+    for entry in languages:
+        assert 'logo' in entry, f'{entry["name"]} is missing a logo key'
+        assert entry.get('glyph'), f'{entry["name"]} is missing a glyph fallback'
+
+
+def test_logo_svgs_are_wellformed():
+    import xml.etree.ElementTree as ET
+
+    for filename in sorted(set(repo_stats.LANGUAGE_LOGOS.values())):
+        path = LOGO_DIR / filename
+        root = ET.parse(path).getroot()
+        assert root.tag.endswith('svg'), f'{filename} is not an <svg> document'
+        assert root.get('viewBox'), f'{filename} has no viewBox, so it will not scale'
+
+
+def test_page_uses_the_shared_dashboard_idiom():
+    """The page should read like System Health / GNSS, not invent its own tiles."""
+    content = (REPO_ROOT / 'templates' / 'repo_stats' / '_content.html').read_text(encoding='utf-8')
+
+    assert 'status-strip' in content, 'headline figures should use the shared strip'
+    assert 'status-tile' in content, 'readouts should use the shared tile'
+    assert 'status-pill' in content, 'header should carry live status pills'
+    assert 'ti-logo' in content, 'language rows should render brand marks'
+
+    # Those utilities must be the shared ones, not redefined on this page.
+    page = (REPO_ROOT / 'templates' / 'repo_stats.html').read_text(encoding='utf-8')
+    for utility in ('.status-tile', '.status-strip', '.status-pill', '.ti-logo'):
+        assert utility not in page, f'{utility} must come from styles.css, not this page'
+
+
+def test_ti_logo_is_a_shared_utility():
+    """It was scoped to the Traffic dashboard; two pages now render logo marks."""
+    styles = (REPO_ROOT / 'static' / 'css' / 'styles.css').read_text(encoding='utf-8')
+    traffic = (REPO_ROOT / 'templates' / 'security' / '_traffic_styles.html').read_text(encoding='utf-8')
+
+    assert '.ti-logo {' in styles, '.ti-logo should be defined once, in styles.css'
+    assert '.traffic-dash-root .ti-logo' not in traffic, (
+        'the page-scoped copy should be gone now that the rule is shared'
+    )
+
+
+def test_theme_repaint_does_not_mutate_chart_options():
+    """Two ways of repainting charts are broken; the script must use neither.
+
+    Writing a value read out of ``chart.options`` back into itself builds a
+    self-referential proxy that blows the stack. Setting only ``Chart.defaults``
+    leaves per-scale tick colours resolved at construction, so charts keep the
+    previous theme's colours — invisible until you switch themes.
+    """
+    scripts = (REPO_ROOT / 'templates' / 'repo_stats' / '_scripts.html').read_text(encoding='utf-8')
+
+    assert 'chart.options.plugins' not in scripts, (
+        'do not assign into the resolved-options proxy'
+    )
+    assert 'Chart.getChart(' in scripts and '.destroy()' in scripts, (
+        'theme changes must rebuild the charts so scale options are re-resolved'
+    )
+
+
 def test_repo_stats_is_registered_in_navigation():
     from webapp.navigation import registry
 
