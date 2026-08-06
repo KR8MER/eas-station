@@ -12,6 +12,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from app_core.gps.gps_manager import GPSManager, REDIS_KEY, REDIS_LAST_3D_KEY
+from app_core.gps.timing_stats import holdover_seconds
 
 
 class FakeRedis:
@@ -83,13 +84,13 @@ def test_no_redis_is_tolerated():
 
 def test_holdover_seconds_helper():
     now = datetime.now(timezone.utc)
-    assert GPSManager._holdover_seconds(None, None, now) is None
-    assert GPSManager._holdover_seconds(now, 3, now) == 0.0
-    assert GPSManager._holdover_seconds(
+    assert holdover_seconds(None, None, now) is None
+    assert holdover_seconds(now, 3, now) == 0.0
+    assert holdover_seconds(
         now - timedelta(seconds=30), 1, now
     ) == 30.0
     # No fix_mode key at all (lost-fix payload) still yields a duration.
-    assert GPSManager._holdover_seconds(
+    assert holdover_seconds(
         now - timedelta(seconds=30), None, now
     ) == 30.0
 

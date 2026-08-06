@@ -95,8 +95,28 @@ code with no Flask involvement, which makes them the safest of the big splits.
 | `app_core/radio/demodulation.py` | 5355 | `app_core/radio/demod/` package | ✅ landed (shim now 95 lines) |
 | `app_utils/image_export.py` | 3391 | `app_utils/image_export/` package | ✅ landed |
 | `app_utils/gpio.py` | 3149 | `app_utils/gpio/` package | ✅ landed |
-| `app_core/gps/gps_manager.py` | 2893 | split manager / NMEA parsing / survey | Planned |
-| `app_core/radio/drivers.py` | 2187 | one module per driver family | Planned |
+| `app_core/gps/gps_manager.py` | 2893 | timing math (2d) + NMEA parsing (2e) extracted | 🚧 2313 — see 2d, 2e |
+| `app_core/radio/drivers.py` | 2187 | one module per driver family | ⏳ not started — one 1822-line class |
+
+> **The last two files are not the same kind of problem as the first three.**
+> 2a–2c were each *several independent top-level definitions* sharing one file,
+> so splitting them was pure motion verifiable by `ast.dump()` comparison.
+> These two are each **one god-class**: `GPSManager` was 2741 of
+> `gps_manager.py`'s 2893 lines, and `_SoapySDRReceiver` is 1822 of
+> `drivers.py`'s 2187. Module-level splitting cannot shrink a single class, so
+> a claim in the 2c pull request that Phase 2 was complete was wrong.
+>
+> The way through is two different techniques, in order:
+>
+> 1. **Move the stateless parts as motion** (2d) — verify with `ast.dump()`.
+> 2. **Extract collaborators for the stateful parts** (2e) — `ast.dump()` is
+>    useless here since the code is deliberately restructured, so verify with a
+>    **characterization harness built before the refactor**: snapshot all
+>    mutated state across a realistic input stream, confirm the baseline is
+>    discriminating, then diff after.
+>
+> `gps_manager.py` has had both applied (2893 → 2313). `drivers.py` has had
+> neither.
 
 ### 2a. `app_core/radio/demodulation.py` → `app_core/radio/demod/` ✅
 
@@ -295,6 +315,145 @@ were imported to confirm they still resolve.
                and n.func.attr == 'setattr' and n.args):
            ...  # report the target expression and attribute name
    ```
+
+---
+
+### 2d. `app_core/gps/gps_manager.py` — stateless timing math extracted ⚠️ partial
+
+`GPSManager` is 2741 lines in one class, 54 methods. Profiling it by `self`
+usage splits the class cleanly in two:
+
+| Group | Methods | Lines | Extractable as motion? |
+| --- | ---: | ---: | --- |
+| Stateless (zero `self` references) | 8 | 386 | ✅ yes — 6 of 8 moved here |
+| Stateful (touch `self`) | 46 | 2235 | ❌ no — needs collaborators |
+
+Six of the eight stateless methods (359 lines) moved out verbatim. Two stayed,
+deliberately:
+
+- **`_sat_key`** (2 lines) — used only by `_record_sat_seen` /
+  `_record_sat_used`, which remain on the manager. Moving a two-line helper
+  would add a cross-module hop for no gain.
+- **`_scan_capture`** (25 lines) — UBX frame scanning. Its natural home is the
+  existing `app_core/gps/ubx.py`, not a timing-statistics module; folding it in
+  here would have mixed two unrelated concerns in one commit.
+
+The six that moved:
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `timing_stats.py` | 342 | `compute_jitter_summary` (adaptive-bucket PPS jitter histogram), `compute_allan_deviation` (overlapping ADEV/TDEV/MTIE at τ = 1/10/100/1000 s), `holdover_seconds`, `derive_leap_state` |
+| `sysprobe.py` | 49 | `read_cpu_temp_c`, `safe_read` — two sysfs reads that swallow failure and return `None` |
+
+These were `@staticmethod` in all but name, so they were pure functions
+trapped inside a class. Extracting them makes them directly importable and
+testable — `tests/test_gps_stability_metrics.py` was already testing them
+through `GPSManager._compute_allan_deviation(...)`, reaching past the class to
+get at a pure function.
+
+**Verification.** All 6 moved functions are `ast.dump()`-identical to their
+originals once the `@staticmethod` decorator and docstring indentation are
+normalised (a module-level function indents its docstring 4, not 8); every
+non-blank removed line was asserted present in the new modules; and both
+implementations were run side by side over 5 interval datasets (including
+empty, single-sample and constant edge cases) with **zero output differences**.
+135 GPS tests pass.
+
+**What is left, and why it is not motion.** The other 2235 lines are stateful:
+`_handle_sentence` alone is 246 lines with 50 `self` references, accumulating
+fix state, satellite tracking and publishing as it parses. The plan's original
+"split manager / NMEA parsing / survey" wording assumed these were separable
+files; they are not. Doing it properly means giving the NMEA parser explicit
+state to return rather than mutating `self`, which changes behaviour-bearing
+code on the GPS/timing path and cannot be verified by AST comparison. That
+deserves its own design pass and reviewed commit — the same conclusion already
+recorded for `controller.py` and `behavior.py` in 2c.
+
+**A lesson this phase added — do not let `head` truncate a reference search.**
+Grepping for the six method names before extracting appeared to show no test
+references, so the first attempt moved them without retargeting any tests. The
+search had been piped through `head -20`, and 20 unrelated `_safe_read_text`
+matches in `app_utils/system.py` consumed the entire output budget before a
+single real hit was printed. 17 tests then failed. When a search is being used
+to prove a *negative*, either drop the limit or filter the known-irrelevant
+matches out first — a truncated search cannot establish that something is
+absent.
+
+---
+
+### 2e. `GPSManager._handle_sentence` → `app_core/gps/nmea.py` ✅
+
+The first **collaborator extraction** in this effort, as opposed to pure
+motion. `_handle_sentence` was 246 lines with 50 `self` references: four
+sentence branches (GGA/RMC/GSV/GSA) that interleaved NMEA field-mapping with
+manager state — satellite history, the holdover anchor, the system-clock sync
+policy and a Redis publish.
+
+The seam is *what the sentence says* vs. *what the manager does about it*.
+`app_core/gps/nmea.py` (326 lines) owns the former and returns the latter:
+
+| Piece | Role |
+| --- | --- |
+| `NMEAParseState` | The cross-sentence accumulators — per-talker GSV buckets, the GSA per-cycle PRN union, the cycle flag. Owned by the manager, passed in. |
+| `SentenceEffects` | What a sentence implies beyond the fix dict: `sats_seen`, `sats_used`, `saw_3d_fix`, `utc_datetime`. |
+| `apply_gga` / `apply_rmc` / `apply_gsv` / `apply_gsa` | One per sentence type. Each takes `(fix, msg, state)` plus config such as `min_satellites`, mutates the fix dict and parse state in place, and returns a `SentenceEffects`. Free of the manager, but not pure. |
+| `apply_sentence` | Bumps the per-type counter and dispatches. |
+
+`_handle_sentence` is now 30 lines: take the lock, call `apply_sentence`, apply
+the effects, publish. The clock-sync policy moved to its own
+`_queue_time_sync`. `_FIX_QUALITY` and `_safe_int` moved to `nmea.py` too — the
+NMEA path was their only consumer — and are re-exported from `gps_manager` so
+existing imports still resolve. `gps_manager.py`: 2893 → **2313** lines.
+
+**Deferring the effects is safe** because none of `_record_sat_seen`,
+`_record_sat_used` or `_mark_3d_fix` reads `self._fix`; that was checked by AST
+before the seam was drawn, not assumed. Had any of them read the fix dict,
+applying effects after the parse instead of mid-parse could have changed
+behaviour.
+
+**Verification — this is where a characterization harness earns its keep.**
+`ast.dump()` comparison is useless here: the code is deliberately restructured.
+So the safety net was built *first*, against the pre-refactor code:
+
+1. A 28-sentence multi-GNSS stream — full cycles, multi-constellation GSV
+   groups, several GSAs per cycle, no-fix → 2D → 3D transitions, empty GLGSA,
+   blank/malformed fields, out-of-order GSV group numbers.
+2. Snapshot **all** mutated state after every sentence: the fix dict, the GSV
+   buckets, the GSA accumulator and cycle flag, the pending time sync, the
+   per-PRN satellite history and the 3D-fix anchor.
+3. Confirm the baseline is discriminating — 28 frames, **28 distinct states**.
+   A harness that records constant state proves nothing.
+4. Refactor, re-run, diff with wall-clock timestamps scrubbed:
+   **0 differing frames of 28.**
+
+`tests/test_gps_nmea_sentences.py` (19 tests) makes the harness permanent and
+adds direct coverage the old shape could not have: each rule is now assertable
+without constructing a `GPSManager`. Two of them were mutation-checked rather
+than trusted — reverting the GSV per-talker bucketing and the GSA union each
+failed exactly one test, and only that test.
+
+**Two traps this phase hit.**
+
+1. **Re-typing a constant instead of moving it.** `_FIX_QUALITY` and
+   `_safe_int` were re-written from memory into the new module. Both were
+   wrong: the fix-quality labels came out `"invalid"/"gps"/"dgps"` instead of
+   `"no_fix"/"gps_fix"/"dgps_fix"`, and the re-typed `_safe_int` dropped the
+   `int(float(s))` conversion so `"12.0"` would raise instead of yielding 12.
+   Neither raises at import; both would have silently changed the dashboard.
+   Move shared helpers by *reference* — grep for the real definition and cut
+   it — and never re-type one from memory.
+2. **A truncated grep cannot prove a negative.** See 2d: `| head -20` hid every
+   real hit behind unrelated matches, and the conclusion drawn from it ("no
+   test references these") was wrong.
+
+### What is left in `gps_manager.py`
+
+2313 lines, still over the guidance. The remaining bulk is the gpsd client
+(`_gpsd_reader_loop`, `_gpsd_connect`, `_handle_gpsd_tpv`, `_handle_gpsd_sky`,
+the watchdog and daemon restart), the serial reader loop, the PPS/kernel-PPS
+handling and `get_status`. Each is a plausible next collaborator and each wants
+the same treatment: characterize first, then extract. `app_core/radio/drivers.py`
+(one 1822-line `_SoapySDRReceiver`) is untouched and needs the same approach.
 
 ---
 
