@@ -91,6 +91,35 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install pytest pytest-asyncio
 
+      - name: Create database schema
+        # The postgres service starts empty apart from the PostGIS extensions,
+        # so tests that hit a real database (tests/test_alert_active_expired_
+        # partition.py and friends) died with UndefinedTable: cap_alerts.
+        #
+        # This mirrors install.sh and .claude/hooks/session-start.sh:
+        #
+        #   1. db.create_all()     build the current schema from the models
+        #   2. alembic stamp head  record that the database is at head
+        #
+        # `alembic upgrade head` is deliberately NOT used: no migration in
+        # app_core/migrations/versions/ creates the base tables, so replaying
+        # the chain against an empty database fails on the first migration
+        # that references cap_alerts. The chain is incremental-only and
+        # assumes the model-built schema already exists.
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/eas_test
+          SECRET_KEY: ci-secret-key-not-for-production-use-only-0123456789
+          SKIP_DB_INIT: '1'
+          LOG_LEVEL: ERROR
+        run: |
+          python -c "
+          from app import app
+          from app_core.extensions import db
+          with app.app_context():
+              db.create_all()
+          "
+          python -m alembic stamp head
+
       - name: Run test suite
         # Tests listed in tests/known_failures.txt are marked xfail by
         # conftest.py rather than skipped, so they still execute: when one
