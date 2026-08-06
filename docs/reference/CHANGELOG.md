@@ -18,8 +18,11 @@ so it was verified by characterization rather than by AST comparison.
 - **`GPSManager._handle_sentence` (246 lines, 50 `self` references) became
   `app_core/gps/nmea.py` (326 lines) plus a 30-line orchestrator.** The seam is
   *what the sentence says* vs. *what the manager does about it*: `apply_gga` /
-  `apply_rmc` / `apply_gsv` / `apply_gsa` are pure functions over
-  `(fix, msg, state)`, with cross-sentence accumulators in `NMEAParseState` and
+  `apply_rmc` / `apply_gsv` / `apply_gsa` are standalone handlers that take
+  `(fix, msg, state)` plus config such as `min_satellites`, mutate the fix
+  dictionary and the parse state in place, and return a `SentenceEffects` —
+  free of the manager, but not pure. Cross-sentence accumulators live in
+  `NMEAParseState` and
   everything else a sentence implies — satellite-history updates, the 3D-fix
   holdover anchor, a usable UTC datetime — returned in a `SentenceEffects` for
   the manager to apply. The system-clock sync policy moved to its own
@@ -62,8 +65,11 @@ altered.
 - **The stateless half of `GPSManager` moved out of
   `app_core/gps/gps_manager.py` (2893 lines).** Profiling the class by `self`
   usage separates 8 methods (386 lines) that never touch instance state from
-  the 46 (2235 lines) that do. The stateless ones were `@staticmethod` in all
-  but name — pure functions trapped inside a class — and now live in
+  the 46 (2235 lines) that do. Six of those eight (359 lines) moved; `_sat_key`
+  (2 lines, used only by the manager's satellite-history helpers) and
+  `_scan_capture` (25 lines, UBX frame scanning that belongs with
+  `app_core/gps/ubx.py`) stayed. The six were `@staticmethod` in all but name —
+  pure functions trapped inside a class — and now live in
   `app_core/gps/timing_stats.py` (342 lines: `compute_jitter_summary`,
   `compute_allan_deviation`, `holdover_seconds`, `derive_leap_state`) and
   `app_core/gps/sysprobe.py` (49 lines: `read_cpu_temp_c`, `safe_read`).

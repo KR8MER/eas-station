@@ -3,8 +3,8 @@
 These behaviours were previously reachable only through
 ``GPSManager._handle_sentence`` — a 246-line method that needed a live manager
 (lock, Redis client, serial config) before a single field could be asserted.
-Now that the sentence-to-field mapping is a set of pure functions over a fix
-dictionary, each rule gets a direct test.
+Now that the sentence-to-field mapping is a set of standalone handlers over an
+explicit fix dictionary and parse state, each rule gets a direct test.
 
 The multi-constellation cases are the ones worth guarding: both the GSV
 per-talker bucketing and the GSA per-cycle union exist because a naive

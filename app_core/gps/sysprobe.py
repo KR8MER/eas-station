@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+
 def read_cpu_temp_c() -> Optional[float]:
     """Best-effort host SoC temperature in °C from sysfs.
 
@@ -20,7 +21,6 @@ def read_cpu_temp_c() -> Optional[float]:
     readings so a broken sensor can't poison the trend archive.
     """
     try:
-        from pathlib import Path
         zones = sorted(Path("/sys/class/thermal").glob("thermal_zone*"))
         chosen = None
         for zone in zones:

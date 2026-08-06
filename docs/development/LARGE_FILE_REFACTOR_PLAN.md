@@ -325,10 +325,20 @@ usage splits the class cleanly in two:
 
 | Group | Methods | Lines | Extractable as motion? |
 | --- | ---: | ---: | --- |
-| Stateless (zero `self` references) | 8 | 386 | ✅ yes — done here |
+| Stateless (zero `self` references) | 8 | 386 | ✅ yes — 6 of 8 moved here |
 | Stateful (touch `self`) | 46 | 2235 | ❌ no — needs collaborators |
 
-The stateless half moved out verbatim:
+Six of the eight stateless methods (359 lines) moved out verbatim. Two stayed,
+deliberately:
+
+- **`_sat_key`** (2 lines) — used only by `_record_sat_seen` /
+  `_record_sat_used`, which remain on the manager. Moving a two-line helper
+  would add a cross-module hop for no gain.
+- **`_scan_capture`** (25 lines) — UBX frame scanning. Its natural home is the
+  existing `app_core/gps/ubx.py`, not a timing-statistics module; folding it in
+  here would have mixed two unrelated concerns in one commit.
+
+The six that moved:
 
 | New module | Lines | Contents |
 | --- | ---: | --- |
@@ -386,7 +396,7 @@ The seam is *what the sentence says* vs. *what the manager does about it*.
 | --- | --- |
 | `NMEAParseState` | The cross-sentence accumulators — per-talker GSV buckets, the GSA per-cycle PRN union, the cycle flag. Owned by the manager, passed in. |
 | `SentenceEffects` | What a sentence implies beyond the fix dict: `sats_seen`, `sats_used`, `saw_3d_fix`, `utc_datetime`. |
-| `apply_gga` / `apply_rmc` / `apply_gsv` / `apply_gsa` | One per sentence type, each a pure function over `(fix, msg, state)`. |
+| `apply_gga` / `apply_rmc` / `apply_gsv` / `apply_gsa` | One per sentence type. Each takes `(fix, msg, state)` plus config such as `min_satellites`, mutates the fix dict and parse state in place, and returns a `SentenceEffects`. Free of the manager, but not pure. |
 | `apply_sentence` | Bumps the per-type counter and dispatches. |
 
 `_handle_sentence` is now 30 lines: take the lock, call `apply_sentence`, apply
