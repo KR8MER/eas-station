@@ -194,6 +194,7 @@ nav:
       - Audit Log Integrity: security/AUDIT_LOG_INTEGRITY.md
   - Development:
       - Developer Guidelines: development/AGENTS.md
+      - Large File Refactor Plan: development/LARGE_FILE_REFACTOR_PLAN.md
       - Contributing: process/CONTRIBUTING.md
       - Releasing: process/RELEASING.md
       - Certification Reliability Plan: process/certification_reliability_plan.md

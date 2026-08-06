@@ -31,11 +31,20 @@ except ImportError:  # pragma: no cover
     pytest.skip("Pillow is required for image_export tests", allow_module_level=True)
 
 
-# Load app_utils/image_export.py directly so the test does not pay the
+# Load app_utils/image_export/ directly so the test does not pay the
 # cost of importing the full ``app_utils`` package (which pulls in
 # psutil, sqlalchemy, etc).  This keeps the test fast and isolated.
-_MODULE_PATH = Path(__file__).resolve().parent.parent / "app_utils" / "image_export.py"
-_spec = importlib.util.spec_from_file_location("image_export_under_test", _MODULE_PATH)
+#
+# ``image_export`` is a package, so the spec needs
+# ``submodule_search_locations`` for its ``from .theme import ...`` style
+# internal imports to resolve against this synthetic package name instead
+# of reaching back through ``app_utils`` and undoing the isolation.
+_PKG_DIR = Path(__file__).resolve().parent.parent / "app_utils" / "image_export"
+_spec = importlib.util.spec_from_file_location(
+    "image_export_under_test",
+    _PKG_DIR / "__init__.py",
+    submodule_search_locations=[str(_PKG_DIR)],
+)
 assert _spec is not None and _spec.loader is not None
 image_export = importlib.util.module_from_spec(_spec)
 # Register before exec so ``@dataclass`` (Python 3.11+) can resolve the
@@ -43,6 +52,14 @@ image_export = importlib.util.module_from_spec(_spec)
 # is still being processed.
 sys.modules[_spec.name] = image_export
 _spec.loader.exec_module(image_export)
+
+# Submodules that tests patch into.  A name must be patched on the module
+# that *calls* it, not on the package that re-exports it: rebinding
+# ``image_export._fetch_tile`` would leave ``maps._render_map`` still
+# resolving ``_fetch_tile`` from its own globals.
+maps_mod = image_export.maps
+render_mod = image_export.render
+tiles_mod = image_export.tiles
 
 
 # ── Theme resolution ────────────────────────────────────────────────────────
@@ -603,7 +620,7 @@ def test_tile_cache_returns_image_on_hit(monkeypatch):
         calls.append(args)
         raise AssertionError("network should not be touched on cache hit")
 
-    monkeypatch.setattr(image_export, "_http",
+    monkeypatch.setattr(tiles_mod, "_http",
                         type("X", (), {"get": staticmethod(_no_network)})())
     tile = image_export._fetch_tile(7, 11, 5)
     assert tile is not None
@@ -625,7 +642,7 @@ def test_tile_disk_cache_round_trips(monkeypatch, tmp_path):
     image_export._tile_disk_put((9, 13, 21), payload)
 
     # Network access would surface immediately as a test failure.
-    monkeypatch.setattr(image_export, "_http",
+    monkeypatch.setattr(tiles_mod, "_http",
                         type("X", (), {"get": staticmethod(
                             lambda *a, **k: (_ for _ in ()).throw(
                                 AssertionError("HTTP touched on L2 hit"))
@@ -658,7 +675,7 @@ def test_tile_disk_cache_writes_after_http_fetch(monkeypatch, tmp_path):
         status_code = 200
         content = payload
 
-    monkeypatch.setattr(image_export, "_http",
+    monkeypatch.setattr(tiles_mod, "_http",
                         type("X", (), {"get": staticmethod(
                             lambda *a, **k: _StubResp(),
                         )})())
@@ -906,7 +923,7 @@ def test_render_map_draws_counties_and_scale_bar(monkeypatch):
     """``_render_map`` overlays county outlines (when available) and a scale
     bar without network access — tiles are stubbed to the offline path."""
     # Force the offline tile path so the test never hits the network.
-    monkeypatch.setattr(image_export, "_fetch_tile", lambda tx, ty, z: None)
+    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
 
     # Stub a 3×3 grid of square "counties" around the alert polygon.
     def _fake_counties(min_lon, min_lat, max_lon, max_lat, db_session=None):
@@ -926,7 +943,7 @@ def test_render_map_draws_counties_and_scale_bar(monkeypatch):
                 })
         return out
 
-    monkeypatch.setattr(image_export, "_fetch_county_outlines", _fake_counties)
+    monkeypatch.setattr(maps_mod, "_fetch_county_outlines", _fake_counties)
 
     geom = {
         "type": "Polygon",
@@ -992,7 +1009,7 @@ def test_generate_alert_image_uses_provided_db_session(monkeypatch):
     monkeypatch.setitem(sys.modules, "app_core.models", fake_models)
 
     # Force the offline tile path so the test never hits the network.
-    monkeypatch.setattr(image_export, "_fetch_tile", lambda tx, ty, z: None)
+    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
 
     geom = {
         "type": "Polygon",
@@ -1009,7 +1026,7 @@ def test_generate_alert_image_uses_provided_db_session(monkeypatch):
         rendered["db_session"] = kwargs.get("db_session")
         return real_render_map(g, severity, *args, **kwargs)
 
-    monkeypatch.setattr(image_export, "_render_map", _spy_render_map)
+    monkeypatch.setattr(render_mod, "_render_map", _spy_render_map)
 
     alert = _FakeAlert()
     alert.id = 42
@@ -1120,7 +1137,7 @@ def test_generate_alert_image_falls_back_to_same_county_union(monkeypatch):
 
     fake_models.CAPAlert = _FakeCAPAlert
     monkeypatch.setitem(sys.modules, "app_core.models", fake_models)
-    monkeypatch.setattr(image_export, "_fetch_tile", lambda tx, ty, z: None)
+    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
 
     session = _StubUnionSession()
 
@@ -1131,7 +1148,7 @@ def test_generate_alert_image_falls_back_to_same_county_union(monkeypatch):
         rendered["geom"] = g
         return real_render_map(g, severity, *args, **kwargs)
 
-    monkeypatch.setattr(image_export, "_render_map", _spy_render_map)
+    monkeypatch.setattr(render_mod, "_render_map", _spy_render_map)
 
     alert = _FakeAlert()
     alert.id = 43
@@ -1147,3 +1164,36 @@ def test_generate_alert_image_falls_back_to_same_county_union(monkeypatch):
     assert rendered.get("geom") == _UNION_GEOM, \
         "map was not rendered from the SAME county-union fallback geometry"
     assert session.union_params["geoids"] == ["39095", "39123"]
+
+
+# ── Repository-root-relative asset paths ────────────────────────────────────
+# ``_LOGO_PATH`` and ``_TILE_DISK_CACHE_DIR_DEFAULT`` are derived from
+# ``__file__`` by walking up a fixed number of directories.  When the renderer
+# was split from a single ``app_utils/image_export.py`` into the
+# ``app_utils/image_export/`` package, every module moved one directory deeper
+# and both constants silently started resolving one level short of the repo
+# root — the share card rendered with no brand logo and tiles cached into
+# ``app_utils/data/tile-cache``.  Neither failure raises: ``_load_logo``
+# swallows the error and the cache just writes elsewhere.  These tests pin the
+# resolved locations so a future move cannot break them quietly.
+
+def test_logo_path_resolves_to_repository_static_dir():
+    repo_root = Path(__file__).resolve().parent.parent
+    expected = repo_root / "static" / "img" / "eas-system-wordmark.png"
+    assert Path(image_export._LOGO_PATH) == expected
+    assert expected.exists(), (
+        "brand wordmark raster is missing; the share image would render "
+        "without a logo"
+    )
+
+
+def test_logo_actually_loads():
+    assert image_export._load_logo() is not None, (
+        "_load_logo() returned None - the share card would render with no "
+        "brand logo, and the failure is otherwise silent"
+    )
+
+
+def test_tile_disk_cache_default_dir_is_repository_data_dir():
+    repo_root = Path(__file__).resolve().parent.parent
+    assert Path(image_export._TILE_DISK_CACHE_DIR_DEFAULT) == repo_root / "data" / "tile-cache"

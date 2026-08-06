@@ -8,6 +8,154 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.135.0] - 2026-08-06 - Large-file refactor, phase 2b: the share-image renderer
+
+Continues the effort started in 2.134.0 and tracked in
+`docs/development/LARGE_FILE_REFACTOR_PLAN.md`. Pure motion again — no
+behaviour was altered.
+
+### Changed
+- **`app_utils/image_export.py` (3391 lines) became the `app_utils/image_export/`
+  package.** The alert share-image renderer mixed thirteen concerns in one
+  file: brand logo, canvas layouts, colour palette, font loading, the ALL-CAPS
+  humanizer, threat icons, event theming, drawing primitives, weather particle
+  effects, OSM tile fetching, map rendering, info-panel drawers and the
+  top-level composer. New layout: `logo.py` (71), `layout.py` (145),
+  `palette.py` (62), `fonts.py` (116), `text.py` (252), `icons.py` (81),
+  `theme.py` (435), `drawing.py` (143), `weather_fx.py` (429), `tiles.py`
+  (257), `maps.py` (731), `panels.py` (577) and `render.py` (492), with an
+  acyclic dependency graph generated from the actual imports. The package
+  `__init__.py` re-exports all 125 names the single-file module exposed
+  (including `logger`), so `from app_utils.image_export import …` is unchanged
+  for `app_core/notifications/alert_image.py` and `webapp/admin/api.py`.
+  Verified as pure motion by comparing `ast.dump()` of every top-level
+  definition: 68 definitions, 68 matches, zero differences. The slicing step
+  additionally asserted that every non-blank line of the original landed in
+  exactly one module, so nothing was silently dropped.
+- **`tests/test_image_export_themes.py` was updated for the package split** —
+  the existing 120 assertions are unchanged - only how the module is loaded and patched - plus three new tests pinning asset paths (see Fixed).
+  The test deliberately loads the renderer by file path to avoid importing all
+  of `app_utils`; loading a package that way needs `submodule_search_locations`
+  on the spec, or its relative imports resolve back through `app_utils` and
+  undo the isolation. Nine `monkeypatch.setattr` calls also had to move to the
+  module that *calls* the patched name (`tiles` for `_http`, `maps` for
+  `_fetch_tile`/`_fetch_county_outlines`, `render` for `_render_map`) —
+  rebinding a name on the re-exporting package does not change what
+  `maps._render_map` resolves from its own globals. The retarget was confirmed
+  load-bearing rather than assumed: pointing the patches back at the package
+  makes 5 tests fail.
+- **`app_core/radio/demod/` now uses relative intra-package imports**, matching
+  `webapp/audio_archive/`, `app_core/flask/`, `app_core/config/`,
+  `app_core/database/` and the new `image_export/`. Beyond consistency this is
+  what allows a package to be loaded standalone by file path in tests.
+
+### Fixed
+- **The brand logo would have disappeared from every share image, silently.**
+  `_LOGO_PATH` and `_TILE_DISK_CACHE_DIR_DEFAULT` are built by walking two
+  directories up from `__file__`. That reached the repository root while the
+  renderer was a single `app_utils/image_export.py`; inside the package every
+  module sits one level deeper, so both resolved one short — the logo path
+  became `app_utils/static/img/…` (nonexistent, and `_load_logo()` swallows the
+  error and renders the card without a logo) and OSM tiles cached into
+  `app_utils/data/tile-cache`, colliding with the directory 2.134.0 had just
+  created for the FIPS table. This is the one way a verbatim move can still
+  change behaviour: the code is genuinely identical, so the AST comparison
+  cannot see it. Both constants now derive from a named `_REPO_ROOT` with a
+  comment explaining the depth, and `tests/test_image_export_themes.py` gained
+  three tests pinning the resolved paths and asserting the logo actually loads.
+  The refactor plan's ground rules gained a rule to audit `__file__`-relative
+  paths before any future split.
+
+### Known limitations
+- `maps.py` (731), `panels.py` (577) and `render.py` (492) remain over the
+  ~400-line guidance. They are coherent single concerns rather than mixed
+  ones, and splitting them further would mean carving up `_render_map` and
+  `generate_alert_image` themselves — a behaviour-adjacent change that belongs
+  in its own commit.
+- Two pre-existing issues were found and deliberately left alone, since fixing
+  either changes behaviour: `maps.py` carries an unused `shadow` local (F841,
+  present identically in the monolith), and
+  `test_render_map_draws_counties_and_scale_bar` asserts only the output
+  image's size and mode — despite its name and docstring it never checks that
+  county outlines or the scale bar were actually drawn, so it passes whether or
+  not its stubs take effect.
+
+## [2.134.0] - 2026-08-06 - Large-file refactor, phase 1: FIPS data and the demodulator
+
+`docs/development/AGENTS.md` asks for Python modules under ~400 lines. The tree
+currently breaks that in 131 modules, 75 templates and 16 JavaScript files.
+This release starts working that number down, beginning with the two biggest
+Python files. Both changes are pure motion — no behaviour was altered.
+
+### Added
+- **`docs/development/LARGE_FILE_REFACTOR_PLAN.md`** — the running plan for the
+  whole effort. It records the full inventory of oversized files, the ground
+  rules that make each split reviewable (move code verbatim, keep the old
+  import path working as a shim, split on a real seam rather than a line
+  number, name the tests that cover the file), a per-file extraction strategy
+  across five phases, and a progress log. `webapp/audio_archive/` from 2.133.1
+  is cited as the reference example.
+
+### Changed
+- **`app_utils/fips_codes.py`: 3887 → 673 lines.** 3,236 lines of it were a
+  single `US_FIPS_COUNTY_TABLE` string literal — FCC/Census reference data, not
+  code. Every reader of the lookup helpers scrolled past it and every diff
+  touching the module rendered it. The table moved to
+  `app_utils/data/us_fips_counties.txt` in the identical `FIPS|ST|Name` pipe
+  format, read at import by `_load_county_table()` and resolved relative to
+  `__file__` the same way the module already resolves the NWS partial-county
+  `.dbf` from `assets/`. A read failure logs an actionable error and degrades to
+  an empty table rather than failing the import. `US_FIPS_COUNTY_TABLE` itself
+  is still exported, so nothing downstream changes. Verified by hashing
+  `US_FIPS_COUNTIES`, `ALL_US_FIPS_CODES`, `US_FIPS_LOOKUP`,
+  `US_STATE_COUNTY_TREE`, `STATEWIDE_SAME_CODES`, `get_extended_same_lookup()`,
+  `get_extended_state_county_tree()` and `get_marine_state_tree()` before and
+  after: all identical.
+- **`app_core/radio/demodulation.py` (5355 lines, the largest module in the
+  tree) became the `app_core/radio/demod/` package.** Six unrelated concerns
+  shared one file: Numba JIT kernels, generic DSP helpers, configuration
+  dataclasses, the RBDS decoder, the FM demodulator and the AM demodulator. The
+  RBDS decoder alone is ~2,300 lines and has its own test file, yet could not be
+  imported without pulling in the whole FM chain. The new layout is
+  `kernels.py` (426), `rbds_constants.py` (144), `types.py` (279), `dsp.py`
+  (332), `rbds_decoder.py` (1238), `rbds_worker.py` (2293), `fm.py` (795),
+  `am.py` (96) and `factory.py` (48), with a strictly acyclic dependency graph.
+  `app_core/radio/demodulation.py` stays as a 95-line re-export shim, so every
+  existing `from app_core.radio.demodulation import …` keeps resolving —
+  including the private `_NUMBA_AVAILABLE` that `webapp/routes_monitoring.py`
+  reads for the diagnostics page. The split was checked to be pure motion by
+  comparing `ast.dump()` of every top-level definition before and after: 23
+  definitions, 23 matches, zero differences.  `tests/test_rbds_demodulation.py`,
+  `tests/test_fm_stereo_decoder.py`, `tests/test_early_decimation.py` and
+  `tests/test_eas_resampler.py` pass unchanged.
+
+### Fixed
+- **`scripts/rbds_diagnose.py` would have silently reported stale pipeline
+  values after the split.** It regex-scans the demodulator source so its report
+  stays in sync with the code rather than hard-coding "current" values, and it
+  pointed at `app_core/radio/demodulation.py` — which is now a 95-line shim.
+  Every lookup would have missed and fallen back to the known-good defaults,
+  which is exactly the staleness the introspection exists to prevent. It now
+  reads every module under `app_core/radio/demod/` concatenated, so the
+  patterns keep matching wherever a symbol lands if the package is split again.
+  Verified to return identical results against the old monolith and the new
+  package.
+
+### Known limitations
+- `scripts/rbds_diagnose.py` cannot locate the `_costas_pysdr` /
+  `_mm_timing_pysdr` calls inside `RBDSWorker._process_rbds` and falls back to
+  assuming Costas runs first. This predates the refactor — it reproduces
+  identically against the pre-split monolith — and is left alone here because
+  correcting it changes what the diagnostic reports, which does not belong in a
+  pure-motion commit.
+- `demod/rbds_worker.py` (2293) and `demod/rbds_decoder.py` (1238) are each a
+  *single class*, so module-level splitting cannot shrink them further.
+  `RBDSWorker`'s 27 methods cover pilot estimation, interference notching,
+  timing recovery, Costas carrier recovery and group decoding — five
+  collaborators wearing one class. Extracting them means mixins or helper
+  objects, which is behaviour-adjacent and belongs in its own reviewed commit.
+  Tracked as Phase 2a-ii in the refactor plan.
+
 ## [2.133.1] - 2026-08-06 - Audio Archives settings survive upgrades, and the page matches the rest of the UI
 
 ### Fixed
