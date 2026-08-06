@@ -419,3 +419,50 @@ def test_audio_stream_endpoint_uses_wav_mimetype(audio_app, authenticated_user):
 
         response.close()
         controller.remove_source("monitor-dummy")
+
+
+def test_ensure_sdr_audio_monitor_source_preserves_archive_settings(audio_app, authenticated_user):
+    """Re-syncing a receiver must not wipe the Audio Archives settings.
+
+    ``ensure_sdr_audio_monitor_source`` used to assign a freshly-built
+    ``config_params`` dict, which deleted the user-owned ``archive`` block
+    stored alongside the receiver-derived keys.  Because the sync runs on every
+    service start, archiving silently reverted to off after every upgrade.
+    """
+    with audio_app.app_context():
+        receiver = _create_receiver()
+        db.session.add(receiver)
+        db.session.commit()
+
+        audio_admin.ensure_sdr_audio_monitor_source(receiver, start_immediately=False, commit=True)
+
+        # The user turns archiving on from /admin/audio/archives.
+        config = AudioSourceConfigDB.query.filter_by(name="sdr-wx42").first()
+        params = dict(config.config_params)
+        params["archive"] = {
+            "enabled": True,
+            "output_dir": "archives",
+            "segment_duration_seconds": 1800,
+            "retention_days": 30,
+            "max_disk_bytes": 0,
+            "format": "mp3",
+            "bitrate": 192,
+            "silence_threshold": 0.005,
+        }
+        config.config_params = params
+        db.session.commit()
+
+        # An upgrade restarts the services, which re-syncs every receiver — and
+        # this time the receiver's own settings changed too.
+        receiver.squelch_threshold_db = -42.0
+        db.session.commit()
+        audio_admin.ensure_sdr_audio_monitor_source(receiver, start_immediately=False, commit=True)
+
+        config = AudioSourceConfigDB.query.filter_by(name="sdr-wx42").first()
+        assert config.config_params["archive"]["enabled"] is True
+        assert config.config_params["archive"]["retention_days"] == 30
+        assert config.config_params["archive"]["format"] == "mp3"
+        assert config.config_params["archive"]["bitrate"] == 192
+
+        # ...while the receiver-derived keys still track the receiver.
+        assert config.config_params["squelch_threshold_db"] == pytest.approx(-42.0)

@@ -638,6 +638,7 @@ class AudioCommandSubscriber:
                         max_disk_bytes=int(archive_config.get('max_disk_bytes', 0)),
                         format=archive_config.get('format', 'wav'),
                         bitrate=int(archive_config.get('bitrate', 128)),
+                        silence_threshold=float(archive_config.get('silence_threshold', 0.0)),
                     )
 
                     try:

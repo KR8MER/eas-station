@@ -48,6 +48,7 @@ from app_core.audio.ingest import AudioSourceConfig, AudioSourceType, AudioSourc
 from app_core.audio.sources import create_audio_source
 from app_core.audio.redis_commands import get_audio_command_publisher
 from app_core.audio.mount_points import generate_mount_point, StreamFormat
+from app_core.audio.source_config import merge_managed_config_params
 from app_core.auth.roles import require_permission
 from app_utils import utc_now
 
@@ -674,7 +675,7 @@ def ensure_sdr_audio_monitor_source(
         'carrier_alarm_enabled': carrier_alarm_enabled,
     }
 
-    config_params = {
+    managed_params = {
         'sample_rate': sample_rate,
         'channels': channels,
         'buffer_size': buffer_size,
@@ -704,7 +705,7 @@ def ensure_sdr_audio_monitor_source(
         db_config = AudioSourceConfigDB(
             name=source_name,
             source_type=AudioSourceType.SDR.value,
-            config_params=config_params,
+            config_params=dict(managed_params),
             priority=priority,
             enabled=True,
             auto_start=start_flag,
@@ -713,8 +714,12 @@ def ensure_sdr_audio_monitor_source(
         db.session.add(db_config)
         created = True
     else:
-        if (db_config.config_params or {}) != config_params:
-            db_config.config_params = config_params
+        # Merge rather than replace: config_params also carries user-owned
+        # settings (Audio Archives retention/format) that this sync must not
+        # delete on every service start.
+        merged_params = merge_managed_config_params(db_config.config_params, managed_params)
+        if (db_config.config_params or {}) != merged_params:
+            db_config.config_params = merged_params
             updated = True
         if not db_config.enabled:
             db_config.enabled = True
