@@ -41,7 +41,6 @@
 .gps-live-body
 
 # templates/admin/gps_dashboard.html, templates/admin/hardware_settings.html
-.gps-live-dot
 
 # templates/admin/gps_dashboard.html, templates/admin/hardware_settings.html
 .gps-nmea-controls

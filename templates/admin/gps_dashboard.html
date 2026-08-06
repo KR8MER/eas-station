@@ -38,36 +38,6 @@
     }
     .gps-dash code { background: var(--bg-tertiary, rgba(127,127,127,.12)); padding: 1px 5px; border-radius: 3px; }
 
-    /* Header banner — node id + GPS lock + refresh-rate selector */
-    .gps-dash-header {
-        display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
-        padding: 10px 14px; margin-bottom: 14px;
-        border: 1px solid var(--border-color, rgba(127,127,127,.25));
-        border-radius: 8px;
-        background: var(--bg-secondary, rgba(127,127,127,.04));
-    }
-    .gps-dash-header .title {
-        font-weight: 700; letter-spacing: 0.04em;
-        display: inline-flex; align-items: center; gap: 8px;
-    }
-    .gps-dash-header .node {
-        color: var(--text-muted); font-family: var(--font-mono, monospace);
-    }
-    .gps-dash-header .spacer { flex: 1 1 auto; }
-    .gps-dash-header select.form-select-sm { width: auto; }
-
-    /* Pills (lock state, fix mode) */
-    .gps-pill {
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 2px 9px; border-radius: 999px;
-        font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em;
-        border: 1px solid currentColor;
-        transition: color 0.3s ease, border-color 0.3s ease;
-    }
-    .gps-pill.ok      { color: #3fb950; }
-    .gps-pill.warn    { color: #d29922; }
-    .gps-pill.danger  { color: #f85149; }
-    .gps-pill.muted   { color: var(--text-muted, #8b949e); }
 
     /* Card shell — styled like the EAS Station™ eas-card section */
     .gps-card {
@@ -309,19 +279,6 @@
     @media (max-width: 575.98px) {
         .gps-dash { font-size: 0.88rem; }
 
-        /* Header: title + node on row 1, pills wrap, controls right-aligned */
-        .gps-dash-header {
-            padding: 8px 10px;
-            gap: 8px;
-        }
-        .gps-dash-header .title { width: 100%; }
-        .gps-dash-header .node {
-            width: 100%;
-            font-size: 0.78rem;
-            margin-top: -2px;
-        }
-        .gps-dash-header .spacer { display: none; }
-        .gps-dash-header select.form-select-sm { flex: 1 1 auto; }
 
         /* Skyview hero: stage becomes a flex column.  The 3D / 2D
            canvas region keeps a fixed height at the top, then the
@@ -820,124 +777,9 @@
        Persistent 7-tile bar showing system health at a glance.
        Telecom / broadcast master-control aesthetic: hard severity
        colours, large primary readouts, tight uppercase labels.
-       ============================================================ */
-    .gps-status-strip {
-        display: grid;
-        /* Wider weight for the two operator-critical tiles (Sync, PPS Lock)
-           so triage works at a glance from across the room. */
-        grid-template-columns: 2fr 1fr 2fr 1fr 1fr 1fr 1fr;
-        gap: 8px;
-        margin: 0 0 14px 0;
-    }
-    .gps-status-tile {
-        position: relative;
-        padding: 10px 12px;
-        border: 1px solid var(--border-color, rgba(127,127,127,.22));
-        border-left: 3px solid var(--text-muted, #8b949e);
-        border-radius: 6px;
-        background: var(--bg-secondary, rgba(127,127,127,.04));
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        min-width: 0;
-        transition: border-left-color 0.45s ease, background-color 0.45s ease;
-    }
-    /* Primary tiles (Sync, PPS Lock): bigger readout and a heavier accent
-       so they read first when the eye scans the strip. Selectors target
-       the existing IDs so no markup changes are needed. */
-    #strip-sync, #strip-pps {
-        border-left-width: 5px;
-        padding: 12px 14px;
-    }
-    #strip-sync .lbl, #strip-pps .lbl { font-size: 0.72rem; }
-    #strip-sync .val, #strip-pps .val { font-size: 1.55rem; }
-    #strip-sync .sub, #strip-pps .sub { font-size: 0.74rem; }
-    .gps-status-tile .lbl {
-        font-size: 0.66rem;
-        font-weight: 700;
-        letter-spacing: 0.10em;
-        text-transform: uppercase;
-        color: var(--text-muted, #8b949e);
-        display: flex; align-items: center; gap: 5px;
-    }
-    .gps-status-tile .lbl i { font-size: 0.74rem; opacity: 0.7; }
-    .gps-status-tile .val {
-        font-family: var(--font-mono, ui-monospace, monospace);
-        font-size: 1.18rem;
-        font-weight: 700;
-        line-height: 1.05;
-        color: var(--text-color);
-        font-variant-numeric: tabular-nums;
-        letter-spacing: 0.02em;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    .gps-status-tile .sub {
-        font-size: 0.68rem;
-        color: var(--text-muted, #8b949e);
-        font-family: var(--font-mono, ui-monospace, monospace);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    /* Severity tinting — strong, broadcast-style colour cues. */
-    .gps-status-tile.sev-ok    { border-left-color: #3fb950; }
-    .gps-status-tile.sev-ok    .val { color: #3fb950; }
-    .gps-status-tile.sev-warn  { border-left-color: #d29922; background: rgba(210,153,34,0.06); }
-    .gps-status-tile.sev-warn  .val { color: #f6c343; }
-    .gps-status-tile.sev-fault { border-left-color: #f85149; background: rgba(248,81,73,0.07); }
-    .gps-status-tile.sev-fault .val { color: #f85149; }
-    .gps-status-tile.sev-info  { border-left-color: #58a6ff; }
-    .gps-status-tile.sev-info  .val { color: #58a6ff; }
-    .gps-status-tile.sev-unknown .val { color: var(--text-muted, #8b949e); }
-
-    /* Stagger fade-in when the page loads — tiles arrive in sequence
-       so the operator's eye is drawn left-to-right across the strip. */
-    @keyframes gps-tile-in {
-        from { opacity: 0; transform: translateY(6px); }
-        to   { opacity: 1; transform: translateY(0);   }
-    }
-    .gps-status-tile           { animation: gps-tile-in 0.35s ease both; }
-    .gps-status-tile:nth-child(2) { animation-delay: 0.05s; }
-    .gps-status-tile:nth-child(3) { animation-delay: 0.10s; }
-    .gps-status-tile:nth-child(4) { animation-delay: 0.15s; }
-    .gps-status-tile:nth-child(5) { animation-delay: 0.20s; }
-    .gps-status-tile:nth-child(6) { animation-delay: 0.25s; }
-    .gps-status-tile:nth-child(7) { animation-delay: 0.30s; }
-    @media (prefers-reduced-motion: reduce) {
-        .gps-status-tile { animation: none; }
-    }
-
-    /* Data-received heartbeat dot — in the dashboard header, pulses
-       green after every successful poll to confirm live telemetry. */
-    .gps-live-dot {
-        display: inline-block;
-        width: 8px; height: 8px;
-        border-radius: 50%;
-        background: var(--text-muted, #8b949e);
-        margin-left: 2px;
-        vertical-align: middle;
-        flex-shrink: 0;
-    }
-    @keyframes gps-data-ping {
-        0%   { box-shadow: 0 0 0 0   rgba(63, 185, 80, 0.80); background: #3fb950; }
-        70%  { box-shadow: 0 0 0 8px rgba(63, 185, 80, 0);    background: #3fb950; }
-        100% { box-shadow: 0 0 0 0   rgba(63, 185, 80, 0);    background: var(--text-muted, #8b949e); }
-    }
-    .gps-live-dot.ping { animation: gps-data-ping 0.75s ease forwards; }
-
-    @media (max-width: 1100px) {
-        .gps-status-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-        #strip-sync .val, #strip-pps .val { font-size: 1.28rem; }
-    }
-    @media (max-width: 720px) {
-        .gps-status-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-        .gps-status-tile { padding: 8px 10px; }
-        .gps-status-tile .val { font-size: 1.02rem; }
-        #strip-sync, #strip-pps { padding: 10px 12px; }
-        #strip-sync .val, #strip-pps .val { font-size: 1.15rem; }
-    }
+    /* Status strip, tiles, header pills and the heartbeat dot now come
+       from the shared .status-strip / .status-pill / .live-dot component
+       in static/css/styles.css, shared with the System Health page. */
 
     /* ============================================================
        VIEW MODE (Simple / Engineering) toggle in the header
@@ -964,6 +806,43 @@
     .gps-view-toggle button.active {
         background: linear-gradient(135deg, #58a6ff, #bc8cff);
         color: #fff;
+    }
+
+    /* The view toggle and the refresh selector now ride in the standard
+       page header's actions slot — white text over the theme gradient.
+       The page-surface tokens above (--text-muted, --border-color) are
+       not legible there, so give them the same frosted treatment the
+       header's buttons already get. */
+    .page-header-actions .gps-view-toggle {
+        border-color: rgba(255, 255, 255, 0.35);
+        background: rgba(255, 255, 255, 0.12);
+    }
+    .page-header-actions .gps-view-toggle button { color: rgba(255, 255, 255, 0.85); }
+    .page-header-actions .gps-view-toggle button + button {
+        border-left-color: rgba(255, 255, 255, 0.30);
+    }
+    .page-header-actions .gps-view-toggle button:hover {
+        color: #fff;
+        background: rgba(255, 255, 255, 0.10);
+    }
+    /* Solid white chip rather than the old blue/purple gradient: the header
+       is already a theme-driven gradient, so a second one underneath the
+       active label muddies it on several themes. */
+    .page-header-actions .gps-view-toggle button.active {
+        background: #ffffff;
+        color: var(--primary-color);
+    }
+    .page-header-actions select#gps-dash-refresh {
+        width: auto;
+        background-color: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.35);
+        color: #ffffff;
+    }
+    /* The popup list is drawn by the OS against its own background, so the
+       translucent-white treatment above must not leak into the options. */
+    .page-header-actions select#gps-dash-refresh option {
+        color: var(--text-color);
+        background-color: var(--surface-color);
     }
 
     /* Hide engineering-only sections when the dashboard is in Simple mode. */
@@ -1421,30 +1300,35 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-3 gps-dash" id="gps-dash-root" data-mode="simple">
+{# The page header is full-bleed, matching System Health: it sits outside the
+   container-fluid rather than inside it, or the container's gutters inset it
+   and the two pages' headers no longer line up. The gps-dash class, the root
+   id and data-mode stay on this outer wrapper — the page CSS and the
+   Simple/Engineering view-mode JS both key off them. #}
+<div class="gps-dash" id="gps-dash-root" data-mode="simple">
 
-    <!-- ============================================================
-         APPLIANCE HEADER — title, node id, refresh, units, view mode.
-         Severity is communicated by the persistent status strip below,
-         not by a handful of pills crammed into the header.
-         ============================================================ -->
-    <div class="gps-dash-header" role="region" aria-label="GPS dashboard header">
-        <span class="title">
-            <i class="fas fa-satellite-dish"></i>
-            GNSS / TIME APPLIANCE
-        </span>
-        <span class="node">NTP Node:&nbsp;<span id="gps-dash-node">…</span></span>
-        <span id="gps-dash-lock-pill"   class="gps-pill muted"><i class="fas fa-circle"></i> —</span>
-        <span id="gps-dash-fix-pill"    class="gps-pill muted">— FIX</span>
-        <span id="gps-dash-stratum-pill" class="gps-pill muted">STRATUM —</span>
-        <span class="gps-live-dot" id="gps-live-dot" title="Last data received"></span>
-        <span class="spacer"></span>
+    {# ============================================================
+       STANDARD PAGE HEADER — the shared component every page uses.
+       This page previously hand-rolled its own `.gps-dash-header`,
+       which is why it opened looking unlike the rest of the UI
+       (System Health included). Live status pills, the heartbeat
+       dot and all the controls ride in the component's actions
+       slot, so nothing is lost — only the chrome is unified.
+       ============================================================ #}
+    {% set header_icon = 'fas fa-satellite-dish' %}
+    {% set header_title = 'GNSS & Time Dashboard' %}
+    {% set header_subtitle %}NTP Node: <span id="gps-dash-node">…</span>{% endset %}
+    {% set header_actions %}
+        <span id="gps-dash-lock-pill"    class="status-pill muted"><i class="fas fa-circle"></i> —</span>
+        <span id="gps-dash-fix-pill"     class="status-pill muted">— FIX</span>
+        <span id="gps-dash-stratum-pill" class="status-pill muted">STRATUM —</span>
+        <span class="live-dot" id="gps-live-dot" title="Last data received"></span>
         <div class="gps-view-toggle" role="group" aria-label="View mode">
             <button type="button" id="gps-view-simple" class="active" aria-pressed="true">Simple</button>
             <button type="button" id="gps-view-engineering" aria-pressed="false">Engineering</button>
         </div>
-        <label for="gps-dash-refresh" class="text-muted small mb-0 ms-2 me-1">Refresh</label>
-        <select id="gps-dash-refresh" class="form-select form-select-sm">
+        <label for="gps-dash-refresh" class="visually-hidden">Refresh interval</label>
+        <select id="gps-dash-refresh" class="form-select form-select-sm" title="Refresh interval">
             <option value="3000">3s</option>
             <option value="5000" selected>5s</option>
             <option value="10000">10s</option>
@@ -1452,54 +1336,64 @@
             <option value="0">Paused</option>
         </select>
         <details class="eas-units-disclosure" id="gps-dash-units-disclosure">
-            <summary class="btn btn-sm btn-outline-secondary" title="Display units (lat/lon, altitude, speed, distance)">
+            <summary class="btn btn-sm btn-outline-light" title="Display units (lat/lon, altitude, speed, distance)">
                 <i class="fas fa-ruler"></i> Units
             </summary>
             <div class="eas-units-popover" id="gps-dash-units-panel"></div>
         </details>
         <a href="{{ url_for('hardware.hardware_settings_page') }}#gps"
-           class="btn btn-sm btn-outline-secondary" title="GPS Hardware Settings">
+           class="btn btn-sm btn-outline-light" title="GPS Hardware Settings">
             <i class="fas fa-cog"></i> Settings
         </a>
-    </div>
+    {% endset %}
+    {% include 'components/page_header.html' %}
+
+<div class="container-fluid py-3">
+
+    <!-- Telemetry-feed failure banner.  Without this a failing
+         /admin/api/gps-dashboard/data leaves every card frozen on its
+         last good values, and the only cue is the heartbeat dot no
+         longer pulsing — far too subtle for a page used to confirm
+         timing integrity. -->
+    <div class="alert alert-danger d-none mt-2 mb-0" id="gps-dash-error" role="alert" aria-live="polite"></div>
 
     <!-- ============================================================
          PERSISTENT TOP STATUS STRIP — at-a-glance system health.
          Seven tiles, severity-tinted (green/amber/red/blue), each
          showing a primary value and a one-line context sub-string.
          ============================================================ -->
-    <section class="gps-status-strip" aria-label="System health at a glance">
-        <div class="gps-status-tile sev-unknown" id="strip-sync">
+    <section class="status-strip status-strip-emphasis" aria-label="System health at a glance">
+        <div class="status-tile is-primary sev-unknown" id="strip-sync">
             <div class="lbl"><i class="fas fa-bolt"></i> Sync <span class="gps-help-anchor" data-gps-help="tile-sync"></span></div>
             <div class="val">—</div>
             <div class="sub" id="strip-sync-sub">awaiting data…</div>
         </div>
-        <div class="gps-status-tile sev-unknown" id="strip-stratum">
+        <div class="status-tile sev-unknown" id="strip-stratum">
             <div class="lbl"><i class="fas fa-layer-group"></i> Stratum <span class="gps-help-anchor" data-gps-help="stratum"></span></div>
             <div class="val">—</div>
             <div class="sub" id="strip-stratum-sub">no chrony tracking</div>
         </div>
-        <div class="gps-status-tile sev-unknown" id="strip-pps">
+        <div class="status-tile is-primary sev-unknown" id="strip-pps">
             <div class="lbl"><i class="fas fa-wave-square"></i> PPS Lock <span class="gps-help-anchor" data-gps-help="pps-lock"></span></div>
             <div class="val">—</div>
             <div class="sub" id="strip-pps-sub">no pulse data</div>
         </div>
-        <div class="gps-status-tile sev-unknown" id="strip-gnss">
+        <div class="status-tile sev-unknown" id="strip-gnss">
             <div class="lbl"><i class="fas fa-satellite"></i> GNSS <span class="gps-help-anchor" data-gps-help="gnss-fix"></span></div>
             <div class="val">—</div>
             <div class="sub" id="strip-gnss-sub">no fix</div>
         </div>
-        <div class="gps-status-tile sev-unknown" id="strip-rms">
+        <div class="status-tile sev-unknown" id="strip-rms">
             <div class="lbl"><i class="fas fa-stopwatch"></i> RMS Offset <span class="gps-help-anchor" data-gps-help="rms-offset"></span></div>
             <div class="val">—</div>
             <div class="sub" id="strip-rms-sub">offset unknown</div>
         </div>
-        <div class="gps-status-tile sev-unknown" id="strip-sats">
+        <div class="status-tile sev-unknown" id="strip-sats">
             <div class="lbl"><i class="fas fa-satellite-dish"></i> Satellites <span class="gps-help-anchor" data-gps-help="satellites-used"></span></div>
             <div class="val">—</div>
             <div class="sub" id="strip-sats-sub">— used / — visible</div>
         </div>
-        <div class="gps-status-tile sev-unknown" id="strip-holdover">
+        <div class="status-tile sev-unknown" id="strip-holdover">
             <div class="lbl"><i class="fas fa-hourglass-half"></i> Holdover <span class="gps-help-anchor" data-gps-help="holdover"></span></div>
             <div class="val">—</div>
             <div class="sub" id="strip-holdover-sub">disciplined</div>
@@ -2471,6 +2365,7 @@
             </div>
         </div>
     </div>
+</div>
 </div>
 {% endblock %}
 
@@ -3730,13 +3625,13 @@
         var hasFix = !!(gps && gps.has_fix);
         var running = !!(gps && gps.running);
         if (hasFix && running) {
-            pill.className = 'gps-pill ok';
+            pill.className = 'status-pill ok';
             pill.innerHTML = '<i class="fas fa-circle-check"></i> GPS LOCKED';
         } else if (running) {
-            pill.className = 'gps-pill warn';
+            pill.className = 'status-pill warn';
             pill.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ACQUIRING';
         } else {
-            pill.className = 'gps-pill danger';
+            pill.className = 'status-pill danger';
             pill.innerHTML = '<i class="fas fa-circle-xmark"></i> NO GPS';
         }
     }
@@ -3762,23 +3657,23 @@
         var suffix = (gps && FIX_QUALITY_SUFFIX[gps.fix_quality]) || '';
         if (suffix) label = label.replace(/ FIX$/, ' ' + suffix);
         var el = document.getElementById('gps-dash-fix-pill');
-        if (el) { el.className = 'gps-pill ' + cls; el.textContent = label; }
+        if (el) { el.className = 'status-pill ' + cls; el.textContent = label; }
     }
     function setStratumPill(tracking) {
         var pill = document.getElementById('gps-dash-stratum-pill');
         if (!pill) return;
         var s = tracking && tracking.stratum;
         if (s === null || s === undefined) {
-            pill.className = 'gps-pill muted';
+            pill.className = 'status-pill muted';
             pill.textContent = 'STRATUM —';
         } else if (s === 1) {
-            pill.className = 'gps-pill ok';
+            pill.className = 'status-pill ok';
             pill.textContent = 'STRATUM 1';
         } else if (s <= 4) {
-            pill.className = 'gps-pill warn';
+            pill.className = 'status-pill warn';
             pill.textContent = 'STRATUM ' + s;
         } else {
-            pill.className = 'gps-pill danger';
+            pill.className = 'status-pill danger';
             pill.textContent = 'STRATUM ' + s;
         }
     }
@@ -6727,6 +6622,19 @@
         renderNmeaInspector(gps.recent_sentences || []);
     }
 
+    // ── Telemetry-feed error banner.  Both helpers are idempotent so
+    //    they can be called on every poll without churning the DOM.
+    function showFeedError(message) {
+        var el = document.getElementById('gps-dash-error');
+        if (!el) return;
+        if (el.textContent !== message) el.textContent = message;
+        el.classList.remove('d-none');
+    }
+    function hideFeedError() {
+        var el = document.getElementById('gps-dash-error');
+        if (el) el.classList.add('d-none');
+    }
+
     // ── Polling.  Configurable interval; "0" means paused.
     var timer = null;
     function fetchOnce() {
@@ -6736,15 +6644,34 @@
         // refresh so the dashboard never shows stale data when refocused.
         if (typeof document !== 'undefined' && document.hidden) return;
         fetch('/admin/api/gps-dashboard/data', { credentials: 'same-origin' })
-            .then(function (r) { return r.json(); })
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
             .then(function (data) {
                 render(data);
+                // gps_dashboard_data() answers HTTP 200 carrying
+                // gps._error when the hardware service is unreachable —
+                // deliberately, so the chrony half of the dashboard keeps
+                // rendering. Treating any 200 as success would hide
+                // precisely the outage this banner exists for.
+                if (data && data.gps && data.gps._error) {
+                    showFeedError('GNSS receiver telemetry is unavailable — the '
+                        + 'hardware service is not responding. Timing data below is '
+                        + 'still live; satellite and fix values are last-known.');
+                } else {
+                    hideFeedError();
+                }
                 // Pulse the heartbeat dot so the operator can see
                 // that fresh telemetry arrived without any fanfare.
+                // Still correct in the gps._error case: the request did
+                // succeed and the chrony half genuinely refreshed.
                 flashEl(document.getElementById('gps-live-dot'));
             })
             .catch(function (err) {
                 console.warn('GPS dashboard fetch failed:', err);
+                showFeedError('Unable to refresh GNSS telemetry — the values '
+                    + 'below are the last good readings, not live.');
             });
     }
     function schedule(intervalMs) {
@@ -6893,9 +6820,24 @@
         // end to avoid hammering Redis (or starving the operator of
         // updates).
         setInterval(function () {
+            // Same reasoning as fetchOnce(): a hidden tab can't show the
+            // result, and this endpoint is Redis-backed. The
+            // visibilitychange handler below re-seeds on return.
+            if (typeof document !== 'undefined' && document.hidden) return;
             if (!TS_CURRENT_TIER || TS_CURRENT_TIER === 'raw') return;
             fetchTrends(TS_CURRENT_WINDOW);
         }, Math.min(300_000, Math.max(60_000, (TS_CURRENT_BUCKET_S * 1000) / 3)));
+
+        // Pair the guard above with an immediate re-seed on refocus so
+        // the charts don't sit on a stale right edge after the tab has
+        // been in the background.
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', function () {
+                if (document.hidden) return;
+                if (!TS_CURRENT_TIER || TS_CURRENT_TIER === 'raw') return;
+                fetchTrends(TS_CURRENT_WINDOW);
+            });
+        }
         fetchTrends(TS_CURRENT_WINDOW).then(fetchOnce);
 
         // ============================================================

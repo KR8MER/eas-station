@@ -9187,3 +9187,189 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 }
 
 /* End of Consolidated Styles */
+
+/* ============================================================================
+   Telemetry Status Strip + Header Pills (.status-strip / .status-pill)
+   ----------------------------------------------------------------------------
+   Shared appliance-style chrome for live monitoring pages (System Health,
+   GNSS & Time Dashboard). Both pages previously carried their own near
+   identical copies under `health-*` and `gps-*` prefixes, which had drifted
+   apart — different surface tokens, two different greens for "OK", and
+   different idle colours for the heartbeat dot. Defined once here instead.
+
+   Anatomy:
+       .status-strip            grid of tiles, sits directly under the header
+         .status-tile           one metric; severity via .sev-* on the tile
+           .lbl                 small uppercase caption (may contain an <i>)
+           .val                 large mono readout
+           .sub                 one-line context string
+       .status-pill             pill for the page header's actions slot
+       .live-dot                heartbeat dot; add .ping after a good poll
+
+   Two palettes on purpose: tiles sit on the page surface and use the
+   saturated set; pills and the dot sit on the header gradient and use
+   lightened variants over a dark scrim, so they stay legible on every theme.
+   ========================================================================== */
+
+.status-strip {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0 0 18px 0;
+}
+
+/* Opt-in weighting for strips whose first and third tiles are the ones an
+   operator triages first (the GNSS page's Sync and PPS Lock). */
+.status-strip.status-strip-emphasis {
+    grid-template-columns: 2fr 1fr 2fr 1fr 1fr 1fr 1fr;
+}
+
+.status-tile {
+    position: relative;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color, rgba(127, 127, 127, .22));
+    border-left: 3px solid var(--text-muted, #8b949e);
+    border-radius: 6px;
+    background: var(--surface-color, rgba(127, 127, 127, .04));
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    transition: border-left-color 0.45s ease, background-color 0.45s ease;
+}
+
+.status-tile .lbl {
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--text-muted, #8b949e);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.status-tile .lbl i { font-size: 0.74rem; opacity: 0.7; }
+
+.status-tile .val {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 1.18rem;
+    font-weight: 700;
+    line-height: 1.05;
+    color: var(--text-color);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.status-tile .sub {
+    font-size: 0.68rem;
+    color: var(--text-muted, #8b949e);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Emphasised tile — heavier rail and a larger readout so it reads first. */
+.status-tile.is-primary {
+    border-left-width: 5px;
+    padding: 12px 14px;
+}
+.status-tile.is-primary .lbl { font-size: 0.72rem; }
+.status-tile.is-primary .val { font-size: 1.55rem; }
+.status-tile.is-primary .sub { font-size: 0.74rem; }
+
+/* Severity tinting — left rail plus value colour. */
+.status-tile.sev-ok    { border-left-color: #3fb950; }
+.status-tile.sev-ok    .val { color: #3fb950; }
+.status-tile.sev-warn  { border-left-color: #d29922; background: rgba(210, 153, 34, 0.06); }
+.status-tile.sev-warn  .val { color: #f6c343; }
+.status-tile.sev-fault { border-left-color: #f85149; background: rgba(248, 81, 73, 0.07); }
+.status-tile.sev-fault .val { color: #f85149; }
+.status-tile.sev-info  { border-left-color: #58a6ff; }
+.status-tile.sev-info  .val { color: #58a6ff; }
+.status-tile.sev-unknown .val { color: var(--text-muted, #8b949e); }
+
+@keyframes status-tile-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.status-tile { animation: status-tile-in 0.35s ease both; }
+.status-tile:nth-child(2) { animation-delay: 0.05s; }
+.status-tile:nth-child(3) { animation-delay: 0.10s; }
+.status-tile:nth-child(4) { animation-delay: 0.15s; }
+.status-tile:nth-child(5) { animation-delay: 0.20s; }
+.status-tile:nth-child(6) { animation-delay: 0.25s; }
+.status-tile:nth-child(7) { animation-delay: 0.30s; }
+
+@media (prefers-reduced-motion: reduce) {
+    .status-tile { animation: none; }
+}
+
+@media (max-width: 1180px) {
+    .status-strip,
+    .status-strip.status-strip-emphasis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+    .status-strip,
+    .status-strip.status-strip-emphasis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+    }
+    .status-tile { padding: 8px 10px; }
+    .status-tile .val { font-size: 1.02rem; }
+    .status-tile.is-primary { padding: 8px 10px; }
+    .status-tile.is-primary .val { font-size: 1.15rem; }
+}
+
+/* ── Header pills ────────────────────────────────────────────────────────
+   Live status chips that ride in the standard page header's actions slot.
+   Lightened palette over a dark scrim: the header gradient is theme-driven,
+   so the saturated tile colours are not reliably legible on top of it. */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    border: 1px solid currentColor;
+    background: rgba(0, 0, 0, 0.22);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    transition: color 0.3s ease, border-color 0.3s ease;
+}
+.status-pill.ok     { color: #6ee07a; }
+.status-pill.warn   { color: #f6c343; }
+.status-pill.danger { color: #ff7b72; }
+.status-pill.info   { color: #79c0ff; }
+.status-pill.muted  { color: rgba(255, 255, 255, 0.78); }
+.status-pill i { font-size: 0.72rem; opacity: 0.85; }
+
+/* ── Heartbeat dot ───────────────────────────────────────────────────────
+   Pulses green once per successful poll, then settles back to idle. */
+.live-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.45);
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+
+@keyframes status-data-ping {
+    0%   { box-shadow: 0 0 0 0   rgba(63, 185, 80, 0.80); background: #3fb950; }
+    70%  { box-shadow: 0 0 0 8px rgba(63, 185, 80, 0);    background: #3fb950; }
+    100% { box-shadow: 0 0 0 0   rgba(63, 185, 80, 0);    background: rgba(255, 255, 255, 0.45); }
+}
+.live-dot.ping { animation: status-data-ping 0.75s ease forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+    .live-dot.ping { animation: none; }
+}

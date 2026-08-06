@@ -8,6 +8,117 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.130.0] - 2026-08-05 - Uniform chrome on the monitoring pages
+
+System Health and the GNSS & Time dashboard show the same *kind* of thing — a
+header with live status pills, a heartbeat dot, and a strip of severity-tinted
+metric tiles — but each had grown a private copy of that chrome under
+`health-*` and `gps-*` prefixes, and the copies had drifted. The two pages now
+share one implementation.
+
+### Changed
+- **The GNSS dashboard uses the standard page header.** It was the last page
+  still hand-rolling its own (`.gps-dash-header`), which is why it opened
+  looking unlike the rest of the UI — AGENTS.md requires the shared
+  `components/page_header.html` and ~59 other templates already use it. Every
+  control it carried is preserved, moved into the header's actions slot: the
+  lock/fix/stratum pills, the heartbeat dot, the Simple/Engineering toggle,
+  the refresh-interval selector, Units and Settings. The header is also
+  hoisted out of the page's `container-fluid`, matching System Health — nested
+  inside it, the container's gutters inset the header so the two pages' headers
+  did not line up.
+- **Status strip, pills and heartbeat dot are now one shared component**
+  (`.status-strip` / `.status-tile` / `.status-pill` / `.live-dot`) defined in
+  `static/css/styles.css` and consumed by both pages, replacing roughly 190
+  lines of duplicated per-page CSS. Element IDs are unchanged, so the page
+  JavaScript — which resolves tiles and pills by ID — is unaffected.
+- **The GNSS page's view toggle and refresh selector** were restyled for the
+  header gradient. They previously used page-surface tokens (`--text-muted`,
+  `--border-color`) that are not legible as white-on-gradient, and the active
+  toggle chip's blue/purple gradient muddied the theme gradient underneath it.
+
+### Fixed
+- **Drift between the two copies.** The strips disagreed on their background
+  token — System Health used `--surface-color`, the GNSS page used
+  `--bg-secondary` — so one strip could paint differently from the other under
+  the same theme. The pills also used two different greens for "OK" (`#6ee07a`
+  vs `#3fb950`) and two different idle colours for the heartbeat dot. The
+  shared component still keeps two palettes deliberately, because tiles sit on
+  the page surface and pills sit on the header gradient, but each is now
+  defined exactly once.
+
+### Added
+- `tests/test_monitoring_pages_uniform_chrome.py` — 39 tests pinning the shared
+  chrome: both pages must include the header component and must not hand-roll
+  one, both must use the shared strip/pill/dot classes, none of the ten retired
+  page-private class names may return, and neither page may redefine a shared
+  class locally. Verified to fail (23 of 39) against the pre-change templates.
+
+### Verification
+Rendered both pages in Chromium at 1440px, 360px and 320px. The two headers
+are now geometrically identical (x=0, width=1440, height=213 at 1440px) and the
+status strips align exactly (x=14, width=1412); the GNSS strip stays taller by
+design, because its Sync and PPS Lock tiles keep their emphasis via the shared
+`.status-tile.is-primary` modifier. No horizontal document scrolling at any of
+the three widths on either page. All 20 themes still pass the contrast audit.
+
+## [2.129.1] - 2026-08-05 - System Health and GNSS dashboard fixes
+
+A bug-fix pass over the two monitoring pages. Several of these are cases
+where one page already solved a problem correctly and the other hadn't;
+in each case the better-behaved page set the pattern.
+
+### Fixed
+- **`formatUptime` was declared twice in `system_health.html`.** Both
+  declarations sat at brace depth 0 in the same `<script>`, so the later
+  one silently won and the earlier 24 lines were dead code. The surviving
+  version dropped minutes for any uptime over a day, while the server's
+  first paint uses Python's `format_uptime()` — so a machine up for
+  `1d 10h 17m` rendered that on load and then reformatted itself to
+  `1d 10h` on the first poll. There is now one definition, and it matches
+  the Python formatter.
+- **System Health never refreshed after a hidden tab regained focus.**
+  Polling correctly pauses on `document.hidden`, but nothing resumed it
+  on return, so a backgrounded tab showed arbitrarily stale readings with
+  no cue that they were stale. Added the `visibilitychange` handler the
+  GNSS dashboard already had.
+- **The GNSS dashboard's trends timer ignored `document.hidden`.** Its
+  sibling `fetchOnce()` has guarded on it since the guard was added; the
+  trends re-fetch kept hitting the Redis-backed trends endpoint in
+  background tabs regardless. Guarded, and paired with a refocus re-seed
+  so the charts don't sit on a stale right edge.
+- **A failing GNSS telemetry feed was reported only to the console.**
+  Every card would freeze on its last good values with nothing but a
+  no-longer-pulsing heartbeat dot to indicate the readings were no longer
+  live — too subtle for a page used to confirm timing integrity. Failures
+  now raise a banner stating the values are last-known, not live.
+  Non-2xx responses are treated as failures rather than being parsed as a
+  valid snapshot. The hardware-service outage path needed handling of its
+  own: `gps_dashboard_data()` answers **HTTP 200** carrying
+  `gps._error` when the hardware service is unreachable — deliberately,
+  so the chrony half of the dashboard keeps rendering — so treating every
+  200 as success would have hidden exactly the outage the banner exists
+  for. That envelope now keeps the banner up, with a message noting that
+  timing data is still live while satellite and fix values are not.
+
+### Accessibility
+- **All 15 `<canvas>` elements on System Health now carry an accessible
+  name** (`role="img"` plus `aria-label`); previously none did, against
+  22 of 23 on the GNSS dashboard. `role="img"` is included because canvas
+  has no implicit ARIA role, and an `aria-label` on a roleless element
+  can be ignored outright.
+
+### Added
+- **A "Full GNSS Dashboard" link on the System Health GPS card.** The
+  only route to the detailed dashboard was the navigation menu. Added to
+  both the server-rendered and JS-rendered copies of the card so it
+  survives a refresh.
+- `tests/test_system_health_gps_ui_fixes.py` — 13 regression tests, each
+  verified to fail against the pre-fix templates. Includes a check that
+  executes the template's `formatUptime` under Node and compares its
+  output against `format_uptime()` across a range of durations, so the
+  two formatters cannot drift apart again.
+
 ## [2.129.0] - 2026-08-05 - Faster VU meters for less CPU
 
 The VU meters were throttled to ~15 fps specifically to keep CPU down. Rather
