@@ -18,12 +18,12 @@ Repository: https://github.com/KR8MER/eas-station
 
 ---
 
-Tests for the PPS-derived stability metrics on ``GPSManager``.
+Tests for the PPS-derived stability metrics in ``app_core.gps.timing_stats``.
 
 Covers the additions made for the noise-floor-compensated stability
 grading on the GPS dashboard:
 
-* jitter percentiles (p95/p99 of |Δ|) in ``_compute_jitter_summary``
+* jitter percentiles (p95/p99 of |Δ|) in ``compute_jitter_summary``
 * the white-PM measurement floor (``sigma_x_wpm_s`` +
   ``floor_sigma_y``) shipped alongside the overlapping ADEV
 
@@ -38,7 +38,11 @@ import random
 
 import pytest
 
-from app_core.gps.gps_manager import GPSManager
+from app_core.gps.sysprobe import read_cpu_temp_c
+from app_core.gps.timing_stats import (
+    compute_allan_deviation,
+    compute_jitter_summary,
+)
 
 NOMINAL_NS = 1_000_000_000
 
@@ -57,7 +61,7 @@ def _white_pm_intervals(n: int, sigma_x_ns: float, seed: int = 42) -> list:
 class TestJitterPercentiles:
     def test_percentiles_present_and_ordered(self):
         intervals = _white_pm_intervals(2000, sigma_x_ns=2000.0)
-        out = GPSManager._compute_jitter_summary(intervals)
+        out = compute_jitter_summary(intervals)
         assert out["p95_ns"] is not None
         assert out["p99_ns"] is not None
         # |Δ| percentiles must be ordered and bounded by the peak.
@@ -69,13 +73,13 @@ class TestJitterPercentiles:
         # point of reporting percentiles alongside σ.  p99 (nearest-rank)
         # lands inside the 1.5 % outlier tail and exposes it.
         intervals = [NOMINAL_NS + 100] * 985 + [NOMINAL_NS + 50_000] * 15
-        out = GPSManager._compute_jitter_summary(intervals)
+        out = compute_jitter_summary(intervals)
         assert out["peak_ns"] == 50_000
         assert out["p95_ns"] <= 1_000
         assert out["p99_ns"] == 50_000
 
     def test_too_few_samples_returns_placeholders(self):
-        out = GPSManager._compute_jitter_summary([NOMINAL_NS])
+        out = compute_jitter_summary([NOMINAL_NS])
         assert out["sample_count"] == 1
         # New keys must not appear partially-populated on the empty path.
         assert "p95_ns" not in out or out.get("p95_ns") is None
@@ -83,14 +87,14 @@ class TestJitterPercentiles:
 
 class TestAdevNoiseFloor:
     def test_empty_input_carries_floor_keys(self):
-        out = GPSManager._compute_allan_deviation([])
+        out = compute_allan_deviation([])
         assert out["tau_s"] == []
         assert out["floor_sigma_y"] == []
         assert out["sigma_x_wpm_s"] is None
 
     def test_floor_matches_formula(self):
         intervals = _white_pm_intervals(1500, sigma_x_ns=2000.0)
-        out = GPSManager._compute_allan_deviation(intervals)
+        out = compute_allan_deviation(intervals)
         sigma_x = out["sigma_x_wpm_s"]
         assert sigma_x is not None and sigma_x > 0
         assert len(out["floor_sigma_y"]) == len(out["tau_s"])
@@ -100,7 +104,7 @@ class TestAdevNoiseFloor:
     def test_sigma_x_recovers_injected_noise(self):
         sigma_x_ns = 2000.0
         intervals = _white_pm_intervals(4000, sigma_x_ns=sigma_x_ns)
-        out = GPSManager._compute_allan_deviation(intervals)
+        out = compute_allan_deviation(intervals)
         # σ_x = σ_Δ/√2 should land near the injected per-pulse noise.
         assert out["sigma_x_wpm_s"] == pytest.approx(sigma_x_ns / 1e9, rel=0.10)
 
@@ -110,7 +114,7 @@ class TestAdevNoiseFloor:
         # limited" grading: a healthy clock with µs timestamp jitter
         # must produce sigma_y ≈ floor at every τ, not above it.
         intervals = _white_pm_intervals(4000, sigma_x_ns=3000.0, seed=7)
-        out = GPSManager._compute_allan_deviation(intervals)
+        out = compute_allan_deviation(intervals)
         assert out["tau_s"], "expected at least τ=1 with 4000 samples"
         for tau, sigma, floor in zip(
             out["tau_s"], out["sigma_y"], out["floor_sigma_y"]
@@ -130,7 +134,7 @@ class TestAdevNoiseFloor:
         for i in range(3000):
             ppm = 1.0 if (i // 300) % 2 == 0 else -1.0
             intervals.append(int(NOMINAL_NS + ppm * 1000))  # ±1 ppm = ±1000 ns
-        out = GPSManager._compute_allan_deviation(intervals)
+        out = compute_allan_deviation(intervals)
         by_tau = dict(zip(out["tau_s"], out["sigma_y"]))
         floor_by_tau = dict(zip(out["tau_s"], out["floor_sigma_y"]))
         assert 100 in by_tau
@@ -142,12 +146,12 @@ class TestAdevNoiseFloor:
 class TestTdevMtie:
     def test_arrays_parallel_to_tau(self):
         intervals = _white_pm_intervals(1500, sigma_x_ns=2000.0)
-        out = GPSManager._compute_allan_deviation(intervals)
+        out = compute_allan_deviation(intervals)
         assert len(out["tdev_s"]) == len(out["tau_s"])
         assert len(out["mtie_s"]) == len(out["tau_s"])
 
     def test_empty_input_carries_keys(self):
-        out = GPSManager._compute_allan_deviation([])
+        out = compute_allan_deviation([])
         assert out["tdev_s"] == []
         assert out["mtie_s"] == []
 
@@ -156,7 +160,7 @@ class TestTdevMtie:
         # TDEV(1) = τ·Modσ_y/√3 = σ_x.  Direct calibration check.
         sigma_x_ns = 2500.0
         intervals = _white_pm_intervals(4000, sigma_x_ns=sigma_x_ns, seed=3)
-        out = GPSManager._compute_allan_deviation(intervals)
+        out = compute_allan_deviation(intervals)
         by_tau = dict(zip(out["tau_s"], out["tdev_s"]))
         assert by_tau[1] == pytest.approx(sigma_x_ns / 1e9, rel=0.10)
 
@@ -165,7 +169,7 @@ class TestTdevMtie:
         # the worst excursion inside a τ-second window is exactly τ µs.
         offset_ns = 1000
         intervals = [NOMINAL_NS + offset_ns] * 1200
-        out = GPSManager._compute_allan_deviation(intervals)
+        out = compute_allan_deviation(intervals)
         by_tau = dict(zip(out["tau_s"], out["mtie_s"]))
         assert by_tau[1] == pytest.approx(offset_ns / 1e9, rel=1e-6)
         assert by_tau[10] == pytest.approx(10 * offset_ns / 1e9, rel=1e-6)
@@ -176,7 +180,7 @@ class TestTdevMtie:
         # dominate MTIE at every τ — that's the property masks rely on.
         intervals = [NOMINAL_NS] * 600
         intervals[300] = NOMINAL_NS + 5_000
-        out = GPSManager._compute_allan_deviation(intervals)
+        out = compute_allan_deviation(intervals)
         for tau, mtie in zip(out["tau_s"], out["mtie_s"]):
             if mtie is None:
                 continue
@@ -188,7 +192,7 @@ class TestTdevMtie:
         # 250 samples: ADEV needs 2m+1 (τ=100 → 201 ✓) but TDEV needs
         # 3m+1 (τ=100 → 301 ✗) — the slot must be None, not missing.
         intervals = _white_pm_intervals(250, sigma_x_ns=1000.0)
-        out = GPSManager._compute_allan_deviation(intervals)
+        out = compute_allan_deviation(intervals)
         assert 100 in out["tau_s"]
         idx = out["tau_s"].index(100)
         assert out["tdev_s"][idx] is None
@@ -270,5 +274,5 @@ class TestCpuTempHelper:
     def test_read_cpu_temp_never_raises(self):
         # Environment-dependent (containers have no thermal zones) —
         # the contract is simply "float in a sane range, or None".
-        val = GPSManager._read_cpu_temp_c()
+        val = read_cpu_temp_c()
         assert val is None or (-40.0 <= val <= 150.0)

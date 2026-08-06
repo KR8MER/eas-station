@@ -8,6 +8,50 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.137.0] - 2026-08-06 - Large-file refactor, phase 2d: GPS timing statistics
+
+Continues the effort tracked in
+`docs/development/LARGE_FILE_REFACTOR_PLAN.md`. Pure motion — no behaviour was
+altered.
+
+### Changed
+- **The stateless half of `GPSManager` moved out of
+  `app_core/gps/gps_manager.py` (2893 lines).** Profiling the class by `self`
+  usage separates 8 methods (386 lines) that never touch instance state from
+  the 46 (2235 lines) that do. The stateless ones were `@staticmethod` in all
+  but name — pure functions trapped inside a class — and now live in
+  `app_core/gps/timing_stats.py` (342 lines: `compute_jitter_summary`,
+  `compute_allan_deviation`, `holdover_seconds`, `derive_leap_state`) and
+  `app_core/gps/sysprobe.py` (49 lines: `read_cpu_temp_c`, `safe_read`).
+  `gps_manager.py` drops to 2528 lines and imports them. Verified as pure
+  motion: all 6 functions are `ast.dump()`-identical to their originals once
+  the `@staticmethod` decorator and docstring indentation are normalised, every
+  non-blank removed line was asserted present in the new modules, and both
+  implementations were run side by side over 5 interval datasets — including
+  empty, single-sample and constant edge cases — with zero output differences.
+- **The GPS stability tests now import the functions directly.** 20 call sites
+  across `tests/test_gps_stability_metrics.py`, `test_gps_holdover_anchor.py`
+  and `test_gps_trends_archive.py` were reaching through the class
+  (`GPSManager._compute_allan_deviation(...)`) to get at a pure function; they
+  now import from `app_core.gps.timing_stats` / `sysprobe`. No assertion
+  changed.
+
+### Documentation
+- **`LARGE_FILE_REFACTOR_PLAN.md` corrected: Phase 2 is not complete.** The
+  phase 2c pull request claimed it was and that everything remaining was
+  Flask-coupled or frontend. Both are wrong — `gps_manager.py` and
+  `app_core/radio/drivers.py` are still open, and both are pure library code.
+  They differ in kind from 2a–2c: each is a single god-class (`GPSManager` is
+  2741 of 2893 lines; `_SoapySDRReceiver` is 1822 of 2187), and module-level
+  splitting cannot shrink one class. Only their stateless parts move as
+  verifiable motion; the rest needs extracted collaborators and its own design
+  pass. The plan now records this distinction so the remaining work is not
+  mistaken for another mechanical split.
+- The CI fixes released in 2.136.0 (repository-relative test paths, CI schema
+  creation) shipped without a changelog entry of their own — the entry was lost
+  when that release's merge conflict was resolved in favour of the phase 2c
+  metadata. Recorded here so the history is not silent about them.
+
 ## [2.136.0] - 2026-08-06 - Large-file refactor, phase 2c: GPIO
 
 Continues the effort tracked in

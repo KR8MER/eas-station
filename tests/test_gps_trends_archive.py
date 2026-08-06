@@ -25,6 +25,7 @@ from services.gps import (
     new_last_bucket_ids,
 )
 from app_core.gps.gps_manager import GPSManager
+from app_core.gps.timing_stats import compute_allan_deviation
 
 
 # --------------------------------------------------------------------------- #
@@ -267,7 +268,7 @@ class TestAllanDeviationLongTau:
         # 2500 PPS pulses > 2*1000 + 1, so τ=1000 should appear in the
         # output.  Use a deterministic ramp so σ_y is non-zero.
         intervals = [1_000_000_000 + (i % 50) for i in range(2500)]
-        out = GPSManager._compute_allan_deviation(intervals)
+        out = compute_allan_deviation(intervals)
         assert 1000 in out["tau_s"], (
             "τ=1000 s should be reported when buffer has ≥2001 samples"
         )

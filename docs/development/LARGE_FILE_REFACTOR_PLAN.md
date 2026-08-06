@@ -95,8 +95,19 @@ code with no Flask involvement, which makes them the safest of the big splits.
 | `app_core/radio/demodulation.py` | 5355 | `app_core/radio/demod/` package | ✅ landed (shim now 95 lines) |
 | `app_utils/image_export.py` | 3391 | `app_utils/image_export/` package | ✅ landed |
 | `app_utils/gpio.py` | 3149 | `app_utils/gpio/` package | ✅ landed |
-| `app_core/gps/gps_manager.py` | 2893 | split manager / NMEA parsing / survey | Planned |
-| `app_core/radio/drivers.py` | 2187 | one module per driver family | Planned |
+| `app_core/gps/gps_manager.py` | 2893 | ~~split manager / NMEA parsing / survey~~ — see 2d | ⚠️ partially done; the rest is **not** motion |
+| `app_core/radio/drivers.py` | 2187 | ~~one module per driver family~~ — see 2d | ⚠️ same shape: one 1822-line class |
+
+> **The remaining two files are not the same kind of problem as the first
+> three.** 2a–2c were each *several independent top-level definitions* sharing
+> one file, so splitting them was pure motion verifiable by `ast.dump()`
+> comparison. These two are each **one god-class**: `GPSManager` is 2741 of
+> `gps_manager.py`'s 2893 lines, and `_SoapySDRReceiver` is 1822 of
+> `drivers.py`'s 2187. Module-level splitting cannot shrink a single class.
+> Only the stateless parts move cleanly; the rest needs extracted collaborators
+> and a design pass, which is a behaviour-risking refactor, not motion. Phase 2
+> is therefore **not** complete — a claim to the contrary in the 2c pull
+> request was wrong.
 
 ### 2a. `app_core/radio/demodulation.py` → `app_core/radio/demod/` ✅
 
@@ -295,6 +306,59 @@ were imported to confirm they still resolve.
                and n.func.attr == 'setattr' and n.args):
            ...  # report the target expression and attribute name
    ```
+
+---
+
+### 2d. `app_core/gps/gps_manager.py` — stateless timing math extracted ⚠️ partial
+
+`GPSManager` is 2741 lines in one class, 54 methods. Profiling it by `self`
+usage splits the class cleanly in two:
+
+| Group | Methods | Lines | Extractable as motion? |
+| --- | ---: | ---: | --- |
+| Stateless (zero `self` references) | 8 | 386 | ✅ yes — done here |
+| Stateful (touch `self`) | 46 | 2235 | ❌ no — needs collaborators |
+
+The stateless half moved out verbatim:
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `timing_stats.py` | 342 | `compute_jitter_summary` (adaptive-bucket PPS jitter histogram), `compute_allan_deviation` (overlapping ADEV/TDEV/MTIE at τ = 1/10/100/1000 s), `holdover_seconds`, `derive_leap_state` |
+| `sysprobe.py` | 49 | `read_cpu_temp_c`, `safe_read` — two sysfs reads that swallow failure and return `None` |
+
+These were `@staticmethod` in all but name, so they were pure functions
+trapped inside a class. Extracting them makes them directly importable and
+testable — `tests/test_gps_stability_metrics.py` was already testing them
+through `GPSManager._compute_allan_deviation(...)`, reaching past the class to
+get at a pure function.
+
+**Verification.** All 6 moved functions are `ast.dump()`-identical to their
+originals once the `@staticmethod` decorator and docstring indentation are
+normalised (a module-level function indents its docstring 4, not 8); every
+non-blank removed line was asserted present in the new modules; and both
+implementations were run side by side over 5 interval datasets (including
+empty, single-sample and constant edge cases) with **zero output differences**.
+135 GPS tests pass.
+
+**What is left, and why it is not motion.** The other 2235 lines are stateful:
+`_handle_sentence` alone is 246 lines with 50 `self` references, accumulating
+fix state, satellite tracking and publishing as it parses. The plan's original
+"split manager / NMEA parsing / survey" wording assumed these were separable
+files; they are not. Doing it properly means giving the NMEA parser explicit
+state to return rather than mutating `self`, which changes behaviour-bearing
+code on the GPS/timing path and cannot be verified by AST comparison. That
+deserves its own design pass and reviewed commit — the same conclusion already
+recorded for `controller.py` and `behavior.py` in 2c.
+
+**A lesson this phase added — do not let `head` truncate a reference search.**
+Grepping for the six method names before extracting appeared to show no test
+references, so the first attempt moved them without retargeting any tests. The
+search had been piped through `head -20`, and 20 unrelated `_safe_read_text`
+matches in `app_utils/system.py` consumed the entire output budget before a
+single real hit was printed. 17 tests then failed. When a search is being used
+to prove a *negative*, either drop the limit or filter the known-irrelevant
+matches out first — a truncated search cannot establish that something is
+absent.
 
 ---
 
