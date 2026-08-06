@@ -149,14 +149,13 @@ def _get_docs_structure() -> Dict[str, List[Dict[str, str]]]:
             'url': '/docs/README'
         })
 
-    # Add repository statistics from static (if exists)
-    repo_stats_file = Path(__file__).parent.parent / 'static' / 'repo_stats.html'
-    if repo_stats_file.exists():
-        structure['Reference'].append({
-            'title': 'Repository Statistics',
-            'path': 'repo_stats',
-            'url': '/repo-stats'
-        })
+    # Repository statistics are computed live by app_utils.repo_stats, so the
+    # link is always valid — there is no generated file to check for.
+    structure['Reference'].append({
+        'title': 'Repository Statistics',
+        'path': 'repo_stats',
+        'url': '/repo-stats'
+    })
 
     # Scan all markdown files
     for md_file in docs_root.rglob('*.md'):
@@ -495,19 +494,33 @@ def register_documentation_routes(app: Flask, logger_instance: Any) -> None:
 
     @app.route('/repo-stats')
     def repo_stats():
-        """Serve the repository statistics HTML page."""
-        from flask import send_from_directory
-        
-        static_dir = Path(app.root_path) / 'static'
-        repo_stats_file = static_dir / 'repo_stats.html'
-        
-        if not repo_stats_file.exists():
-            logger.warning('Repository statistics file not found: %s', repo_stats_file)
+        """Render live repository statistics for the running checkout."""
+        from app_utils.repo_stats import get_stats
+
+        refresh = request.args.get('refresh') == '1'
+        try:
+            stats = get_stats(app=app, refresh=refresh)
+        except OSError as exc:
+            logger.error('Unable to analyse repository for statistics: %s', exc)
             return _render_no_cache('error.html',
-                                   error='Repository statistics not available',
-                                   details='Please run scripts/generate_repo_stats.py to generate statistics'), 404
-        
-        return send_from_directory(static_dir, 'repo_stats.html')
+                                   error='Repository statistics unavailable',
+                                   details=f'The repository could not be read: {exc}'), 500
+
+        return _render_no_cache('repo_stats.html', stats=stats)
+
+    @app.route('/api/repo-stats')
+    def repo_stats_api():
+        """Return the same statistics as JSON for tooling and the refresh button."""
+        from app_utils.repo_stats import get_stats
+
+        refresh = request.args.get('refresh') == '1'
+        try:
+            stats = get_stats(app=app, refresh=refresh)
+        except OSError as exc:
+            logger.error('Unable to analyse repository for statistics: %s', exc)
+            return jsonify({'error': 'Repository statistics unavailable', 'details': str(exc)}), 500
+
+        return jsonify(stats)
 
 
 __all__ = ['register_documentation_routes']

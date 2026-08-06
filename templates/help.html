@@ -393,6 +393,27 @@
                             </div>
                         </div>
 
+                        <!-- Repository Statistics -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="repoStatsHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#repoStatsCollapse">
+                                    <i class="fas fa-code-branch me-2"></i>Repository Statistics
+                                </button>
+                            </h2>
+                            <div id="repoStatsCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>Reports → Analytics → Repository Statistics</strong> (<code>/repo-stats</code>) reports what is actually installed on this appliance — code size, registered routes and component counts — measured from the running checkout each time you load it.</p>
+                                    <ul>
+                                        <li><strong>First-party code</strong> — source files, lines of code, comments, registered routes, templates and test modules for EAS Station itself.</li>
+                                        <li><strong>What gets counted</strong> — every tracked file lands in exactly one bucket: <em>first-party</em>, <em>documentation</em>, or <em>vendored</em> third-party libraries (Bootstrap, Chart.js and friends under <code>static/vendor/</code>). Vendored code is reported separately so it never inflates the headline figures.</li>
+                                        <li><strong>Routes by module</strong> — read from the running application's URL map, so the count matches what the server actually serves.</li>
+                                        <li><strong>Component inventory</strong> — Flask blueprints, database models, Alembic migrations, systemd units and operator scripts.</li>
+                                    </ul>
+                                    <p>Figures are cached for ten minutes. Click <strong>Recalculate</strong> in the page header to force a fresh measurement — no command line required. Signed-in users also get a <strong>JSON</strong> button exposing the same snapshot at <code>/api/repo-stats</code>.</p>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Security Center -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="securityCenterHeading">

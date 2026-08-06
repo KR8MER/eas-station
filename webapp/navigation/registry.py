@@ -391,6 +391,12 @@ _REPORTS = NavSection(
                     description="Rolled-up operational summary for the station.",
                     permissions=(SYSTEM_CONFIGURE,),
                 ),
+                NavItem(
+                    label="Repository Statistics",
+                    icon="fas fa-code-branch",
+                    href="/repo-stats",
+                    description="Live code, route and component metrics for this build.",
+                ),
             ),
         ),
         NavGroup(
