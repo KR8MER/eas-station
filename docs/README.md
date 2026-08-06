@@ -41,6 +41,7 @@ Welcome to the documentation for EAS Station™ - an Emergency Alert System plat
 | Guide | What You'll Learn |
 |-------|-------------------|
 | [Developer Guidelines](development/AGENTS.md) | Code standards, architecture, testing |
+| [Large File Refactor Plan](development/LARGE_FILE_REFACTOR_PLAN.md) | Which oversized modules are being split, how, and what has landed |
 | [JavaScript API](frontend/JAVASCRIPT_API.md) | REST API reference |
 | [Contributing](process/CONTRIBUTING.md) | How to contribute |
 

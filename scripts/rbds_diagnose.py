@@ -473,16 +473,22 @@ def _run_pipeline_to_bits(
 # ──────────────────────────────────────────────────────────────────────────────
 # Production-pipeline introspection
 #
-# These helpers read the current state of `app_core/radio/demodulation.py` so
-# the diagnostic report stays in sync with the source code instead of relying
-# on hard-coded "current" values that go stale every time the pipeline is
-# tuned.  They are deliberately lightweight (regex-based) so the script keeps
+# These helpers read the current state of the `app_core/radio/demod/` package
+# so the diagnostic report stays in sync with the source code instead of
+# relying on hard-coded "current" values that go stale every time the pipeline
+# is tuned.  They are deliberately lightweight (regex-based) so the script keeps
 # working even when the full Flask / SDR stack cannot be imported.
+#
+# The whole package is concatenated rather than a single named module: the
+# demodulator was split out of the former monolithic
+# `app_core/radio/demodulation.py`, and reading every module means these
+# regexes keep matching wherever a symbol lands if the package is split
+# further.
 # ──────────────────────────────────────────────────────────────────────────────
 
-_PROD_SOURCE_PATH = (
+_PROD_SOURCE_DIR = (
     pathlib.Path(__file__).resolve().parent.parent
-    / "app_core" / "radio" / "demodulation.py"
+    / "app_core" / "radio" / "demod"
 )
 
 # When source introspection fails (e.g. the script is running outside the repo
@@ -492,12 +498,23 @@ _INTROSPECTION_FAILED: list[str] = []
 
 
 def _read_prod_source() -> str:
+    """Return every demodulator module concatenated, or '' if unreadable."""
     try:
-        return _PROD_SOURCE_PATH.read_text(encoding="utf-8")
+        parts = [
+            path.read_text(encoding="utf-8")
+            for path in sorted(_PROD_SOURCE_DIR.glob("*.py"))
+        ]
     except OSError as exc:
         if not _INTROSPECTION_FAILED:
             _INTROSPECTION_FAILED.append(str(exc))
         return ""
+    if not parts:
+        if not _INTROSPECTION_FAILED:
+            _INTROSPECTION_FAILED.append(
+                f"no demodulator modules found under {_PROD_SOURCE_DIR}"
+            )
+        return ""
+    return "\n".join(parts)
 
 
 def _production_costas_params() -> tuple[float, float]:
