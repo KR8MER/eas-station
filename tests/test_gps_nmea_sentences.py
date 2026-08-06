@@ -124,6 +124,58 @@ class TestGSVBucketing:
         assert [(t, p) for t, p, _ in effects.sats_seen] == [("GP", 1), ("GP", 2)]
         assert [snr for _, _, snr in effects.sats_seen] == [20, 22]
 
+    def test_same_prn_from_two_constellations_keeps_both(self, fix, state):
+        """PRN numbering is per-constellation and overlaps.
+
+        Galileo and BeiDou both number from 1, so a $GAGSV PRN 5 and a $GPGSV
+        PRN 5 are different satellites. Merging on PRN alone dropped one of
+        them from the view — silently, because nothing raises.
+        """
+        feed(fix, state, "GPGSV,1,1,02,05,45,220,40,12,30,100,35")
+        feed(fix, state, "GAGSV,1,1,02,05,60,300,44,09,20,050,30")
+        identities = {(s["constellation"], s["prn"]) for s in fix["satellites_in_view"]}
+        assert identities == {("GP", 5), ("GP", 12), ("GA", 5), ("GA", 9)}, (
+            "a satellite was lost to a cross-constellation PRN collision"
+        )
+
+    def test_colliding_prns_keep_their_own_sky_position_and_snr(self, fix, state):
+        """The collision didn't just drop a row — it corrupted the survivor.
+
+        Whichever talker parsed last overwrote the other's elevation, azimuth
+        and SNR, so the remaining PRN-5 row showed Galileo's sky position under
+        a single undifferentiated entry.
+        """
+        feed(fix, state, "GPGSV,1,1,01,05,45,220,40")
+        feed(fix, state, "GAGSV,1,1,01,05,60,300,44")
+        by_id = {(s["constellation"], s["prn"]): s for s in fix["satellites_in_view"]}
+        assert by_id[("GP", 5)]["elevation"] == 45
+        assert by_id[("GP", 5)]["azimuth"] == 220
+        assert by_id[("GP", 5)]["snr"] == 40
+        assert by_id[("GA", 5)]["elevation"] == 60
+        assert by_id[("GA", 5)]["azimuth"] == 300
+        assert by_id[("GA", 5)]["snr"] == 44
+
+    def test_publish_order_is_unchanged_when_every_prn_is_unique(self, fix, state):
+        """The common case must not reorder — PRN stays the primary sort key."""
+        feed(fix, state, "GPGSV,1,1,04,01,05,040,20,02,10,090,22,03,20,140,25,04,30,190,28")
+        feed(fix, state, "GLGSV,1,1,02,65,45,220,33,66,55,270,36")
+        assert [s["prn"] for s in fix["satellites_in_view"]] == [1, 2, 3, 4, 65, 66]
+
+    def test_colliding_prns_are_ordered_deterministically_by_talker(self, fix, state):
+        """Ties break on constellation so the published order is stable."""
+        feed(fix, state, "GPGSV,1,1,01,05,45,220,40")
+        feed(fix, state, "GAGSV,1,1,01,05,60,300,44")
+        assert [
+            (s["prn"], s["constellation"]) for s in fix["satellites_in_view"]
+        ] == [(5, "GA"), (5, "GP")]
+
+    def test_a_talkers_own_repeat_of_a_prn_still_replaces_in_place(self, fix, state):
+        """Within one constellation a PRN is unique — a refresh must not duplicate."""
+        feed(fix, state, "GPGSV,1,1,01,05,45,220,40")
+        feed(fix, state, "GPGSV,1,1,01,05,50,225,42")
+        assert len(fix["satellites_in_view"]) == 1
+        assert fix["satellites_in_view"][0]["snr"] == 42
+
 
 class TestGSAAccumulation:
     def test_empty_second_constellation_gsa_does_not_clear_the_union(self, fix, state):
