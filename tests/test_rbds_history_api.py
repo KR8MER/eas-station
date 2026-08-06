@@ -41,6 +41,7 @@ from app_core.extensions import db
 from app_core.models import AudioSourceMetrics
 from app_utils import utc_now
 from webapp.admin import audio_ingest as audio_admin
+from webapp.admin.audio_ingest import controller as audio_controller_mod
 
 
 @compiles(JSONB, "sqlite")
@@ -50,8 +51,11 @@ def _compile_jsonb_sqlite(type_, compiler, **kwargs):  # pragma: no cover - sqla
 
 @pytest.fixture(autouse=True)
 def _quiet_audio_globals(monkeypatch):
-    monkeypatch.setattr(audio_admin, "_initialization_started", True)
-    monkeypatch.setattr(audio_admin, "_start_audio_sources_background", lambda app: None)
+    # These globals live in webapp.admin.audio_ingest.controller, not on the
+    # package: rebinding them on the package would not change what
+    # _get_audio_controller sees in its own module globals.
+    monkeypatch.setattr(audio_controller_mod, "_initialization_started", True)
+    monkeypatch.setattr(audio_controller_mod, "_start_audio_sources_background", lambda app: None)
 
 
 @pytest.fixture

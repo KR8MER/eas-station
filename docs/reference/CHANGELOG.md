@@ -8,6 +8,66 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.139.0] - 2026-08-06 - Large-file refactor, phase 3: the audio-ingest admin API
+
+The first web-layer split. `webapp/admin/audio_ingest.py` (3,180 lines — the
+largest Flask module in the tree) became `webapp/admin/audio_ingest/`: 15
+modules, 14 of them under the 400-line guidance. Behaviour is unchanged.
+
+### Changed
+- **`webapp/admin/audio_ingest.py` → `webapp/admin/audio_ingest/`.** Helpers
+  and handlers had been interleaved down the length of the file; they are now
+  separated the way `webapp/audio_archive/` already does it.
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `blueprint.py` | 36 | the shared `audio_ingest_bp` |
+  | `controller.py` | 231 | controller singleton, startup, Redis metrics bridge |
+  | `streaming.py` | 262 | auto-streaming (Icecast) service lifecycle |
+  | `sanitize.py` | 173 | JSON-safety helpers for values reaching the API |
+  | `probe.py` | 155 | stream-URL probing |
+  | `radio_sources.py` | 385 | SDR-backed audio source provisioning |
+  | `serialization.py` | 359 | audio source → API payload |
+  | `routes_sources.py` | 749 | source collection and item endpoints |
+  | `routes_source_control.py` | 164 | start/stop and stream-test endpoints |
+  | `routes_rbds.py` | 151 | RBDS history endpoint |
+  | `routes_metrics.py` | 233 | metrics endpoints |
+  | `routes_health.py` | 255 | health endpoints and the dashboard page |
+  | `routes_alerts.py` | 204 | audio alert endpoints |
+  | `routes_devices.py` | 159 | device discovery, waveform, spectrogram, stream |
+  | `routes_icecast.py` | 205 | Icecast configuration and stream control |
+
+  The package `__init__.py` is the compatibility shim: every name the
+  single-file module exposed is re-exported, so the imports in
+  `webapp/routes_settings_radio.py`, `app_core/websocket_push.py` and
+  `webapp/admin/__init__.py` are untouched. `register_audio_ingest_routes`
+  keeps its `(app, logger)` signature and stays the package's only `__all__`
+  entry.
+
+- **`register_audio_ingest_routes` now fans the caller's logger out to every
+  submodule.** Pre-split there was one `logger` global and registration
+  rebound it; the package has one per module, and rebinding only the package's
+  would have left every line that actually logs on its own logger.
+
+### Fixed
+- **`api_get_rbds_history` and the source start/stop endpoints keep working in
+  tests that reset module state.** Four test fixtures reset globals such as
+  `_audio_controller` and `_auto_streaming_service` through
+  `monkeypatch.setattr` on the module. Those globals now live in the submodule
+  that owns them, and the patches were retargeted accordingly — patching the
+  re-exporting package would not change what a function sees in its own module
+  globals, so the resets would have silently stopped resetting anything.
+
+### Added
+- **`tests/test_audio_ingest_package.py`** (16 tests) pins the split: the
+  Blueprint's `import_name`, every URL rule surviving registration, the logger
+  fan-out covering every module that logs, the re-exports other modules import,
+  and — the bug class this split could most easily have introduced — that no
+  module imports a mutable global such as `_audio_controller` by value. Each
+  guard was mutation-checked: reintroducing the bad import, dropping a module
+  from the fan-out list, and un-importing a route module each fail exactly the
+  test that covers them.
+
 ## [2.138.1] - 2026-08-06 - Fix cross-constellation PRN collision in GSV parsing
 
 ### Fixed

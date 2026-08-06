@@ -463,16 +463,105 @@ Flask modules where route handlers and their helpers are interleaved. The
 `webapp/audio_archive/` package is the template to copy: helpers in topic
 modules, `routes.py` holding only handlers.
 
-| File | Lines | Planned split |
+| File | Lines | Planned split | Status |
+| --- | ---: | --- | --- |
+| `webapp/admin/audio_ingest.py` | 3180 | `webapp/admin/audio_ingest/` package | ✅ landed — see 3a |
+| `webapp/routes_public.py` | 2849 | split by surface: dashboard, alert detail, search, exports | ⏳ |
+| `webapp/routes_settings_radio.py` | 2781 | receivers / profiles / diagnostics | ⏳ |
+| `webapp/admin/api.py` | 2105 | group endpoints by resource | ⏳ |
+| `webapp/admin/certbot.py` | 1946 | certificate ops vs. routes | ⏳ |
+| `app.py` | 1869 | move remaining inline routes/factory helpers into `webapp/` | ⏳ |
+| `webapp/admin/maintenance.py` | 1802 | task definitions vs. routes | ⏳ |
+| `webapp/routes/alert_verification.py` | 1668 | verification engine vs. routes | ⏳ |
+
+### 3a. `webapp/admin/audio_ingest.py` → `webapp/admin/audio_ingest/` ✅
+
+The largest Flask module in the tree, and the first web-layer split. Helpers
+and handlers were interleaved down its whole length — the stream-URL probe
+helpers sit at line 1575, *between* two route handlers.
+
+| New module | Lines | Contents |
 | --- | ---: | --- |
-| `webapp/admin/audio_ingest.py` | 3180 | `webapp/admin/audio_ingest/` — `controller.py` (singleton + startup), `sources.py` (DB↔runtime serialisation), `streaming.py` (Icecast + auto-stream), `probe.py` (stream URL testing), `metrics.py`, `routes.py` |
-| `webapp/routes_public.py` | 2849 | split by surface: dashboard, alert detail, search, exports |
-| `webapp/routes_settings_radio.py` | 2781 | receivers / profiles / diagnostics |
-| `webapp/admin/api.py` | 2105 | group endpoints by resource |
-| `webapp/admin/certbot.py` | 1946 | certificate ops vs. routes |
-| `webapp/admin/maintenance.py` | 1802 | task definitions vs. routes |
-| `webapp/routes/alert_verification.py` | 1668 | verification engine vs. routes |
-| `app.py` | 1869 | move remaining inline routes/factory helpers into `webapp/` |
+| `blueprint.py` | 36 | `audio_ingest_bp` |
+| `controller.py` | 231 | Controller singleton, background startup, `_try_acquire_lock`, the Redis metrics bridge |
+| `streaming.py` | 262 | Auto-streaming (Icecast) service lifecycle, `_get_icecast_stream_url` |
+| `sanitize.py` | 173 | `_sanitize_float`/`_bool`/`_metadata_value`, `_merge_metadata`, `_redact_device_params`, `_db_to_linear` |
+| `probe.py` | 155 | `_describe_stream_status`, `_probe_stream_url` |
+| `radio_sources.py` | 385 | `ensure_sdr_audio_monitor_source` and the SDR naming/metadata helpers |
+| `serialization.py` | 359 | Adapter/DB row → API payload |
+| `routes_sources.py` | 749 | Source collection and item endpoints |
+| `routes_source_control.py` | 164 | start / stop / test-stream |
+| `routes_rbds.py` | 151 | RBDS history |
+| `routes_metrics.py` | 233 | `/api/audio/metrics*` |
+| `routes_health.py` | 255 | `/api/audio/health*` and the dashboard page |
+| `routes_alerts.py` | 204 | `/api/audio/alerts*` |
+| `routes_devices.py` | 159 | devices, waveform, spectrogram, live stream |
+| `routes_icecast.py` | 205 | `/api/audio/icecast/*` |
+
+```
+blueprint, sanitize, probe        leaves
+controller   -> (nothing in-package)
+streaming    -> controller
+serialization-> controller, sanitize, streaming
+radio_sources-> controller, streaming
+routes_*     -> blueprint + the helpers each one needs
+```
+
+The entry point is unchanged: `register_audio_ingest_routes(app, logger)` stays
+the package's only `__all__` entry, so `webapp/admin/__init__.py` did not move.
+
+**Verification.** 69 of the 73 top-level definitions are `ast.dump()`-identical
+before and after, every non-blank line of the original lands in exactly one
+module, and the full suite is green (1,997 passed). The four deliberate
+differences are each pinned by a test in
+`tests/test_audio_ingest_package.py`.
+
+**Three things this phase adds to the checklist, all of them consequences of
+one file becoming many namespaces.**
+
+1. **A Blueprint's `import_name` changes when it moves.**
+   `Blueprint('audio_ingest', __name__)` in a `blueprint.py` resolves to
+   `webapp.admin.audio_ingest.blueprint`, one level deeper than before — the
+   same class of silent drift as the `__file__` bug in 2b, since Flask derives
+   the blueprint's root path (and any template/static folder it later gains)
+   from it. `__package__` is the pre-split value, so that is what the new
+   module passes. Pinned by a test.
+2. **Never import a mutable module global across modules.**
+   `remove_radio_managed_audio_source` reads `_audio_controller` directly. A
+   generated `from .controller import _audio_controller` binds `None` at import
+   time and never sees the singleton `_get_audio_controller` later installs, so
+   the local-controller fallback would have silently stopped removing sources —
+   no exception, since `if controller and …` simply skips. It goes through a
+   new `_peek_audio_controller()` accessor instead, mirroring the
+   `_get_auto_streaming_service()` that the sibling global already had. A test
+   AST-scans the package for by-value imports of any of the six mutable globals.
+3. **A `logger` global that a registration hook rebinds has to be fanned out.**
+   `register_audio_ingest_routes` did `global logger; logger = logger_instance`.
+   With one module that was the whole story; with fifteen, rebinding the
+   package's `logger` leaves every line that actually logs on its own. The hook
+   now walks a `_LOGGING_MODULES` tuple, and a test asserts that tuple covers
+   every module in the package that defines a `logger`.
+
+**The monkeypatch retarget was load-bearing, and loudly so.** Four fixtures
+across three test files reset `_audio_controller`, `_auto_streaming_service`,
+`_initialization_started`, `_streaming_lock_file`,
+`_audio_initialization_lock_file`, `_start_audio_sources_background`,
+`_reload_auto_streaming_from_env`, `_read_audio_metrics_from_redis` and
+`_restore_audio_source_from_db_config` on the module. Deliberately *not*
+re-exporting the mutable globals from the package `__init__` is what made this
+safe: `monkeypatch.setattr` raises `AttributeError` on a missing attribute, so
+all 9 patch sites failed immediately instead of turning into silent no-ops. Had
+the shim re-exported them for completeness, the resets would have kept
+"passing" while resetting nothing.
+
+**Still over the cap — follow-up needed.** `routes_sources.py` is 749 lines
+because `api_get_audio_sources` alone is 327: one handler that reads Redis,
+queries three tables, reconciles the DB against the live controller and
+serializes the result. Bringing it under the guidance means extracting a
+listing collaborator, which is a restructure rather than motion and wants a
+characterization harness first — the 2e technique, not the 2a–2d one. Tracked
+as Phase 3a-ii. `tests/test_audio_ingest_package.py` names the module as a
+known exemption so no *other* module can quietly join it.
 
 ## Phase 4 — Long-running services
 
@@ -514,23 +603,24 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-08-06 | 2.134.0 | Plan written. Phase 1 (`fips_codes.py`, 3887 → 673) and Phase 2a (`demodulation.py`, 5355 → 9 modules + a 95-line shim). ~7,500 lines of oversized module retired. Follow-up Phase 2a-ii opened for `RBDSWorker`/`RBDSDecoder`. |
 | 2026-08-06 | 2.135.0 | Phase 2b (`image_export.py`, 3391 → 13 modules + a re-exporting `__init__`). `demod/` converted to relative imports to match the repo convention. Largest remaining Python module is now `poller/cap_poller.py` at 3996. |
 | 2026-08-06 | 2.136.0 | Phase 2c (`gpio.py`, 3149 → 7 modules + a re-exporting `__init__`). Phase 2 complete: the four biggest library modules — 15,043 lines between them — are now 42 focused modules. A pre-split checklist was added, distilled from the three bugs the earlier phases hit. |
+| 2026-08-06 | 2.138.0 | Phase 2d/2e (`gps_manager.py`, 2893 → 2313). The stateless timing math moved as motion; `_handle_sentence` was restructured into `app_core/gps/nmea.py` and verified by characterization rather than AST comparison. |
+| 2026-08-06 | 2.139.0 | Phase 3a (`webapp/admin/audio_ingest.py`, 3180 → 15 modules + a re-exporting `__init__`). First web-layer split; `register_audio_ingest_routes(app, logger)` preserved as the entry point. Three new checklist items: Blueprint `import_name`, mutable-global imports, logger fan-out. |
 
 ## Next up
 
-Phase 2 is complete. Every remaining oversized module is either Flask-coupled
-(Phase 3), on the alert path (Phase 4), or frontend (Phase 5) — all three are
-meaningfully riskier than the library splits that have landed so far, and none
-should be attempted without first running the pre-split checklist below.
+**Phase 3a-ii — `routes_sources.py` (749)** is the smallest remaining piece of
+work with the clearest payoff: `api_get_audio_sources` is 327 lines of one
+handler, and extracting the listing collaborator brings the last module of the
+`audio_ingest` package under the guidance. It is a restructure, not motion, so
+it needs the 2e treatment — build the characterization harness against the
+current handler first, confirm it discriminates, then extract.
 
-**Phase 3 — `webapp/admin/audio_ingest.py` (3180)** is the recommended next
-step, being the largest of the web-layer modules and the one with the clearest
-helper/handler seam. One decision to make before starting: whether it should
-follow `webapp/audio_archive/` exactly (helpers in topic modules, `routes.py`
-holding only handlers) or keep its `register_*_routes(app, logger)` entry
-point. The latter is how the admin package is wired today, so the split should
-preserve it and only move helpers out.
+**Phase 3 continued — `webapp/routes_public.py` (2849)** is the next whole-file
+split. Unlike `audio_ingest` it is public-facing rather than admin, so the
+surfaces (dashboard, alert detail, search, exports) are the seam rather than
+resource groups.
 
-**Phase 4 (`poller/cap_poller.py`, 3996 — now the largest Python module in the
+**Phase 4 (`poller/cap_poller.py`, 3996 — the largest Python module in the
 tree, and `app_utils/eas.py`, 3848)** is the highest-risk work in this plan:
 both sit directly on the alert path, and each is dominated by one very large
 class, so the split means extracted collaborators rather than free functions.
@@ -559,3 +649,18 @@ cost a debugging cycle in an earlier phase.
       without it. A retarget that changes nothing means the test was passing
       vacuously and you have learned something either way.
 - [ ] **Import every production consumer** to confirm the shim resolves.
+- [ ] **Check what `__name__` is passed to.** A `Blueprint(name, __name__)` or
+      `logging.getLogger(__name__)` means something different one directory
+      deeper. Pass `__package__` where the pre-split value is what matters.
+      (Phase 3a.)
+- [ ] **Never let a module import a mutable global from a sibling.**
+      `from .x import _some_global` snapshots the value at import time. Add an
+      accessor function instead, and AST-scan the package to prove none crept
+      in. (Phase 3a: would have silently disabled a cleanup path.)
+- [ ] **Do not re-export mutable globals from the shim.** Tests reset them with
+      `monkeypatch.setattr`, which raises on a missing attribute but silently
+      no-ops on a re-exported one. The loud failure is what tells you where the
+      patch has to point. (Phase 3a.)
+- [ ] **Fan out any global a registration hook rebinds** — `logger` is the
+      usual one. One module meant one global; a package means one per module.
+      (Phase 3a.)
