@@ -22,16 +22,12 @@ from __future__ import annotations
 """RBDS history endpoint."""
 
 import logging
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
-from flask import Blueprint, Flask, jsonify, render_template, request, current_app, Response, stream_with_context
+from datetime import timedelta
+from typing import Any, Dict, List
+from flask import jsonify, request
 from app_core.extensions import db
 from app_core.models import (
-    AudioAlert,
-    AudioHealthStatus,
     AudioSourceMetrics,
-    AudioSourceConfigDB,
-    RadioReceiver,
 )
 from app_utils import utc_now
 

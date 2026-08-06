@@ -219,16 +219,15 @@ def test_no_module_imports_a_mutable_global_by_value():
 def test_package_modules_stay_within_the_size_guidance():
     """AGENTS.md asks for Python modules under ~400 lines.
 
-    routes_sources.py is the one module the split could not bring under the cap:
-    ``api_get_audio_sources`` alone is 327 lines. It is listed here explicitly
-    so the exemption is visible rather than implied, and so no *new* module
-    joins it silently.
+    The whole package clears it. ``routes_sources.py`` was the last holdout at
+    749 lines — ``api_get_audio_sources`` alone was 327 of them — until the
+    listing reconciliation moved to ``listing``/``source_payload`` and the write
+    endpoints to ``routes_sources_write``. There are no exemptions left, so this
+    is an exact check.
     """
-    known_over = {'routes_sources.py'}
-
     over = {
         path.name: len(path.read_text().splitlines())
         for path in _package_modules()
         if len(path.read_text().splitlines()) > 400
     }
-    assert set(over) <= known_over, f'new oversized module(s) in the package: {over}'
+    assert not over, f'oversized module(s) in the package: {over}'

@@ -24,16 +24,13 @@ from __future__ import annotations
 import logging
 import json
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from app_core.models import (
-    AudioAlert,
-    AudioHealthStatus,
     AudioSourceMetrics,
     AudioSourceConfigDB,
-    RadioReceiver,
 )
 from app_core.audio import AudioIngestController
-from app_core.audio.ingest import AudioSourceConfig, AudioSourceType, AudioSourceStatus
+from app_core.audio.ingest import AudioSourceConfig, AudioSourceType
 from app_core.audio.sources import create_audio_source
 
 from .controller import _get_audio_controller, _read_audio_metrics_from_redis

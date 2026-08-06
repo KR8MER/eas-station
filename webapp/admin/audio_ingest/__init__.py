@@ -54,6 +54,7 @@ from . import (  # noqa: F401  - imported for their side effect of registering r
     controller,
     probe,
     radio_sources,
+    listing,
     routes_alerts,
     routes_devices,
     routes_health,
@@ -62,7 +63,9 @@ from . import (  # noqa: F401  - imported for their side effect of registering r
     routes_rbds,
     routes_source_control,
     routes_sources,
+    routes_sources_write,
     sanitize,
+    source_payload,
     serialization,
     streaming,
 )
@@ -121,11 +124,10 @@ from .routes_source_control import (
     api_stop_audio_source,
     api_test_stream_url,
 )
-from .routes_sources import (
+from .routes_sources import api_get_audio_source, api_get_audio_sources
+from .routes_sources_write import (
     api_create_audio_source,
     api_delete_audio_source,
-    api_get_audio_source,
-    api_get_audio_sources,
     api_update_audio_source,
 )
 from .sanitize import (
@@ -163,16 +165,20 @@ logger = logging.getLogger(__name__)
 # submodule still logging under its own name.
 _LOGGING_MODULES = (
     controller,
+    listing,
+    source_payload,
     streaming,
     sanitize,
     probe,
     radio_sources,
     serialization,
     routes_sources,
+    routes_sources_write,
     routes_source_control,
     routes_rbds,
     routes_metrics,
     routes_health,
+    listing,
     routes_alerts,
     routes_devices,
     routes_icecast,

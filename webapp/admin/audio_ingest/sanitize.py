@@ -22,8 +22,8 @@ from __future__ import annotations
 """JSON-safety helpers for values that reach the API surface."""
 
 import logging
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime
+from typing import Any, Dict, Optional
 
 
 logger = logging.getLogger(__name__)

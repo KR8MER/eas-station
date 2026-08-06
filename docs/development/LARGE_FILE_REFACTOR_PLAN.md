@@ -489,8 +489,11 @@ helpers sit at line 1575, *between* two route handlers.
 | `probe.py` | 155 | `_describe_stream_status`, `_probe_stream_url` |
 | `radio_sources.py` | 385 | `ensure_sdr_audio_monitor_source` and the SDR naming/metadata helpers |
 | `serialization.py` | 359 | Adapter/DB row → API payload |
-| `routes_sources.py` | 749 | Source collection and item endpoints |
-| `routes_source_control.py` | 164 | start / stop / test-stream |
+| `routes_sources.py` | 88 | The two read endpoints (3a-ii) |
+| `routes_sources_write.py` | 389 | create / update / delete (3a-ii) |
+| `listing.py` | 226 | Reconciling DB, controller and Redis for the source list (3a-ii) |
+| `source_payload.py` | 268 | One audio source rendered to JSON (3a-ii) |
+| `routes_source_control.py` | 160 | start / stop / test-stream |
 | `routes_rbds.py` | 151 | RBDS history |
 | `routes_metrics.py` | 233 | `/api/audio/metrics*` |
 | `routes_health.py` | 255 | `/api/audio/health*` and the dashboard page |
@@ -554,14 +557,62 @@ all 9 patch sites failed immediately instead of turning into silent no-ops. Had
 the shim re-exported them for completeness, the resets would have kept
 "passing" while resetting nothing.
 
-**Still over the cap — follow-up needed.** `routes_sources.py` is 749 lines
-because `api_get_audio_sources` alone is 327: one handler that reads Redis,
-queries three tables, reconciles the DB against the live controller and
-serializes the result. Bringing it under the guidance means extracting a
-listing collaborator, which is a restructure rather than motion and wants a
-characterization harness first — the 2e technique, not the 2a–2d one. Tracked
-as Phase 3a-ii. `tests/test_audio_ingest_package.py` names the module as a
-known exemption so no *other* module can quietly join it.
+### 3a-ii. `api_get_audio_sources` → `listing.py` + `source_payload.py` ✅
+
+The one module 3a left over the cap. `routes_sources.py` was 749 lines because
+`api_get_audio_sources` alone was 327: a single handler that decoded the audio
+service's Redis snapshot in four possible shapes, queried three tables,
+reconciled the database against the local controller, and built two different
+JSON bodies depending on which won.
+
+Module-level splitting cannot shrink one function, so this is a **collaborator
+extraction** — the 2e technique, not the 2a–2d one — and it was verified the
+same way.
+
+| Piece | Role |
+| --- | --- |
+| `RedisControllerState` | What the audio service is publishing: the source map, whether it is usable, whether the service is dead at all, and the streaming block. |
+| `_read_redis_controller_state` | Decodes it. The `audio_controller` entry and its nested `streaming` entry may each be a dict or a JSON string, present or absent, well-formed or not. |
+| `_latest_metrics_by_source` | One query for the newest persisted metric row per source. |
+| `_collect_icecast_status` | Per-source stream stats, local service first, Redis only as a fallback. |
+| `_serialize_from_redis` / `_serialize_db_only` | The two JSON bodies, in `source_payload.py`. The third — a live local adapter — was already `serialization._serialize_audio_source`. |
+| `build_source_listing` | Orchestration and the envelope counters. |
+
+The write endpoints moved to `routes_sources_write.py` in the same pass, split
+along the permission boundary: all three carry
+`@require_permission('receivers.configure')`, and neither read endpoint does.
+
+**Verification — the harness came first, as in 2e.**
+
+1. `tests/test_audio_source_listing.py` (12 tests) was written and run green
+   against the *pre-refactor* handler, covering all three live-state paths, the
+   envelope counters, the dead-service escalation rule, malformed Redis
+   payloads and a failing streaming service.
+2. Confirmed discriminating before trusting it: five deliberate mutations —
+   disabling the dead-service escalation, reversing Redis/database metric
+   precedence, inverting `db_only_count`, letting Redis override the local
+   streaming service, and dropping the reconstructed Icecast URL — each failed
+   exactly the test that covers it, and only that test.
+3. A separate dump script rendered the **full response body** for 8 scenarios
+   (8 distinct bodies — a harness recording constant state proves nothing)
+   against a git worktree at the pre-extraction commit and against the working
+   tree: **0 differing bytes**, with the script printing which module it
+   patched so a silent fallback to the old shape could not masquerade as a
+   match.
+
+**A trap worth recording: a mutation that does not apply looks exactly like a
+mutation that survived.** The first run of the five reported four caught and
+one survived. The surviving one had been written with the wrong indentation in
+its search string, so `str.replace` matched nothing and the "mutant" was the
+original code. Assert that the mutation target was found before drawing any
+conclusion from the result.
+
+**A second one, from tidying up afterwards:** `ruff check --select F401 --fix`
+over the package removed 124 genuinely unused imports — and would have removed
+the shim's re-exports too, silently breaking every external importer, except
+that ruff exempts `__init__.py` from F401 by default. That exemption is the
+only thing that made the command safe. Verify the shim still resolves after any
+automated import cleanup rather than relying on it.
 
 ## Phase 4 — Long-running services
 
@@ -604,16 +655,10 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-08-06 | 2.135.0 | Phase 2b (`image_export.py`, 3391 → 13 modules + a re-exporting `__init__`). `demod/` converted to relative imports to match the repo convention. Largest remaining Python module is now `poller/cap_poller.py` at 3996. |
 | 2026-08-06 | 2.136.0 | Phase 2c (`gpio.py`, 3149 → 7 modules + a re-exporting `__init__`). Phase 2 complete: the four biggest library modules — 15,043 lines between them — are now 42 focused modules. A pre-split checklist was added, distilled from the three bugs the earlier phases hit. |
 | 2026-08-06 | 2.138.0 | Phase 2d/2e (`gps_manager.py`, 2893 → 2313). The stateless timing math moved as motion; `_handle_sentence` was restructured into `app_core/gps/nmea.py` and verified by characterization rather than AST comparison. |
+| 2026-08-06 | 2.140.0 | Phase 3a-ii (`api_get_audio_sources`, 327 → 15 lines + `listing.py`/`source_payload.py`; write endpoints to `routes_sources_write.py`). Every module in `webapp/admin/audio_ingest/` is now under the 400-line guidance. |
 | 2026-08-06 | 2.139.0 | Phase 3a (`webapp/admin/audio_ingest.py`, 3180 → 15 modules + a re-exporting `__init__`). First web-layer split; `register_audio_ingest_routes(app, logger)` preserved as the entry point. Three new checklist items: Blueprint `import_name`, mutable-global imports, logger fan-out. |
 
 ## Next up
-
-**Phase 3a-ii — `routes_sources.py` (749)** is the smallest remaining piece of
-work with the clearest payoff: `api_get_audio_sources` is 327 lines of one
-handler, and extracting the listing collaborator brings the last module of the
-`audio_ingest` package under the guidance. It is a restructure, not motion, so
-it needs the 2e treatment — build the characterization harness against the
-current handler first, confirm it discriminates, then extract.
 
 **Phase 3 continued — `webapp/routes_public.py` (2849)** is the next whole-file
 split. Unlike `audio_ingest` it is public-facing rather than admin, so the
@@ -664,3 +709,9 @@ cost a debugging cycle in an earlier phase.
 - [ ] **Fan out any global a registration hook rebinds** — `logger` is the
       usual one. One module meant one global; a package means one per module.
       (Phase 3a.)
+- [ ] **Assert a mutation actually applied** before concluding it survived.
+      A search string with the wrong indentation replaces nothing, and the
+      "surviving mutant" is the untouched original. (Phase 3a-ii.)
+- [ ] **Re-check the shim after any automated import cleanup.** `ruff --fix`
+      would strip a re-export shim bare; it only spares `__init__.py` because
+      F401 exempts it by default. (Phase 3a-ii.)

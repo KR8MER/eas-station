@@ -22,14 +22,10 @@ from __future__ import annotations
 """Start/stop and stream-test endpoints for audio sources."""
 
 import logging
-from flask import Blueprint, Flask, jsonify, render_template, request, current_app, Response, stream_with_context
-from app_core.cache import cache, clear_audio_source_cache
+from flask import jsonify, request
+from app_core.cache import clear_audio_source_cache
 from app_core.models import (
-    AudioAlert,
-    AudioHealthStatus,
-    AudioSourceMetrics,
     AudioSourceConfigDB,
-    RadioReceiver,
 )
 from app_core.audio.redis_commands import get_audio_command_publisher
 from app_core.auth.roles import require_permission

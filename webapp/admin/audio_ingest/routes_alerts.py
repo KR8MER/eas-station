@@ -22,16 +22,12 @@ from __future__ import annotations
 """Audio alert endpoints."""
 
 import logging
-from flask import Blueprint, Flask, jsonify, render_template, request, current_app, Response, stream_with_context
+from flask import jsonify, request
 from sqlalchemy import desc
-from app_core.cache import cache, clear_audio_source_cache
+from app_core.cache import cache
 from app_core.extensions import db
 from app_core.models import (
     AudioAlert,
-    AudioHealthStatus,
-    AudioSourceMetrics,
-    AudioSourceConfigDB,
-    RadioReceiver,
 )
 from app_core.auth.roles import require_permission
 from app_utils import utc_now

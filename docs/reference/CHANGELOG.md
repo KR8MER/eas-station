@@ -8,6 +8,54 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.140.0] - 2026-08-06 - Large-file refactor, phase 3a-ii: the audio source listing
+
+The follow-up 2.139.0 opened. `routes_sources.py` was the one module the package
+split could not bring under the 400-line guidance, because
+`api_get_audio_sources` was 327 lines of a single handler. Every module in
+`webapp/admin/audio_ingest/` is now under the cap. Behaviour is unchanged.
+
+### Changed
+- **`api_get_audio_sources` (327 lines) became a 15-line handler plus two
+  modules.** The handler reconciled three sources of truth inline — the database
+  rows, the local controller's adapters, and the audio service's Redis snapshot
+  — while also decoding Redis' several payload shapes and building two different
+  JSON bodies. Those are now separated:
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `listing.py` | 226 | `RedisControllerState` and its decoding, the latest-metric query, Icecast status collection, and `build_source_listing` |
+  | `source_payload.py` | 268 | `_serialize_from_redis` and `_serialize_db_only` — one audio source rendered to JSON |
+
+  `routes_sources.py` keeps only the two read endpoints (88 lines) and delegates
+  to `build_source_listing()`.
+
+- **The write endpoints moved to `routes_sources_write.py`** (389 lines). The
+  split follows the permission boundary exactly: every handler there carries
+  `@require_permission('receivers.configure')` and neither handler left in
+  `routes_sources.py` carries one.
+
+- **Three shapes the endpoint has always tolerated are now named rather than
+  implied.** `RedisControllerState.service_dead` distinguishes "the audio
+  service published nothing" from "it published an empty source list" — the
+  former is what turns an auto-start source's badge from grey *Stopped* into
+  red *Error*. `_redis_data_for` names the rule that a non-dict Redis entry
+  falls back to the database row rather than to the local controller.
+  `_collect_icecast_status` documents that Redis is the fallback for stream
+  stats, never an override of a locally hosted streaming service.
+
+### Added
+- **`tests/test_audio_source_listing.py`** (12 tests) characterizes
+  `GET /api/audio/sources` across all three of its live-state paths — local
+  adapter, Redis snapshot, database-only — plus the envelope counters, the
+  dead-service escalation rule, malformed Redis payloads, JSON-encoded
+  controller blobs, and a failing streaming service. Written against the
+  pre-refactor handler and confirmed discriminating first: five deliberate
+  mutations (disabling the dead-service escalation, reversing Redis/database
+  metric precedence, inverting `db_only_count`, letting Redis override the
+  local streaming service, and dropping the reconstructed Icecast URL) each
+  failed exactly the test covering them.
+
 ## [2.139.0] - 2026-08-06 - Large-file refactor, phase 3: the audio-ingest admin API
 
 The first web-layer split. `webapp/admin/audio_ingest.py` (3,180 lines — the

@@ -22,7 +22,7 @@ from __future__ import annotations
 """Icecast configuration and stream control endpoints."""
 
 import logging
-from flask import Blueprint, Flask, jsonify, render_template, request, current_app, Response, stream_with_context
+from flask import jsonify, request
 from werkzeug.exceptions import BadRequest
 from app_core.auth.roles import require_permission
 

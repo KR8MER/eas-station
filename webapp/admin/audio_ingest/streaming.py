@@ -22,11 +22,9 @@ from __future__ import annotations
 """Auto-streaming (Icecast) service lifecycle."""
 
 import logging
-import json
 import os
-from typing import Any, Dict, List, Optional, Tuple
-from flask import Blueprint, Flask, jsonify, render_template, request, current_app, Response, stream_with_context
-from app_core.audio.ingest import AudioSourceConfig, AudioSourceType, AudioSourceStatus
+from typing import Any, Dict, Optional, Tuple
+from app_core.audio.ingest import AudioSourceStatus
 
 from .controller import _get_audio_controller, _read_audio_metrics_from_redis, _try_acquire_lock
 
