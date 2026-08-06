@@ -279,10 +279,10 @@ def test_pulse_does_not_release_a_pin_a_hold_adopted(monkeypatch):
     controller = _StubController()
     manager = _manager(controller, {17: {GPIOBehavior.INCOMING_ALERT}})
 
-    # ``gpio.time`` is the stdlib module, so the patch below is process-wide.
+    # ``gpio.behavior.time`` is the stdlib module, so the patch below is process-wide.
     # Scope the stub to this thread and delegate everything else to the real
     # sleep, so a concurrently running test can never pick it up.
-    real_sleep = gpio.time.sleep
+    real_sleep = gpio.behavior.time.sleep
     test_thread = threading.get_ident()
 
     def _broadcast_starts_during_the_pulse(seconds):
@@ -293,7 +293,7 @@ def test_pulse_does_not_release_a_pin_a_hold_adopted(monkeypatch):
         # the broadcast hold adopted the already-energised pin.
         manager._hold_map[17] = {GPIOBehavior.TRANSMITTER_PTT}
 
-    monkeypatch.setattr(gpio.time, "sleep", _broadcast_starts_during_the_pulse)
+    monkeypatch.setattr(gpio.behavior.time, "sleep", _broadcast_starts_during_the_pulse)
     manager._pulse_pin(pin=17, duration=3.0, label="Incoming Alert", alert_id="a1")
 
     assert controller.deactivated == [], "the pulse must not un-key the transmitter"

@@ -47,7 +47,7 @@ These are what make a split reviewable and safe. Follow them on every file.
    path both silently resolved one level short of the repository root, and
    neither failure raises — `_load_logo()` swallows the error and renders a
    card with no logo. Both are now pinned by tests.
-6. **Follow the existing naming convention.** When a module is superseded, the
+7. **Follow the existing naming convention.** When a module is superseded, the
    old one is renamed with an `_old` suffix — never `_new` for the replacement.
    In practice most splits here need no rename because the original path stays
    as the shim.
@@ -94,7 +94,7 @@ code with no Flask involvement, which makes them the safest of the big splits.
 | --- | ---: | --- | --- |
 | `app_core/radio/demodulation.py` | 5355 | `app_core/radio/demod/` package | ✅ landed (shim now 95 lines) |
 | `app_utils/image_export.py` | 3391 | `app_utils/image_export/` package | ✅ landed |
-| `app_utils/gpio.py` | 3149 | `app_utils/gpio/` package | Planned |
+| `app_utils/gpio.py` | 3149 | `app_utils/gpio/` package | ✅ landed |
 | `app_core/gps/gps_manager.py` | 2893 | split manager / NMEA parsing / survey | Planned |
 | `app_core/radio/drivers.py` | 2187 | one module per driver family | Planned |
 
@@ -238,13 +238,63 @@ matching `webapp/audio_archive/`, `app_core/flask/`, `app_core/config/` and
 package standalone, as `tests/test_image_export_themes.py` does. `demod/` was
 converted from absolute to relative in the same release for this reason.
 
-### 2c. `app_utils/gpio.py` → `app_utils/gpio/`
+### 2c. `app_utils/gpio.py` → `app_utils/gpio/` ✅
 
-Four distinct subsystems share one file: the GPIO backend abstraction
-(lgpio/sysfs/null), the `GPIOController` + behaviour matrix, the NeoPixel
-controller, and the tower-light controller. Suggested split: `backends.py`,
-`types.py` (enums + dataclasses), `controller.py`, `behavior.py`, `neopixel.py`,
-`tower_light.py`, `config_loaders.py` (the `load_*_from_db` functions).
+Four distinct subsystems shared one file: the GPIO backend abstraction
+(lgpio/sysfs/null), the `GPIOController` + behaviour manager, the NeoPixel
+controller, and the tower-light controller.
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `pin_types.py` | 166 | `GPIOState`, `GPIOActivationType`, `GPIOBehavior`, the behaviour label/pulse tables, `GPIOActivationEvent`, `GPIOPinConfig`, flash-interval bounds |
+| `backends.py` | 426 | `GPIOBackend` Protocol, `_LGPIOBackend`, `_SysfsGPIOBackend`, `_NullGPIOBackend`, gpiozero pin-factory setup, `_BackendPinDevice` |
+| `tower_light.py` | 410 | Adafruit and ANDONT command protocols, `TowerLightConfig`, `TowerLightController` |
+| `neopixel.py` | 336 | Strip-type constants, `NeopixelConfig`, `_NullNeopixelStrip`, `_make_neo_color`, `NeopixelController` |
+| `controller.py` | 1003 | `GPIOController` |
+| `behavior.py` | 546 | `GPIOBehaviorManager` |
+| `config_loaders.py` | 440 | The four `load_*_from_db` functions and behaviour-matrix (de)serialisation |
+
+```
+pin_types, backends, tower_light   leaves
+neopixel        -> pin_types
+controller      -> backends, pin_types
+behavior        -> controller, pin_types
+config_loaders  -> neopixel, pin_types, tower_light
+```
+
+Each optional-dependency probe moved to sit with its only consumer:
+`get_gpio_settings` / `_GPIO_SETTINGS_AVAILABLE` with the database loaders,
+`PixelStrip` / `NeopixelColor` / `_NEOPIXEL_LIB_AVAILABLE` with the NeoPixel
+controller, `Device` / `OutputDevice` / `MockFactory` with the backends. The
+package `__init__.py` re-exports all 72 names the single-file module exposed.
+
+**Verification.** 28 top-level definitions, 28 `ast.dump()` matches, zero
+differences, plus the every-line-placed assertion. All six production importers
+were imported to confirm they still resolve.
+
+**Two lessons this phase added.**
+
+1. **Do not name a package module `types.py`.** It shadows the stdlib `types`
+   for any process whose working directory is the package directory, and the
+   stdlib import chain (`dataclasses` → `re` → `enum` → `types`) then fails
+   with a confusing partially-initialised-module error. Renamed to
+   `pin_types.py`. `app_core/radio/demod/types.py` has the same footgun — it is
+   harmless in normal operation, so it was left alone rather than churning
+   merged code, but it is a cleanup candidate.
+2. **Find monkeypatch targets with an AST scan, not a grep.** String matching
+   found 24 of the 31 patch sites here; it missed multi-line
+   `monkeypatch.setattr(\n    gpio,\n    "name",\n    …)` calls and a bare
+   `real_sleep = gpio.time.sleep` attribute read. Walking the test files'
+   ASTs for `setattr` calls whose first argument resolves to the package
+   catches every form. The reusable check:
+
+   ```python
+   # For each tests/*.py: find setattr calls targeting the package.
+   for n in ast.walk(ast.parse(path.read_text())):
+       if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+               and n.func.attr == 'setattr' and n.args):
+           ...  # report the target expression and attribute name
+   ```
 
 ---
 
@@ -304,24 +354,49 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | --- | --- | --- |
 | 2026-08-06 | 2.134.0 | Plan written. Phase 1 (`fips_codes.py`, 3887 → 673) and Phase 2a (`demodulation.py`, 5355 → 9 modules + a 95-line shim). ~7,500 lines of oversized module retired. Follow-up Phase 2a-ii opened for `RBDSWorker`/`RBDSDecoder`. |
 | 2026-08-06 | 2.135.0 | Phase 2b (`image_export.py`, 3391 → 13 modules + a re-exporting `__init__`). `demod/` converted to relative imports to match the repo convention. Largest remaining Python module is now `poller/cap_poller.py` at 3996. |
+| 2026-08-06 | 2.136.0 | Phase 2c (`gpio.py`, 3149 → 7 modules + a re-exporting `__init__`). Phase 2 complete: the four biggest library modules — 15,043 lines between them — are now 42 focused modules. A pre-split checklist was added, distilled from the three bugs the earlier phases hit. |
 
 ## Next up
 
-**Phase 2c — `app_utils/gpio.py` (3149).** Four independent subsystems share
-one file (backend abstraction, `GPIOController` + behaviour matrix, NeoPixel,
-tower light), so the seams are clean. It is the last of the big library-code
-splits; after it, everything remaining is either Flask-coupled (Phase 3) or on
-the alert path (Phase 4).
+Phase 2 is complete. Every remaining oversized module is either Flask-coupled
+(Phase 3), on the alert path (Phase 4), or frontend (Phase 5) — all three are
+meaningfully riskier than the library splits that have landed so far, and none
+should be attempted without first running the pre-split checklist below.
 
-**Before Phase 3 starts**, decide whether `webapp/admin/audio_ingest.py` should
+**Phase 3 — `webapp/admin/audio_ingest.py` (3180)** is the recommended next
+step, being the largest of the web-layer modules and the one with the clearest
+helper/handler seam. One decision to make before starting: whether it should
 follow `webapp/audio_archive/` exactly (helpers in topic modules, `routes.py`
 holding only handlers) or keep its `register_*_routes(app, logger)` entry
 point. The latter is how the admin package is wired today, so the split should
 preserve it and only move helpers out.
 
-**Carry the two test lessons from Phase 2b forward.** Any module that tests
-load by file path needs `submodule_search_locations` once it becomes a package,
-and any name a test monkeypatches has to be patched on the module that *calls*
-it, not on the package that re-exports it. Check for both before splitting —
-and verify the retarget is load-bearing by confirming the tests fail without
-it, rather than assuming.
+**Phase 4 (`poller/cap_poller.py`, 3996 — now the largest Python module in the
+tree, and `app_utils/eas.py`, 3848)** is the highest-risk work in this plan:
+both sit directly on the alert path, and each is dominated by one very large
+class, so the split means extracted collaborators rather than free functions.
+Pin the behaviour with tests *before* moving anything.
+
+## Pre-split checklist
+
+Run all of this before touching a file. Each item exists because skipping it
+cost a debugging cycle in an earlier phase.
+
+- [ ] **`grep -n "__file__"`.** Every `__file__`-relative path shifts meaning
+      when a module moves one directory deeper. AST-equality cannot catch it.
+      Assert the resolved values against the pre-split module afterwards.
+      (Phase 2b: silently dropped the brand logo from every share image.)
+- [ ] **AST-scan the tests for `monkeypatch.setattr` targets**, not grep — grep
+      misses multi-line calls and bare attribute reads. Retarget each to the
+      module that *calls* the name. (Phase 2c: grep found 24 of 31 sites.)
+- [ ] **Check for tests loading the module by file path**
+      (`spec_from_file_location`). A package needs `submodule_search_locations`
+      on the spec. (Phase 2b.)
+- [ ] **Do not name a module `types.py`** — it shadows the stdlib. (Phase 2c.)
+- [ ] **Assert every non-blank line of the original lands in exactly one
+      module**, so nothing is silently dropped by an off-by-one slice.
+- [ ] **Compare `ast.dump()` of every top-level definition** old vs new.
+- [ ] **Verify any test retarget is load-bearing** by confirming the tests fail
+      without it. A retarget that changes nothing means the test was passing
+      vacuously and you have learned something either way.
+- [ ] **Import every production consumer** to confirm the shim resolves.
