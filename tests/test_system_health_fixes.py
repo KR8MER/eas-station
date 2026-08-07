@@ -207,8 +207,11 @@ class TestPlatformDetails:
         dt_base.mkdir()
         (dt_base / "model").write_bytes(b"Raspberry Pi 4 Model B\0")
         (dt_base / "serial-number").write_bytes(b"test-serial-123\0")
+        # Patch the module that *reads* the candidate list: `_collect_platform_details`
+        # calls `device_tree._collect_device_tree_details`, which resolves
+        # DEVICE_TREE_CANDIDATES from its own globals.
         monkeypatch.setattr(
-            system_utils, "DEVICE_TREE_CANDIDATES", [dt_base]
+            system_utils.device_tree, "DEVICE_TREE_CANDIDATES", [dt_base]
         )
 
         details = system_utils._collect_platform_details()
