@@ -145,19 +145,37 @@ def _merge_metadata(*metadata_sources: Optional[Dict[str, Any]]) -> Optional[Dic
     return merged or None
 
 
+#: ``device_params`` keys holding a credential. None of these may ever reach a
+#: client; each is replaced by a ``<key>_set`` boolean so the edit form can
+#: still show "leave blank to keep current".
+#:
+#: ``auth_username`` is deliberately absent — a username is not a credential on
+#: its own, and the edit form repopulates the field from it
+#: (``static/js/audio_monitoring.js``). Redacting it would break that form
+#: without protecting a secret.
+SECRET_DEVICE_PARAM_KEYS = ('auth_password', 'auth_header')
+
+
 def _redact_device_params(device_params: Any) -> Any:
-    """Return a copy of device_params with the stored stream password redacted.
+    """Return a copy of device_params with every stored credential redacted.
 
     The browser never needs the actual credential; it only needs to know one is
-    stored (so the edit form can show "leave blank to keep current"). We expose a
-    boolean ``auth_password_set`` instead of the secret.
+    stored. ``auth_header`` counts: it is sent verbatim as the ``Authorization``
+    header (see ``app_core/audio/sources.py``), so it carries a bearer token or
+    Basic credential just as ``auth_password`` does.
+
+    This is the single redaction boundary. Every payload builder that emits
+    ``device_params`` must route it through here — see
+    ``tests/test_audio_credential_redaction.py``, which asserts that no
+    endpoint's response body contains a stored secret.
     """
     if not isinstance(device_params, dict):
         return device_params
     redacted = dict(device_params)
-    if 'auth_password' in redacted:
-        redacted['auth_password_set'] = bool(redacted.get('auth_password'))
-        redacted.pop('auth_password', None)
+    for key in SECRET_DEVICE_PARAM_KEYS:
+        if key in redacted:
+            redacted[f'{key}_set'] = bool(redacted.get(key))
+            redacted.pop(key, None)
     return redacted
 
 

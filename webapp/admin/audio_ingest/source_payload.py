@@ -33,7 +33,12 @@ from typing import Any, Dict, Optional
 
 from app_core.models import AudioSourceConfigDB, AudioSourceMetrics
 
-from .sanitize import _merge_metadata, _sanitize_bool, _sanitize_float
+from .sanitize import (
+    _merge_metadata,
+    _redact_device_params,
+    _sanitize_bool,
+    _sanitize_float,
+)
 from .serialization import _sanitize_streaming_stats
 
 logger = logging.getLogger(__name__)
@@ -47,7 +52,11 @@ def _first_defined(*candidates):
 
 
 def _config_block(db_config: AudioSourceConfigDB) -> Dict[str, Any]:
-    """The stored config, with the documented defaults filled in."""
+    """The stored config, with the documented defaults filled in.
+
+    ``device_params`` goes through ``_redact_device_params``: it comes straight
+    off the database row and holds the stream credentials.
+    """
     config_params = db_config.config_params or {}
     return {
         'sample_rate': config_params.get('sample_rate', 44100),
@@ -55,7 +64,7 @@ def _config_block(db_config: AudioSourceConfigDB) -> Dict[str, Any]:
         'buffer_size': config_params.get('buffer_size', 4096),
         'silence_threshold_db': config_params.get('silence_threshold_db', -60.0),
         'silence_duration_seconds': config_params.get('silence_duration_seconds', 5.0),
-        'device_params': config_params.get('device_params', {}),
+        'device_params': _redact_device_params(config_params.get('device_params', {})),
     }
 
 

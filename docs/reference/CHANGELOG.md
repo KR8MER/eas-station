@@ -8,6 +8,59 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.140.1] - 2026-08-07 - Stop serving stored stream credentials to the browser
+
+### Fixed
+- **`GET /api/audio/sources` returned the stored stream password in cleartext.**
+  `_redact_device_params` was applied at individual call sites rather than at the
+  payload boundary, and the two branches of the sources listing — the Redis-backed
+  one and the database-only one — never called it. Any client that could reach the
+  endpoint received `device_params.auth_password` verbatim for every configured
+  source. The detail endpoint had always redacted, which is why the gap went
+  unnoticed. Predates the 2.139.0 package split; reproduced on 2.138.1.
+
+- **Every endpoint emitting `device_params` returned the stored `Authorization`
+  header, including the paths that already redacted.** `_redact_device_params`
+  only ever stripped `auth_password`, so `auth_header` — sent verbatim as the
+  `Authorization` header by `app_core/audio/sources.py`, and therefore a bearer
+  token or Basic credential — passed straight through the redaction that was
+  supposed to be protecting it. This affected `GET /api/audio/sources/<name>` too,
+  not just the listing.
+
+  Redaction now happens in one place. `SECRET_DEVICE_PARAM_KEYS` names every
+  credential key, `_redact_device_params` replaces each with a `<key>_set`
+  boolean, and `_config_block` routes the listing through it.
+  `auth_username` is deliberately *not* redacted: a username is not a credential
+  on its own and the edit form repopulates from it.
+
+- **`_restore_audio_source_from_db_config` copied credentials into
+  `adapter.metrics.metadata`.** It folds every `device_params` key into the
+  adapter's metadata, which the detail endpoint serializes — so the secrets
+  reached the API even on the adapter path, where `config.device_params` itself
+  was redacted. It now redacts first, and copies the metadata dict instead of
+  mutating the adapter's own.
+
+- **`GET /api/audio/icecast/config` returned the Icecast source and admin
+  passwords in cleartext, with no permission check.** The sibling POST that writes
+  the same settings required `system.configure`; the read did not. The route is
+  now gated to match, and both the read and write responses carry
+  `password_set` / `admin_password_set` booleans instead of the secrets.
+
+### Changed
+- **The stream edit form treats the Authorization header as write-only**, the way
+  it already treated the password. `static/js/audio_monitoring.js` renders it as
+  an empty password field with a "leave blank to keep current" hint and only
+  submits it when the operator types a new value — without this the redaction
+  would have wiped the stored header on every save.
+
+### Added
+- **`tests/test_audio_credential_redaction.py`** (15 tests). The central one is
+  deliberately blunt: plant a known secret in a source's `device_params`, hit
+  every audio endpoint, and assert the value appears nowhere in the response
+  bytes — the failure mode a call-site-by-call-site approach keeps reproducing.
+  All four protections were mutation-checked; reverting `SECRET_DEVICE_PARAM_KEYS`
+  to its pre-fix value fails seven tests, including the detail endpoint.
+
 ## [2.140.0] - 2026-08-06 - Large-file refactor, phase 3a-ii: the audio source listing
 
 The follow-up 2.139.0 opened. `routes_sources.py` was the one module the package

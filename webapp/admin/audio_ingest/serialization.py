@@ -71,8 +71,12 @@ def _restore_audio_source_from_db_config(
 
     adapter = create_audio_source(runtime_config)
 
-    metadata = adapter.metrics.metadata or {}
-    device_params = config_params.get('device_params')
+    # Copy rather than mutate the adapter's own metadata dict, and redact first:
+    # every device_params key is surfaced here, so without this the stream
+    # credentials reach the API through metrics.metadata even on the paths that
+    # redact `config.device_params` itself.
+    metadata = dict(adapter.metrics.metadata or {})
+    device_params = _redact_device_params(config_params.get('device_params'))
     if isinstance(device_params, dict):
         for key, value in device_params.items():
             if value is None:
