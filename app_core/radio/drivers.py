@@ -195,6 +195,15 @@ class _SoapySDRReceiver(ReceiverInterface):
         self._retry_backoff = 0.25
         self._max_retry_backoff = 5.0
         self._last_logged_error: Optional[str] = None
+        # Rate limit for repeats of an unchanged error.  A persistent fault
+        # still gets re-surfaced periodically so it cannot go silent, but it
+        # no longer writes one SystemLog row per failed read.
+        self._last_error_log_time = 0.0
+        self._error_log_interval = 300.0  # 5 minutes
+        # A recovery must hold this long before it is announced, so a flapping
+        # receiver does not alternate ERROR/INFO rows on every read.
+        self._error_cleared_at = 0.0
+        self._recovery_confirm_seconds = 10.0
         # Connection health tracking
         self._connection_attempts = 0
         self._connection_failures = 0
@@ -654,23 +663,55 @@ class _SoapySDRReceiver(ReceiverInterface):
             current_error = self._status.last_error
 
         if sanitized_error is not None and current_error:
-            details = self._build_event_details(context=context)
-            details["error"] = current_error
-            self._emit_event(
-                "ERROR",
-                f"{self.config.identifier}: {current_error}",
-                details=details,
-            )
+            # Only emit when the error text actually changed, or when the same
+            # error has persisted past the re-notify window.  ``_update_status``
+            # is called from the capture loop on every read, so an SDR that is
+            # flapping — read fails, reconnect succeeds, read fails again —
+            # previously wrote an ERROR row (and a matching "recovered" INFO
+            # row) per iteration, tens of rows per second, each with its own DB
+            # commit.  ``_last_logged_error`` was already being maintained for
+            # exactly this purpose but was never consulted here.
+            now = time.time()
+            repeated = current_error == self._last_logged_error
+            if not repeated or now - self._last_error_log_time >= self._error_log_interval:
+                details = self._build_event_details(context=context)
+                details["error"] = current_error
+                if repeated:
+                    details["repeated_since"] = self._last_error_log_time
+                self._emit_event(
+                    "ERROR",
+                    f"{self.config.identifier}: {current_error}",
+                    details=details,
+                )
+                self._last_error_log_time = now
             self._last_logged_error = current_error
+            # A fresh failure invalidates any in-progress recovery streak.
+            self._error_cleared_at = 0.0
         elif sanitized_error is None and locked and self._last_logged_error:
+            # Require the recovery to hold for ``_recovery_confirm_seconds``
+            # before announcing it.  Without this, a receiver flapping between
+            # a failed read and a successful reconnect emits "recovered" on
+            # every good read — and because that branch cleared
+            # ``_last_logged_error``, the next failed read looked like a brand
+            # new error and re-emitted ERROR too.  That pairing is what
+            # produced bursts of ERROR/INFO rows in the same second.
+            now = time.time()
+            if not self._error_cleared_at:
+                self._error_cleared_at = now
+                return
+            if now - self._error_cleared_at < self._recovery_confirm_seconds:
+                return
             details = self._build_event_details(context=context)
             details["previous_error"] = self._last_logged_error
+            details["stable_for_seconds"] = round(now - self._error_cleared_at, 1)
             self._emit_event(
                 "INFO",
                 f"{self.config.identifier} recovered and resumed streaming",
                 details=details,
             )
             self._last_logged_error = None
+            self._last_error_log_time = 0.0
+            self._error_cleared_at = 0.0
 
     def _build_event_details(self, *, context: Optional[str] = None) -> Dict[str, object]:
         with self._status_lock:

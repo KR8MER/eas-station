@@ -36,7 +36,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from .broadcast_queue import BroadcastQueue
@@ -244,8 +244,21 @@ class AudioSourceAdapter(ABC):
         # the rest of the audio system.
         self._consecutive_failed_restarts = 0
         self._quarantine_threshold = 3      # failed restarts before quarantine
-        self._quarantine_seconds = 60.0      # cooldown before retrying
+        self._quarantine_seconds = 60.0      # base cooldown before retrying
         self._quarantined_until = 0.0
+        # Quarantine uses exponential backoff.  A source that keeps coming
+        # back broken doubles its cooldown each time, so a permanently dead
+        # stream settles at one retry every ``_max_quarantine_seconds``
+        # instead of hammering the upstream — and flooding the alert log —
+        # every ``_quarantine_seconds`` forever.  Cleared by ``note_healthy``.
+        self._quarantine_escalations = 0
+        self._max_quarantine_seconds = 900.0  # 15 minutes
+        # ``start()`` returning True only proves the capture *launched* (the
+        # ffmpeg process spawned, the SDR handle opened).  It does not prove
+        # audio ever arrives.  Until the health monitor sees a real sample the
+        # restart stays provisional, so the circuit-breaker counters must not
+        # be cleared.  See ``note_healthy``.
+        self._restart_unconfirmed = False
 
     @abstractmethod
     def _start_capture(self) -> None:
@@ -597,6 +610,39 @@ class AudioSourceAdapter(ABC):
         """Return True if this source is in restart cooldown after repeated failures."""
         return time.time() < self._quarantined_until
 
+    def quarantine_backoff_seconds(self) -> float:
+        """Cooldown the *next* quarantine will use, with exponential backoff.
+
+        Doubles per escalation from ``_quarantine_seconds``, capped at
+        ``_max_quarantine_seconds``.  A stream that is simply off the air
+        therefore decays to one retry every 15 minutes rather than retrying
+        every minute indefinitely.
+        """
+        return min(
+            self._quarantine_seconds * (2 ** self._quarantine_escalations),
+            self._max_quarantine_seconds,
+        )
+
+    def enter_quarantine(self) -> float:
+        """Put the source into cooldown and return the applied duration."""
+        cooldown = self.quarantine_backoff_seconds()
+        self._quarantined_until = time.time() + cooldown
+        self._quarantine_escalations += 1
+        return cooldown
+
+    def note_healthy(self) -> None:
+        """Confirm the source is genuinely delivering audio.
+
+        This is the *only* place the restart circuit breaker is cleared. The
+        health monitor calls it when it observes a metrics update produced by
+        a real audio chunk (not the timestamp ``start()`` writes at launch),
+        which is the sole evidence that a restart actually worked.
+        """
+        self._restart_unconfirmed = False
+        self._consecutive_failed_restarts = 0
+        self._quarantine_escalations = 0
+        self._quarantined_until = 0.0
+
     def restart(
         self,
         reason: str,
@@ -666,10 +712,22 @@ class AudioSourceAdapter(ABC):
                     self._restart_count += 1
                     self._last_restart = time.time()
                     self._last_error = None
-                    self._consecutive_failed_restarts = 0
-                    self._quarantined_until = 0.0
+                    # NOTE: the circuit-breaker counters
+                    # (``_consecutive_failed_restarts``, ``_quarantined_until``,
+                    # ``_quarantine_escalations``) are deliberately NOT cleared
+                    # here.  ``start()`` only reports that the capture launched;
+                    # a dead stream URL or a dead SDR relaunches cleanly every
+                    # single time while never delivering a sample.  Clearing the
+                    # breaker on launch made it unreachable for exactly that
+                    # failure mode, so the monitor escalated to ERROR, waited out
+                    # a flat 60s quarantine, restarted, had its quarantine wiped,
+                    # and stalled again — forever, at roughly one cycle every
+                    # three minutes.  Only ``note_healthy()`` — called by the
+                    # health monitor once audio actually flows — clears them.
+                    self._restart_unconfirmed = True
                     logger.info(
-                        "%s: audio source restarted successfully after %s",
+                        "%s: audio source restarted successfully after %s "
+                        "(awaiting audio to confirm recovery)",
                         self.config.name,
                         reason,
                     )
@@ -680,12 +738,12 @@ class AudioSourceAdapter(ABC):
 
             self._consecutive_failed_restarts += 1
             if self._consecutive_failed_restarts >= self._quarantine_threshold:
-                self._quarantined_until = time.time() + self._quarantine_seconds
+                cooldown = self.enter_quarantine()
                 logger.error(
                     "%s: quarantining audio source for %.0fs after %d consecutive "
                     "failed restarts (last reason: %s)",
                     self.config.name,
-                    self._quarantine_seconds,
+                    cooldown,
                     self._consecutive_failed_restarts,
                     reason,
                 )
@@ -709,6 +767,15 @@ class AudioSourceAdapter(ABC):
 
 class AudioIngestController:
     """Main controller for managing multiple audio sources."""
+
+    # Relative severity of the source-alert states, used to decide whether a
+    # repeat alert is worth emitting.  A failing source oscillates between
+    # these as it is restarted, so only an *escalation* breaks the dedup.
+    _ALERT_SEVERITY = {
+        "stall": 1,
+        "disconnected": 2,
+        "error": 3,
+    }
 
     def __init__(
         self,
@@ -739,6 +806,11 @@ class AudioIngestController:
         # ERROR and lets the adapter's own quarantine timer back off the loop.
         self._consecutive_stalls: Dict[str, int] = {}
         self._stall_quarantine_threshold = 3
+        # Last (state, message) reported per source, with its timestamp, so a
+        # source stuck in ERROR does not emit an identical alert row on every
+        # retry cycle.  Cleared as soon as the source is healthy again.
+        self._alerted_states: Dict[str, Tuple[str, float]] = {}
+        self._alert_renotify_seconds = 900.0  # re-surface a stuck source every 15 min
         # Headers injected via inject_eas_test_signal() — decoded alerts whose
         # raw_header matches an entry here are known-synthetic and get confidence=1.0.
         self._synthetic_headers: set = set()
@@ -1213,6 +1285,10 @@ class AudioIngestController:
     ) -> None:
         if not adapter.config.enabled:
             self._consecutive_stalls.pop(name, None)
+            # Drop the dedup record too, so re-enabling a source reports its
+            # next failure immediately rather than being suppressed as a
+            # "repeat" of whatever state it was in when it was switched off.
+            self._alerted_states.pop(name, None)
             return
 
         # Quarantined sources are skipped to break the restart-storm cycle
@@ -1246,7 +1322,12 @@ class AudioIngestController:
                     self._stall_quarantine_threshold,
                     diagnostics,
                 )
-                self._fire_source_alert(adapter.config.name, "stall", "stalled capture (no audio samples)")
+                if self._should_alert_state(name, "stall", now):
+                    self._fire_source_alert(
+                        adapter.config.name,
+                        "stall",
+                        "stalled capture (no audio samples)",
+                    )
 
                 if stalls >= self._stall_quarantine_threshold:
                     # adapter.restart() keeps succeeding because ``start()`` only
@@ -1269,12 +1350,23 @@ class AudioIngestController:
                         adapter.status = AudioSourceStatus.ERROR
                         adapter.error_message = f"no audio samples after {stalls} restarts ({diagnostics})"
                         adapter._last_error = adapter.error_message
-                        adapter._quarantined_until = time.time() + adapter._quarantine_seconds
-                        self._fire_source_alert(
-                            adapter.config.name,
-                            "error",
-                            adapter.error_message,
+                        # Exponential backoff: each escalation doubles the
+                        # cooldown, so a source that is simply off the air
+                        # stops being retried every minute forever.
+                        cooldown = adapter.enter_quarantine()
+                        logger.error(
+                            "%s: quarantined for %.0fs after stall escalation "
+                            "(escalation #%d)",
+                            name,
+                            cooldown,
+                            adapter._quarantine_escalations,
                         )
+                        if self._should_alert_state(name, "error", time.time()):
+                            self._fire_source_alert(
+                                adapter.config.name,
+                                "error",
+                                adapter.error_message,
+                            )
 
                     self.spawn_recovery(name, _escalate, "stall escalation")
                     self._consecutive_stalls[name] = 0
@@ -1299,15 +1391,70 @@ class AudioIngestController:
                 started_at = adapter._start_time or 0.0
                 if last_update > started_at + self._monitor_grace_period:
                     self._consecutive_stalls.pop(name, None)
+                    # Audio is genuinely flowing, so this is the one moment a
+                    # restart can be called confirmed.  Clearing the breaker
+                    # here — rather than in restart() on a successful launch —
+                    # is what stops a permanently dead stream from resetting
+                    # its own quarantine every cycle.
+                    if adapter._restart_unconfirmed or adapter._quarantine_escalations:
+                        logger.info(
+                            "%s: audio confirmed flowing — clearing restart "
+                            "circuit breaker",
+                            name,
+                        )
+                    adapter.note_healthy()
+                    self._alerted_states.pop(name, None)
             return
 
         if status in (AudioSourceStatus.ERROR, AudioSourceStatus.DISCONNECTED):
-            self._fire_source_alert(adapter.config.name, status.value, adapter.error_message or f"source in {status.value} state")
+            # Fire once per distinct failure state rather than on every retry
+            # cycle.  A source parked in ERROR was previously logging a fresh
+            # alert row each time its quarantine lapsed, which is what filled
+            # the Audio Alerts log with the same two sources for hours.
+            message = adapter.error_message or f"source in {status.value} state"
+            if self._should_alert_state(name, status.value, now):
+                self._fire_source_alert(adapter.config.name, status.value, message)
             self.spawn_recovery(
                 name,
                 lambda adapter=adapter, status=status: adapter.restart(f"status={status.value}"),
                 f"status={status.value}",
             )
+
+    def _should_alert_state(self, name: str, state: str, now: float) -> bool:
+        """Rate-limit repeated alerts for a source stuck failing.
+
+        An alert fires when any of these hold:
+
+        * nothing has been reported for this source since it was last healthy;
+        * the failure has escalated in severity (a source that was merely
+          stalling is now in ERROR);
+        * ``_alert_renotify_seconds`` has elapsed, so a long outage is
+          re-surfaced periodically rather than going silent forever.
+
+        Severity ranking matters because a broken source *cycles*: it stalls,
+        escalates to ERROR, gets restarted out of quarantine, stalls again.
+        Keying on state equality alone would let that alternation fire a fresh
+        pair of alerts on every cycle — which is precisely the flood this
+        method exists to stop.
+
+        Keying on state rather than message is also deliberate: the escalation
+        message embeds ``_describe_stall`` diagnostics (uptime, restart count,
+        last-sample age) that differ on every cycle, so a message-based
+        signature would dedup nothing.  The message still reaches the callback;
+        it just does not participate in the signature.
+        """
+        rank = self._ALERT_SEVERITY.get(state, 0)
+        previous = self._alerted_states.get(name)
+        if previous is not None:
+            prev_state, reported_at = previous
+            prev_rank = self._ALERT_SEVERITY.get(prev_state, 0)
+            if (
+                rank <= prev_rank
+                and now - reported_at < self._alert_renotify_seconds
+            ):
+                return False
+        self._alerted_states[name] = (state, now)
+        return True
 
     def _fire_source_alert(self, source_name: str, event_type: str, message: str) -> None:
         """Invoke the registered source alert callback (non-blocking, best-effort)."""

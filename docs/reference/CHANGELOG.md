@@ -8,6 +8,66 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.140.2] - 2026-08-07 - Stalled audio sources no longer cycle forever
+
+### Fixed
+- **A dead audio source restarted forever instead of backing off, filling the
+  Audio Alerts log for hours.** Production showed two sources (`WNCI`,
+  `ERN-LUC`) repeating `stall, stall, stall, error, error` on a ~3-minute
+  cycle for over four hours, with no terminal state and no recovery.
+
+  The restart circuit breaker existed but was unreachable for this failure
+  mode. `AudioSourceAdapter.restart()` cleared `_consecutive_failed_restarts`
+  and `_quarantined_until` whenever `start()` returned `True` — but `start()`
+  only proves the capture *launched*. A stream URL that is off the air, or a
+  dead SDR, relaunches cleanly every single time while never delivering a
+  sample, so the breaker's counters reset on every cycle. The health monitor
+  compensated with its own consecutive-stall escalation, which set a flat 60s
+  quarantine; the restart that followed quarantine expiry then wiped that
+  quarantine too. Net effect: escalate → wait 60s → restart → stall ×3 →
+  escalate, indefinitely.
+
+  Three changes break the loop:
+  - `restart()` no longer clears the breaker. A successful launch marks the
+    restart provisional (`_restart_unconfirmed`); only `note_healthy()` —
+    called by the health monitor when it observes a metrics update produced
+    by a *real* audio chunk — clears it. This mirrors the guard the monitor
+    already applied to its own stall counter.
+  - Quarantine now backs off exponentially (60s → 120s → … → 900s cap)
+    instead of staying at 60s, so a source that is simply off the air settles
+    at one retry every 15 minutes. The backoff resets on confirmed recovery.
+  - Repeat alerts are deduplicated by severity (`stall` < `disconnected` <
+    `error`) with a 15-minute re-notify. A failing source oscillates between
+    those states as it is restarted, so keying on state *equality* would have
+    deduplicated nothing; keying on message would have been worse still, as
+    the escalation message embeds `_describe_stall` diagnostics that change
+    every cycle.
+
+  Measured on a reproduction of the production shape: 21 alerts and 14
+  `start()` calls in 30 seconds before, 2 alerts after — with the outage
+  still fully reported and recovery still working. Regression tests in
+  `tests/test_audio_stall_recovery_backoff.py`; the three end-to-end
+  assertions were mutation-checked by restoring the original `restart()`
+  behaviour, which fails exactly them.
+
+- **A flapping SDR receiver wrote an `ERROR` and a matching `INFO` row per
+  failed read.** `radio.wbks` logged 20 ERROR/INFO pairs within three seconds.
+  `_update_status` is called from the capture loop on every read and emitted an
+  event unconditionally; `_last_logged_error` was maintained for exactly this
+  purpose but never consulted. The paired "recovered" INFO made it worse by
+  clearing `_last_logged_error`, so the next failed read looked like a brand
+  new error. Identical errors are now rate-limited to one row per 5 minutes,
+  and a recovery must hold for 10 seconds before it is announced.
+
+- **The Logs page "Copy" button omitted the message from every row.** It read
+  `cells[3]` as the message, but the log tables have six columns and
+  `cells[3]` is the *Alert* column — which renders a muted em dash when a row
+  has no linked alert. Every copied line therefore ended in `—` with the
+  actual message dropped. Copy now reads the correct column via a named
+  `LOG_COL` map, includes the alert identifier, drops em-dash placeholders,
+  and appends the collapsed Details JSON so copied logs carry the diagnostics
+  that make them actionable.
+
 ## [2.140.1] - 2026-08-07 - Stop serving stored stream credentials to the browser
 
 ### Fixed
