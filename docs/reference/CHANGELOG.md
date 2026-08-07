@@ -8,6 +8,55 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.141.0] - 2026-08-07 - Phase 3b: split the public route surface
+
+### Changed
+- **`webapp/routes_public.py` (2,849 lines) is now the `webapp/public/`
+  package**, one module per surface. This is Phase 3b of
+  `docs/development/LARGE_FILE_REFACTOR_PLAN.md`.
+
+  Unlike the `audio_ingest` split in 2.139.0, this module had exactly **one**
+  top-level definition: its entire body was a single 2,779-line
+  `register(app, logger)` with all 21 route handlers nested inside it. Nothing
+  could be moved at module level.
+
+  That made the split simpler rather than harder. Every handler closed over
+  only `app` (for the `@app.route` decorator) and `route_logger` — verified by
+  walking the AST for names resolving to `register`'s scope, not assumed — so
+  each surface keeps its own `register(app, route_logger)` and the handler
+  bodies move verbatim, still nested inside a `register`, just a much smaller
+  one. No reindentation, no rebinding, no signature changes.
+
+  | New module | Lines | Contents |
+  | --- | ---: | --- |
+  | `pages.py` | 189 | `/`, `/about`, `/help`, `/style-guide`, `/attribution`, `/support`, `/navigation`, `/terms`, `/privacy`, `/sms-compliance`, `/system_health`, `/audio-monitor` |
+  | `sitemap.py` | 115 | `/sitemap.xml` |
+  | `stats.py` | 693 | `/stats` |
+  | `alerts.py` | 648 | `/alerts`, `/alerts/export.pdf` |
+  | `logs_data.py` | 1116 | `_load_logs_data`, via a `build_logs_loader(route_logger)` factory |
+  | `logs.py` | 265 | `/logs`, `/logs/export.csv`, `/logs/export.pdf` |
+
+  `_load_logs_data` is a helper the three `/logs` handlers share, not a route.
+  Wrapping it in a factory rather than re-signaturing it to take
+  `route_logger` explicitly keeps its 1,057-line body byte-identical — only
+  the enclosing scope changed. `logs.py` receives it as a parameter named
+  `_load_logs_data`, so its three call sites resolve unchanged.
+
+  `webapp/routes_public.py` remains as a 31-line shim re-exporting `register`,
+  so the route-module registry in `webapp/__init__.py` is untouched.
+
+  Verified three independent ways, each confirmed discriminating before its
+  result was trusted: 21/21 handlers `ast.dump()`-identical with every
+  non-blank line placed exactly once (2,753 lines, 0 unplaced); the Flask URL
+  map diffed against a worktree at the pre-split commit (**549 rules, 0
+  differences**, mutation-checked by deleting a `register()` call); and all 28
+  public surfaces fetched through the test client on both sides and hashed
+  (**28/28 identical, 28 distinct digests**). Full suite: 2,045 passed.
+
+  `logs_data.py`, `stats.py` and `alerts.py` remain over the 400-line
+  guidance — each is dominated by one enormous function, which module-level
+  splitting cannot shrink. Tracked as Phase 3b-ii.
+
 ## [2.140.2] - 2026-08-07 - Stalled audio sources no longer cycle forever
 
 ### Fixed

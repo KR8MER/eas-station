@@ -466,7 +466,7 @@ modules, `routes.py` holding only handlers.
 | File | Lines | Planned split | Status |
 | --- | ---: | --- | --- |
 | `webapp/admin/audio_ingest.py` | 3180 | `webapp/admin/audio_ingest/` package | ✅ landed — see 3a |
-| `webapp/routes_public.py` | 2849 | split by surface: dashboard, alert detail, search, exports | ⏳ |
+| `webapp/routes_public.py` | 2849 | `webapp/public/` package, split by surface | ✅ landed — see 3b |
 | `webapp/routes_settings_radio.py` | 2781 | receivers / profiles / diagnostics | ⏳ |
 | `webapp/admin/api.py` | 2105 | group endpoints by resource | ⏳ |
 | `webapp/admin/certbot.py` | 1946 | certificate ops vs. routes | ⏳ |
@@ -614,6 +614,77 @@ that ruff exempts `__init__.py` from F401 by default. That exemption is the
 only thing that made the command safe. Verify the shim still resolves after any
 automated import cleanup rather than relying on it.
 
+### 3b. `webapp/routes_public.py` → `webapp/public/` ✅
+
+The second web-layer split, and structurally unlike 3a. `audio_ingest.py` had
+73 top-level definitions sharing a file; `routes_public.py` had **one**. Its
+entire body was a single 2,779-line `register(app, logger)` with all 21 route
+handlers nested inside it, so no top-level definition could be moved at all.
+
+That turned out to make the split *easier*, not harder. Every handler closed
+over exactly two names — `app` (for the `@app.route` decorator) and
+`route_logger` — which was checked by walking the AST for `Name` nodes
+resolving to `register`'s scope rather than assumed:
+
+| Handler group | Closure variables used |
+| --- | --- |
+| all 21 handlers | `app`, `route_logger` |
+| `terms_page`, `privacy_page` | + `_render_policy_page` (same module) |
+| `_render_policy_page` | `policy_docs_root`, `route_logger` |
+
+So each surface keeps its own `register(app, route_logger)` and the handler
+bodies move **verbatim** — still nested inside a `register`, just a much
+smaller one. No reindentation, no rebinding, no signature changes.
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `pages.py` | 189 | `/`, `/about`, `/help`, `/style-guide`, `/attribution`, `/support`, `/navigation`, `/terms`, `/privacy`, `/sms-compliance`, `/system_health`, `/audio-monitor`, `_render_policy_page` |
+| `sitemap.py` | 115 | `/sitemap.xml` |
+| `stats.py` | 693 | `/stats` |
+| `alerts.py` | 648 | `/alerts` and `/alerts/export.pdf` |
+| `logs_data.py` | 1116 | `_load_logs_data`, via a `build_logs_loader(route_logger)` factory |
+| `logs.py` | 265 | `/logs`, `/logs/export.csv`, `/logs/export.pdf` |
+
+`_load_logs_data` is a helper, not a route, and it is the only piece the three
+`/logs` handlers share. Wrapping it in `build_logs_loader(route_logger)`
+rather than re-signaturing it to take `route_logger` as a parameter keeps its
+1,057-line body byte-identical — only the enclosing scope changed. `logs.py`
+receives it as a parameter *named `_load_logs_data`*, so the three call sites
+resolve it unchanged.
+
+`webapp/routes_public.py` remains as a 31-line shim re-exporting `register`,
+so the route-module registry in `webapp/__init__.py` is untouched.
+
+**Verification.** Three independent checks, each confirmed discriminating
+before its result was trusted:
+
+1. **AST equality** — 21 of 21 handlers `ast.dump()`-identical before and
+   after, plus the every-non-blank-line-placed-exactly-once assertion (2,753
+   lines, 0 unplaced).
+2. **URL map** — every rule, endpoint and method set, sorted and diffed
+   against a git worktree at the pre-split commit: **549 rules, 0
+   differences**. Mutation-checked by deleting one `register()` call, which
+   the diff caught.
+3. **Response bodies** — all 28 public surfaces fetched through the test
+   client on both sides and hashed with volatile content scrubbed: **28/28
+   identical, 28 distinct digests**.
+
+**A trap this phase hit — an "identical length, different hash" diff is a
+scrubbing bug, not a regression.** Nine pages first compared as differing with
+byte-for-byte identical lengths, which is the signature of an unscrubbed
+fixed-width random value rather than a content change. It was the per-session
+CSRF token, which `base.html` emits in three shapes; the harness only knew the
+`<input value=…>` one and missed `<meta name="csrf-token">` and
+`window.CSRF_TOKEN`. Diff the raw bodies before concluding anything from a
+digest mismatch — the length equality was the tell.
+
+**Still over the cap — follow-up needed.** `logs_data.py` (1116),
+`stats.py` (693) and `alerts.py` (648) are each dominated by one enormous
+function: `_load_logs_data` is 1,057 lines, `stats` is 645, `alerts` is 385.
+Module-level splitting cannot shrink a single function, so these need
+collaborator extraction with a characterization harness built first — the 2e /
+3a-ii technique, not this one. Tracked as Phase 3b-ii.
+
 ## Phase 4 — Long-running services
 
 Highest risk: these are the alert path. Each is dominated by one very large
@@ -657,13 +728,21 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-08-06 | 2.138.0 | Phase 2d/2e (`gps_manager.py`, 2893 → 2313). The stateless timing math moved as motion; `_handle_sentence` was restructured into `app_core/gps/nmea.py` and verified by characterization rather than AST comparison. |
 | 2026-08-06 | 2.140.0 | Phase 3a-ii (`api_get_audio_sources`, 327 → 15 lines + `listing.py`/`source_payload.py`; write endpoints to `routes_sources_write.py`). Every module in `webapp/admin/audio_ingest/` is now under the 400-line guidance. |
 | 2026-08-06 | 2.139.0 | Phase 3a (`webapp/admin/audio_ingest.py`, 3180 → 15 modules + a re-exporting `__init__`). First web-layer split; `register_audio_ingest_routes(app, logger)` preserved as the entry point. Three new checklist items: Blueprint `import_name`, mutable-global imports, logger fan-out. |
+| 2026-08-07 | 2.141.0 | Phase 3b (`webapp/routes_public.py`, 2849 → 6 surface modules + a package `__init__` + a 31-line shim). First split of a module that was a *single* function — all 21 handlers were nested inside one 2,779-line `register()`. Verified by AST equality, a 549-rule URL-map diff, and 28 response-body digests. |
 
 ## Next up
 
-**Phase 3 continued — `webapp/routes_public.py` (2849)** is the next whole-file
-split. Unlike `audio_ingest` it is public-facing rather than admin, so the
-surfaces (dashboard, alert detail, search, exports) are the seam rather than
-resource groups.
+**Phase 3b-ii — the three `webapp/public/` modules still over the cap.**
+`logs_data.py` (1116), `stats.py` (693) and `alerts.py` (648) are each one
+enormous function: `_load_logs_data` at 1,057 lines, `stats` at 645, `alerts`
+at 385. These need the 2e / 3a-ii technique — characterize first, then extract
+collaborators — not another module-level slice. `_load_logs_data` is the
+clearest candidate: it is a dispatch over ~10 log categories, so each category
+is a natural collaborator and the seam is already marked by the `log_type`
+branches.
+
+**Phase 3 continued — `webapp/routes_settings_radio.py` (2781)** is the next
+whole-file split.
 
 **Phase 4 (`poller/cap_poller.py`, 3996 — the largest Python module in the
 tree, and `app_utils/eas.py`, 3848)** is the highest-risk work in this plan:
@@ -714,4 +793,18 @@ cost a debugging cycle in an earlier phase.
       "surviving mutant" is the untouched original. (Phase 3a-ii.)
 - [ ] **Re-check the shim after any automated import cleanup.** `ruff --fix`
       would strip a re-export shim bare; it only spares `__init__.py` because
-      F401 exempts it by default. (Phase 3a-ii.)
+      F401 exempts it by default. A shim that is *not* an `__init__.py` — like
+      `webapp/routes_public.py` — has no such exemption and survives only
+      because its `__all__` marks the re-export as used. Verify, don't assume.
+      (Phase 3a-ii, 3b.)
+- [ ] **Map the closure before splitting a module that is one big function.**
+      Nested handlers can be moved verbatim into per-topic `register()`
+      functions *only if* you know exactly which enclosing names each one
+      captures. Walk the AST for `Name` nodes resolving to the outer scope
+      rather than eyeballing it. (Phase 3b: all 21 handlers captured just
+      `app` and `route_logger`, which is what made the split pure motion.)
+- [ ] **Treat an equal-length, unequal-hash diff as a scrubbing bug first.**
+      It is the signature of an unscrubbed fixed-width random value, not a
+      content change. Diff the raw bodies before concluding a regression.
+      (Phase 3b: the per-session CSRF token, emitted in three shapes by
+      `base.html`, of which the harness knew only one.)
