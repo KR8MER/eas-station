@@ -1075,6 +1075,57 @@
     updateLastUpdateTime();
 
     // Copy logs to clipboard
+    // Column order in the log tables, kept in one place because getting it
+    // wrong is silent: the copy button used to read cells[3] as the message,
+    // but cells[3] is the Alert column, so every copied row ended in the "—"
+    // placeholder and the actual message was never copied at all.
+    const LOG_COL = { TIMESTAMP: 0, LEVEL: 1, MODULE: 2, ALERT: 3, MESSAGE: 4 };
+
+    // Cells that hold nothing render a muted em dash; treat that as empty so
+    // it does not masquerade as content in the copied text.
+    function cellText(cell) {
+        if (!cell) return '';
+        const text = cell.textContent.trim();
+        return (text === '—' || text === '-') ? '' : text;
+    }
+
+    /**
+     * Render one log row as a tab-separated line, including the alert
+     * identifier and any expandable Details payload (which lives in the
+     * sibling `<tr class="collapse">` immediately after the row).
+     */
+    function serializeLogRow(row) {
+        const cells = row.querySelectorAll('td');
+        if (cells.length <= LOG_COL.MESSAGE) return '';
+
+        const timestamp = cellText(cells[LOG_COL.TIMESTAMP]);
+        const level = cellText(cells[LOG_COL.LEVEL]);
+        const module = cellText(cells[LOG_COL.MODULE]);
+        const alertId = cellText(cells[LOG_COL.ALERT]);
+
+        const messageCell = cells[LOG_COL.MESSAGE];
+        const messageSpan = messageCell.querySelector('.log-message');
+        const message = messageSpan ? messageSpan.textContent.trim() : cellText(messageCell);
+
+        let line = `${timestamp}\t${level}\t${module}\t${alertId}\t${message}\n`;
+
+        // The Details button toggles a sibling row holding the JSON payload.
+        // It carries the stack traces and diagnostics that make a copied log
+        // actionable, so include it rather than only what happens to be
+        // visible on screen.
+        const detailsRow = row.nextElementSibling;
+        if (detailsRow && detailsRow.querySelector && !detailsRow.classList.contains('log-row')) {
+            const pre = detailsRow.querySelector('pre');
+            if (pre) {
+                const details = pre.textContent.trim();
+                if (details) {
+                    line += `\tdetails: ${details.replace(/\n/g, '\n\t')}\n`;
+                }
+            }
+        }
+        return line;
+    }
+
     function copyLogsToClipboard() {
         const btn = document.getElementById('copyLogsBtn');
         const originalHTML = btn.innerHTML;
@@ -1092,31 +1143,13 @@
 
                     const rows = item.querySelectorAll('tr.log-row');
                     rows.forEach(row => {
-                        const cells = row.querySelectorAll('td');
-                        if (cells.length >= 4) {
-                            const timestamp = cells[0].textContent.trim();
-                            const level = cells[1].textContent.trim();
-                            const module = cells[2].textContent.trim();
-                            // Get message from .log-message span or entire cell
-                            const messageSpan = cells[3].querySelector('.log-message');
-                            const message = messageSpan ? messageSpan.textContent.trim() : cells[3].textContent.trim();
-                            logText += `${timestamp}\t${level}\t${module}\t${message}\n`;
-                        }
+                        logText += serializeLogRow(row);
                     });
                 });
             } else {
                 // Standard table view
                 logRows.forEach(row => {
-                    const cells = row.querySelectorAll('td');
-                    if (cells.length >= 4) {
-                        const timestamp = cells[0].textContent.trim();
-                        const level = cells[1].textContent.trim();
-                        const module = cells[2].textContent.trim();
-                        // Get message from .log-message span or entire cell
-                        const messageSpan = cells[3].querySelector('.log-message');
-                        const message = messageSpan ? messageSpan.textContent.trim() : cells[3].textContent.trim();
-                        logText += `${timestamp}\t${level}\t${module}\t${message}\n`;
-                    }
+                    logText += serializeLogRow(row);
                 });
             }
 

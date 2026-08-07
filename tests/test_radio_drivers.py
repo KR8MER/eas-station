@@ -194,6 +194,13 @@ def test_receiver_logs_error_and_recovery(monkeypatch):
     )
 
     receiver = RTLSDRReceiver(config, event_logger=recorder)
+    # A recovery must hold for ``_recovery_confirm_seconds`` before it is
+    # announced, so that a receiver flapping between a failed read and a
+    # successful reconnect does not alternate ERROR/INFO rows on every read.
+    # Shorten it here so the test still runs in ~2s; the flap-suppression
+    # behaviour itself is covered by
+    # test_repeated_identical_errors_are_rate_limited below.
+    receiver._recovery_confirm_seconds = 0.1
     receiver.start()
 
     try:
@@ -504,3 +511,82 @@ def test_dynamic_buffer_size_calculation():
     buffer_size_airspy = receiver_airspy._calculate_buffer_size()
     # 2.5MHz * 50ms = 125000 samples
     assert buffer_size_airspy == 125000, f"Expected 125000, got {buffer_size_airspy}"
+
+
+def _make_receiver_for_status_logging(events):
+    """Build a receiver wired to an event recorder, without starting a stream.
+
+    ``_update_status`` is the unit under test; it needs no live device.
+    """
+    def recorder(level, message, *, module, details=None):
+        events.append((level, message, module, details))
+
+    config = ReceiverConfig(
+        identifier="wbks",
+        driver="rtlsdr",
+        frequency_hz=162_550_000,
+        sample_rate=2_400_000,
+        gain=10.0,
+        auto_start=False,
+    )
+    return RTLSDRReceiver(config, event_logger=recorder)
+
+
+def test_repeated_identical_errors_are_rate_limited():
+    """A flapping receiver must not log an ERROR/INFO pair per read.
+
+    Regression guard: ``_update_status`` runs from the capture loop on every
+    read and emitted an event unconditionally.  ``_last_logged_error`` was
+    maintained for exactly this purpose but never consulted, so a receiver
+    whose read fails, reconnects, and fails again wrote tens of rows per
+    second — each with its own database commit.  Observed in production as 20
+    ERROR/INFO pairs for ``radio.wbks`` within three seconds.
+    """
+    events = []
+    receiver = _make_receiver_for_status_logging(events)
+
+    # Flap 20 times: read fails, reconnect succeeds, repeat.
+    for _ in range(20):
+        receiver._update_status(locked=False, last_error="readStream error -1", context="read_stream")
+        receiver._update_status(locked=True, signal_strength=0.5)
+
+    errors = [e for e in events if e[0] == "ERROR"]
+    infos = [e for e in events if e[0] == "INFO"]
+
+    assert len(errors) == 1, (
+        f"an unchanged error should be logged once, not once per read; got {len(errors)}"
+    )
+    assert not infos, (
+        "a recovery that never holds must not be announced; "
+        f"got {[i[1] for i in infos]}"
+    )
+
+
+def test_changed_error_is_logged_immediately():
+    """Rate limiting must not hide a genuinely different failure."""
+    events = []
+    receiver = _make_receiver_for_status_logging(events)
+
+    receiver._update_status(locked=False, last_error="readStream error -1", context="read_stream")
+    receiver._update_status(locked=False, last_error="device disconnected", context="read_stream")
+
+    errors = [e[1] for e in events if e[0] == "ERROR"]
+    assert len(errors) == 2, f"a new error text must be reported at once; got {errors}"
+    assert any("device disconnected" in message for message in errors)
+
+
+def test_sustained_recovery_is_announced():
+    """A recovery that holds past the confirm window is still reported."""
+    events = []
+    receiver = _make_receiver_for_status_logging(events)
+    receiver._recovery_confirm_seconds = 0.05
+
+    receiver._update_status(locked=False, last_error="readStream error -1", context="read_stream")
+    receiver._update_status(locked=True, signal_strength=0.5)  # starts the streak
+    time.sleep(0.1)
+    receiver._update_status(locked=True, signal_strength=0.5)  # confirms it
+
+    infos = [e[1] for e in events if e[0] == "INFO"]
+    assert any("recovered" in message for message in infos), (
+        f"a sustained recovery must be announced; got {infos}"
+    )
