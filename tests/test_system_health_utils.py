@@ -64,13 +64,17 @@ def test_collect_cpu_details_reads_arm_fields(monkeypatch, sample_cpuinfo_text):
             return sample_cpuinfo_text
         return original_read_text(self, *args, **kwargs)
 
-    monkeypatch.setattr(system_utils, "Path", Path)
+    # `_collect_cpu_details` lives in `app_utils.system.hardware`; patch the names
+    # in that module's namespace, not on the package that re-exports it.
+    monkeypatch.setattr(system_utils.hardware, "Path", Path)
     monkeypatch.setattr(Path, "exists", fake_exists, raising=False)
     monkeypatch.setattr(Path, "read_text", fake_read_text, raising=False)
 
     # Ensure predictable CPU frequency values to avoid relying on host environment.
-    monkeypatch.setattr(system_utils.psutil, "cpu_freq", lambda: DummyCPUFreq())
-    monkeypatch.setattr(system_utils.psutil, "cpu_count", lambda logical=True: 8 if logical else 4)
+    monkeypatch.setattr(system_utils.hardware.psutil, "cpu_freq", lambda: DummyCPUFreq())
+    monkeypatch.setattr(
+        system_utils.hardware.psutil, "cpu_count", lambda logical=True: 8 if logical else 4
+    )
 
     details = system_utils._collect_cpu_details(logger=None)
 
@@ -93,7 +97,7 @@ def test_collect_device_tree_details(tmp_path, monkeypatch):
     (system_dir / "linux,revision").write_bytes((0x1A2B3C4D).to_bytes(4, byteorder="big"))
     (base / "compatible").write_bytes(b"raspberrypi,5-model-b\0brcm,bcm2712\0")
 
-    monkeypatch.setattr(system_utils, "DEVICE_TREE_CANDIDATES", [base])
+    monkeypatch.setattr(system_utils.device_tree, "DEVICE_TREE_CANDIDATES", [base])
 
     details = system_utils._collect_device_tree_details()
 

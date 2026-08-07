@@ -8,6 +8,64 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.142.0] - 2026-08-07 - Phase 4a: split the system-monitoring helpers
+
+### Changed
+- **`app_utils/system.py` (2,580 lines) is now the `app_utils/system/`
+  package**, 16 focused modules behind a re-exporting `__init__`. This is the
+  Phase 4 `app_utils/system.py` entry in
+  `docs/development/LARGE_FILE_REFACTOR_PLAN.md` — the one the plan flagged as
+  "mostly independent helpers — easier than it looks", and it was: 47 top-level
+  definitions sharing one file, with a strictly acyclic internal dependency
+  graph and no `__file__`-relative paths to shift.
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `common.py` | 102 | `SystemHealth`, `_safe_read_text`, `_safe_int`, `_coerce_int`, `_to_bool`, `_is_valid_temperature` |
+  | `dependencies.py` | 96 | `_collect_dependency_versions` |
+  | `services.py` | 146 | `_collect_systemd_services` |
+  | `badges.py` | 189 | Shields.io badges and the distro logo URL |
+  | `osinfo.py` | 131 | OS release details and virtualization detection |
+  | `network.py` | 111 | Interface traffic counters, primary-interface selection |
+  | `device_tree.py` | 110 | `DEVICE_TREE_CANDIDATES` and the device-tree readers |
+  | `block_devices.py` | 163 | `lsblk` inventory and its simplifier |
+  | `hardware.py` | 276 | CPU, USB and platform inventory |
+  | `disks.py` | 99 | Disk enumeration and device-type detection |
+  | `smart.py` | 429 | `_collect_smart_health` |
+  | `smart_fields.py` | 202 | smartctl/NVMe field extraction |
+  | `temperature.py` | 177 | Thermal sensor readings |
+  | `rtc.py` | 127 | Real-time clock status |
+  | `subsystems.py` | 147 | Hardware subsystem and GPS probes |
+  | `snapshot.py` | 478 | `build_system_health_snapshot` |
+
+  Pure motion, verified as such: **48 top-level definitions, 48
+  `ast.dump()` matches, zero differences**, plus the standing assertion that
+  every non-blank line of the original lands in exactly one module.
+
+- **`DEVICE_TREE_CANDIDATES` is deliberately not re-exported from the package.**
+  It is a mutable list that two tests replace with `monkeypatch.setattr`;
+  re-exporting it would have turned both patches into silent no-ops, since
+  `device_tree` resolves the name from its own globals. Leaving it out made
+  both fail loudly with `AttributeError`, which is what pointed at the right
+  patch target. Same for `Path` and `psutil` in the CPU-details test — all
+  three now patch `app_utils.system.<module>`.
+
+### Fixed
+- `docs/guides/SMART_SETUP.md` pointed at line ranges in the old monolith
+  (`app_utils/system.py` lines 1276-1557) and at `webapp/routes_public.py` for
+  the health-page route, which moved to `webapp/public/pages.py` in 2.141.0.
+  Both now name modules and functions rather than line numbers.
+
+### Notes
+- `smart.py` (429) and `snapshot.py` (478) are still over the 400-line
+  guidance. Each is *one function* — `_collect_smart_health` is 396 lines and
+  `build_system_health_snapshot` is 406 — so module-level splitting cannot
+  shrink them; they need collaborator extraction with a characterization
+  harness built first, as in Phase 2e / 3a-ii. Tracked as Phase 4a-ii.
+- One pre-existing lint finding was left alone deliberately: `smart.py` has an
+  unused `device_name` local (F841), present in the monolith. Fixing it is a
+  behaviour-adjacent change and does not belong in a pure-motion commit.
+
 ## [2.141.0] - 2026-08-07 - Phase 3b: split the public route surface
 
 ### Changed

@@ -157,7 +157,8 @@ The code automatically:
 
 ## Files
 
-- SMART collection code: `app_utils/system.py` (lines 1276-1557)
-- NVMe detection: `app_utils/system.py:_detect_device_type()` (lines 1716-1750)
-- Health page route: `webapp/routes_public.py:/system_health` (line 650)
+- SMART collection code: `app_utils/system/smart.py:_collect_smart_health()`
+- smartctl output parsing: `app_utils/system/smart_fields.py`
+- NVMe detection: `app_utils/system/disks.py:_detect_device_type()`
+- Health page route: `webapp/public/pages.py:/system_health`
 - Health template: `webapp/templates/system_health.html`

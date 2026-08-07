@@ -698,7 +698,81 @@ functions, and each needs its behaviour pinned by tests before it moves.
 | `app_core/eas_storage.py` | 2824 | |
 | `sdr_hardware_service.py` | 2275 | |
 | `eas_monitoring_service.py` | 2246 | |
-| `app_utils/system.py` | 2580 | mostly independent helpers — easier than it looks |
+| `app_utils/system.py` | 2580 | ✅ landed — see 4a |
+
+### 4a. `app_utils/system.py` → `app_utils/system/` ✅
+
+The one Phase 4 file that is not a god-class, and the plan's own note —
+"mostly independent helpers — easier than it looks" — held up. 47 top-level
+definitions shared the file, the internal call graph is strictly acyclic, and
+`grep -n "__file__"` came back empty, so this is the 2a–2c technique with no
+new hazards.
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `common.py` | 102 | `SystemHealth`, `_safe_read_text`, `_safe_int`, `_coerce_int`, `_to_bool`, `_is_valid_temperature` |
+| `dependencies.py` | 96 | `_collect_dependency_versions` |
+| `services.py` | 146 | `_collect_systemd_services` |
+| `badges.py` | 189 | `get_distro_logo_url`, `_escape_shields_io_text`, `get_shields_io_badges` |
+| `osinfo.py` | 131 | `_collect_operating_system_details`, `_detect_virtualization_environment` |
+| `network.py` | 111 | `_collect_network_traffic`, `_select_primary_interface` |
+| `device_tree.py` | 110 | `DEVICE_TREE_CANDIDATES`, `_collect_device_tree_details` and the three device-tree readers |
+| `block_devices.py` | 163 | `_collect_block_devices`, `_simplify_block_devices` |
+| `hardware.py` | 276 | `_collect_hardware_inventory`, `_collect_usb_devices`, `_collect_cpu_details`, `_collect_platform_details` |
+| `disks.py` | 99 | `_iter_disk_devices`, `_detect_device_type`, `_nvme_controller_path` |
+| `smart.py` | 429 | `_collect_smart_health` |
+| `smart_fields.py` | 202 | `NVME_DATA_UNIT_BYTES` and the smartctl/NVMe field extractors |
+| `temperature.py` | 177 | `_collect_temperature_readings`, `_add_temperature_entry`, `_parse_temperature_value` |
+| `rtc.py` | 127 | `_collect_rtc_status` |
+| `subsystems.py` | 147 | `_HARDWARE_SUBSYSTEMS`, `_collect_hardware_subsystems`, `_collect_gps_status` |
+| `snapshot.py` | 478 | `_AUDIO_PROCESS_KEYWORDS`, `_is_audio_processing_process`, `build_system_health_snapshot` |
+
+```
+common, dependencies, services, badges, network, device_tree,
+disks, smart_fields, subsystems                              leaves
+block_devices -> common
+osinfo        -> common
+temperature   -> common
+rtc           -> common
+hardware      -> common, block_devices, device_tree
+smart         -> common, disks, smart_fields
+snapshot      -> badges, dependencies, hardware, network, rtc,
+                 services, smart, subsystems, temperature, osinfo
+```
+
+**Verification.** 48 top-level definitions, 48 `ast.dump()` matches, zero
+differences, plus the every-non-blank-line-placed-exactly-once assertion.
+`ruff check --select F,E9` is clean on the package apart from one pre-existing
+F841. All four production consumers were imported to confirm the shim resolves
+(`app_utils/__init__.py`, `app_core/system_health.py`, `webapp/admin/api.py`,
+`scripts/diagnose_smart.sh`). 43 system-health tests pass.
+
+**The mutable-global rule paid for itself again.** `DEVICE_TREE_CANDIDATES` is
+a list that two tests replace wholesale. It is deliberately absent from the
+package `__init__`, so both patches raised `AttributeError` instead of silently
+patching a name nothing reads — the same loud-failure property that made the
+3a retarget safe. They now patch `app_utils.system.device_tree`. The CPU test's
+`Path` and `psutil` patches moved to `app_utils.system.hardware` for the same
+reason.
+
+**One generator bug worth recording: a parameter name is not a use of an
+import.** The script that derived each module's import block from the names its
+definitions reference treated the parameter of
+`_escape_shields_io_text(text: str)` as a use of `from sqlalchemy import text`,
+and gave `badges.py` (and `device_tree.py`, via a local) an import they do not
+need. `ruff --select F` caught both as F811/F401. Only `snapshot.py` actually
+issues SQL. Lint the generated package before trusting an inferred import
+block — name-level inference cannot see scope.
+
+**Still over the cap — follow-up needed.** `snapshot.py` (478) and `smart.py`
+(429) are each *one function*: `build_system_health_snapshot` is 406 lines and
+`_collect_smart_health` is 396. Module-level splitting cannot shrink them, so
+they need collaborator extraction with a characterization harness built first
+— the 2e / 3a-ii technique. Tracked as Phase 4a-ii. `build_system_health_snapshot`
+is the more tractable of the two: it is a sequence of independent `_collect_*`
+calls assembled into one dict, so the seam is already drawn.
+
+---
 
 ## Phase 5 — Frontend
 
@@ -729,6 +803,7 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-08-06 | 2.140.0 | Phase 3a-ii (`api_get_audio_sources`, 327 → 15 lines + `listing.py`/`source_payload.py`; write endpoints to `routes_sources_write.py`). Every module in `webapp/admin/audio_ingest/` is now under the 400-line guidance. |
 | 2026-08-06 | 2.139.0 | Phase 3a (`webapp/admin/audio_ingest.py`, 3180 → 15 modules + a re-exporting `__init__`). First web-layer split; `register_audio_ingest_routes(app, logger)` preserved as the entry point. Three new checklist items: Blueprint `import_name`, mutable-global imports, logger fan-out. |
 | 2026-08-07 | 2.141.0 | Phase 3b (`webapp/routes_public.py`, 2849 → 6 surface modules + a package `__init__` + a 31-line shim). First split of a module that was a *single* function — all 21 handlers were nested inside one 2,779-line `register()`. Verified by AST equality, a 549-rule URL-map diff, and 28 response-body digests. |
+| 2026-08-07 | 2.142.0 | Phase 4a (`app_utils/system.py`, 2580 → 16 modules + a re-exporting `__init__`). The one Phase 4 file that is not a god-class; pure motion, 48/48 AST matches. 14 of the 16 modules are under the guidance. |
 
 ## Next up
 
@@ -743,6 +818,11 @@ branches.
 
 **Phase 3 continued — `webapp/routes_settings_radio.py` (2781)** is the next
 whole-file split.
+
+**Phase 4a-ii — `snapshot.py` (478) and `smart.py` (429)**, the two modules
+4a left over the cap. Each is one function; `build_system_health_snapshot` is
+the easier one because its body is already a sequence of independent
+`_collect_*` calls.
 
 **Phase 4 (`poller/cap_poller.py`, 3996 — the largest Python module in the
 tree, and `app_utils/eas.py`, 3848)** is the highest-risk work in this plan:
@@ -803,6 +883,11 @@ cost a debugging cycle in an earlier phase.
       captures. Walk the AST for `Name` nodes resolving to the outer scope
       rather than eyeballing it. (Phase 3b: all 21 handlers captured just
       `app` and `route_logger`, which is what made the split pure motion.)
+- [ ] **Lint the generated package — an inferred import block cannot see
+      scope.** If the per-module imports are derived from the names each
+      definition references, a *parameter* called `text` reads as a use of
+      `from sqlalchemy import text`. `ruff check --select F,E9` catches both
+      halves (F401 unused, F811 shadowed). (Phase 4a.)
 - [ ] **Treat an equal-length, unequal-hash diff as a scrubbing bug first.**
       It is the signature of an unscrubbed fixed-width random value, not a
       content change. Diff the raw bodies before concluding a regression.
