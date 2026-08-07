@@ -39,6 +39,8 @@ from app_core.audio.ingest import (
 from app_core.audio.sources import create_audio_source
 from app_core.audio.metering import AudioMeter, SilenceDetector, AudioHealthMonitor
 from webapp.admin import audio_ingest as audio_admin
+from webapp.admin.audio_ingest import controller as audio_controller_mod
+from webapp.admin.audio_ingest import streaming as audio_streaming_mod
 
 
 class DummyCaptureAdapter(AudioSourceAdapter):
@@ -567,7 +569,7 @@ def icecast_control_app(monkeypatch):
     app = Flask('icecast-control-test')
     app.config['TESTING'] = True
 
-    monkeypatch.setattr(audio_admin, '_auto_streaming_service', None)
+    monkeypatch.setattr(audio_streaming_mod, '_auto_streaming_service', None)
     audio_admin.register_audio_ingest_routes(app, logging.getLogger('icecast-control-test'))
 
     yield app
@@ -582,7 +584,7 @@ def test_api_start_icecast_stream_success(icecast_control_app, monkeypatch):
         'server': 'localhost:8000'
     }
 
-    monkeypatch.setattr(audio_admin, '_auto_streaming_service', service)
+    monkeypatch.setattr(audio_streaming_mod, '_auto_streaming_service', service)
 
     client = icecast_control_app.test_client()
     response = client.post('/api/audio/icecast/start')
@@ -595,8 +597,8 @@ def test_api_start_icecast_stream_success(icecast_control_app, monkeypatch):
 
 
 def test_api_start_icecast_stream_requires_configuration(icecast_control_app, monkeypatch):
-    monkeypatch.setattr(audio_admin, '_auto_streaming_service', None)
-    monkeypatch.setattr(audio_admin, '_reload_auto_streaming_from_env', lambda: None)
+    monkeypatch.setattr(audio_streaming_mod, '_auto_streaming_service', None)
+    monkeypatch.setattr(audio_streaming_mod, '_reload_auto_streaming_from_env', lambda: None)
 
     client = icecast_control_app.test_client()
     response = client.post('/api/audio/icecast/start')
@@ -611,7 +613,7 @@ def test_api_stop_icecast_stream_success(icecast_control_app, monkeypatch):
     service.stop.return_value = None
     service.get_status.return_value = {'active_stream_count': 0}
 
-    monkeypatch.setattr(audio_admin, '_auto_streaming_service', service)
+    monkeypatch.setattr(audio_streaming_mod, '_auto_streaming_service', service)
 
     client = icecast_control_app.test_client()
     response = client.post('/api/audio/icecast/stop')
@@ -623,7 +625,7 @@ def test_api_stop_icecast_stream_success(icecast_control_app, monkeypatch):
 
 
 def test_api_stop_icecast_stream_requires_configuration(icecast_control_app, monkeypatch):
-    monkeypatch.setattr(audio_admin, '_auto_streaming_service', None)
+    monkeypatch.setattr(audio_streaming_mod, '_auto_streaming_service', None)
 
     client = icecast_control_app.test_client()
     response = client.post('/api/audio/icecast/stop')
@@ -643,7 +645,7 @@ def test_safe_auto_stream_status_uses_redis(monkeypatch):
         }
     }
 
-    monkeypatch.setattr(audio_admin, '_read_audio_metrics_from_redis', lambda: redis_payload)
+    monkeypatch.setattr(audio_streaming_mod, '_read_audio_metrics_from_redis', lambda: redis_payload)
 
     status = audio_admin._safe_auto_stream_status(None)
 

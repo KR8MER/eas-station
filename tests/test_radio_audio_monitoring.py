@@ -48,6 +48,9 @@ _EXPECTED_SQUELCH_COLUMNS: tuple[str, ...] = (
 )
 from app_core.audio.ingest import AudioSourceStatus
 from webapp.admin import audio_ingest as audio_admin
+from webapp.admin.audio_ingest import controller as audio_controller_mod
+from webapp.admin.audio_ingest import streaming as audio_streaming_mod
+from webapp.admin.audio_ingest import serialization as audio_serialization_mod
 import webapp.routes_settings_radio as radio_routes
 
 
@@ -58,12 +61,15 @@ def _compile_jsonb_sqlite(type_, compiler, **kwargs):  # pragma: no cover - sqla
 
 @pytest.fixture(autouse=True)
 def reset_audio_globals(monkeypatch):
-    monkeypatch.setattr(audio_admin, "_audio_controller", None)
-    monkeypatch.setattr(audio_admin, "_auto_streaming_service", None)
-    monkeypatch.setattr(audio_admin, "_initialization_started", True)
-    monkeypatch.setattr(audio_admin, "_streaming_lock_file", None)
-    monkeypatch.setattr(audio_admin, "_audio_initialization_lock_file", None)
-    monkeypatch.setattr(audio_admin, "_start_audio_sources_background", lambda app: None)
+    # Each global lives in the submodule that owns it. Patching the
+    # re-exporting package instead would not change what the functions see in
+    # their own module globals, and the reset would silently do nothing.
+    monkeypatch.setattr(audio_controller_mod, "_audio_controller", None)
+    monkeypatch.setattr(audio_controller_mod, "_initialization_started", True)
+    monkeypatch.setattr(audio_controller_mod, "_audio_initialization_lock_file", None)
+    monkeypatch.setattr(audio_controller_mod, "_start_audio_sources_background", lambda app: None)
+    monkeypatch.setattr(audio_streaming_mod, "_auto_streaming_service", None)
+    monkeypatch.setattr(audio_streaming_mod, "_streaming_lock_file", None)
 
 
 @pytest.fixture
@@ -367,7 +373,11 @@ def test_audio_start_endpoint_restores_missing_adapter(audio_app, monkeypatch, a
             controller_obj.add_source(dummy_adapter)
             return dummy_adapter
 
-        monkeypatch.setattr(audio_admin, "_restore_audio_source_from_db_config", _fake_restore)
+        # _get_controller_and_adapter calls this through its own module global, so
+        # webapp.admin.audio_ingest.serialization is the object to patch.
+        monkeypatch.setattr(
+            audio_serialization_mod, "_restore_audio_source_from_db_config", _fake_restore
+        )
 
         client = audio_app.test_client()
         response = client.post("/api/audio/sources/sdr-wxstart/start")

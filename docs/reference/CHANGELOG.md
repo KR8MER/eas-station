@@ -8,6 +8,114 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.140.0] - 2026-08-06 - Large-file refactor, phase 3a-ii: the audio source listing
+
+The follow-up 2.139.0 opened. `routes_sources.py` was the one module the package
+split could not bring under the 400-line guidance, because
+`api_get_audio_sources` was 327 lines of a single handler. Every module in
+`webapp/admin/audio_ingest/` is now under the cap. Behaviour is unchanged.
+
+### Changed
+- **`api_get_audio_sources` (327 lines) became a 15-line handler plus two
+  modules.** The handler reconciled three sources of truth inline — the database
+  rows, the local controller's adapters, and the audio service's Redis snapshot
+  — while also decoding Redis' several payload shapes and building two different
+  JSON bodies. Those are now separated:
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `listing.py` | 226 | `RedisControllerState` and its decoding, the latest-metric query, Icecast status collection, and `build_source_listing` |
+  | `source_payload.py` | 268 | `_serialize_from_redis` and `_serialize_db_only` — one audio source rendered to JSON |
+
+  `routes_sources.py` keeps only the two read endpoints (88 lines) and delegates
+  to `build_source_listing()`.
+
+- **The write endpoints moved to `routes_sources_write.py`** (389 lines). The
+  split follows the permission boundary exactly: every handler there carries
+  `@require_permission('receivers.configure')` and neither handler left in
+  `routes_sources.py` carries one.
+
+- **Three shapes the endpoint has always tolerated are now named rather than
+  implied.** `RedisControllerState.service_dead` distinguishes "the audio
+  service published nothing" from "it published an empty source list" — the
+  former is what turns an auto-start source's badge from grey *Stopped* into
+  red *Error*. `_redis_data_for` names the rule that a non-dict Redis entry
+  falls back to the database row rather than to the local controller.
+  `_collect_icecast_status` documents that Redis is the fallback for stream
+  stats, never an override of a locally hosted streaming service.
+
+### Added
+- **`tests/test_audio_source_listing.py`** (12 tests) characterizes
+  `GET /api/audio/sources` across all three of its live-state paths — local
+  adapter, Redis snapshot, database-only — plus the envelope counters, the
+  dead-service escalation rule, malformed Redis payloads, JSON-encoded
+  controller blobs, and a failing streaming service. Written against the
+  pre-refactor handler and confirmed discriminating first: five deliberate
+  mutations (disabling the dead-service escalation, reversing Redis/database
+  metric precedence, inverting `db_only_count`, letting Redis override the
+  local streaming service, and dropping the reconstructed Icecast URL) each
+  failed exactly the test covering them.
+
+## [2.139.0] - 2026-08-06 - Large-file refactor, phase 3: the audio-ingest admin API
+
+The first web-layer split. `webapp/admin/audio_ingest.py` (3,180 lines — the
+largest Flask module in the tree) became `webapp/admin/audio_ingest/`: 15
+modules, 14 of them under the 400-line guidance. Behaviour is unchanged.
+
+### Changed
+- **`webapp/admin/audio_ingest.py` → `webapp/admin/audio_ingest/`.** Helpers
+  and handlers had been interleaved down the length of the file; they are now
+  separated the way `webapp/audio_archive/` already does it.
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `blueprint.py` | 36 | the shared `audio_ingest_bp` |
+  | `controller.py` | 231 | controller singleton, startup, Redis metrics bridge |
+  | `streaming.py` | 262 | auto-streaming (Icecast) service lifecycle |
+  | `sanitize.py` | 173 | JSON-safety helpers for values reaching the API |
+  | `probe.py` | 155 | stream-URL probing |
+  | `radio_sources.py` | 385 | SDR-backed audio source provisioning |
+  | `serialization.py` | 359 | audio source → API payload |
+  | `routes_sources.py` | 749 | source collection and item endpoints |
+  | `routes_source_control.py` | 164 | start/stop and stream-test endpoints |
+  | `routes_rbds.py` | 151 | RBDS history endpoint |
+  | `routes_metrics.py` | 233 | metrics endpoints |
+  | `routes_health.py` | 255 | health endpoints and the dashboard page |
+  | `routes_alerts.py` | 204 | audio alert endpoints |
+  | `routes_devices.py` | 159 | device discovery, waveform, spectrogram, stream |
+  | `routes_icecast.py` | 205 | Icecast configuration and stream control |
+
+  The package `__init__.py` is the compatibility shim: every name the
+  single-file module exposed is re-exported, so the imports in
+  `webapp/routes_settings_radio.py`, `app_core/websocket_push.py` and
+  `webapp/admin/__init__.py` are untouched. `register_audio_ingest_routes`
+  keeps its `(app, logger)` signature and stays the package's only `__all__`
+  entry.
+
+- **`register_audio_ingest_routes` now fans the caller's logger out to every
+  submodule.** Pre-split there was one `logger` global and registration
+  rebound it; the package has one per module, and rebinding only the package's
+  would have left every line that actually logs on its own logger.
+
+### Fixed
+- **`api_get_rbds_history` and the source start/stop endpoints keep working in
+  tests that reset module state.** Four test fixtures reset globals such as
+  `_audio_controller` and `_auto_streaming_service` through
+  `monkeypatch.setattr` on the module. Those globals now live in the submodule
+  that owns them, and the patches were retargeted accordingly — patching the
+  re-exporting package would not change what a function sees in its own module
+  globals, so the resets would have silently stopped resetting anything.
+
+### Added
+- **`tests/test_audio_ingest_package.py`** (16 tests) pins the split: the
+  Blueprint's `import_name`, every URL rule surviving registration, the logger
+  fan-out covering every module that logs, the re-exports other modules import,
+  and — the bug class this split could most easily have introduced — that no
+  module imports a mutable global such as `_audio_controller` by value. Each
+  guard was mutation-checked: reintroducing the bad import, dropping a module
+  from the fan-out list, and un-importing a route module each fail exactly the
+  test that covers them.
+
 ## [2.138.1] - 2026-08-06 - Fix cross-constellation PRN collision in GSV parsing
 
 ### Fixed
