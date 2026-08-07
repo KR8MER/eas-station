@@ -33,8 +33,14 @@ logger = logging.getLogger(__name__)
 
 
 @audio_ingest_bp.route('/api/audio/icecast/config', methods=['GET'])
+@require_permission('system.configure')
 def api_get_icecast_config():
-    """Get Icecast rebroadcast configuration."""
+    """Get Icecast rebroadcast configuration.
+
+    The stored source and admin passwords are never returned; the client only
+    needs to know whether one is set, which is what the ``*_set`` flags carry.
+    The route is gated to match the POST that writes the same settings.
+    """
     try:
         from app_core.icecast_settings import get_icecast_settings
 
@@ -45,9 +51,9 @@ def api_get_icecast_config():
             'server': settings.server,
             'port': settings.port,
             'external_port': settings.external_port,
-            'password': settings.source_password,
+            'password_set': bool(settings.source_password),
             'admin_user': settings.admin_user or '',
-            'admin_password': settings.admin_password or '',
+            'admin_password_set': bool(settings.admin_password),
             'public_hostname': settings.public_hostname or '',
             'mount': settings.default_mount,
             'name': settings.stream_name,
@@ -148,9 +154,9 @@ def api_update_icecast_config():
             'server': server,
             'port': port,
             'external_port': external_port,
-            'password': password,
+            'password_set': bool(password),
             'admin_user': admin_user,
-            'admin_password': admin_password,
+            'admin_password_set': bool(admin_password),
             'public_hostname': public_hostname,
             'mount': mount,
             'name': name,

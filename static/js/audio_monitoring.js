@@ -1467,8 +1467,11 @@ function updateEditSourceTypeConfig(sourceType, deviceParams) {
             const streamUrl = deviceParams?.url || '';
             const streamFormat = deviceParams?.format || 'mp3';
             const editAuthUsername = deviceParams?.auth_username || '';
-            const editAuthHeader = deviceParams?.auth_header || '';
-            const hasStoredPassword = !!(deviceParams?.auth_password_set || deviceParams?.auth_password);
+            // The API never returns the stored password or Authorization header,
+            // only a boolean saying one exists — so both fields render empty with
+            // a "leave blank to keep current" hint rather than a round-tripped value.
+            const hasStoredPassword = !!deviceParams?.auth_password_set;
+            const hasStoredHeader = !!deviceParams?.auth_header_set;
             html = `
                 <div class="mb-3">
                     <label for="editStreamUrl" class="form-label">Stream URL <span class="text-danger">*</span></label>
@@ -1512,12 +1515,13 @@ function updateEditSourceTypeConfig(sourceType, deviceParams) {
                                    placeholder="${hasStoredPassword ? 'Leave blank to keep current' : 'Password'}" autocomplete="new-password">
                         </div>
                     </div>
-                    <input type="text" class="form-control mt-2" id="editStreamAuthHeader"
-                           value="${escapeHtml(editAuthHeader)}"
-                           placeholder="Or a raw Authorization value, e.g. Bearer &lt;token&gt;" autocomplete="off">
+                    <input type="password" class="form-control mt-2" id="editStreamAuthHeader"
+                           placeholder="${hasStoredHeader ? 'Authorization header stored — leave blank to keep current' : 'Or a raw Authorization value, e.g. Bearer &lt;token&gt;'}"
+                           autocomplete="new-password">
                     <small class="form-text text-muted">
                         For protected streams. Username/password use HTTP Basic auth; the raw value
                         (if set) is sent as the <code>Authorization</code> header and takes precedence.
+                        ${hasStoredHeader ? 'Type a new value to replace the stored one.' : ''}
                     </small>
                 </div>
             `;
@@ -1674,14 +1678,19 @@ async function saveEditedSource() {
                 if (streamFormat && streamFormat !== 'mp3') {
                     deviceParams.format = streamFormat;
                 }
-                // Auth fields are merged server-side; always send username/header so
-                // they can be updated or cleared. Only send the password when the
-                // user typed one (blank keeps the stored credential).
+                // Auth fields are merged server-side; always send the username so it
+                // can be updated or cleared. The password and Authorization header
+                // are only sent when the user typed one — the API no longer returns
+                // them, so an empty field means "keep the stored credential" rather
+                // than "clear it".
                 deviceParams.auth_username = document.getElementById('editStreamAuthUsername')?.value?.trim() || '';
-                deviceParams.auth_header = document.getElementById('editStreamAuthHeader')?.value?.trim() || '';
                 const editPassword = document.getElementById('editStreamAuthPassword')?.value;
                 if (editPassword) {
                     deviceParams.auth_password = editPassword;
+                }
+                const editAuthHeader = document.getElementById('editStreamAuthHeader')?.value?.trim();
+                if (editAuthHeader) {
+                    deviceParams.auth_header = editAuthHeader;
                 }
                 hasDeviceParams = true;
                 break;
