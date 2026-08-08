@@ -467,7 +467,7 @@ modules, `routes.py` holding only handlers.
 | --- | ---: | --- | --- |
 | `webapp/admin/audio_ingest.py` | 3180 | `webapp/admin/audio_ingest/` package | ✅ landed — see 3a |
 | `webapp/routes_public.py` | 2849 | `webapp/public/` package, split by surface | ✅ landed — see 3b; `logs_data.py` follow-up in 3b-ii |
-| `webapp/routes_settings_radio.py` | 2781 | receivers / profiles / diagnostics | ⏳ |
+| `webapp/routes_settings_radio.py` | 2781 | `webapp/radio_settings/` package, split by topic | ✅ landed — see 3c |
 | `webapp/admin/api.py` | 2105 | group endpoints by resource | ⏳ |
 | `webapp/admin/certbot.py` | 1946 | certificate ops vs. routes | ⏳ |
 | `app.py` | 1869 | move remaining inline routes/factory helpers into `webapp/` | ⏳ |
@@ -902,6 +902,100 @@ diff), but the rule is simple: **never run a file-rewriting harness in the
 background against a tree you are still editing.** Run it in the foreground, or
 against a worktree copy.
 
+### 3c. `webapp/routes_settings_radio.py` → `webapp/radio_settings/` ✅
+
+The largest remaining Flask module, and a hybrid of the two shapes seen so far:
+eight module-level helpers (like 3a) *plus* a 2,114-line `register()` with 26
+handlers nested inside it (like 3b). The 3b closure analysis is what made it
+tractable — walking the AST for `Name` nodes resolving to `register`'s scope
+showed every handler captures only `app` and `route_logger`:
+
+| Handlers | Closure variables captured |
+| ---: | --- |
+| 22 | `app`, `route_logger` |
+| 2 | `app` |
+| 1 | *(none)* |
+| 1 | `app`, `route_logger`, `_decode_soapysdr_error` (moved alongside it) |
+
+So the bodies move **verbatim** into topic modules that each keep their own
+small `register(app, route_logger)` — no reindentation anywhere.
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `deps.py` | 129 | The injectable seams and the capture constants |
+| `sdr_client.py` | 64 | `_send_sdr_command` |
+| `serialization.py` | 162 | `_receiver_to_dict`, `_make_offline_status` |
+| `payload.py` | 291 | `_parse_receiver_payload` |
+| `sync.py` | 174 | `_sync_radio_manager_state`, `_sync_audio_monitors` |
+| `routes_pages.py` | 66 | The two rendered pages |
+| `routes_receivers.py` | 259 | Receiver CRUD |
+| `routes_receiver_control.py` | 241 | Restart, audio-monitor wiring |
+| `routes_devices.py` | 265 | Discovery, capabilities, frequency validation |
+| `routes_presets.py` | 49 | Built-in tuning presets |
+| `routes_signal.py` | 355 | Waveform, spectrum |
+| `routes_monitoring.py` | 64 | Dashboard status, diagnostics summary |
+| `routes_diagnostics_status.py` | 306 | Status, SoapySDR error decoding |
+| `routes_diagnostics_capture.py` | 275 | IQ capture and download |
+| `routes_diagnostics_waterfall.py` | 315 | The waterfall view |
+| `routes_diagnostics_analyze.py` | 386 | Capture analysis, auto-gain sweep |
+| `__init__.py` | 105 | `register`, fanning out in the original order |
+
+`webapp/routes_settings_radio.py` remains as a **52-line shim**. All 17 modules
+are within the guidance.
+
+**The one deliberate deviation from verbatim motion is `deps.py`.** The radio
+tests inject fakes for `get_redis_client`, `get_radio_manager`,
+`_log_radio_event`, `RADIO_CAPTURE_DIR` and the other capture constants — names
+used by up to 19 definitions each, which after the split are spread across ten
+modules. A `from .deps import get_redis_client` in each would snapshot the real
+object at import time, so a stub set in one place would be silently ignored
+everywhere else. Route modules therefore go **through** the module
+(`deps.get_redis_client()`), giving exactly one patch point, and a module added
+later honours the stub automatically. 51 references were routed this way; every
+other line is untouched.
+
+**The shim deliberately does not re-export those names**, so a
+`monkeypatch.setattr` aimed at the old location raises `AttributeError` instead
+of quietly patching something nothing reads. That is what made the retarget
+safe: all 11 patch sites failed immediately and pointed at the real seam.
+
+**Verification.**
+
+1. **AST equality** — 34 of 34 moved definitions `ast.dump()`-identical, plus
+   the every-non-blank-line-placed-exactly-once assertion (2,394 lines placed;
+   the 54 unplaced are the licence header, the import block, the `register`
+   signature and `__all__`).
+2. **URL map** — every rule, endpoint and method set diffed against a worktree
+   at the pre-split commit: **549 rules, 0 differences**. Mutation-checked by
+   dropping one module from the registration tuple, which the diff caught (3
+   missing rules).
+3. **Logger identity** — `_module_logger` was `logging.getLogger(__name__)`,
+   which would have silently become `webapp.radio_settings.deps`. It is pinned
+   to the pre-split `"webapp.routes_settings_radio"`, and `register()` derives
+   the same `getChild("routes_settings_radio")` once and passes it down, so
+   every log line keeps its original name.
+
+**Three traps this phase hit, all in the tooling rather than the code.**
+
+1. **`partition(")\n")` found the licence header, not the import block.** The
+   copyright line ends `(KR8MER)`, so a naive split to separate imports from
+   body landed on line 3 and the "body" rewrite corrupted every module's
+   imports. Split on a sentinel you actually control.
+2. **A regex cannot rewrite a name safely; it needs scope.** Three functions
+   import `get_redis_client` from `app_core.redis_client` *locally*, shadowing
+   the module-level import from `app_core.extensions` — a different object.
+   A regex rewrote both the import aliases (`from x import deps.get_redis_client`,
+   a syntax error ruff caught) and those shadowed call sites, which would have
+   been a silent behaviour change. The rewrite became AST-driven, skipping any
+   function that rebinds the name.
+3. **`ast.walk()` does not respect scope boundaries.** The first scope-aware
+   version collected local bindings with `ast.walk(fn)`, which descends into
+   nested functions — so `register()` inherited every handler's local import
+   and appeared to shadow names it never touches. Since shadowing is inherited
+   downward, that silently skipped the rewrite for *every* handler. The symptom
+   was a plausible-looking count (46 rewrites instead of 51). Cut nested
+   `FunctionDef`/`Lambda`/`ClassDef` off explicitly when computing a scope.
+
 ## Phase 4 — Long-running services
 
 Highest risk: these are the alert path. Each is dominated by one very large
@@ -1024,6 +1118,7 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-08-08 | 2.143.0 | Phase 3b-ii (`_load_logs_data`, 1,057 lines in one function → the `webapp/public/logs_sources/` package; `logs_data.py` 1116 → 80). A `LogQuery`/`LogPage` contract replaced the seventeen-way `if/elif`. The function had no test coverage, so 79 characterization tests were written against the pre-refactor code first; verified by a 115-scenario output diff (0 differences) and two mutation runs (15/15 before, 16/16 after). All nine modules under the guidance. |
 | 2026-08-08 | 2.144.0 | Phase 3b-ii cont. (`stats()`, 645 lines in one handler → the `webapp/public/stats_sections/` package; `stats.py` 693 → 50). Seventeen inline try/except blocks became a `StatsSection` contract. 32 characterization tests, mutation-checked 17/17 before and after; payload compared key-by-key against the pre-refactor handler (70 keys, 0 differences). Found 29 of 31 trailing `setdefault` calls to be dead. |
 | 2026-08-08 | 2.145.0 | Phase 3b-ii cont. (`alerts()` + its PDF export → the `webapp/public/alerts_page/` package; `alerts.py` 648 → 112). A pipeline rather than a dispatch or an accumulation, so the modules are stages. 73 characterization tests, mutation-checked 26/26 before and after (all 26 needed retargeting); 68-scenario output diff, 0 differences. **Phase 3b-ii complete** — every `webapp/public/` module is within the guidance. |
+| 2026-08-08 | 2.146.0 | Phase 3c (`webapp/routes_settings_radio.py`, 2781 → 17 modules + a 52-line shim). All 26 handlers captured only `app` and `route_logger`, so they moved verbatim. 34/34 AST matches; URL map diffed at 549 rules, 0 differences. The one deliberate change is a `deps.py` of injectable seams, reached through the module so a test has a single patch point. |
 
 ## Next up
 
@@ -1031,8 +1126,10 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 left over the cap — `logs_data.py`, `stats.py` and `alerts.py` — have landed,
 and every module in the package is now within the guidance.
 
-**Phase 3 continued — `webapp/routes_settings_radio.py` (2781)** is the next
-whole-file split.
+**Phase 3 continued — the remaining web-layer files.** `webapp/admin/api.py`
+(2105), `webapp/admin/certbot.py` (1946), `app.py` (1869),
+`webapp/admin/maintenance.py` (1802) and
+`webapp/routes/alert_verification.py` (1668) are what is left in Phase 3.
 
 **Phase 4a-ii — `snapshot.py` (478) and `smart.py` (429)**, the two modules
 4a left over the cap. Each is one function; `build_system_health_snapshot` is
@@ -1103,6 +1200,24 @@ cost a debugging cycle in an earlier phase.
       definition references, a *parameter* called `text` reads as a use of
       `from sqlalchemy import text`. `ruff check --select F,E9` catches both
       halves (F401 unused, F811 shadowed). (Phase 4a.)
+- [ ] **Rewrite names with the AST, never a regex — a regex has no scope.**
+      It will rewrite the alias inside `from x import name` (a syntax error, if
+      you are lucky enough for the linter to catch it) and, worse, call sites
+      inside functions that shadow the name with their own local import. Phase
+      3c had three functions importing `get_redis_client` from a *different*
+      module locally; rewriting those would have been a silent behaviour
+      change, not a move.
+- [ ] **`ast.walk()` does not stop at scope boundaries.** Computing "names
+      bound in this function" with `ast.walk` descends into nested functions,
+      so an outer function inherits every inner one's local imports. In Phase
+      3c that made `register()` appear to shadow names it never touches, and
+      because shadowing inherits downward it silently skipped the rewrite for
+      every nested handler — leaving a plausible-looking count rather than an
+      error. Cut nested `FunctionDef`/`Lambda`/`ClassDef` off explicitly.
+- [ ] **Split generated files on a sentinel you control, not on punctuation.**
+      A `partition(")\n")` intended to find the end of an import block matched
+      the `(KR8MER)` in the copyright header instead, and the "body" rewrite
+      then corrupted every module's imports. (Phase 3c.)
 - [ ] **Never run a file-rewriting harness in the background against a tree you
       are still editing.** A mutation runner backs up, rewrites and restores
       files in place; started in the background while new modules were being

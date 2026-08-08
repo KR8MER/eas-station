@@ -52,6 +52,7 @@ from webapp.admin.audio_ingest import controller as audio_controller_mod
 from webapp.admin.audio_ingest import streaming as audio_streaming_mod
 from webapp.admin.audio_ingest import serialization as audio_serialization_mod
 import webapp.routes_settings_radio as radio_routes
+import webapp.radio_settings.deps as radio_deps
 
 
 @compiles(JSONB, "sqlite")
@@ -250,8 +251,8 @@ def test_sync_radio_manager_state_updates_audio_sources(audio_app, monkeypatch, 
             return None
 
     dummy_manager = DummyRadioManager()
-    monkeypatch.setattr(radio_routes, "get_radio_manager", lambda: dummy_manager)
-    monkeypatch.setattr(radio_routes, "_log_radio_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(radio_deps, "get_radio_manager", lambda: dummy_manager)
+    monkeypatch.setattr(radio_deps, "_log_radio_event", lambda *args, **kwargs: None)
 
     with audio_app.app_context():
         active = _create_receiver(identifier="WXACTIVE", display_name="Active NOAA")

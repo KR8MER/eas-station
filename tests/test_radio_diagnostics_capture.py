@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import sys
 from pathlib import Path
 
@@ -49,6 +50,7 @@ if str(ROOT) not in sys.path:
 from app_core.extensions import db
 from app_core.models import RadioReceiver
 import webapp.routes_settings_radio as radio_routes
+import webapp.radio_settings.deps as radio_deps
 
 
 @compiles(JSONB, "sqlite")
@@ -107,12 +109,12 @@ def capture_app(tmp_path, monkeypatch):
     # exercises a real filesystem location without needing /var/log.
     capture_dir = tmp_path / "captures"
     capture_dir.mkdir()
-    monkeypatch.setattr(radio_routes, "RADIO_CAPTURE_DIR", str(capture_dir))
+    monkeypatch.setattr(radio_deps, "RADIO_CAPTURE_DIR", str(capture_dir))
 
     # Silence the event-log shim — its real implementation talks to the
     # RadioManager which is not present in this isolated test app.
     monkeypatch.setattr(
-        radio_routes, "_log_radio_event", lambda *args, **kwargs: None
+        radio_deps, "_log_radio_event", lambda *args, **kwargs: None
     )
 
     with app.app_context():
@@ -171,7 +173,7 @@ def test_capture_iq_happy_path(capture_app, monkeypatch, authenticated_user):
             "size_bytes": capture_path.stat().st_size,
             "dtype": "complex64",
         })
-        monkeypatch.setattr(radio_routes, "get_redis_client", lambda: fake_redis)
+        monkeypatch.setattr(radio_deps, "get_redis_client", lambda: fake_redis)
 
         client = app.test_client()
         resp = client.post(
@@ -238,7 +240,7 @@ def test_capture_iq_rejects_out_of_tree_path(capture_app, monkeypatch, tmp_path,
             "frequency_hz": 1,
             "size_bytes": attacker_path.stat().st_size,
         })
-        monkeypatch.setattr(radio_routes, "get_redis_client", lambda: fake_redis)
+        monkeypatch.setattr(radio_deps, "get_redis_client", lambda: fake_redis)
 
         client = app.test_client()
         resp = client.post(
@@ -259,7 +261,7 @@ def test_download_rejects_non_hex_capture_id(capture_app, monkeypatch, authentic
     app, _ = capture_app
 
     fake_redis = FakeRedis()
-    monkeypatch.setattr(radio_routes, "get_redis_client", lambda: fake_redis)
+    monkeypatch.setattr(radio_deps, "get_redis_client", lambda: fake_redis)
 
     with app.app_context():
         client = app.test_client()
@@ -275,7 +277,7 @@ def test_download_404_when_capture_expired(capture_app, monkeypatch, authenticat
     """A capture id with no Redis entry returns 404 (TTL expired)."""
     app, _ = capture_app
     fake_redis = FakeRedis()
-    monkeypatch.setattr(radio_routes, "get_redis_client", lambda: fake_redis)
+    monkeypatch.setattr(radio_deps, "get_redis_client", lambda: fake_redis)
 
     with app.app_context():
         client = app.test_client()
@@ -294,7 +296,7 @@ def test_download_blocks_tampered_redis_path(capture_app, monkeypatch, tmp_path,
     """
     app, _ = capture_app
     fake_redis = FakeRedis()
-    monkeypatch.setattr(radio_routes, "get_redis_client", lambda: fake_redis)
+    monkeypatch.setattr(radio_deps, "get_redis_client", lambda: fake_redis)
 
     bad_path = tmp_path / "tampered.npy"
     bad_path.write_bytes(b"should-not-be-served")
@@ -324,7 +326,7 @@ def test_capture_iq_timeout_returns_504(capture_app, monkeypatch, authenticated_
 
         # No capture_iq_result configured → the polling loop will time out.
         fake_redis = FakeRedis(capture_iq_result=None)
-        monkeypatch.setattr(radio_routes, "get_redis_client", lambda: fake_redis)
+        monkeypatch.setattr(radio_deps, "get_redis_client", lambda: fake_redis)
         # Short-circuit time so the test doesn't actually sleep 15 seconds.
         time_counter = {"t": 0.0}
 
@@ -332,8 +334,8 @@ def test_capture_iq_timeout_returns_504(capture_app, monkeypatch, authenticated_
             time_counter["t"] += 1.0
             return time_counter["t"]
 
-        monkeypatch.setattr(radio_routes.time, "time", fake_monotonic)
-        monkeypatch.setattr(radio_routes.time, "sleep", lambda _s: None)
+        monkeypatch.setattr(time, "time", fake_monotonic)
+        monkeypatch.setattr(time, "sleep", lambda _s: None)
 
         client = app.test_client()
         resp = client.post(
@@ -383,7 +385,7 @@ def test_capture_iq_long_duration_is_accepted(capture_app, monkeypatch, authenti
             "duration_sec": 30.0,
             "complete": True,
         })
-        monkeypatch.setattr(radio_routes, "get_redis_client", lambda: fake_redis)
+        monkeypatch.setattr(radio_deps, "get_redis_client", lambda: fake_redis)
 
         client = app.test_client()
         resp = client.post(
@@ -423,7 +425,7 @@ def test_capture_iq_clamps_excessive_duration(capture_app, monkeypatch, authenti
             "size_bytes": 1,
             "dtype": "complex64",
         })
-        monkeypatch.setattr(radio_routes, "get_redis_client", lambda: fake_redis)
+        monkeypatch.setattr(radio_deps, "get_redis_client", lambda: fake_redis)
 
         client = app.test_client()
         resp = client.post(
@@ -434,7 +436,7 @@ def test_capture_iq_clamps_excessive_duration(capture_app, monkeypatch, authenti
         command = json.loads(fake_redis.lists["sdr:commands"][0])
         # Should have been clamped to the max duration * sample rate.
         assert command["num_samples"] == int(
-            radio_routes.RADIO_CAPTURE_MAX_DURATION_SEC * 2_400_000
+            radio_deps.RADIO_CAPTURE_MAX_DURATION_SEC * 2_400_000
         )
 
 
@@ -462,7 +464,7 @@ def test_auto_gain_happy_path(capture_app, monkeypatch, authenticated_user):
             "measurements": measurements,
             "selected_measurement": measurements[2],
         })
-        monkeypatch.setattr(radio_routes, "get_redis_client", lambda: fake_redis)
+        monkeypatch.setattr(radio_deps, "get_redis_client", lambda: fake_redis)
 
         client = app.test_client()
         resp = client.post(
@@ -506,7 +508,7 @@ def test_auto_gain_persists_when_requested(capture_app, monkeypatch, authenticat
                                       "peak_dbfs": -6.0, "clipping_fraction": 0.0,
                                       "samples": 8192},
         })
-        monkeypatch.setattr(radio_routes, "get_redis_client", lambda: fake_redis)
+        monkeypatch.setattr(radio_deps, "get_redis_client", lambda: fake_redis)
 
         client = app.test_client()
         resp = client.post(
@@ -532,7 +534,7 @@ def test_auto_gain_propagates_service_failure(capture_app, monkeypatch, authenti
             "error": "Could not read gain range: device not ready",
             "measurements": [],
         })
-        monkeypatch.setattr(radio_routes, "get_redis_client", lambda: fake_redis)
+        monkeypatch.setattr(radio_deps, "get_redis_client", lambda: fake_redis)
 
         client = app.test_client()
         resp = client.post(

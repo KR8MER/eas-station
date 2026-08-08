@@ -8,6 +8,63 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.146.0] - 2026-08-08 - Phase 3c: split the radio settings routes
+
+### Changed
+- **`webapp/routes_settings_radio.py` (2,781 lines) is now the
+  `webapp/radio_settings/` package** — 17 modules behind a 52-line shim. It was
+  eight module-level helpers plus a 2,114-line `register()` with 26 route
+  handlers nested inside it.
+
+  Every handler closed over exactly `app` and `route_logger`, so each one moved
+  **verbatim** into a topic module that keeps its own small
+  `register(app, route_logger)` — no reindentation, no signature changes.
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `deps.py` | 129 | The seams a test injects fakes for, plus the capture constants |
+  | `sdr_client.py` | 64 | `_send_sdr_command` |
+  | `serialization.py` | 162 | A `RadioReceiver` row rendered to the API payload |
+  | `payload.py` | 291 | `_parse_receiver_payload` — the whole write-side contract |
+  | `sync.py` | 174 | Reconciling the database against the live RadioManager |
+  | `routes_pages.py` | 66 | The two rendered pages |
+  | `routes_receivers.py` | 259 | Receiver CRUD |
+  | `routes_receiver_control.py` | 241 | Restart, audio-monitor wiring |
+  | `routes_devices.py` | 265 | Discovery, capabilities, frequency validation |
+  | `routes_presets.py` | 49 | Built-in tuning presets |
+  | `routes_signal.py` | 355 | Waveform and spectrum |
+  | `routes_monitoring.py` | 64 | Dashboard status and the diagnostics summary |
+  | `routes_diagnostics_status.py` | 306 | Diagnostics status, SoapySDR error decoding |
+  | `routes_diagnostics_capture.py` | 275 | IQ capture request and download |
+  | `routes_diagnostics_waterfall.py` | 315 | The waterfall view |
+  | `routes_diagnostics_analyze.py` | 386 | Capture analysis and the auto-gain sweep |
+  | `__init__.py` | 105 | `register`, fanning out to the topic modules |
+
+  All 17 modules are within the 400-line guidance.
+
+- **Test seams are now reachable in one place.** The names the radio tests
+  inject fakes for — `get_redis_client`, `get_radio_manager`,
+  `_log_radio_event`, `RADIO_CAPTURE_DIR` and the other capture constants —
+  live in `deps.py` and are called *through* the module. A by-value import
+  would have snapshotted the real object, so a stub set in one place would have
+  been silently ignored everywhere else.
+
+### Fixed
+- Nothing user-visible. 34 of 34 moved definitions are `ast.dump()`-identical,
+  every non-blank line of the original lands in exactly one module, and the
+  app's URL map is unchanged: **549 rules, 0 differences**, verified against a
+  worktree at the pre-split commit.
+
+### Notes
+- **Three functions import `get_redis_client` from `app_core.redis_client`
+  locally**, shadowing the module-level import from `app_core.extensions` —
+  a genuinely different object. Those call sites were left exactly as they
+  were; rewriting them would have changed behaviour, not just location.
+- `tests/test_8khz_stress_test.py::test_8khz_with_increasing_noise[0.2]` is
+  flaky: it generates noise with an unseeded `random.randint`, so the 20 %
+  case sits close to the confidence threshold and fails occasionally. Unrelated
+  to this change; noted here because it can turn a full-suite run red.
+
 ## [2.145.0] - 2026-08-08 - Phase 3b-ii: split the /alerts browse surface
 
 ### Changed
