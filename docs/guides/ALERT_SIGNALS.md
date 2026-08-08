@@ -242,7 +242,7 @@ database values when set:
 Internally the signal is rendered by `app_utils.eas._generate_chime()`; profiles
 are listed in `app_utils.eas.ALERT_CHIME_PROFILES`. Adding new profiles is a
 matter of extending that helper and the validation set in
-`webapp/admin/maintenance.py`.
+`webapp/admin/maintenance/routes_eas_settings.py`.
 
 ---
 
@@ -328,5 +328,5 @@ Schema additions are applied by Alembic migrations
 
 The migration uses `ADD COLUMN IF NOT EXISTS` and the application also
 self-heals these columns on first read via `_PENDING_MIGRATIONS` in
-`webapp/admin/maintenance.py`, so existing deployments will not require
+`webapp/admin/maintenance/eas_settings.py`, so existing deployments will not require
 a manual schema fix-up.

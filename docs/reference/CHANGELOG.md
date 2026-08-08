@@ -8,6 +8,77 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.149.0] - 2026-08-08 - Phase 3f: split the maintenance routes
+
+### Changed
+- **`webapp/admin/maintenance.py` (1,802 lines) is now the
+  `webapp/admin/maintenance/` package** — 15 modules plus a 118-line
+  `__init__`, every one within the 400-line guidance. All 31 top-level
+  definitions moved verbatim: **31 of 31 are `ast.dump()`-identical.**
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `blueprint.py` | 28 | `maintenance_bp` |
+  | `paths.py` | 41 | `repo_root` — the tools scripts and `.env` live under it |
+  | `routes_poll.py` | 53 | Out-of-band feed poll |
+  | `serialization.py` | 65 | A CAP alert row for the admin views |
+  | `eas_settings.py` | 85 | The singleton EAS settings row |
+  | `routes_env.py` | 122 | The `.env` editor |
+  | `routes_operations.py` | 140 | Operation status, backup, upgrade |
+  | `routes_database.py` | 153 | DB health and optimize |
+  | `routes_expiry.py` | 162 | Mark and clear expired alerts |
+  | `operations.py` | 165 | Backup/upgrade progress state and its lock |
+  | `routes_location.py` | 178 | Location settings, filtering, FIPS lookup |
+  | `routes_import.py` | 249 | Manual single-alert import |
+  | `routes_eas_settings.py` | 259 | The EAS settings page |
+  | `routes_alerts.py` | 264 | Admin alert list and detail |
+  | `noaa.py` | 271 | The `api.weather.gov` client |
+  | `__init__.py` | 118 | `register_maintenance_routes`, `__all__` |
+
+### Fixed
+- **`repo_root` would have silently moved, taking backup, upgrade and the
+  `.env` editor with it.** It is `Path(__file__).resolve().parent.parent.parent`
+  — three hops to the repository root from `webapp/admin/maintenance.py`, one
+  short from `webapp/admin/maintenance/paths.py`. It resolves
+  `tools/create_backup.py` and `tools/inplace_upgrade.py`, is passed as their
+  `cwd`, and locates the `.env` that Settings → Environment reads and writes.
+  Unfixed, all three would point into `webapp/`: the backup would invoke a
+  script that does not exist and the environment editor would edit a file
+  nothing reads. This is the second consecutive phase to hit this hazard.
+
+- **`get_operation_status` is re-exported even though `__all__` does not list
+  it.** `app_core/websocket_push.py` imports it by name to feed the admin
+  operation-status push. The import sits inside a function whose caller logs
+  and continues, so losing it would have been silent — precisely the shape of
+  the `AudioSourceConfigDB` regression the audio_ingest split caused. The test
+  derives the required names by AST-walking the tree rather than listing them,
+  so it cannot drift.
+
+### Added
+- **`tests/test_maintenance_package.py`** — 20 tests, the first this module
+  has had. Beyond the structural guards it pins two things worth stating:
+
+  - **The blueprint takes no `url_prefix`** — `/admin` is written into each
+    route decorator, the *opposite* of the certbot blueprint next door, which
+    is registered with `url_prefix='/admin'` and whose decorators must not
+    repeat it. The two conventions sit in adjacent packages; the test records
+    which is which so "harmonising" them is a deliberate act.
+  - **`_OPERATION_STATE` is mutated in place, never rebound.** That is what
+    makes a by-value import of it safe. A module that rebound it would give
+    the status endpoint a private copy that never updates, and the test fails
+    if one ever does.
+
+  Both guards are mutation-checked: dropping a `.parent` fails 2 tests, and
+  removing the `get_operation_status` re-export fails 1.
+
+### Notes
+- **`limit` is allow-listed but never sent upstream.** `build_noaa_alert_request`
+  accepts it and drops it; `retrieve_noaa_alerts` applies it client-side by
+  slicing the response. So a manual import fetches the full NOAA result set
+  and trims it locally. Left as-is — this is a motion commit — but now
+  asserted by a test, so a future change that starts forwarding it is a
+  visible decision rather than an accident.
+
 ## [2.148.0] - 2026-08-08 - Phase 3e: split the Certbot routes
 
 ### Changed
