@@ -841,6 +841,67 @@ count of `register` so the two runs could be proven to be different code.
    `_is_success`. "Not applied" proves nothing, so each was rewritten against
    its new home before the run counted.
 
+### 3b-ii (cont). `alerts()` → `webapp/public/alerts_page/` ✅
+
+The last of the three, and a third distinct shape. `_load_logs_data` was a
+**dispatch** (one branch runs per request); `stats()` was an **accumulation**
+(all sections run, contributing to one dict); `alerts()` is a **pipeline** —
+each stage consumes what the last produced, so the modules are stages and the
+seams are sequential.
+
+    parse_filters        request args → AlertFilters (clamped, allow-listed)
+    load_filter_options  dropdown values + headline counts
+    build_alert_query    AlertFilters → a filtered, sorted query
+    paginate_alerts      one page of rows, with a fallback
+    build_audio_map      generated EAS audio for those rows
+    load_manual_messages recent operator-originated activations
+    backfill_ipaws_audio lazy extraction for pre-extractor alerts
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `filters.py` | 210 | `AlertFilters`, the sortable-column allow-list, parsing and clamping |
+| `query.py` | 133 | Search, exact filters, date range, VTEC, visibility, sorting |
+| `pagination.py` | 101 | `MockPagination`, paginate-with-fallback |
+| `options.py` | 88 | Filter dropdown values and headline counts |
+| `enrichment.py` | 160 | Audio map, manual activations, lazy IPAWS backfill |
+| `pdf_export.py` | 150 | The export's query, blocks and filter summary |
+| `__init__.py` | 94 | `build_alerts_page` |
+
+`webapp/public/alerts.py`: 648 → **112** lines. **Phase 3b-ii is complete —
+every module in `webapp/public/` is now within the guidance.**
+
+**One duplication left in place, deliberately.** The page and the PDF export
+have *separate* query builders, and the export's is a strict subset: it has no
+date-range, VTEC or superseded handling, so a PDF exported from a filtered page
+can contain rows the page was hiding. Unifying them would have been the
+obvious tidy-up and would have silently changed what operators get in a
+compliance export. It is documented at the top of `pdf_export.py` and pinned by
+`test_pdf_export_ignores_filters_the_page_supports` — recorded as current
+behaviour, not endorsed.
+
+**Verification.** 73 characterization tests written and green against the
+pre-refactor handlers, reaching the boundary by replacing `render_template` and
+`generate_pdf_document` with captures. Mutation-checked 26/26 before and 26/26
+after — with **all 26 needing retargeting** in between, since almost every
+mutated line had moved or been reworded. Template kwargs and PDF arguments were
+then compared across 34 query strings on both routes against a worktree at the
+pre-refactor commit: **68 scenarios, 37 distinct outputs, 0 differences.**
+
+**A dead variable removed.** The PDF export captured `per_page` and never used
+it — a standing `ruff` F841. `ruff check --select F,E9` is now clean across the
+whole of `webapp/public/`.
+
+**The operational lesson from this phase is about the harness, not the code.**
+The mutation runner rewrites files in place and restores them afterwards. It
+was started in the background while new modules were still being written into
+the same directory, and it duly picked the half-written files up as mutation
+targets — backing up, mutating and "restoring" them, which left one committed
+file altered and one new file silently carrying a mutant's arithmetic. Nothing
+was lost (git had the committed file; the new one was caught by reading the
+diff), but the rule is simple: **never run a file-rewriting harness in the
+background against a tree you are still editing.** Run it in the foreground, or
+against a worktree copy.
+
 ## Phase 4 — Long-running services
 
 Highest risk: these are the alert path. Each is dominated by one very large
@@ -962,15 +1023,13 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-08-07 | 2.142.0 | Phase 4a (`app_utils/system.py`, 2580 → 16 modules + a re-exporting `__init__`). The one Phase 4 file that is not a god-class; pure motion, 48/48 AST matches. 14 of the 16 modules are under the guidance. |
 | 2026-08-08 | 2.143.0 | Phase 3b-ii (`_load_logs_data`, 1,057 lines in one function → the `webapp/public/logs_sources/` package; `logs_data.py` 1116 → 80). A `LogQuery`/`LogPage` contract replaced the seventeen-way `if/elif`. The function had no test coverage, so 79 characterization tests were written against the pre-refactor code first; verified by a 115-scenario output diff (0 differences) and two mutation runs (15/15 before, 16/16 after). All nine modules under the guidance. |
 | 2026-08-08 | 2.144.0 | Phase 3b-ii cont. (`stats()`, 645 lines in one handler → the `webapp/public/stats_sections/` package; `stats.py` 693 → 50). Seventeen inline try/except blocks became a `StatsSection` contract. 32 characterization tests, mutation-checked 17/17 before and after; payload compared key-by-key against the pre-refactor handler (70 keys, 0 differences). Found 29 of 31 trailing `setdefault` calls to be dead. |
+| 2026-08-08 | 2.145.0 | Phase 3b-ii cont. (`alerts()` + its PDF export → the `webapp/public/alerts_page/` package; `alerts.py` 648 → 112). A pipeline rather than a dispatch or an accumulation, so the modules are stages. 73 characterization tests, mutation-checked 26/26 before and after (all 26 needed retargeting); 68-scenario output diff, 0 differences. **Phase 3b-ii complete** — every `webapp/public/` module is within the guidance. |
 
 ## Next up
 
-**Phase 3b-ii continued — `alerts.py` (648).** The last of the three
-`webapp/public/` modules over the cap: a 385-line `alerts()` handler plus a
-~175-line PDF export. Unlike the other two it is a *pipeline* — parse request
-args, fetch filter options, build the query, paginate with a fallback, enrich
-with audio — so the seams are sequential stages rather than independent
-branches.
+**Phase 3b-ii is complete.** All three `webapp/public/` modules that Phase 3b
+left over the cap — `logs_data.py`, `stats.py` and `alerts.py` — have landed,
+and every module in the package is now within the guidance.
 
 **Phase 3 continued — `webapp/routes_settings_radio.py` (2781)** is the next
 whole-file split.
@@ -1044,6 +1103,19 @@ cost a debugging cycle in an earlier phase.
       definition references, a *parameter* called `text` reads as a use of
       `from sqlalchemy import text`. `ruff check --select F,E9` catches both
       halves (F401 unused, F811 shadowed). (Phase 4a.)
+- [ ] **Never run a file-rewriting harness in the background against a tree you
+      are still editing.** A mutation runner backs up, rewrites and restores
+      files in place; started in the background while new modules were being
+      written into the same package, it picked the half-written files up as
+      targets, leaving one committed file altered and one new file carrying a
+      mutant's arithmetic. Run it in the foreground, or point it at a worktree
+      copy. (Phase 3b-ii.)
+- [ ] **Retarget every mutation after the split, and count "not applied" as a
+      failure.** A refactor moves and rewords the lines the mutations matched —
+      after the `alerts()` split, all 26 stopped applying. A mutation that
+      matched nothing proves nothing, so the run is only meaningful once every
+      one has been pointed at its new home. (Phase 3b-ii, and 4 of 17 in the
+      `stats()` split.)
 - [ ] **Purge `__pycache__` when a harness restores a mutated source.**
       A mutation that swaps two same-length branches leaves the byte count
       unchanged, and a restore that preserves the backup's mtime lets CPython

@@ -8,6 +8,47 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.145.0] - 2026-08-08 - Phase 3b-ii: split the /alerts browse surface
+
+### Changed
+- **The 385-line `alerts()` handler and its ~175-line PDF export are now the
+  `webapp/public/alerts_page/` package.** This completes Phase 3b-ii — every
+  module in `webapp/public/` is now within the size guidance.
+
+  Unlike the previous two, this one is a *pipeline*, so the modules are stages:
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `filters.py` | 210 | `AlertFilters`, the sortable-column allow-list, request parsing and clamping |
+  | `query.py` | 133 | Search, exact filters, date range, VTEC, visibility rules, sorting |
+  | `pagination.py` | 101 | `MockPagination` and the paginate-with-fallback |
+  | `options.py` | 88 | Filter dropdown values and the headline counts |
+  | `enrichment.py` | 160 | Audio map, manual activations, lazy IPAWS backfill |
+  | `pdf_export.py` | 150 | The export's query, blocks and filter summary |
+  | `__init__.py` | 94 | `build_alerts_page` |
+
+  `webapp/public/alerts.py` drops from 648 to 112 lines.
+
+- **Added `tests/test_public_alerts_page.py` (73 tests).** Neither handler had
+  coverage. The suite pins the input clamping (`page`, `per_page`, `sort`,
+  `direction` are all attacker-controlled), the VTEC override, every filter,
+  the pagination fallback including `iter_pages()` elision, and the PDF
+  export's formatting and truncation.
+
+### Fixed
+- Removed a dead `per_page` capture in the PDF export that had been flagged by
+  `ruff` (F841) for some time. `ruff check --select F,E9` is now clean across
+  the whole of `webapp/public/`.
+
+### Notes
+- **The PDF export applies a strict subset of the page's filters.** It honours
+  search, status, severity, event, source and `show_expired`, but *not* the
+  date range, the VTEC event chain or the superseded rule — so a PDF exported
+  from a filtered page can contain rows the page was hiding. This is
+  pre-existing behaviour, now documented in `pdf_export.py` and pinned by
+  `test_pdf_export_ignores_filters_the_page_supports`. Unifying the two query
+  builders is a behaviour change and needs its own commit.
+
 ## [2.144.0] - 2026-08-08 - Phase 3b-ii: split the /stats dashboard
 
 ### Changed
