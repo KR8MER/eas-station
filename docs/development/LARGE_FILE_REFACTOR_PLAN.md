@@ -485,7 +485,7 @@ modules, `routes.py` holding only handlers.
 | `webapp/routes_public.py` | 2849 | `webapp/public/` package, split by surface | ✅ landed — see 3b; `logs_data.py` follow-up in 3b-ii |
 | `webapp/routes_settings_radio.py` | 2781 | `webapp/radio_settings/` package, split by topic | ✅ landed — see 3c |
 | `webapp/admin/api.py` | 2105 | `webapp/admin/api/` package, split by resource | ✅ landed — see 3d |
-| `webapp/admin/certbot.py` | 1946 | certificate ops vs. routes | ⏳ |
+| `webapp/admin/certbot.py` | 1946 | `webapp/admin/certbot/` package | ✅ landed — see 3e |
 | `app.py` | 1869 | move remaining inline routes/factory helpers into `webapp/` | ⏳ |
 | `webapp/admin/maintenance.py` | 1802 | task definitions vs. routes | ⏳ |
 | `webapp/routes/alert_verification.py` | 1668 | verification engine vs. routes | ⏳ |
@@ -1126,6 +1126,94 @@ state — the `_multi_county_list` guard counts `", <state_code>"` occurrences,
 so a fixture using `"ohio"` reinstates the false positive it was written to
 prevent.
 
+### 3e. `webapp/admin/certbot.py` → `webapp/admin/certbot/` ✅
+
+The same shape as 3d — 22 ordinary top-level definitions — so the motion was
+easy. What made this one interesting is that it carried **both** hazards the
+checklist warns about, and it had **no test coverage at all** to catch either.
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `blueprint.py` | 40 | `certbot_bp`, the domain/email patterns |
+| `log.py` | 43 | The one logger, named `webapp.admin.certbot` |
+| `failures.py` | 50 | certbot exit → operator-readable explanation |
+| `routes_pages.py` | 50 | The rendered settings page |
+| `nginx.py` | 93 | Is nginx up, and bring it up |
+| `routes_status.py` | 119 | Certificate status and the log tail |
+| `routes_settings.py` | 134 | Reading and writing stored settings |
+| `staging.py` | 149 | Detect and clear staging certificates |
+| `paths.py` | 157 | The writable `certbot_data` tree |
+| `routes_actions.py` | 228 | Auto-renewal, download, install |
+| `routes_obtain.py` | 273 | Obtain dry-run, domain test |
+| `routes_renew.py` | 286 | Renew dry-run, real run |
+| `install.py` | 293 | Install a certificate into nginx |
+| `routes_obtain_execute.py` | 449 | The real certificate run — over, see below |
+| `__init__.py` | 105 | `register_certbot_routes`, side-effect imports |
+
+```
+log, blueprint                 leaves
+paths                  -> log
+failures               -> paths
+nginx                  -> log
+staging                -> log, paths
+install                -> log, nginx, paths
+routes_pages           -> blueprint, log
+routes_settings        -> blueprint, log
+routes_status          -> blueprint, log, paths
+routes_obtain          -> blueprint, log, paths
+routes_obtain_execute  -> blueprint, failures, install, log, nginx, paths, staging
+routes_renew           -> blueprint, failures, log, paths, staging
+routes_actions         -> blueprint, install, log, paths
+```
+
+**The `__file__` hazard fired, exactly as the checklist predicted.**
+`CERTBOT_BASE_DIR = Path(__file__).parent.parent.parent / 'certbot_data'` —
+three hops from `webapp/admin/certbot.py` to the repository root, but only two
+thirds of the way from `webapp/admin/certbot/paths.py`. Unfixed it resolves to
+`<repo>/webapp/certbot_data`, and *nothing raises*: certbot builds a fresh
+empty tree there and every existing certificate appears to have vanished. This
+is the same failure shape as Phase 2b's brand logo, and the same reason
+AST-equality cannot see it — the code really is identical, it just means
+something else. Fixed to four hops, pinned by a test asserting the resolved
+value, and a second test rejects any *new*
+`Path(__file__).parent.parent.parent` added at this depth.
+
+**A module-level logger is a `__name__` hazard too, not just `Blueprint` and
+`getLogger` in the checklist sense.** One `logging.getLogger(__name__)` served
+all 92 call sites, so per-module loggers would have renamed every record from
+`webapp.admin.certbot` to `webapp.admin.certbot.<submodule>` — invisible in
+tests, but it breaks a journald grep or a log filter keyed on the old name.
+There is one `log.py` holding `getLogger(__package__)` and every module
+imports `logger` from it.
+
+**Whether a by-value logger import is safe depends on the registration
+hook.** 3a needed a fan-out list because `register_audio_ingest_routes`
+*rebinds* the module's `logger`; here `register_certbot_routes` only writes one
+line through the logger it is handed and never rebinds, so `from .log import
+logger` is safe. Check which kind you have before copying either pattern —
+the fan-out is unnecessary machinery when nothing rebinds, and a by-value
+import is silently wrong when something does.
+
+**`routes_obtain_execute.py` is 449 lines — over, and left that way.**
+`obtain_certificate_execute` is a single 387-line `try` block. Module-level
+splitting cannot shrink one function; that needs collaborators extracted from
+the body, which is behavioural and needs the behaviour pinned first. Doing
+that on a module with *zero* existing coverage is its own piece of work.
+Tracked as **Phase 3e-ii**. The size test names it as a known exception and
+fails if another module silently joins it.
+
+**Zero coverage is worth stating before the move, not after.** Ground rule 5
+says to run the tests that cover the file and name them in the commit message;
+here there were none, on the code that drives certificate issuance. The split
+added `tests/test_certbot_package.py` — 11 tests, all three structural guards
+mutation-checked.
+
+**Verification.** 22 of 23 definitions `ast.dump()`-identical; the one
+difference is `register_certbot_routes`, retyped into the package `__init__`,
+whose docstring lost the trailing whitespace on one blank line. URL map
+unchanged at **549 rules, 0 differences**, 14 certbot endpoints intact, and all
+four `CERTBOT_*` paths resolve to their pre-split values.
+
 ## Phase 4 — Long-running services
 
 Highest risk: these are the alert path. Each is dominated by one very large
@@ -1251,6 +1339,7 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-08-08 | 2.146.0 | Phase 3c (`webapp/routes_settings_radio.py`, 2781 → 17 modules + a 52-line shim). All 26 handlers captured only `app` and `route_logger`, so they moved verbatim. 34/34 AST matches; URL map diffed at 549 rules, 0 differences. The one deliberate change is a `deps.py` of injectable seams, reached through the module so a test has a single patch point. |
 | 2026-08-08 | 2.146.1 | Not a split — a **regression the Phase 3a split caused**, found while baselining the next one. `webapp/admin/audio_ingest.py` had imported `AudioSourceConfigDB` at its top, so the model was incidentally importable from it; the package `__init__` re-exports only what it means to. `app_core/websocket_push.py` imported it from there twice and both broke silently, taking the audio-source WebSocket push with them. The package's guard test listed its exports by hand and nobody had added this one — it now AST-walks the tree for every `from webapp.admin.audio_ingest import …` and asserts each name resolves. |
 | 2026-08-08 | 2.147.0 | Phase 3d (`webapp/admin/api.py`, 2105 → 13 modules + a 95-line `__init__`). 21 ordinary top-level definitions rather than one giant `register()`, so pure motion: 21/21 AST matches, URL map 549 rules / 0 differences. Import blocks are derived with `symtable` after hand-writing them produced 127 ruff errors. Two source-text test files were retargeted, and `_detect_county_wide` is now tested through the real function instead of a local mirror. |
+| 2026-08-08 | 2.148.0 | Phase 3e (`webapp/admin/certbot.py`, 1946 → 14 modules + a 105-line `__init__`). 22/23 AST matches, URL map 549 rules / 0 differences. Carried both `__file__` hazards at once: `CERTBOT_BASE_DIR` would have silently moved the whole certbot tree to `webapp/certbot_data`, and per-module loggers would have renamed every log record. The module had **zero** test coverage beforehand; the split added 11 tests, three guards mutation-checked. `routes_obtain_execute.py` (449) is left over the cap as Phase 3e-ii — it is one 387-line `try` block. |
 
 ## Next up
 
@@ -1259,12 +1348,18 @@ left over the cap — `logs_data.py`, `stats.py` and `alerts.py` — have landed
 and every module in the package is now within the guidance.
 
 **Phase 3 continued — the remaining web-layer files.** `webapp/admin/api.py`
-landed as 3d. `webapp/admin/certbot.py` (1946), `app.py` (1869),
+landed as 3d and `webapp/admin/certbot.py` as 3e. `app.py` (1869),
 `webapp/admin/maintenance.py` (1802) and
 `webapp/routes/alert_verification.py` (1668) are what is left in Phase 3.
-Check which shape each one is before planning it: 3d was 21 top-level
-definitions and took an afternoon, while 3b and 3c were single enormous
+Check which shape each one is before planning it: 3d and 3e were ordinary
+top-level definitions and went quickly, while 3b and 3c were single enormous
 `register()` functions and needed characterization work first.
+
+**Phase 3e-ii — `routes_obtain_execute.py` (449).** The one module 3e left
+over the cap. `obtain_certificate_execute` is a single 387-line `try` block,
+so it needs collaborators extracted from the body rather than module-level
+splitting. It shells out to certbot and nginx, so a characterization harness
+has to fake both; build that first. Same technique as 2e / 3a-ii / 3b-ii.
 
 **Phase 4a-ii — `snapshot.py` (478) and `smart.py` (429)**, the two modules
 4a left over the cap. Each is one function; `build_system_health_snapshot` is
@@ -1321,7 +1416,18 @@ cost a debugging cycle in an earlier phase.
 - [ ] **Check what `__name__` is passed to.** A `Blueprint(name, __name__)` or
       `logging.getLogger(__name__)` means something different one directory
       deeper. Pass `__package__` where the pre-split value is what matters.
-      (Phase 3a.)
+      (Phase 3a.) **A module-level logger counts**: one
+      `getLogger(__name__)` serving the whole file becomes one logger *per
+      module*, renaming every record from `webapp.admin.certbot` to
+      `webapp.admin.certbot.<submodule>`. No test sees it; a journald grep or
+      log filter keyed on the old name does. Put the logger in its own module
+      and import it. (Phase 3e.)
+- [ ] **Decide by-value vs. fan-out for the logger by asking whether the
+      registration hook rebinds it.** If `register_*` reassigns the module's
+      `logger`, a by-value `from .log import logger` is silently wrong and you
+      need 3a's fan-out list. If it only *writes through* the logger it is
+      handed — as `register_certbot_routes` does — the fan-out is unnecessary
+      machinery and a by-value import is correct. (Phase 3a vs. 3e.)
 - [ ] **Never let a module import a mutable global from a sibling.**
       `from .x import _some_global` snapshots the value at import time. Add an
       accessor function instead, and AST-scan the package to prove none crept

@@ -8,6 +8,90 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.148.0] - 2026-08-08 - Phase 3e: split the Certbot routes
+
+### Changed
+- **`webapp/admin/certbot.py` (1,946 lines) is now the
+  `webapp/admin/certbot/` package** — 14 modules plus a 105-line `__init__`.
+  Like 3d this was ordinary top-level definitions, so all 22 moved verbatim.
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `blueprint.py` | 40 | `certbot_bp` and the domain/email patterns |
+  | `log.py` | 43 | The one logger, named `webapp.admin.certbot` |
+  | `failures.py` | 50 | certbot exit → operator-readable explanation |
+  | `routes_pages.py` | 50 | The rendered settings page |
+  | `nginx.py` | 93 | Is nginx up, and bring it up |
+  | `routes_status.py` | 119 | Certificate status and the log tail |
+  | `routes_settings.py` | 134 | Reading and writing stored settings |
+  | `staging.py` | 149 | Detect and clear staging certificates |
+  | `paths.py` | 157 | The writable `certbot_data` tree |
+  | `routes_actions.py` | 228 | Auto-renewal, download, install |
+  | `routes_obtain.py` | 273 | Obtain dry-run and the domain test |
+  | `routes_renew.py` | 286 | Renew dry-run and the real run |
+  | `install.py` | 293 | Install a certificate into nginx |
+  | `routes_obtain_execute.py` | 449 | The real certificate run |
+  | `__init__.py` | 105 | `register_certbot_routes`, side-effect imports |
+
+  `register_certbot_routes(app, logger)` is unchanged, and `__all__` still
+  exports it alongside `certbot_bp`.
+
+### Fixed
+- **The `certbot_data` directory would have silently moved.**
+  `CERTBOT_BASE_DIR` is `Path(__file__).parent.parent.parent / 'certbot_data'`
+  — three hops from `webapp/admin/certbot.py` to the repository root. From
+  `webapp/admin/certbot/paths.py` that is one hop short, so it resolves to
+  `<repo>/webapp/certbot_data`. Nothing raises: certbot would have built a
+  fresh empty tree in the wrong place and every existing certificate would
+  have looked like it had vanished. Fixed to four hops and pinned by a test
+  that asserts the resolved value, plus a second test that rejects any *new*
+  `Path(__file__).parent.parent.parent` added at the wrong depth.
+
+- **Log records keep the name `webapp.admin.certbot`.** The single-file module
+  had one `logging.getLogger(__name__)` behind all 92 call sites. Per-module
+  loggers would have renamed those records to
+  `webapp.admin.certbot.routes_obtain` and friends, breaking any log filter or
+  journald grep keyed on the old name. There is one `log.py` holding
+  `getLogger(__package__)` and every module imports it. A by-value import is
+  safe here specifically because `register_certbot_routes` does **not** rebind
+  the module logger — it only writes one line through the logger it is handed.
+  (Phase 3a's audio_ingest package needed a fan-out instead precisely because
+  its `register` did rebind.)
+
+- **Two dead imports dropped out**: `os` and `datetime.datetime` were imported
+  by the single-file module and used by none of it.
+
+### Added
+- **`tests/test_certbot_package.py` — the first tests this module has ever
+  had.** It had zero coverage before the split, which is worth stating plainly
+  given it drives certificate issuance. Eleven tests covering the three
+  failure modes that produce no error: the resolved `certbot_data` paths, the
+  logger name, and routes lost from the URL map. Also the `/admin` prefix
+  invariant the module docstring warns about, and that the domain and email
+  patterns still discriminate — they gate every certificate request.
+
+  All three guards are mutation-checked: dropping a `.parent` fails 2 tests,
+  reverting the logger to `__name__` fails 1, and removing a route module from
+  the `__init__` imports fails 2.
+
+### Notes
+- **`routes_obtain_execute.py` is 449 lines and knowingly over the guidance.**
+  `obtain_certificate_execute` is a single 387-line `try` block, so
+  module-level splitting cannot shrink it — that needs collaborators extracted
+  from the body, which is a behavioural refactor and needs the behaviour
+  pinned first. On a module that had no coverage at all, that is its own piece
+  of work; tracked as Phase 3e-ii. The size test names it as a known exception
+  and fails if it is ever silently joined by another.
+- **Verification.** 22 of 23 top-level definitions are `ast.dump()`-identical.
+  The one difference is `register_certbot_routes`, retyped into the package
+  `__init__`: its docstring lost the trailing whitespace on one blank line.
+  That is the whole diff — `"...app.\n    \n    Routes"` became
+  `"...app.\n\n    Routes"`. The URL map is unchanged at **549 rules, 0
+  differences**, all 14 certbot endpoints intact, and the four `CERTBOT_*`
+  paths resolve to exactly their pre-split values.
+- **Four pre-existing F541 warnings** (f-strings with no placeholders) moved
+  across verbatim rather than being cleaned up, to keep the diff pure motion.
+
 ## [2.147.0] - 2026-08-08 - Phase 3d: split the admin API routes
 
 ### Changed
