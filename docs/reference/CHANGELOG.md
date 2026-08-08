@@ -8,6 +8,189 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.146.0] - 2026-08-08 - Phase 3c: split the radio settings routes
+
+### Changed
+- **`webapp/routes_settings_radio.py` (2,781 lines) is now the
+  `webapp/radio_settings/` package** — 17 modules behind a 52-line shim. It was
+  eight module-level helpers plus a 2,114-line `register()` with 26 route
+  handlers nested inside it.
+
+  Every handler closed over exactly `app` and `route_logger`, so each one moved
+  **verbatim** into a topic module that keeps its own small
+  `register(app, route_logger)` — no reindentation, no signature changes.
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `deps.py` | 129 | The seams a test injects fakes for, plus the capture constants |
+  | `sdr_client.py` | 64 | `_send_sdr_command` |
+  | `serialization.py` | 162 | A `RadioReceiver` row rendered to the API payload |
+  | `payload.py` | 291 | `_parse_receiver_payload` — the whole write-side contract |
+  | `sync.py` | 174 | Reconciling the database against the live RadioManager |
+  | `routes_pages.py` | 66 | The two rendered pages |
+  | `routes_receivers.py` | 259 | Receiver CRUD |
+  | `routes_receiver_control.py` | 241 | Restart, audio-monitor wiring |
+  | `routes_devices.py` | 265 | Discovery, capabilities, frequency validation |
+  | `routes_presets.py` | 49 | Built-in tuning presets |
+  | `routes_signal.py` | 355 | Waveform and spectrum |
+  | `routes_monitoring.py` | 64 | Dashboard status and the diagnostics summary |
+  | `routes_diagnostics_status.py` | 306 | Diagnostics status, SoapySDR error decoding |
+  | `routes_diagnostics_capture.py` | 275 | IQ capture request and download |
+  | `routes_diagnostics_waterfall.py` | 315 | The waterfall view |
+  | `routes_diagnostics_analyze.py` | 386 | Capture analysis and the auto-gain sweep |
+  | `__init__.py` | 105 | `register`, fanning out to the topic modules |
+
+  All 17 modules are within the 400-line guidance.
+
+- **Test seams are now reachable in one place.** The names the radio tests
+  inject fakes for — `get_redis_client`, `get_radio_manager`,
+  `_log_radio_event`, `RADIO_CAPTURE_DIR` and the other capture constants —
+  live in `deps.py` and are called *through* the module. A by-value import
+  would have snapshotted the real object, so a stub set in one place would have
+  been silently ignored everywhere else.
+
+### Fixed
+- Nothing user-visible. 34 of 34 moved definitions are `ast.dump()`-identical,
+  every non-blank line of the original lands in exactly one module, and the
+  app's URL map is unchanged: **549 rules, 0 differences**, verified against a
+  worktree at the pre-split commit.
+
+### Notes
+- **Three functions import `get_redis_client` from `app_core.redis_client`
+  locally**, shadowing the module-level import from `app_core.extensions` —
+  a genuinely different object. Those call sites were left exactly as they
+  were; rewriting them would have changed behaviour, not just location.
+- `tests/test_8khz_stress_test.py::test_8khz_with_increasing_noise[0.2]` is
+  flaky: it generates noise with an unseeded `random.randint`, so the 20 %
+  case sits close to the confidence threshold and fails occasionally. Unrelated
+  to this change; noted here because it can turn a full-suite run red.
+
+## [2.145.0] - 2026-08-08 - Phase 3b-ii: split the /alerts browse surface
+
+### Changed
+- **The 385-line `alerts()` handler and its ~175-line PDF export are now the
+  `webapp/public/alerts_page/` package.** This completes Phase 3b-ii — every
+  module in `webapp/public/` is now within the size guidance.
+
+  Unlike the previous two, this one is a *pipeline*, so the modules are stages:
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `filters.py` | 210 | `AlertFilters`, the sortable-column allow-list, request parsing and clamping |
+  | `query.py` | 133 | Search, exact filters, date range, VTEC, visibility rules, sorting |
+  | `pagination.py` | 101 | `MockPagination` and the paginate-with-fallback |
+  | `options.py` | 88 | Filter dropdown values and the headline counts |
+  | `enrichment.py` | 160 | Audio map, manual activations, lazy IPAWS backfill |
+  | `pdf_export.py` | 150 | The export's query, blocks and filter summary |
+  | `__init__.py` | 94 | `build_alerts_page` |
+
+  `webapp/public/alerts.py` drops from 648 to 112 lines.
+
+- **Added `tests/test_public_alerts_page.py` (73 tests).** Neither handler had
+  coverage. The suite pins the input clamping (`page`, `per_page`, `sort`,
+  `direction` are all attacker-controlled), the VTEC override, every filter,
+  the pagination fallback including `iter_pages()` elision, and the PDF
+  export's formatting and truncation.
+
+### Fixed
+- Removed a dead `per_page` capture in the PDF export that had been flagged by
+  `ruff` (F841) for some time. `ruff check --select F,E9` is now clean across
+  the whole of `webapp/public/`.
+
+### Notes
+- **The PDF export applies a strict subset of the page's filters.** It honours
+  search, status, severity, event, source and `show_expired`, but *not* the
+  date range, the VTEC event chain or the superseded rule — so a PDF exported
+  from a filtered page can contain rows the page was hiding. This is
+  pre-existing behaviour, now documented in `pdf_export.py` and pinned by
+  `test_pdf_export_ignores_filters_the_page_supports`. Unifying the two query
+  builders is a behaviour change and needs its own commit.
+
+## [2.144.0] - 2026-08-08 - Phase 3b-ii: split the /stats dashboard
+
+### Changed
+- **The 645-line `stats()` handler is now the `webapp/public/stats_sections/`
+  package.** The handler was seventeen `try/except` blocks in a row, each
+  running a few queries, writing into a shared `stats_data` dict and declaring
+  its own fallback so one failing query could not lose the whole dashboard.
+  That pattern is now expressed once, as a `StatsSection` contract:
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `common.py` | 81 | The `StatsSection` contract and the runner |
+  | `alerts_overview.py` | 215 | Headline counts, boundary/status/severity/event breakdowns, urgency, certainty, message types |
+  | `timeline.py` | 237 | Hour/weekday/month/year buckets and the recent-alert feed |
+  | `coverage.py` | 143 | Most-affected boundaries, alert durations, coverage overlap |
+  | `broadcast.py` | 173 | Forwarding rate, manual activations, received alerts, broadcast latency, relay stats |
+  | `polling.py` | 183 | Poller success rate, timings and trend |
+  | `__init__.py` | 100 | The ordered pipeline and `build_stats_data` |
+
+  `webapp/public/stats.py` drops from 693 to 50 lines. The pipeline order is
+  declared explicitly in one place because it is load-bearing — three sections
+  divide by `total_alerts` and must run after the counts.
+
+- **Added `tests/test_public_stats_sections.py` (32 tests).** The handler had
+  no coverage; the suite pins every derived rate, every time bucket, the
+  per-section fallbacks, and the full set of keys `stats.html` indexes.
+
+### Fixed
+- Nothing user-visible. The rendered payload was compared key-by-key against
+  the pre-refactor handler across an empty and a populated database — 70 keys,
+  **zero differences** — and the test suite was mutation-checked before (17/17
+  caught) and after (17/17 caught) the split.
+
+### Notes
+- **29 of the handler's 31 trailing `setdefault` calls were dead.** Every
+  section already set its keys on both its success and its failure path, so
+  those defaults could never fire. Only `avg_durations` and
+  `lifecycle_timeline` had no producer; the new package keeps just those two
+  and the section contract now guarantees the rest structurally.
+
+## [2.143.0] - 2026-08-08 - Phase 3b-ii: split the /logs query layer
+
+### Changed
+- **`_load_logs_data` (1,057 lines in a single function) is now the
+  `webapp/public/logs_sources/` package**, nine modules behind a shared
+  contract. This is the Phase 3b-ii follow-up recorded in
+  `docs/development/LARGE_FILE_REFACTOR_PLAN.md` — the first of the three
+  `webapp/public/` modules that Phase 3b left over the size guidance.
+
+  The function was a seventeen-way `if/elif` on `log_type`, each branch
+  querying its own source and shaping rows into the generic log dict the
+  template renders. Every branch is now a loader taking one `LogQuery` and
+  returning one `LogPage`, so the dispatcher is a table lookup:
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `common.py` | 83 | The `LogQuery` / `LogPage` contract and the shared timestamp sort key |
+  | `database.py` | 329 | System, polling, polling-debug, audio, audio-metrics, audio-health, GPIO |
+  | `eas.py` | 304 | EAS messages, decoded audio, manual activations, received alerts |
+  | `audit.py` | 130 | The audit trail and the compliance ledger |
+  | `reports.py` | 146 | The six FCC report kinds and the report metadata envelope |
+  | `services.py` | 90 | The systemd journal category |
+  | `aggregate.py` | 112 | The "All Logs" merge, fault tolerance and truncation |
+  | `aggregate_collectors.py` | 346 | The eleven per-category collectors the merge runs |
+  | `__init__.py` | 81 | `LOADERS` and `resolve_loader` |
+
+  `webapp/public/logs_data.py` drops from 1,116 to 80 lines and now only
+  dispatches; `MIN_LOGS_PER_CATEGORY` is re-exported so the old import path
+  still resolves. Adding a log category no longer means editing a 1,000-line
+  function — it means writing a loader and registering it.
+
+- **Added `tests/test_public_logs_data.py` (79 tests).** The loader previously
+  had no test coverage at all. The suite asserts the complete returned triple
+  for every log type — display name, every key of every row, and the report
+  metadata — plus the per-branch level-derivation rules, the fallback strings
+  for missing fields, the audit action filter running in SQL, the session
+  rollback after a failing report builder, and the limit arithmetic.
+
+### Fixed
+- Nothing user-visible. The split is behaviour-preserving: the loader's full
+  output was compared across 115 scenarios (23 log types × 5 parameter
+  combinations) against the pre-refactor code with **zero differences**, and
+  the test suite was mutation-checked both before the refactor (15/15 caught)
+  and after it (16/16 caught) to prove it would notice if that changed.
+
 ## [2.142.0] - 2026-08-07 - Phase 4a: split the system-monitoring helpers
 
 ### Changed

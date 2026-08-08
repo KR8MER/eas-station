@@ -466,8 +466,8 @@ modules, `routes.py` holding only handlers.
 | File | Lines | Planned split | Status |
 | --- | ---: | --- | --- |
 | `webapp/admin/audio_ingest.py` | 3180 | `webapp/admin/audio_ingest/` package | ✅ landed — see 3a |
-| `webapp/routes_public.py` | 2849 | `webapp/public/` package, split by surface | ✅ landed — see 3b |
-| `webapp/routes_settings_radio.py` | 2781 | receivers / profiles / diagnostics | ⏳ |
+| `webapp/routes_public.py` | 2849 | `webapp/public/` package, split by surface | ✅ landed — see 3b; `logs_data.py` follow-up in 3b-ii |
+| `webapp/routes_settings_radio.py` | 2781 | `webapp/radio_settings/` package, split by topic | ✅ landed — see 3c |
 | `webapp/admin/api.py` | 2105 | group endpoints by resource | ⏳ |
 | `webapp/admin/certbot.py` | 1946 | certificate ops vs. routes | ⏳ |
 | `app.py` | 1869 | move remaining inline routes/factory helpers into `webapp/` | ⏳ |
@@ -685,6 +685,317 @@ Module-level splitting cannot shrink a single function, so these need
 collaborator extraction with a characterization harness built first — the 2e /
 3a-ii technique, not this one. Tracked as Phase 3b-ii.
 
+### 3b-ii. `_load_logs_data` → `webapp/public/logs_sources/` ✅
+
+The first of the three modules 3b left over the cap. `_load_logs_data` was
+1,057 lines in **one function**: a seventeen-way `if/elif` chain on `log_type`,
+where each branch queried its own table (or the systemd journal, or the
+compliance ledger, or an FCC report builder) and shaped rows into the generic
+log dict the template renders.
+
+The seam was already drawn by the branches, so the interesting design question
+was not *where* to cut but *what contract* the pieces share. Every loader now
+takes one `LogQuery` and returns one `LogPage`:
+
+| Piece | Role |
+| --- | --- |
+| `LogQuery` | `log_type`, `limit`, `service_filter`, `action_filter`, `logger`. The last two are read by exactly one loader each, but travel with every query so the dispatch table can stay uniform. |
+| `LogPage` | `display_name`, `rows`, `report_meta`. Only the report loader populates the third field — it is what the template keys off to choose the columnar layout. |
+| `resolve_loader` | Exact-match lookup, falling back to the `report_` prefix. Returns `None` for an unknown type, which is how the dispatcher reproduces the old chain "reaching the end without matching". |
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `common.py` | 83 | `LogQuery`, `LogPage`, `MIN_LOGS_PER_CATEGORY`, `timestamp_sort_key` |
+| `database.py` | 329 | `system`, `polling`, `polling_debug`, `audio`, `audio_metrics`, `audio_health`, `gpio` |
+| `eas.py` | 304 | `eas_messages`, `decoded_audio`, `manual_activations`, `received_alerts` |
+| `audit.py` | 130 | `audit` (with the SQL-level action filter), `compliance` |
+| `reports.py` | 146 | The six FCC report kinds and the `report_meta` envelope |
+| `services.py` | 90 | The systemd journal category |
+| `aggregate.py` | 112 | The "All Logs" merge, fault-tolerance and truncation |
+| `aggregate_collectors.py` | 346 | The eleven per-category collectors the merge runs |
+| `__init__.py` | 81 | `LOADERS`, `resolve_loader` |
+
+`webapp/public/logs_data.py`: 1116 → **80** lines, now only a dispatch, with
+`MIN_LOGS_PER_CATEGORY` re-exported so the old import path still resolves.
+
+**`aggregate.py` is deliberately not a loop over the focused loaders**, however
+much it looks like one. Three things differ, and each would be a visible
+regression if "de-duplicated":
+
+1. **The row shape.** Merged rows carry a `category` label and a trimmed
+   `details` payload; the focused views carry the full payload and an
+   `alert_identifier`.
+2. **Fault tolerance.** Each merged category is wrapped so one broken table
+   cannot take the whole page down; in a focused view a failure *should*
+   surface.
+3. **The cap.** Each category is limited separately before the merge, so a
+   chatty table cannot crowd the others out.
+
+The one thing that *was* de-duplicated is `get_sort_key`, which the `all` and
+`services` branches each carried a private copy of — verified `ast.dump()`
+-identical before collapsing them into `common.timestamp_sort_key`.
+
+**Verification — the harness came first, as in 2e and 3a-ii.** The function had
+**no test coverage at all**, which ground rule 5 says to find out before moving
+code rather than after.
+
+1. `tests/test_public_logs_data.py` (79 tests) was written and run green
+   against the *pre-refactor* function, asserting the full returned triple —
+   display name, every key of every row, and the report metadata — for every
+   `log_type`, plus the level-derivation rules, the fallback strings, and the
+   limit arithmetic.
+2. Confirmed discriminating before being trusted: **15 deliberate mutations,
+   15 caught, 0 survived, 0 misapplied**, each failing only the tests that
+   cover it.
+3. A dump script rendered the loader's full output for **115 scenarios**
+   (23 log types × 5 parameter combinations) against a git worktree at the
+   pre-refactor commit and against the working tree: **0 differing scenarios,
+   26 distinct outputs**. The script prints which module it patched, so a
+   silent fallback could not masquerade as a match.
+4. The mutation run was repeated against the *refactored* structure — 16
+   mutations in their new homes, 16 caught — because passing on one shape says
+   nothing about the other.
+
+**Three traps this phase hit.**
+
+1. **`cd` persisted between the two dump runs**, so the "after" run executed in
+   the pre-refactor worktree and reported a perfect match against itself. The
+   `patched:` line is what caught it: it named `webapp.public.logs_data`, a
+   module that no longer carries the systemd collaborators after the split.
+   This is precisely the failure the 3a-ii note predicted — print what the
+   harness bound to, and check it.
+2. **A source restore does not invalidate the bytecode cache.** The mutation
+   that swapped two branches of the `audio_health` level rule reordered text of
+   *identical length*, and `shutil.move` restored the backup's mtime — so
+   CPython saw a matching `(mtime, size)` and kept running the **mutated**
+   `.pyc` after the file had been restored. The symptom was one test failing
+   in every subsequent mutation, which reads exactly like a flaky test. Purge
+   `__pycache__` on restore. (Note the family resemblance to the 3b lesson:
+   equal length is a tell, not a coincidence.)
+3. **Seeding fires audit listeners.** Inserting `EASMessage` /
+   `ManualEASActivation` rows writes `eas.broadcast` / `eas.manual_activation`
+   audit entries stamped with the real wall clock, which then showed up as four
+   "differing" audit scenarios. They were genuinely different between runs and
+   had nothing to do with the refactor — the fix is to seed the audit trail
+   deterministically *after* everything else, not to scrub the diff.
+
+**All nine modules are under the 400-line guidance.** `aggregate.py` came out
+at 418 on the first pass and was split again along the collector boundary
+rather than being recorded as a follow-up.
+
+### 3b-ii (cont). `stats()` → `webapp/public/stats_sections/` ✅
+
+The second of the three. Where `_load_logs_data` was a *dispatch* — exactly one
+branch runs per request — `stats()` is an *accumulation*: seventeen
+`try/except` blocks in a row, each running a few queries, writing into a shared
+`stats_data` dict, and declaring its own fallback so one failing query cannot
+lose the whole dashboard. The repeated try/rollback/log/fallback shape is the
+thing worth extracting, and it becomes the `StatsSection` contract:
+
+| Piece | Role |
+| --- | --- |
+| `StatsSection` | `collect`, `fallback`, `error_message`. |
+| `collect(stats_data) -> fragment` | Reads the dict built so far — three sections divide by `total_alerts` — and returns only its own keys. |
+| `run_sections` | Runs each in order; on failure rolls back, logs, and substitutes the fallback. The rollback is not optional: a failed query leaves the session aborted, so without it every *later* section fails too. |
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `common.py` | 81 | The contract and the runner |
+| `alerts_overview.py` | 215 | Headline counts, boundary/status/severity/event breakdowns, urgency, certainty, message types |
+| `timeline.py` | 237 | Hour/weekday/month/year buckets, the recent-alert feed |
+| `coverage.py` | 143 | Most-affected boundaries, durations, coverage overlap |
+| `broadcast.py` | 173 | Forwarding rate, manual activations, received alerts, latency, relays |
+| `polling.py` | 183 | Poller success rate, timings, trend |
+| `__init__.py` | 100 | The ordered pipeline and `build_stats_data` |
+
+`webapp/public/stats.py`: 693 → **50** lines. Every module is under the
+guidance.
+
+**The pipeline order is declared explicitly in `__init__.py`**, not implied by
+module grouping. It is load-bearing — `EAS_FORWARDING`, `MESSAGE_TYPES` and
+`COVERAGE_OVERLAP` each divide by `total_alerts` — and keeping the original
+sequence also keeps the error-log order unchanged on a broken database.
+
+**Verification.** Harness first, as always: 32 characterization tests written
+and green against the pre-refactor handler, reaching the payload by replacing
+`render_template` with a capture and calling the view directly (the app's
+global login redirect otherwise gets in the way). Mutation-checked at 17/17
+before the split and 17/17 after. The rendered payload was then compared
+key-by-key against a worktree at the pre-refactor commit across an empty and a
+populated database: **70 keys, 0 differences**, with the dump printing the line
+count of `register` so the two runs could be proven to be different code.
+
+**Two findings worth recording.**
+
+1. **29 of the 31 trailing `setdefault` calls were dead.** Each section already
+   set its keys on *both* its success and its failure path, so the defaults
+   could never fire. Only `avg_durations` and `lifecycle_timeline` had no
+   producer at all. This was established with a static check, not by eye, after
+   a mutation deleting one of the redundant defaults survived — the right
+   outcome for a semantically null change, and the signal that sent me looking.
+   The section contract now guarantees the property structurally, so only the
+   two real defaults remain.
+2. **Retargeting mutations is part of the job.** Seven of the seventeen stopped
+   applying after the split, because the code they matched had legitimately
+   been reworded — `- 5` became `- MAX_YEAR_LOOKBACK`, the success test became
+   `_is_success`. "Not applied" proves nothing, so each was rewritten against
+   its new home before the run counted.
+
+### 3b-ii (cont). `alerts()` → `webapp/public/alerts_page/` ✅
+
+The last of the three, and a third distinct shape. `_load_logs_data` was a
+**dispatch** (one branch runs per request); `stats()` was an **accumulation**
+(all sections run, contributing to one dict); `alerts()` is a **pipeline** —
+each stage consumes what the last produced, so the modules are stages and the
+seams are sequential.
+
+    parse_filters        request args → AlertFilters (clamped, allow-listed)
+    load_filter_options  dropdown values + headline counts
+    build_alert_query    AlertFilters → a filtered, sorted query
+    paginate_alerts      one page of rows, with a fallback
+    build_audio_map      generated EAS audio for those rows
+    load_manual_messages recent operator-originated activations
+    backfill_ipaws_audio lazy extraction for pre-extractor alerts
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `filters.py` | 210 | `AlertFilters`, the sortable-column allow-list, parsing and clamping |
+| `query.py` | 133 | Search, exact filters, date range, VTEC, visibility, sorting |
+| `pagination.py` | 101 | `MockPagination`, paginate-with-fallback |
+| `options.py` | 88 | Filter dropdown values and headline counts |
+| `enrichment.py` | 160 | Audio map, manual activations, lazy IPAWS backfill |
+| `pdf_export.py` | 150 | The export's query, blocks and filter summary |
+| `__init__.py` | 94 | `build_alerts_page` |
+
+`webapp/public/alerts.py`: 648 → **112** lines. **Phase 3b-ii is complete —
+every module in `webapp/public/` is now within the guidance.**
+
+**One duplication left in place, deliberately.** The page and the PDF export
+have *separate* query builders, and the export's is a strict subset: it has no
+date-range, VTEC or superseded handling, so a PDF exported from a filtered page
+can contain rows the page was hiding. Unifying them would have been the
+obvious tidy-up and would have silently changed what operators get in a
+compliance export. It is documented at the top of `pdf_export.py` and pinned by
+`test_pdf_export_ignores_filters_the_page_supports` — recorded as current
+behaviour, not endorsed.
+
+**Verification.** 73 characterization tests written and green against the
+pre-refactor handlers, reaching the boundary by replacing `render_template` and
+`generate_pdf_document` with captures. Mutation-checked 26/26 before and 26/26
+after — with **all 26 needing retargeting** in between, since almost every
+mutated line had moved or been reworded. Template kwargs and PDF arguments were
+then compared across 34 query strings on both routes against a worktree at the
+pre-refactor commit: **68 scenarios, 37 distinct outputs, 0 differences.**
+
+**A dead variable removed.** The PDF export captured `per_page` and never used
+it — a standing `ruff` F841. `ruff check --select F,E9` is now clean across the
+whole of `webapp/public/`.
+
+**The operational lesson from this phase is about the harness, not the code.**
+The mutation runner rewrites files in place and restores them afterwards. It
+was started in the background while new modules were still being written into
+the same directory, and it duly picked the half-written files up as mutation
+targets — backing up, mutating and "restoring" them, which left one committed
+file altered and one new file silently carrying a mutant's arithmetic. Nothing
+was lost (git had the committed file; the new one was caught by reading the
+diff), but the rule is simple: **never run a file-rewriting harness in the
+background against a tree you are still editing.** Run it in the foreground, or
+against a worktree copy.
+
+### 3c. `webapp/routes_settings_radio.py` → `webapp/radio_settings/` ✅
+
+The largest remaining Flask module, and a hybrid of the two shapes seen so far:
+eight module-level helpers (like 3a) *plus* a 2,114-line `register()` with 26
+handlers nested inside it (like 3b). The 3b closure analysis is what made it
+tractable — walking the AST for `Name` nodes resolving to `register`'s scope
+showed every handler captures only `app` and `route_logger`:
+
+| Handlers | Closure variables captured |
+| ---: | --- |
+| 22 | `app`, `route_logger` |
+| 2 | `app` |
+| 1 | *(none)* |
+| 1 | `app`, `route_logger`, `_decode_soapysdr_error` (moved alongside it) |
+
+So the bodies move **verbatim** into topic modules that each keep their own
+small `register(app, route_logger)` — no reindentation anywhere.
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `deps.py` | 129 | The injectable seams and the capture constants |
+| `sdr_client.py` | 64 | `_send_sdr_command` |
+| `serialization.py` | 162 | `_receiver_to_dict`, `_make_offline_status` |
+| `payload.py` | 291 | `_parse_receiver_payload` |
+| `sync.py` | 174 | `_sync_radio_manager_state`, `_sync_audio_monitors` |
+| `routes_pages.py` | 66 | The two rendered pages |
+| `routes_receivers.py` | 259 | Receiver CRUD |
+| `routes_receiver_control.py` | 241 | Restart, audio-monitor wiring |
+| `routes_devices.py` | 265 | Discovery, capabilities, frequency validation |
+| `routes_presets.py` | 49 | Built-in tuning presets |
+| `routes_signal.py` | 355 | Waveform, spectrum |
+| `routes_monitoring.py` | 64 | Dashboard status, diagnostics summary |
+| `routes_diagnostics_status.py` | 306 | Status, SoapySDR error decoding |
+| `routes_diagnostics_capture.py` | 275 | IQ capture and download |
+| `routes_diagnostics_waterfall.py` | 315 | The waterfall view |
+| `routes_diagnostics_analyze.py` | 386 | Capture analysis, auto-gain sweep |
+| `__init__.py` | 105 | `register`, fanning out in the original order |
+
+`webapp/routes_settings_radio.py` remains as a **52-line shim**. All 17 modules
+are within the guidance.
+
+**The one deliberate deviation from verbatim motion is `deps.py`.** The radio
+tests inject fakes for `get_redis_client`, `get_radio_manager`,
+`_log_radio_event`, `RADIO_CAPTURE_DIR` and the other capture constants — names
+used by up to 19 definitions each, which after the split are spread across ten
+modules. A `from .deps import get_redis_client` in each would snapshot the real
+object at import time, so a stub set in one place would be silently ignored
+everywhere else. Route modules therefore go **through** the module
+(`deps.get_redis_client()`), giving exactly one patch point, and a module added
+later honours the stub automatically. 51 references were routed this way; every
+other line is untouched.
+
+**The shim deliberately does not re-export those names**, so a
+`monkeypatch.setattr` aimed at the old location raises `AttributeError` instead
+of quietly patching something nothing reads. That is what made the retarget
+safe: all 11 patch sites failed immediately and pointed at the real seam.
+
+**Verification.**
+
+1. **AST equality** — 34 of 34 moved definitions `ast.dump()`-identical, plus
+   the every-non-blank-line-placed-exactly-once assertion (2,394 lines placed;
+   the 54 unplaced are the licence header, the import block, the `register`
+   signature and `__all__`).
+2. **URL map** — every rule, endpoint and method set diffed against a worktree
+   at the pre-split commit: **549 rules, 0 differences**. Mutation-checked by
+   dropping one module from the registration tuple, which the diff caught (3
+   missing rules).
+3. **Logger identity** — `_module_logger` was `logging.getLogger(__name__)`,
+   which would have silently become `webapp.radio_settings.deps`. It is pinned
+   to the pre-split `"webapp.routes_settings_radio"`, and `register()` derives
+   the same `getChild("routes_settings_radio")` once and passes it down, so
+   every log line keeps its original name.
+
+**Three traps this phase hit, all in the tooling rather than the code.**
+
+1. **`partition(")\n")` found the licence header, not the import block.** The
+   copyright line ends `(KR8MER)`, so a naive split to separate imports from
+   body landed on line 3 and the "body" rewrite corrupted every module's
+   imports. Split on a sentinel you actually control.
+2. **A regex cannot rewrite a name safely; it needs scope.** Three functions
+   import `get_redis_client` from `app_core.redis_client` *locally*, shadowing
+   the module-level import from `app_core.extensions` — a different object.
+   A regex rewrote both the import aliases (`from x import deps.get_redis_client`,
+   a syntax error ruff caught) and those shadowed call sites, which would have
+   been a silent behaviour change. The rewrite became AST-driven, skipping any
+   function that rebinds the name.
+3. **`ast.walk()` does not respect scope boundaries.** The first scope-aware
+   version collected local bindings with `ast.walk(fn)`, which descends into
+   nested functions — so `register()` inherited every handler's local import
+   and appeared to shadow names it never touches. Since shadowing is inherited
+   downward, that silently skipped the rewrite for *every* handler. The symptom
+   was a plausible-looking count (46 rewrites instead of 51). Cut nested
+   `FunctionDef`/`Lambda`/`ClassDef` off explicitly when computing a scope.
+
 ## Phase 4 — Long-running services
 
 Highest risk: these are the alert path. Each is dominated by one very large
@@ -804,20 +1115,21 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-08-06 | 2.139.0 | Phase 3a (`webapp/admin/audio_ingest.py`, 3180 → 15 modules + a re-exporting `__init__`). First web-layer split; `register_audio_ingest_routes(app, logger)` preserved as the entry point. Three new checklist items: Blueprint `import_name`, mutable-global imports, logger fan-out. |
 | 2026-08-07 | 2.141.0 | Phase 3b (`webapp/routes_public.py`, 2849 → 6 surface modules + a package `__init__` + a 31-line shim). First split of a module that was a *single* function — all 21 handlers were nested inside one 2,779-line `register()`. Verified by AST equality, a 549-rule URL-map diff, and 28 response-body digests. |
 | 2026-08-07 | 2.142.0 | Phase 4a (`app_utils/system.py`, 2580 → 16 modules + a re-exporting `__init__`). The one Phase 4 file that is not a god-class; pure motion, 48/48 AST matches. 14 of the 16 modules are under the guidance. |
+| 2026-08-08 | 2.143.0 | Phase 3b-ii (`_load_logs_data`, 1,057 lines in one function → the `webapp/public/logs_sources/` package; `logs_data.py` 1116 → 80). A `LogQuery`/`LogPage` contract replaced the seventeen-way `if/elif`. The function had no test coverage, so 79 characterization tests were written against the pre-refactor code first; verified by a 115-scenario output diff (0 differences) and two mutation runs (15/15 before, 16/16 after). All nine modules under the guidance. |
+| 2026-08-08 | 2.144.0 | Phase 3b-ii cont. (`stats()`, 645 lines in one handler → the `webapp/public/stats_sections/` package; `stats.py` 693 → 50). Seventeen inline try/except blocks became a `StatsSection` contract. 32 characterization tests, mutation-checked 17/17 before and after; payload compared key-by-key against the pre-refactor handler (70 keys, 0 differences). Found 29 of 31 trailing `setdefault` calls to be dead. |
+| 2026-08-08 | 2.145.0 | Phase 3b-ii cont. (`alerts()` + its PDF export → the `webapp/public/alerts_page/` package; `alerts.py` 648 → 112). A pipeline rather than a dispatch or an accumulation, so the modules are stages. 73 characterization tests, mutation-checked 26/26 before and after (all 26 needed retargeting); 68-scenario output diff, 0 differences. **Phase 3b-ii complete** — every `webapp/public/` module is within the guidance. |
+| 2026-08-08 | 2.146.0 | Phase 3c (`webapp/routes_settings_radio.py`, 2781 → 17 modules + a 52-line shim). All 26 handlers captured only `app` and `route_logger`, so they moved verbatim. 34/34 AST matches; URL map diffed at 549 rules, 0 differences. The one deliberate change is a `deps.py` of injectable seams, reached through the module so a test has a single patch point. |
 
 ## Next up
 
-**Phase 3b-ii — the three `webapp/public/` modules still over the cap.**
-`logs_data.py` (1116), `stats.py` (693) and `alerts.py` (648) are each one
-enormous function: `_load_logs_data` at 1,057 lines, `stats` at 645, `alerts`
-at 385. These need the 2e / 3a-ii technique — characterize first, then extract
-collaborators — not another module-level slice. `_load_logs_data` is the
-clearest candidate: it is a dispatch over ~10 log categories, so each category
-is a natural collaborator and the seam is already marked by the `log_type`
-branches.
+**Phase 3b-ii is complete.** All three `webapp/public/` modules that Phase 3b
+left over the cap — `logs_data.py`, `stats.py` and `alerts.py` — have landed,
+and every module in the package is now within the guidance.
 
-**Phase 3 continued — `webapp/routes_settings_radio.py` (2781)** is the next
-whole-file split.
+**Phase 3 continued — the remaining web-layer files.** `webapp/admin/api.py`
+(2105), `webapp/admin/certbot.py` (1946), `app.py` (1869),
+`webapp/admin/maintenance.py` (1802) and
+`webapp/routes/alert_verification.py` (1668) are what is left in Phase 3.
 
 **Phase 4a-ii — `snapshot.py` (478) and `smart.py` (429)**, the two modules
 4a left over the cap. Each is one function; `build_system_health_snapshot` is
@@ -888,6 +1200,53 @@ cost a debugging cycle in an earlier phase.
       definition references, a *parameter* called `text` reads as a use of
       `from sqlalchemy import text`. `ruff check --select F,E9` catches both
       halves (F401 unused, F811 shadowed). (Phase 4a.)
+- [ ] **Rewrite names with the AST, never a regex — a regex has no scope.**
+      It will rewrite the alias inside `from x import name` (a syntax error, if
+      you are lucky enough for the linter to catch it) and, worse, call sites
+      inside functions that shadow the name with their own local import. Phase
+      3c had three functions importing `get_redis_client` from a *different*
+      module locally; rewriting those would have been a silent behaviour
+      change, not a move.
+- [ ] **`ast.walk()` does not stop at scope boundaries.** Computing "names
+      bound in this function" with `ast.walk` descends into nested functions,
+      so an outer function inherits every inner one's local imports. In Phase
+      3c that made `register()` appear to shadow names it never touches, and
+      because shadowing inherits downward it silently skipped the rewrite for
+      every nested handler — leaving a plausible-looking count rather than an
+      error. Cut nested `FunctionDef`/`Lambda`/`ClassDef` off explicitly.
+- [ ] **Split generated files on a sentinel you control, not on punctuation.**
+      A `partition(")\n")` intended to find the end of an import block matched
+      the `(KR8MER)` in the copyright header instead, and the "body" rewrite
+      then corrupted every module's imports. (Phase 3c.)
+- [ ] **Never run a file-rewriting harness in the background against a tree you
+      are still editing.** A mutation runner backs up, rewrites and restores
+      files in place; started in the background while new modules were being
+      written into the same package, it picked the half-written files up as
+      targets, leaving one committed file altered and one new file carrying a
+      mutant's arithmetic. Run it in the foreground, or point it at a worktree
+      copy. (Phase 3b-ii.)
+- [ ] **Retarget every mutation after the split, and count "not applied" as a
+      failure.** A refactor moves and rewords the lines the mutations matched —
+      after the `alerts()` split, all 26 stopped applying. A mutation that
+      matched nothing proves nothing, so the run is only meaningful once every
+      one has been pointed at its new home. (Phase 3b-ii, and 4 of 17 in the
+      `stats()` split.)
+- [ ] **Purge `__pycache__` when a harness restores a mutated source.**
+      A mutation that swaps two same-length branches leaves the byte count
+      unchanged, and a restore that preserves the backup's mtime lets CPython
+      reuse the *mutant's* `.pyc`. The tree then keeps running code you believe
+      you reverted, and the symptom looks exactly like one flaky test.
+      (Phase 3b-ii.)
+- [ ] **Make the harness print what it bound to, and read it.** A comparison
+      script that silently falls back to the pre-split shape reports a perfect
+      match against itself. Naming the patched module is what catches a `cd`
+      that leaked between runs, an import that resolved to the wrong tree, or a
+      patch target that no longer exists. (Phase 3a-ii, 3b-ii.)
+- [ ] **Seed fixtures deterministically, including what the ORM writes for
+      you.** Insert-triggered listeners (audit events, `onupdate` stamps) carry
+      real wall-clock values, and they will show up as diffs that have nothing
+      to do with the refactor. Re-seed those tables last rather than scrubbing
+      the comparison until it goes quiet. (Phase 3b-ii.)
 - [ ] **Treat an equal-length, unequal-hash diff as a scrubbing bug first.**
       It is the signature of an unscrubbed fixed-width random value, not a
       content change. Diff the raw bodies before concluding a regression.
