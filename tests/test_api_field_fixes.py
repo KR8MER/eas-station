@@ -17,15 +17,41 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Test API field fixes for runtime errors."""
+"""Test API field fixes for runtime errors.
+
+These read the admin API source rather than calling it, because what they
+guard is a name that only fails at request time: ``alert.msg_type`` raises
+``AttributeError`` inside a handler, which the route's own ``except`` turns
+into a 500 rather than a test failure.
+
+The source used to be a single ``webapp/admin/api.py``; it is the
+``webapp/admin/api/`` package now, so these scan the package. Reading a
+directory rather than a fixed filename also means a future split cannot make
+them pass vacuously — an assertion against a file that no longer exists fails
+loudly, but one against a shim that no longer holds the code would not.
+"""
+import py_compile
+from pathlib import Path
+
 import pytest
+
+PACKAGE_DIR = Path(__file__).resolve().parents[1] / 'webapp' / 'admin' / 'api'
+
+
+def _package_files() -> list[Path]:
+    files = sorted(PACKAGE_DIR.glob('*.py'))
+    assert files, f'no modules found in {PACKAGE_DIR} — has the package moved?'
+    return files
+
+
+def _package_source() -> str:
+    return '\n'.join(p.read_text(encoding='utf-8') for p in _package_files())
 
 
 def test_api_uses_correct_message_type_field():
-    """Test that api.py uses message_type instead of msg_type."""
-    with open('webapp/admin/api.py', 'r') as f:
-        content = f.read()
-    
+    """The admin API must use message_type, not the non-existent msg_type."""
+    content = _package_source()
+
     # Verify we use the correct field name
     assert 'alert.message_type' in content
     # Verify we don't use the incorrect field name
@@ -33,10 +59,9 @@ def test_api_uses_correct_message_type_field():
 
 
 def test_api_system_status_has_db_error_handling():
-    """Test that api_system_status function has proper database error handling."""
-    with open('webapp/admin/api.py', 'r') as f:
-        content = f.read()
-    
+    """api_system_status must handle a database failure specifically."""
+    content = (PACKAGE_DIR / 'routes_system.py').read_text(encoding='utf-8')
+
     # Verify database error handling is present
     assert 'database_status' in content
     assert "db.session.rollback()" in content
@@ -46,9 +71,9 @@ def test_api_system_status_has_db_error_handling():
 
 
 def test_api_imports_syntax():
-    """Test that api.py has valid Python syntax."""
-    import py_compile
-    py_compile.compile('webapp/admin/api.py', doraise=True)
+    """Every module in the package has valid Python syntax."""
+    for path in _package_files():
+        py_compile.compile(str(path), doraise=True)
 
 
 if __name__ == "__main__":

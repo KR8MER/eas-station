@@ -8,6 +8,93 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.147.0] - 2026-08-08 - Phase 3d: split the admin API routes
+
+### Changed
+- **`webapp/admin/api.py` (2,105 lines) is now the `webapp/admin/api/`
+  package** — 13 modules plus a 95-line `__init__`. Unlike the last two
+  phases this file was 21 ordinary top-level definitions rather than
+  handlers nested inside one giant `register()`, so every definition moved
+  **verbatim**.
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `blueprint.py` | 45 | The shared `api_bp` |
+  | `hostinfo.py` | 81 | Host CPU sample cache and primary-IP detection |
+  | `motion.py` | 98 | The NWS storm-motion parameter parser |
+  | `county.py` | 164 | The county-wide heuristic and location terms |
+  | `display_data.py` | 322 | One alert flattened for the detail views |
+  | `routes_geometry.py` | 176 | `/api/alerts/<id>/geometry` |
+  | `routes_alert_detail.py` | 337 | `/alerts/<id>` |
+  | `routes_alert_export.py` | 265 | PDF, social-share image, IPAWS audio |
+  | `routes_alerts_list.py` | 321 | `/api/alerts` and `/api/alerts/historical` |
+  | `routes_boundaries.py` | 141 | `/api/boundaries` |
+  | `routes_system.py` | 281 | `/api/system_status`, `/api/system_health` |
+  | `routes_system_history.py` | 136 | `/api/system_health/history` |
+  | `routes_smart.py` | 165 | `/api/smart_diag` |
+  | `__init__.py` | 95 | `register_api_routes` and the side-effect imports |
+
+  All 14 modules are within the 400-line guidance. The entry point is
+  unchanged — `webapp/admin/__init__.py` still does `from .api import
+  register_api_routes`, and it is the only name the package re-exports.
+
+- **Import blocks are derived, not hand-written.** Guessing them produced 127
+  ruff errors on the first attempt. The generator now narrows each of the
+  original file's import statements to the names the module actually uses,
+  with the free-variable set computed by `symtable` rather than by counting
+  `ast.Name` nodes. Name counting is scope-blind and had already claimed a
+  local variable `desc` inside `_extract_alert_display_data` as a use of
+  `from sqlalchemy import desc` — the same bug Phase 4a hit with a parameter
+  named `text`.
+
+- **Three dead imports dropped out of the split**: `flask.current_app`,
+  `app_utils.vtec.extract_vtec_identity` and
+  `optimized_parsing.json_dumps` were imported by the single-file module and
+  used by none of it.
+
+### Fixed
+- **`tests/test_api_field_fixes.py` and
+  `tests/test_detect_county_wide_false_positive.py` read the API source as
+  text** and would have broken on the move. They now scan the package
+  directory, which also means a future split cannot make them pass vacuously:
+  an assertion against a missing file fails loudly, but one against a shim
+  that no longer holds the code would quietly succeed.
+
+### Added
+- **`tests/test_api_package.py`** — the structural guards for the split, all
+  covering things that fail silently: a route module dropped from the
+  `__init__` imports vanishes from the URL map without raising; the
+  blueprint's `import_name` shifts if `blueprint.py` passes its own
+  `__name__`; and the CPU sample cache stops updating if any module imports
+  it by value.
+
+  It also exercises the real `_detect_county_wide` against a stub alert.
+  The existing regression tests reimplemented the two heuristics locally and
+  then grepped the source to check the original still matched — a copy of the
+  logic cannot catch a change to the original. Both heuristics are
+  mutation-checked: removing the `_multi_county_list` guard fails 2 cases,
+  and dropping `county_short` from the `county_and_state` test fails 2 more.
+
+  Writing those cases surfaced that `state_code` holds the two-letter postal
+  code (`OH`), not the spelled-out state. The `_multi_county_list` guard counts
+  `", <state_code>"` occurrences against area descriptions NWS writes as
+  `"Allen, OH; Putnam, OH; Van Wert, OH"`, so a fixture using `"ohio"` counts
+  zero and reinstates the false positive the guard exists to prevent.
+
+### Notes
+- **The blueprint's `root_path` moved** from `webapp/admin` to
+  `webapp/admin/api`. `import_name` is unchanged, but it now names a package
+  rather than a module, so Flask derives a different directory. Nothing reads
+  it — the blueprint sets neither `template_folder` nor `static_folder` and
+  never calls `open_resource` — and a test pins that, so adding one later is
+  a deliberate decision rather than a surprise.
+- **Verification.** 21 of 21 top-level definitions are `ast.dump()`-identical
+  before and after, every non-blank line of the original lands in exactly one
+  module (the 11 that do not are the re-rendered import statements, the
+  module docstring and the `Blueprint(...)` line), and the app's URL map is
+  unchanged: **549 rules, 0 differences**, verified against a worktree at the
+  pre-split commit.
+
 ## [2.146.1] - 2026-08-08 - Restore the audio-source WebSocket push
 
 ### Fixed

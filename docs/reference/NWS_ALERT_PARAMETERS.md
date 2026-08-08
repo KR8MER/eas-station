@@ -5,7 +5,7 @@ and displays on the Alert Detail page: **VTEC** and **eventMotionDescription**.
 
 Both arrive in a CAP alert's `properties.parameters` object (keyed `VTEC` and
 `eventMotionDescription`) and are decoded in
-`webapp/admin/api.py` → `_extract_alert_display_data()`.
+`webapp/admin/api/display_data.py` → `_extract_alert_display_data()`.
 
 ---
 
@@ -297,13 +297,13 @@ This is an approximation adequate for the short distances involved (~30–50 km)
 
 | Component | File | Function / Symbol |
 |-----------|------|-------------------|
-| VTEC parser | `webapp/admin/api.py` | `_parse_vtec()` |
-| VTEC action lookup | `webapp/admin/api.py` | `_VTEC_ACTIONS` |
-| VTEC phenomenon lookup | `webapp/admin/api.py` | `_VTEC_PHENOMENA` |
-| VTEC significance lookup | `webapp/admin/api.py` | `_VTEC_SIGNIFICANCE` |
-| VTEC program lookup | `webapp/admin/api.py` | `_VTEC_PROGRAMS` |
-| Storm motion parser | `webapp/admin/api.py` | `_parse_event_motion()` |
-| Caller (both) | `webapp/admin/api.py` | `_extract_alert_display_data()` |
+| VTEC parser | `app_utils/vtec.py` | `parse_vtec_display()` |
+| VTEC action lookup | `app_utils/vtec.py` | `VTEC_ACTIONS` |
+| VTEC phenomenon lookup | `app_utils/vtec.py` | `VTEC_PHENOMENA` |
+| VTEC significance lookup | `app_utils/vtec.py` | `VTEC_SIGNIFICANCE` |
+| VTEC program lookup | `app_utils/vtec.py` | `VTEC_PROGRAMS` |
+| Storm motion parser | `webapp/admin/api/motion.py` | `_parse_event_motion()` |
+| Caller (both) | `webapp/admin/api/display_data.py` | `_extract_alert_display_data()` |
 | Template — VTEC display | `templates/alert_detail.html` | `{% if ipaws_data.vtec_parsed %}` block |
 | Template — storm motion display | `templates/alert_detail.html` | `{% if ipaws_data.storm_motion %}` block |
 | Map track rendering | `templates/alert_detail.html` | `addStormTrackToMap()` |

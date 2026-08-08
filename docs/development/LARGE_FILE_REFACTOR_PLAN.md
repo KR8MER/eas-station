@@ -9,11 +9,27 @@
 > above 350 lines, create or use a sibling module/package instead of expanding
 > the existing file.
 
-Today the tree violates that guidance in **131 Python modules**, **75 templates**
-and **16 JavaScript files**. That number will not go to zero in one pass, and
-trying would produce an unreviewable diff across the whole codebase. This
-document is the running plan: it records the inventory, the extraction strategy
-per file, and which phases have landed.
+When this plan was written (2026-08-06) the tree violated that guidance in
+**131 Python modules**, **75 templates** and **16 JavaScript files**. That
+number will not go to zero in one pass, and trying would produce an
+unreviewable diff across the whole codebase. This document is the running
+plan: it records the inventory, the extraction strategy per file, and which
+phases have landed.
+
+**Do not read those figures as current.** Counting every tracked `*.py` over
+400 lines outside `__pycache__`/`node_modules`/`venv`/`migrations`:
+
+| | 2026-08-06 | 2026-08-08 |
+| --- | ---: | ---: |
+| Python modules > 400 lines | 131 | 162 (137 excluding `tests/`) |
+| Templates > 300 lines | 75 | 75 |
+
+The Python figure went **up** while eight files were being split, because the
+tree is also growing — the phases below retired roughly 20,000 lines of
+oversized module, and new work added more oversized modules than that removed.
+The template count has not moved at all: Phase 5 has not started. Treat the
+per-phase tables as the source of truth for what has actually landed, and
+re-run the count rather than trusting any number written here.
 
 ---
 
@@ -207,7 +223,7 @@ render      -> drawing, fonts, layout, logo, maps, palette, panels,
 Here the package `__init__.py` *is* the compatibility shim — it re-exports all
 125 names the single-file module exposed (including `logger`), so
 `from app_utils.image_export import …` is unchanged for
-`app_core/notifications/alert_image.py` and `webapp/admin/api.py`.
+`app_core/notifications/alert_image.py` and `webapp/admin/api/`.
 
 **Verification.** 68 top-level definitions, 68 `ast.dump()` matches, zero
 differences. The slicing script also asserted that every non-blank line of the
@@ -468,7 +484,7 @@ modules, `routes.py` holding only handlers.
 | `webapp/admin/audio_ingest.py` | 3180 | `webapp/admin/audio_ingest/` package | ✅ landed — see 3a |
 | `webapp/routes_public.py` | 2849 | `webapp/public/` package, split by surface | ✅ landed — see 3b; `logs_data.py` follow-up in 3b-ii |
 | `webapp/routes_settings_radio.py` | 2781 | `webapp/radio_settings/` package, split by topic | ✅ landed — see 3c |
-| `webapp/admin/api.py` | 2105 | group endpoints by resource | ⏳ |
+| `webapp/admin/api.py` | 2105 | `webapp/admin/api/` package, split by resource | ✅ landed — see 3d |
 | `webapp/admin/certbot.py` | 1946 | certificate ops vs. routes | ⏳ |
 | `app.py` | 1869 | move remaining inline routes/factory helpers into `webapp/` | ⏳ |
 | `webapp/admin/maintenance.py` | 1802 | task definitions vs. routes | ⏳ |
@@ -996,6 +1012,120 @@ safe: all 11 patch sites failed immediately and pointed at the real seam.
    was a plausible-looking count (46 rewrites instead of 51). Cut nested
    `FunctionDef`/`Lambda`/`ClassDef` off explicitly when computing a scope.
 
+### 3d. `webapp/admin/api.py` → `webapp/admin/api/` ✅
+
+The easiest of the four web-layer splits so far, and worth recording *why*:
+3b and 3c were each one enormous `register()` with the handlers nested inside
+it, so the unit of motion was a closure. This file was 21 ordinary top-level
+definitions decorated with `@api_bp.route`, which is the 2a–2c shape. Every
+definition moved verbatim.
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `blueprint.py` | 45 | The shared `api_bp` |
+| `hostinfo.py` | 81 | Host CPU sample cache, primary-IP detection |
+| `motion.py` | 98 | The NWS storm-motion parameter parser |
+| `county.py` | 164 | The county-wide heuristic and location terms |
+| `display_data.py` | 322 | One alert flattened for the detail views |
+| `routes_geometry.py` | 176 | `/api/alerts/<id>/geometry` |
+| `routes_alert_detail.py` | 337 | `/alerts/<id>` |
+| `routes_alert_export.py` | 265 | PDF, social-share image, IPAWS audio |
+| `routes_alerts_list.py` | 321 | `/api/alerts`, `/api/alerts/historical` |
+| `routes_boundaries.py` | 141 | `/api/boundaries` |
+| `routes_system.py` | 281 | `/api/system_status`, `/api/system_health` |
+| `routes_system_history.py` | 136 | `/api/system_health/history` |
+| `routes_smart.py` | 165 | `/api/smart_diag` |
+| `__init__.py` | 95 | `register_api_routes`, side-effect imports |
+
+```
+blueprint, county, hostinfo, motion       leaves
+display_data           -> motion
+routes_geometry        -> blueprint, county
+routes_alert_detail    -> blueprint, county, display_data
+routes_alert_export    -> blueprint, display_data
+routes_alerts_list     -> blueprint, county
+routes_boundaries      -> blueprint
+routes_system          -> blueprint, hostinfo
+routes_system_history  -> blueprint
+routes_smart           -> blueprint
+```
+
+All 14 modules are within the guidance. `register_api_routes(app, logger)` is
+unchanged and is the package's only `__all__` entry.
+
+**Verification.** 21 of 21 top-level definitions are `ast.dump()`-identical,
+every non-blank line of the original lands in exactly one module, and the URL
+map is unchanged at **549 rules, 0 differences** against a worktree at the
+pre-split commit. The 11 original lines that appear nowhere in the package are
+the re-rendered import statements, the module docstring and the
+`Blueprint(...)` line.
+
+**Derive import blocks; do not write them.** Hand-writing them produced **127
+ruff errors** on the first attempt — a mix of F401 (imports the module does not
+need) and F821 (names it does need and did not get). The generator now narrows
+each of the *original's* import statements to the names a module actually uses,
+which keeps the original grouping and gets the answer right.
+
+**Compute free variables with `symtable`, not by counting `ast.Name` nodes.**
+The first derived version still emitted two errors, because
+`_extract_alert_display_data` has a local variable named `desc` and name
+counting read that as a use of `from sqlalchemy import desc` (F401 + F811).
+This is the third appearance of the same bug — Phase 4a hit it with a parameter
+named `text`, and 3c with `ast.walk()` ignoring scope boundaries. `symtable`
+answers the question directly: at module scope keep names that are referenced
+and never bound, and inside a function keep the symbols `is_global()` reports.
+
+**Three dead imports fell out** — `flask.current_app`,
+`app_utils.vtec.extract_vtec_identity` and `optimized_parsing.json_dumps` were
+imported by the single-file module and used by none of it. Deriving the import
+blocks removes this class of cruft for free.
+
+**A blueprint's `root_path` changes even when `import_name` does not.** The
+checklist already says to pass the package name rather than the module's
+`__name__` (Phase 3a), and `blueprint.py` does — `__package__` is exactly
+`webapp.admin.api`. But `import_name` now names a *package* rather than a
+module, so Flask derives `root_path` as `webapp/admin/api` where it used to be
+`webapp/admin`. It is inert here (no `template_folder`, no `static_folder`, no
+`open_resource`), and a test pins that so adding one later is deliberate. Any
+split that converts a module into a package of the same name inherits this.
+
+**Tests that read the source as text break on the move, and the failure mode
+is asymmetric.** `tests/test_api_field_fixes.py` and
+`tests/test_detect_county_wide_false_positive.py` both `open()` the API source
+and assert against the text. Pointed at a deleted file they fail loudly, which
+is fine — but pointed at a *shim* that no longer holds the code they would pass
+vacuously, which is worse than deleting them. Both now scan the package
+directory. Add this to the pre-split checklist alongside the
+`spec_from_file_location` item: grep the tests for the module's *path*, not
+just its import name.
+
+**A new test that passes alone can still fail in the suite — pytest imports
+every test module during collection.** The new `putnam_ohio` fixture did
+`import app_core.location` and then reached through `app_core.location`. That
+works in isolation but raises `AttributeError: module 'app_core' has no
+attribute 'location'` under a full run: the submodule attribute is only set on
+the parent package by the import that first *executes* the submodule, and by
+collection time something else has already put it in `sys.modules`. Use
+`importlib.import_module('app_core.location')`, which returns
+`sys.modules[name]` and never touches the parent. `tests/conftest.py` documents
+the identical trap for `app_core.auth`. **Run a new test file inside the whole
+suite, not just on its own** — the failure only appears there, and the first
+full run of this phase reported 11 errors that a targeted run could not
+reproduce.
+
+**A test that mirrors the logic cannot catch a change to the original.**
+`test_detect_county_wide_false_positive.py` reimplemented both heuristics
+locally and then grepped the source to confirm the original still matched —
+which is what the two brittle source checks were doing there. `_detect_county_wide`
+only reads `alert.area_desc` and `alert.raw_json`, so
+`tests/test_api_package.py` now exercises the real function against a stub
+alert and a monkeypatched `get_location_settings`. Both heuristics are
+mutation-checked (2 failures each). Writing those cases also surfaced that
+`state_code` holds the two-letter postal code (`OH`), not the spelled-out
+state — the `_multi_county_list` guard counts `", <state_code>"` occurrences,
+so a fixture using `"ohio"` reinstates the false positive it was written to
+prevent.
+
 ## Phase 4 — Long-running services
 
 Highest risk: these are the alert path. Each is dominated by one very large
@@ -1055,7 +1185,7 @@ snapshot      -> badges, dependencies, hardware, network, rtc,
 differences, plus the every-non-blank-line-placed-exactly-once assertion.
 `ruff check --select F,E9` is clean on the package apart from one pre-existing
 F841. All four production consumers were imported to confirm the shim resolves
-(`app_utils/__init__.py`, `app_core/system_health.py`, `webapp/admin/api.py`,
+(`app_utils/__init__.py`, `app_core/system_health.py`, `webapp/admin/api/`,
 `scripts/diagnose_smart.sh`). 43 system-health tests pass.
 
 **The mutable-global rule paid for itself again.** `DEVICE_TREE_CANDIDATES` is
@@ -1119,6 +1249,8 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-08-08 | 2.144.0 | Phase 3b-ii cont. (`stats()`, 645 lines in one handler → the `webapp/public/stats_sections/` package; `stats.py` 693 → 50). Seventeen inline try/except blocks became a `StatsSection` contract. 32 characterization tests, mutation-checked 17/17 before and after; payload compared key-by-key against the pre-refactor handler (70 keys, 0 differences). Found 29 of 31 trailing `setdefault` calls to be dead. |
 | 2026-08-08 | 2.145.0 | Phase 3b-ii cont. (`alerts()` + its PDF export → the `webapp/public/alerts_page/` package; `alerts.py` 648 → 112). A pipeline rather than a dispatch or an accumulation, so the modules are stages. 73 characterization tests, mutation-checked 26/26 before and after (all 26 needed retargeting); 68-scenario output diff, 0 differences. **Phase 3b-ii complete** — every `webapp/public/` module is within the guidance. |
 | 2026-08-08 | 2.146.0 | Phase 3c (`webapp/routes_settings_radio.py`, 2781 → 17 modules + a 52-line shim). All 26 handlers captured only `app` and `route_logger`, so they moved verbatim. 34/34 AST matches; URL map diffed at 549 rules, 0 differences. The one deliberate change is a `deps.py` of injectable seams, reached through the module so a test has a single patch point. |
+| 2026-08-08 | 2.146.1 | Not a split — a **regression the Phase 3a split caused**, found while baselining the next one. `webapp/admin/audio_ingest.py` had imported `AudioSourceConfigDB` at its top, so the model was incidentally importable from it; the package `__init__` re-exports only what it means to. `app_core/websocket_push.py` imported it from there twice and both broke silently, taking the audio-source WebSocket push with them. The package's guard test listed its exports by hand and nobody had added this one — it now AST-walks the tree for every `from webapp.admin.audio_ingest import …` and asserts each name resolves. |
+| 2026-08-08 | 2.147.0 | Phase 3d (`webapp/admin/api.py`, 2105 → 13 modules + a 95-line `__init__`). 21 ordinary top-level definitions rather than one giant `register()`, so pure motion: 21/21 AST matches, URL map 549 rules / 0 differences. Import blocks are derived with `symtable` after hand-writing them produced 127 ruff errors. Two source-text test files were retargeted, and `_detect_county_wide` is now tested through the real function instead of a local mirror. |
 
 ## Next up
 
@@ -1127,9 +1259,12 @@ left over the cap — `logs_data.py`, `stats.py` and `alerts.py` — have landed
 and every module in the package is now within the guidance.
 
 **Phase 3 continued — the remaining web-layer files.** `webapp/admin/api.py`
-(2105), `webapp/admin/certbot.py` (1946), `app.py` (1869),
+landed as 3d. `webapp/admin/certbot.py` (1946), `app.py` (1869),
 `webapp/admin/maintenance.py` (1802) and
 `webapp/routes/alert_verification.py` (1668) are what is left in Phase 3.
+Check which shape each one is before planning it: 3d was 21 top-level
+definitions and took an afternoon, while 3b and 3c were single enormous
+`register()` functions and needed characterization work first.
 
 **Phase 4a-ii — `snapshot.py` (478) and `smart.py` (429)**, the two modules
 4a left over the cap. Each is one function; `build_system_health_snapshot` is
@@ -1157,6 +1292,24 @@ cost a debugging cycle in an earlier phase.
 - [ ] **Check for tests loading the module by file path**
       (`spec_from_file_location`). A package needs `submodule_search_locations`
       on the spec. (Phase 2b.)
+- [ ] **Grep the tests for the module's *path*, not just its import name** —
+      `open('webapp/admin/api.py')`, `py_compile.compile(...)`, `Path(...)`.
+      Tests that assert against source *text* break on the move, and the
+      failure mode is asymmetric: pointed at a deleted file they fail loudly,
+      but pointed at a shim that no longer holds the code they pass vacuously.
+      Retarget them at the package directory. (Phase 3d: five such tests.)
+- [ ] **Run any new test file inside the full suite, not just on its own.**
+      pytest imports *every* test module during collection, so a module you
+      never look at can change what yours sees. Reaching a submodule as
+      `parent.child` after `import parent.child` is the usual casualty — use
+      `importlib.import_module('parent.child')`. (Phase 3d: 11 errors that no
+      targeted run reproduced.)
+- [ ] **Prefer replacing a source-text assertion with a call to the real
+      function.** A test that mirrors the logic locally and then greps the
+      original to confirm they still match cannot catch a change to the
+      original — that is what the grep was standing in for. If the function
+      only needs a stub object and one monkeypatched lookup, test it directly
+      and mutation-check it. (Phase 3d.)
 - [ ] **Do not name a module `types.py`** — it shadows the stdlib. (Phase 2c.)
 - [ ] **Assert every non-blank line of the original lands in exactly one
       module**, so nothing is silently dropped by an off-by-one slice.
@@ -1195,11 +1348,21 @@ cost a debugging cycle in an earlier phase.
       captures. Walk the AST for `Name` nodes resolving to the outer scope
       rather than eyeballing it. (Phase 3b: all 21 handlers captured just
       `app` and `route_logger`, which is what made the split pure motion.)
-- [ ] **Lint the generated package — an inferred import block cannot see
-      scope.** If the per-module imports are derived from the names each
-      definition references, a *parameter* called `text` reads as a use of
-      `from sqlalchemy import text`. `ruff check --select F,E9` catches both
-      halves (F401 unused, F811 shadowed). (Phase 4a.)
+- [ ] **Derive per-module import blocks from the original's own import
+      statements; do not hand-write them.** Narrowing each original statement
+      to the names a module uses keeps the grouping and gets the answer right.
+      Hand-writing them cost 127 ruff errors in one go. (Phase 3d.)
+- [ ] **Compute the free-variable set with `symtable`, not `ast.Name` counting
+      — name counting cannot see scope.** A *parameter* called `text` reads as
+      a use of `from sqlalchemy import text`, and so does a *local variable*
+      called `desc`. `symtable` answers directly: at module scope keep names
+      referenced but never bound; inside a function keep the symbols
+      `is_global()` reports. This bug has now appeared three times (4a, 3c, 3d)
+      in three different disguises — it is the single most repeated mistake in
+      this plan.
+- [ ] **Lint the generated package anyway.** `ruff check --select F,E9` is the
+      gate, whatever produced the imports: F401 catches an import nothing
+      needs, F821 an import a module needed and did not get. (Phase 4a.)
 - [ ] **Rewrite names with the AST, never a regex — a regex has no scope.**
       It will rewrite the alias inside `from x import name` (a syntax error, if
       you are lucky enough for the linter to catch it) and, worse, call sites
