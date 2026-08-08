@@ -92,6 +92,41 @@ PUBLIC_IMPORTS = (
 )
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# Directories that are not part of the shipped tree.
+_SKIP_DIRS = {'.git', '__pycache__', 'node_modules', 'venv', '.venv', 'build', 'dist'}
+
+
+def _imports_from_audio_ingest() -> list[tuple[str, str]]:
+    """Every ``from webapp.admin.audio_ingest import X`` in the tree, as (name, source).
+
+    Derived by AST-walking the repository rather than hand-listed. The
+    hand-maintained ``PUBLIC_IMPORTS`` tuple below is kept as an explicit
+    floor, but it is exactly the mechanism that let ``AudioSourceConfigDB``
+    slip: nobody remembered to add it, so the split dropped a name two
+    ``app_core/websocket_push.py`` functions import and the tests stayed
+    green. A derived list cannot drift from the tree.
+    """
+    found: list[tuple[str, str]] = []
+    for path in REPO_ROOT.rglob('*.py'):
+        if any(part in _SKIP_DIRS for part in path.parts):
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding='utf-8'))
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            if node.module != 'webapp.admin.audio_ingest' or node.level:
+                continue
+            for alias in node.names:
+                if alias.name != '*':
+                    found.append((alias.name, str(path.relative_to(REPO_ROOT))))
+    return sorted(set(found))
+
+
 def _package_modules() -> list[Path]:
     return sorted(p for p in PACKAGE_DIR.glob('*.py') if p.name != '__init__.py')
 
@@ -102,6 +137,27 @@ def test_shim_reexports_the_names_other_modules_import(name):
     assert hasattr(audio_ingest, name), (
         f'{name} is imported from webapp.admin.audio_ingest elsewhere in the tree; '
         'the package __init__ must keep re-exporting it.'
+    )
+
+
+@pytest.mark.unit
+def test_every_absolute_import_of_the_package_resolves():
+    """No ``from webapp.admin.audio_ingest import X`` anywhere may dangle.
+
+    ``AudioSourceConfigDB`` did. The single-file module imported the model at
+    its top, so the name was incidentally importable from it; the package
+    ``__init__`` re-exports only what it means to, so the name vanished. Both
+    call sites are inside ``try``/``except Exception`` or behind a caller that
+    logs and moves on, so the failure never raised anywhere a human would see
+    it — the audio-source WebSocket push simply stopped updating.
+    """
+    dangling = [
+        (name, source)
+        for name, source in _imports_from_audio_ingest()
+        if not hasattr(audio_ingest, name)
+    ]
+    assert not dangling, 'imports of webapp.admin.audio_ingest that no longer resolve: ' + ', '.join(
+        f'{name} (from {source})' for name, source in dangling
     )
 
 

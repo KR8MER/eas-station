@@ -8,6 +8,41 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.146.1] - 2026-08-08 - Restore the audio-source WebSocket push
+
+### Fixed
+- **The live audio-source list stopped updating over WebSocket.** The Phase 3a
+  split turned `webapp/admin/audio_ingest.py` into a package, and the package
+  `__init__` re-exports only the names it means to. The single-file module had
+  imported `AudioSourceConfigDB` at its top, so the model was *incidentally*
+  importable from it — and `app_core/websocket_push.py` imported it from there
+  in two places. Both broke:
+
+  - `_emit_audio_sources_update()` imports at the top of the function, outside
+    its `try`, so every call raised `ImportError` before doing any work. The
+    Audio Monitoring page's source list never received a push.
+  - `_refresh_config_cache()` imports inside a `try`/`except Exception` that
+    logs at **debug** level, so the shared audio-source config cache silently
+    stayed empty for the process's whole life.
+
+  Neither surfaced an error a human would see — one was swallowed at debug,
+  the other logged once per emit into a stream nobody reads. Both now import
+  the model from `app_core.models`, which is where every other consumer
+  (`app_core/audio/eas_monitor.py`, `eas_monitoring_service.py`, the
+  diagnostics scripts) already gets it. A routes package was never the right
+  home for a model import.
+
+### Changed
+- **`tests/test_audio_ingest_package.py` now derives the shim's required
+  exports from the tree instead of a hand-written list.** The existing
+  `PUBLIC_IMPORTS` tuple is kept as an explicit floor, but it is the exact
+  mechanism that let this through: `AudioSourceConfigDB` was never added to
+  it, so the guard was green while the import dangled. The new
+  `test_every_absolute_import_of_the_package_resolves` AST-walks every `.py`
+  in the repository for `from webapp.admin.audio_ingest import …` and asserts
+  each name still resolves. Confirmed discriminating — it fails with the
+  pre-fix source and passes after.
+
 ## [2.146.0] - 2026-08-08 - Phase 3c: split the radio settings routes
 
 ### Changed
