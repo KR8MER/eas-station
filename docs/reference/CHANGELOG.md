@@ -8,6 +8,51 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.143.0] - 2026-08-08 - Phase 3b-ii: split the /logs query layer
+
+### Changed
+- **`_load_logs_data` (1,057 lines in a single function) is now the
+  `webapp/public/logs_sources/` package**, nine modules behind a shared
+  contract. This is the Phase 3b-ii follow-up recorded in
+  `docs/development/LARGE_FILE_REFACTOR_PLAN.md` — the first of the three
+  `webapp/public/` modules that Phase 3b left over the size guidance.
+
+  The function was a seventeen-way `if/elif` on `log_type`, each branch
+  querying its own source and shaping rows into the generic log dict the
+  template renders. Every branch is now a loader taking one `LogQuery` and
+  returning one `LogPage`, so the dispatcher is a table lookup:
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `common.py` | 83 | The `LogQuery` / `LogPage` contract and the shared timestamp sort key |
+  | `database.py` | 329 | System, polling, polling-debug, audio, audio-metrics, audio-health, GPIO |
+  | `eas.py` | 304 | EAS messages, decoded audio, manual activations, received alerts |
+  | `audit.py` | 130 | The audit trail and the compliance ledger |
+  | `reports.py` | 146 | The six FCC report kinds and the report metadata envelope |
+  | `services.py` | 90 | The systemd journal category |
+  | `aggregate.py` | 112 | The "All Logs" merge, fault tolerance and truncation |
+  | `aggregate_collectors.py` | 346 | The eleven per-category collectors the merge runs |
+  | `__init__.py` | 81 | `LOADERS` and `resolve_loader` |
+
+  `webapp/public/logs_data.py` drops from 1,116 to 80 lines and now only
+  dispatches; `MIN_LOGS_PER_CATEGORY` is re-exported so the old import path
+  still resolves. Adding a log category no longer means editing a 1,000-line
+  function — it means writing a loader and registering it.
+
+- **Added `tests/test_public_logs_data.py` (79 tests).** The loader previously
+  had no test coverage at all. The suite asserts the complete returned triple
+  for every log type — display name, every key of every row, and the report
+  metadata — plus the per-branch level-derivation rules, the fallback strings
+  for missing fields, the audit action filter running in SQL, the session
+  rollback after a failing report builder, and the limit arithmetic.
+
+### Fixed
+- Nothing user-visible. The split is behaviour-preserving: the loader's full
+  output was compared across 115 scenarios (23 log types × 5 parameter
+  combinations) against the pre-refactor code with **zero differences**, and
+  the test suite was mutation-checked both before the refactor (15/15 caught)
+  and after it (16/16 caught) to prove it would notice if that changed.
+
 ## [2.142.0] - 2026-08-07 - Phase 4a: split the system-monitoring helpers
 
 ### Changed
