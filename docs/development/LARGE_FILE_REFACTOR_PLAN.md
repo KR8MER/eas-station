@@ -783,6 +783,64 @@ code rather than after.
 at 418 on the first pass and was split again along the collector boundary
 rather than being recorded as a follow-up.
 
+### 3b-ii (cont). `stats()` → `webapp/public/stats_sections/` ✅
+
+The second of the three. Where `_load_logs_data` was a *dispatch* — exactly one
+branch runs per request — `stats()` is an *accumulation*: seventeen
+`try/except` blocks in a row, each running a few queries, writing into a shared
+`stats_data` dict, and declaring its own fallback so one failing query cannot
+lose the whole dashboard. The repeated try/rollback/log/fallback shape is the
+thing worth extracting, and it becomes the `StatsSection` contract:
+
+| Piece | Role |
+| --- | --- |
+| `StatsSection` | `collect`, `fallback`, `error_message`. |
+| `collect(stats_data) -> fragment` | Reads the dict built so far — three sections divide by `total_alerts` — and returns only its own keys. |
+| `run_sections` | Runs each in order; on failure rolls back, logs, and substitutes the fallback. The rollback is not optional: a failed query leaves the session aborted, so without it every *later* section fails too. |
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `common.py` | 81 | The contract and the runner |
+| `alerts_overview.py` | 215 | Headline counts, boundary/status/severity/event breakdowns, urgency, certainty, message types |
+| `timeline.py` | 237 | Hour/weekday/month/year buckets, the recent-alert feed |
+| `coverage.py` | 143 | Most-affected boundaries, durations, coverage overlap |
+| `broadcast.py` | 173 | Forwarding rate, manual activations, received alerts, latency, relays |
+| `polling.py` | 183 | Poller success rate, timings, trend |
+| `__init__.py` | 100 | The ordered pipeline and `build_stats_data` |
+
+`webapp/public/stats.py`: 693 → **50** lines. Every module is under the
+guidance.
+
+**The pipeline order is declared explicitly in `__init__.py`**, not implied by
+module grouping. It is load-bearing — `EAS_FORWARDING`, `MESSAGE_TYPES` and
+`COVERAGE_OVERLAP` each divide by `total_alerts` — and keeping the original
+sequence also keeps the error-log order unchanged on a broken database.
+
+**Verification.** Harness first, as always: 32 characterization tests written
+and green against the pre-refactor handler, reaching the payload by replacing
+`render_template` with a capture and calling the view directly (the app's
+global login redirect otherwise gets in the way). Mutation-checked at 17/17
+before the split and 17/17 after. The rendered payload was then compared
+key-by-key against a worktree at the pre-refactor commit across an empty and a
+populated database: **70 keys, 0 differences**, with the dump printing the line
+count of `register` so the two runs could be proven to be different code.
+
+**Two findings worth recording.**
+
+1. **29 of the 31 trailing `setdefault` calls were dead.** Each section already
+   set its keys on *both* its success and its failure path, so the defaults
+   could never fire. Only `avg_durations` and `lifecycle_timeline` had no
+   producer at all. This was established with a static check, not by eye, after
+   a mutation deleting one of the redundant defaults survived — the right
+   outcome for a semantically null change, and the signal that sent me looking.
+   The section contract now guarantees the property structurally, so only the
+   two real defaults remain.
+2. **Retargeting mutations is part of the job.** Seven of the seventeen stopped
+   applying after the split, because the code they matched had legitimately
+   been reworded — `- 5` became `- MAX_YEAR_LOOKBACK`, the success test became
+   `_is_success`. "Not applied" proves nothing, so each was rewritten against
+   its new home before the run counted.
+
 ## Phase 4 — Long-running services
 
 Highest risk: these are the alert path. Each is dominated by one very large
@@ -903,15 +961,16 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-08-07 | 2.141.0 | Phase 3b (`webapp/routes_public.py`, 2849 → 6 surface modules + a package `__init__` + a 31-line shim). First split of a module that was a *single* function — all 21 handlers were nested inside one 2,779-line `register()`. Verified by AST equality, a 549-rule URL-map diff, and 28 response-body digests. |
 | 2026-08-07 | 2.142.0 | Phase 4a (`app_utils/system.py`, 2580 → 16 modules + a re-exporting `__init__`). The one Phase 4 file that is not a god-class; pure motion, 48/48 AST matches. 14 of the 16 modules are under the guidance. |
 | 2026-08-08 | 2.143.0 | Phase 3b-ii (`_load_logs_data`, 1,057 lines in one function → the `webapp/public/logs_sources/` package; `logs_data.py` 1116 → 80). A `LogQuery`/`LogPage` contract replaced the seventeen-way `if/elif`. The function had no test coverage, so 79 characterization tests were written against the pre-refactor code first; verified by a 115-scenario output diff (0 differences) and two mutation runs (15/15 before, 16/16 after). All nine modules under the guidance. |
+| 2026-08-08 | 2.144.0 | Phase 3b-ii cont. (`stats()`, 645 lines in one handler → the `webapp/public/stats_sections/` package; `stats.py` 693 → 50). Seventeen inline try/except blocks became a `StatsSection` contract. 32 characterization tests, mutation-checked 17/17 before and after; payload compared key-by-key against the pre-refactor handler (70 keys, 0 differences). Found 29 of 31 trailing `setdefault` calls to be dead. |
 
 ## Next up
 
-**Phase 3b-ii continued — `stats.py` (693) and `alerts.py` (648).** The other
-two `webapp/public/` modules over the cap, each one enormous function: `stats`
-at 645 lines and `alerts` at 385. Same technique as the `logs_data.py` split
-that just landed — characterize first, then extract collaborators. Neither has
-the tidy dispatch seam `_load_logs_data` had, so expect the harness to be the
-larger half of the work.
+**Phase 3b-ii continued — `alerts.py` (648).** The last of the three
+`webapp/public/` modules over the cap: a 385-line `alerts()` handler plus a
+~175-line PDF export. Unlike the other two it is a *pipeline* — parse request
+args, fetch filter options, build the query, paginate with a fallback, enrich
+with audio — so the seams are sequential stages rather than independent
+branches.
 
 **Phase 3 continued — `webapp/routes_settings_radio.py` (2781)** is the next
 whole-file split.

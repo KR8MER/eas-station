@@ -8,6 +8,46 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.144.0] - 2026-08-08 - Phase 3b-ii: split the /stats dashboard
+
+### Changed
+- **The 645-line `stats()` handler is now the `webapp/public/stats_sections/`
+  package.** The handler was seventeen `try/except` blocks in a row, each
+  running a few queries, writing into a shared `stats_data` dict and declaring
+  its own fallback so one failing query could not lose the whole dashboard.
+  That pattern is now expressed once, as a `StatsSection` contract:
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `common.py` | 81 | The `StatsSection` contract and the runner |
+  | `alerts_overview.py` | 215 | Headline counts, boundary/status/severity/event breakdowns, urgency, certainty, message types |
+  | `timeline.py` | 237 | Hour/weekday/month/year buckets and the recent-alert feed |
+  | `coverage.py` | 143 | Most-affected boundaries, alert durations, coverage overlap |
+  | `broadcast.py` | 173 | Forwarding rate, manual activations, received alerts, broadcast latency, relay stats |
+  | `polling.py` | 183 | Poller success rate, timings and trend |
+  | `__init__.py` | 100 | The ordered pipeline and `build_stats_data` |
+
+  `webapp/public/stats.py` drops from 693 to 50 lines. The pipeline order is
+  declared explicitly in one place because it is load-bearing — three sections
+  divide by `total_alerts` and must run after the counts.
+
+- **Added `tests/test_public_stats_sections.py` (32 tests).** The handler had
+  no coverage; the suite pins every derived rate, every time bucket, the
+  per-section fallbacks, and the full set of keys `stats.html` indexes.
+
+### Fixed
+- Nothing user-visible. The rendered payload was compared key-by-key against
+  the pre-refactor handler across an empty and a populated database — 70 keys,
+  **zero differences** — and the test suite was mutation-checked before (17/17
+  caught) and after (17/17 caught) the split.
+
+### Notes
+- **29 of the handler's 31 trailing `setdefault` calls were dead.** Every
+  section already set its keys on both its success and its failure path, so
+  those defaults could never fire. Only `avg_durations` and
+  `lifecycle_timeline` had no producer; the new package keeps just those two
+  and the section contract now guarantees the rest structurally.
+
 ## [2.143.0] - 2026-08-08 - Phase 3b-ii: split the /logs query layer
 
 ### Changed
