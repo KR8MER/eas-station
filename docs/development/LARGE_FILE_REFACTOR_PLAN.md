@@ -488,7 +488,7 @@ modules, `routes.py` holding only handlers.
 | `webapp/admin/certbot.py` | 1946 | `webapp/admin/certbot/` package | ✅ landed — see 3e |
 | `app.py` | 1869 | **not the same kind of split** — see 3g below before starting | ⏳ |
 | `webapp/admin/maintenance.py` | 1802 | `webapp/admin/maintenance/` package | ✅ landed — see 3f |
-| `webapp/routes/alert_verification.py` | 1668 | verification engine vs. routes | ⏳ |
+| `webapp/routes/alert_verification.py` | 1668 | `webapp/routes/alert_verification/` package | ✅ landed — see 3h |
 
 ### 3a. `webapp/admin/audio_ingest.py` → `webapp/admin/audio_ingest/` ✅
 
@@ -1268,6 +1268,79 @@ slice — it goes into the package `__init__`. Writing it from memory produced
 The AST check would have caught it, but only after the fact; reading the six
 original lines first is cheaper.
 
+### 3h. `webapp/routes/alert_verification.py` → package ✅
+
+The second-hardest shape in Phase 3, and the one that best shows why the
+closure has to be *measured*. 687 of 1,668 lines were one
+`register(app, logger)` holding eight helpers and seven handlers.
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `errors.py` | 26 | The self-test error type |
+| `samples.py` | 31 | The bundled sample recordings |
+| `routes_export.py` | 77 | The CSV export |
+| `temp_audio.py` | 77 | Decode an upload, then persist |
+| `helpers.py` | 89 | The capture-free helpers from `register` |
+| `decode_serialization.py` | 100 | A decode result across the thread boundary |
+| `composite_audio.py` | 124 | Stitching segments into one file |
+| `routes_api.py` | 141 | Progress, header decode, decode audio |
+| `routes_self_test.py` | 170 | The end-to-end self test |
+| `audio_buffer.py` | 174 | PCM extraction and caching |
+| `routes_operations.py` | 203 | Starting an async run |
+| `routes_page.py` | 269 | The verification dashboard |
+| `progress.py` | 289 | On-disk progress and result stores |
+| `eas_detection.py` | 316 | Locating every EAS burst in a file |
+| `__init__.py` | 123 | `register`, fanning out to the route modules |
+
+**Two kinds of motion, chosen by `symtable` rather than by eye.** Four nested
+helpers capture nothing from `register`, so they were dedented to module scope
+— semantically identical, and `ast.dump` is unchanged because it ignores
+`col_offset`. The other four capture `route_logger`, `repo_root` or `app`, so
+each topic module keeps its own `register(app, logger)` rebuilding exactly
+those locals. Emitting both locals unconditionally left an unused `repo_root`
+in three modules (F841); emit only what that module's handlers actually
+capture.
+
+**The silent-no-op hazard, demonstrated rather than asserted.** The checklist
+has said since 3a not to re-export mutable globals a test patches. This split
+is where that was actually measured: with `_progress_dir` and friends
+re-exported and the async tests patching the package, **all six tests still
+pass** — writing to the real temp directory instead of `tmp_path`. The patch
+rebinds a copy; `OperationResultStore` keeps reading the original. Nothing
+fails, and the test quietly stops testing isolation. Left off the package, the
+same call raises `AttributeError` naming the module. If you are ever unsure
+whether a re-export matters, re-export it and run the tests: passing is the
+bad outcome.
+
+**Group by the call graph, not by topic name.** `_process_temp_audio_file` →
+`_detect_comprehensive_eas_segments` → `_build_composite_audio_segment` is one
+chain crossing three layers. Putting the two ends in one `composite_audio`
+module — which their names invite — sandwiched `eas_detection` into an import
+cycle. Python reports that as a partially-initialised module at startup, which
+names the symptom, not the mistake. The generator now walks the emitted
+imports and fails with the cycle spelled out; the package test does the same
+so a later edit cannot reintroduce one.
+
+**Inspect handlers through `__wrapped__`.** `app.view_functions[name]` is the
+outermost decorator (`require_auth`), whose only free variable is the function
+it wraps — the first closure assertions passed nothing but `{'f'}`. Unwrap
+before reading `co_freevars`.
+
+**Do not assert `co_freevars == ()` on a module-level function.** It is always
+empty; the test is tautological. The invariant that can actually break is
+textual — a future edit inside a dedented helper reaching for `route_logger`
+compiles fine and raises `NameError` only on the branch that runs it. Assert
+on the source instead.
+
+**No `__file__` hazard here**: `repo_root` comes from `app.root_path`, so it
+does not move with the module's depth. Worth checking for explicitly rather
+than assuming, given 3e and 3f both had one.
+
+**Verification.** 27 of 28 definitions — top-level *and* nested —
+`ast.dump()`-identical; the one difference is `register`, deliberately
+restructured to fan out. URL map unchanged at **549 rules, 0 differences**,
+all 7 endpoints intact.
+
 ### 3g. `app.py` (1869) — assessed, not started ⚠️
 
 **Do not plan this one as another package split.** It is a different problem
@@ -1438,6 +1511,7 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-08-08 | 2.146.0 | Phase 3c (`webapp/routes_settings_radio.py`, 2781 → 17 modules + a 52-line shim). All 26 handlers captured only `app` and `route_logger`, so they moved verbatim. 34/34 AST matches; URL map diffed at 549 rules, 0 differences. The one deliberate change is a `deps.py` of injectable seams, reached through the module so a test has a single patch point. |
 | 2026-08-08 | 2.146.1 | Not a split — a **regression the Phase 3a split caused**, found while baselining the next one. `webapp/admin/audio_ingest.py` had imported `AudioSourceConfigDB` at its top, so the model was incidentally importable from it; the package `__init__` re-exports only what it means to. `app_core/websocket_push.py` imported it from there twice and both broke silently, taking the audio-source WebSocket push with them. The package's guard test listed its exports by hand and nobody had added this one — it now AST-walks the tree for every `from webapp.admin.audio_ingest import …` and asserts each name resolves. |
 | 2026-08-08 | 2.147.0 | Phase 3d (`webapp/admin/api.py`, 2105 → 13 modules + a 95-line `__init__`). 21 ordinary top-level definitions rather than one giant `register()`, so pure motion: 21/21 AST matches, URL map 549 rules / 0 differences. Import blocks are derived with `symtable` after hand-writing them produced 127 ruff errors. Two source-text test files were retargeted, and `_detect_county_wide` is now tested through the real function instead of a local mirror. |
+| 2026-08-08 | 2.150.0 | Phase 3h (`webapp/routes/alert_verification.py`, 1668 → 14 modules + a 123-line `__init__`). 27/28 AST matches including nested definitions; URL map 549 rules / 0 differences. The closure was reproduced from `symtable`: four capture-free helpers dedented to module scope, four capturing ones kept inside per-module `register`s. The silent-no-op hazard was *measured* — with the mutable globals re-exported, all six async tests pass while writing to the real temp dir. An import cycle from grouping by topic name instead of the call graph was caught and is now checked. **Phase 3 complete except `app.py`.** |
 | 2026-08-08 | 2.149.0 | Phase 3f (`webapp/admin/maintenance.py`, 1802 → 15 modules + a 118-line `__init__`). 31/31 AST matches, URL map 549 rules / 0 differences, every module under the cap. The `__file__` hazard fired for the second phase running — `repo_root` drives backup, upgrade *and* the `.env` editor. `get_operation_status` is imported by `websocket_push` but absent from `__all__`, so the export test derives its list from the tree. `app.py` was assessed and deliberately deferred — see 3g. |
 | 2026-08-08 | 2.148.0 | Phase 3e (`webapp/admin/certbot.py`, 1946 → 14 modules + a 105-line `__init__`). 22/23 AST matches, URL map 549 rules / 0 differences. Carried both `__file__` hazards at once: `CERTBOT_BASE_DIR` would have silently moved the whole certbot tree to `webapp/certbot_data`, and per-module loggers would have renamed every log record. The module had **zero** test coverage beforehand; the split added 11 tests, three guards mutation-checked. `routes_obtain_execute.py` (449) is left over the cap as Phase 3e-ii — it is one 387-line `try` block. |
 
@@ -1447,23 +1521,21 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 left over the cap — `logs_data.py`, `stats.py` and `alerts.py` — have landed,
 and every module in the package is now within the guidance.
 
-**Phase 3 continued.** `api.py` landed as 3d, `certbot.py` as 3e and
-`maintenance.py` as 3f. Two files are left, and they are the two hard ones —
-the easy shape is used up:
+**Phase 3 is complete except for `app.py`.** `api.py` landed as 3d,
+`certbot.py` as 3e, `maintenance.py` as 3f and `alert_verification.py` as 3h.
+Every web-layer file the plan listed is now a package of modules within the
+guidance, bar two known exceptions (`routes_obtain_execute.py` at 449, tracked
+as 3e-ii) and `app.py` itself.
 
-- **`webapp/routes/alert_verification.py` (1668)** — a 687-line `register()`
-  with the handlers nested inside it, plus a 276-line
-  `_detect_comprehensive_eas_segments`. This is the 3b/3c shape: map the
-  closure before moving anything, and expect the big function to need
-  collaborator extraction rather than motion.
-- **`app.py` (1869)** — assessed in 3g above and deliberately deferred. It is
-  not a package split at all; it needs the module-level singleton turned into
-  a real factory first, as its own commit, because until then statement order
-  *is* the behaviour and none of this plan's verification catches a reorder.
+**`app.py` (1869) is assessed in 3g above and deliberately deferred.** It is
+not a package split at all: it needs the module-level singleton turned into a
+real factory first, as its own commit, because until then statement order *is*
+the behaviour and none of this plan's verification catches a reorder. Budget
+it as its own phase.
 
 Check which shape a file is before planning it. 3d/3e/3f were ordinary
-top-level definitions and went quickly; 3b and 3c were single enormous
-`register()` functions and needed characterization first.
+top-level definitions and went quickly; 3b, 3c and 3h were single enormous
+`register()` functions and needed the closure mapped first.
 
 **Phase 3e-ii — `routes_obtain_execute.py` (449).** The one module 3e left
 over the cap. `obtain_certificate_execute` is a single 387-line `try` block,
@@ -1497,6 +1569,20 @@ cost a debugging cycle in an earlier phase.
 - [ ] **Check for tests loading the module by file path**
       (`spec_from_file_location`). A package needs `submodule_search_locations`
       on the spec. (Phase 2b.)
+- [ ] **Lay the modules out by the call graph, not by topic name.** A chain
+      that crosses three layers (`_process_temp_audio_file` →
+      `_detect_comprehensive_eas_segments` → `_build_composite_audio_segment`)
+      looks like one topic and is three. Putting its two ends in one module
+      sandwiches the middle into an import cycle. Walk the emitted imports and
+      fail on a cycle by name — Python's own error names the symptom, not the
+      layering. (Phase 3h.)
+- [ ] **Unwrap `__wrapped__` before inspecting a handler's closure.**
+      `app.view_functions[name]` is the outermost decorator; its only free
+      variable is the function it wraps. (Phase 3h.)
+- [ ] **Never assert `co_freevars == ()` on a module-level function** — it is
+      always empty, so the test cannot fail. Assert on the source that the
+      function does not reference names its old enclosing scope provided.
+      (Phase 3h.)
 - [ ] **Read the original of any definition you retype rather than move.**
       Exactly one function usually does not travel as a source slice — the
       `register_*` that goes into the package `__init__`. Writing it from
@@ -1557,7 +1643,11 @@ cost a debugging cycle in an earlier phase.
 - [ ] **Do not re-export mutable globals from the shim.** Tests reset them with
       `monkeypatch.setattr`, which raises on a missing attribute but silently
       no-ops on a re-exported one. The loud failure is what tells you where the
-      patch has to point. (Phase 3a.)
+      patch has to point. (Phase 3a.) **Phase 3h measured the cost**: with
+      `_progress_dir` and friends re-exported and the patch aimed at the
+      package, all six async tests still *passed* — writing to the real temp
+      directory instead of `tmp_path`. If you are unsure whether a re-export
+      matters, add it and run the tests: **passing is the bad outcome.**
 - [ ] **Fan out any global a registration hook rebinds** — `logger` is the
       usual one. One module meant one global; a package means one per module.
       (Phase 3a.)

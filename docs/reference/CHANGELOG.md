@@ -8,6 +8,100 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.150.0] - 2026-08-08 - Phase 3h: split the alert verification routes
+
+### Changed
+- **`webapp/routes/alert_verification.py` (1,668 lines) is now the
+  `webapp/routes/alert_verification/` package** — 14 modules plus a 123-line
+  `__init__`, all within the 400-line guidance. **Phase 3 is complete for
+  every file except `app.py`**, which is assessed separately (3g).
+
+  This was the harder shape: 687 of those lines were a single
+  `register(app, logger)` with eight helpers and seven handlers nested inside
+  it, so the split had to reproduce a *closure*, not just move text.
+
+  | Module | Lines | Contents |
+  | --- | ---: | --- |
+  | `errors.py` | 26 | The self-test error type |
+  | `samples.py` | 31 | The bundled sample recordings |
+  | `routes_export.py` | 77 | The CSV export |
+  | `temp_audio.py` | 77 | Decode an upload, then persist |
+  | `helpers.py` | 89 | The capture-free helpers from `register` |
+  | `decode_serialization.py` | 100 | A decode result across the thread boundary |
+  | `composite_audio.py` | 124 | Stitching segments into one file |
+  | `routes_api.py` | 141 | Progress, header decode, decode audio |
+  | `routes_self_test.py` | 170 | The end-to-end self test |
+  | `audio_buffer.py` | 174 | PCM extraction and caching |
+  | `routes_operations.py` | 203 | Starting an async run |
+  | `routes_page.py` | 269 | The verification dashboard |
+  | `progress.py` | 289 | On-disk progress and result stores |
+  | `eas_detection.py` | 316 | Locating every EAS burst in a file |
+  | `__init__.py` | 123 | `register`, fanning out to the route modules |
+
+- **The closure was reproduced from `symtable`, not guessed.** Four helpers
+  capture nothing from `register`, so they were dedented to module scope in
+  `helpers.py` — semantically identical, and their `ast.dump` is unchanged.
+  The other four capture `route_logger`, `repo_root` or `app`, so each topic
+  module keeps its own `register(app, logger)` that rebuilds exactly the
+  locals its handlers need and nests them inside. Three modules needed only
+  `route_logger`; emitting `repo_root` unconditionally left an unused local in
+  each (F841).
+
+### Fixed
+- **Four mutable globals are deliberately *not* re-exported from the package.**
+  `_progress_dir`, `_progress_lock`, `_result_dir` and `_result_lock` are
+  replaced with `tmp_path` by `tests/test_alert_verification_async.py`. This
+  was verified rather than assumed: with the names re-exported and the patch
+  aimed at the package, **all six tests still pass** — while writing to the
+  real temp directory instead of `tmp_path`. The patch rebinds a copy; the
+  classes keep reading the original. Absent from the package, the same call
+  raises `AttributeError` naming the module, which is the whole point. The
+  six patch sites across two test files now target `alert_verification.progress`,
+  `.helpers` (`get_location_settings`) and `.routes_self_test`
+  (`AlertSelfTestHarness`).
+
+- **One dead import dropped out**: `struct` was imported and never used.
+
+### Added
+- **`tests/test_alert_verification_package.py`** — 14 tests. The
+  closure-specific ones inspect the handler through `__wrapped__`, since
+  `app.view_functions[...]` returns the outermost `require_auth` decorator
+  whose only free variable is the function it wraps.
+
+- **A flaky test that made every "suite green" claim unreliable.**
+  `tests/test_8khz_stress_test.py` generated its noise with the global
+  *unseeded* `random`, then asserted a confidence threshold — so a decoder
+  regression and an unlucky draw were indistinguishable. Measured at **2
+  failures in 12 runs** of `test_8khz_with_increasing_noise[0.2]`. It now uses
+  a seeded `random.Random`, and 15 consecutive runs pass.
+
+  **Seeding it surfaced something worth a look.** Sweeping ten seeds across
+  five noise levels, 6 of 50 combinations fail at 20-25% noise — and they fail
+  with `len(result.headers) == 0` while `bit_confidence` stays around 0.92.
+  That is not gradual degradation: bit recovery still looks healthy while
+  header framing drops out entirely. Whether the decoder should tolerate that
+  noise is a signal-processing decision, so it is documented in the helper's
+  docstring with a one-line reproducer rather than hidden by the seed.
+
+### Notes
+- **An import cycle was created and caught during the split.** The call chain
+  is `_process_temp_audio_file` → `_detect_comprehensive_eas_segments` →
+  `_build_composite_audio_segment`. Grouping the two ends into one
+  `composite_audio` module — which is what their names suggest — put
+  `eas_detection` in the middle of a cycle. Split into `composite_audio` and
+  `temp_audio`, and the generator now walks the emitted imports and fails on a
+  cycle by name rather than leaving Python to raise a partially-initialised
+  ImportError at startup. **Group by the call graph, not by topic name.**
+- **No `__file__` hazard here**, unlike 3e and 3f: `repo_root` is derived from
+  `app.root_path`, so it does not shift with the module's depth.
+- **`eas_detection.py` (316) holds one 276-line function.** Within the
+  guidance as a module, but it is the same shape as the other single-function
+  modules this plan has flagged; noted rather than tracked.
+- **Verification.** 27 of 28 definitions (top-level *and* nested) are
+  `ast.dump()`-identical. The one difference is `register` itself, which is
+  deliberately restructured to fan out to the route modules. URL map unchanged
+  at **549 rules, 0 differences**, all 7 endpoints intact.
+
 ## [2.149.0] - 2026-08-08 - Phase 3f: split the maintenance routes
 
 ### Changed
