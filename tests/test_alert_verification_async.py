@@ -34,6 +34,9 @@ if str(ROOT) not in sys.path:
 from app_utils.eas_decode import SAMEAudioDecodeResult, SAMEAudioSegment, SAMEHeaderDetails
 
 import webapp.routes.alert_verification as alert_verification
+# The mutable globals below live in the submodule that reads them; see the
+# note in webapp/routes/alert_verification/__init__.py.
+from webapp.routes.alert_verification import progress as av_progress
 
 
 def test_decode_result_serialization_round_trip():
@@ -76,9 +79,14 @@ def test_decode_result_serialization_round_trip():
 
 
 def test_operation_result_store(tmp_path, monkeypatch):
-    # Redirect the result store to a temporary path for isolation
-    monkeypatch.setattr(alert_verification, "_result_dir", str(tmp_path))
-    monkeypatch.setattr(alert_verification, "_result_lock", threading.Lock())
+    # Redirect the result store to a temporary path for isolation.
+    #
+    # Patch the submodule that owns these, not the package. The package
+    # deliberately does not re-export them: rebinding a re-exported copy would
+    # leave OperationResultStore reading the real temp directory, so the patch
+    # would silently do nothing and this test would stop isolating anything.
+    monkeypatch.setattr(av_progress, "_result_dir", str(tmp_path))
+    monkeypatch.setattr(av_progress, "_result_lock", threading.Lock())
 
     payload = {"decode_errors": ["example"], "decode_result": {"raw_text": ""}}
     alert_verification.OperationResultStore.save("test-op", payload)
@@ -129,8 +137,8 @@ def test_progress_tracker_percent_is_monotonic_across_phases(tmp_path, monkeypat
     """The progress bar must never go backward when the pipeline moves
     from the upload phase (small total) to the decode phase (larger
     total).  This was the visible 50% → 16% regression users observed."""
-    monkeypatch.setattr(alert_verification, "_progress_dir", str(tmp_path))
-    monkeypatch.setattr(alert_verification, "_progress_lock", threading.Lock())
+    monkeypatch.setattr(av_progress, "_progress_dir", str(tmp_path))
+    monkeypatch.setattr(av_progress, "_progress_lock", threading.Lock())
 
     tracker = alert_verification.ProgressTracker("op-monotonic")
 

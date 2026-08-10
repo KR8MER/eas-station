@@ -301,7 +301,7 @@ def _refresh_config_cache() -> None:
     """Refresh the shared audio-source config cache from the database."""
     global _config_cache, _config_cache_loaded_at
     try:
-        from webapp.admin.audio_ingest import AudioSourceConfigDB
+        from app_core.models import AudioSourceConfigDB
         # Build a fresh dict, then swap the reference atomically.  CPython
         # name binding is atomic with respect to other threads, so the fast
         # loop will see either the old dict or the new one — never a
@@ -549,7 +549,8 @@ def _emit_system_health_update(app: 'Flask', socketio: 'SocketIO') -> None:
 
 def _emit_audio_sources_update(app: 'Flask', socketio: 'SocketIO') -> None:
     """Emit audio source list update with runtime status from Redis."""
-    from webapp.admin.audio_ingest import AudioSourceConfigDB, _read_audio_metrics_from_redis
+    from app_core.models import AudioSourceConfigDB
+    from webapp.admin.audio_ingest import _read_audio_metrics_from_redis
 
     try:
         # Build status lookup from Redis so frontend gets live status, not 'stopped' default

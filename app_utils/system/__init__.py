@@ -49,7 +49,8 @@ __all__ = [
     "build_system_health_snapshot",
     "get_distro_logo_url",
     "get_shields_io_badges",
-    # Private helpers reached from outside the package: `webapp/admin/api.py`
+    # Private helpers reached from outside the package:
+    # `webapp/admin/api/routes_smart.py`
     # imports `_nvme_controller_path`, `scripts/diagnose_smart.sh` imports
     # `_collect_smart_health`, and the system-health tests exercise the
     # collectors directly.

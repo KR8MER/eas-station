@@ -9,11 +9,27 @@
 > above 350 lines, create or use a sibling module/package instead of expanding
 > the existing file.
 
-Today the tree violates that guidance in **131 Python modules**, **75 templates**
-and **16 JavaScript files**. That number will not go to zero in one pass, and
-trying would produce an unreviewable diff across the whole codebase. This
-document is the running plan: it records the inventory, the extraction strategy
-per file, and which phases have landed.
+When this plan was written (2026-08-06) the tree violated that guidance in
+**131 Python modules**, **75 templates** and **16 JavaScript files**. That
+number will not go to zero in one pass, and trying would produce an
+unreviewable diff across the whole codebase. This document is the running
+plan: it records the inventory, the extraction strategy per file, and which
+phases have landed.
+
+**Do not read those figures as current.** Counting every tracked `*.py` over
+400 lines outside `__pycache__`/`node_modules`/`venv`/`migrations`:
+
+| | 2026-08-06 | 2026-08-08 |
+| --- | ---: | ---: |
+| Python modules > 400 lines | 131 | 162 (137 excluding `tests/`) |
+| Templates > 300 lines | 75 | 75 |
+
+The Python figure went **up** while eight files were being split, because the
+tree is also growing — the phases below retired roughly 20,000 lines of
+oversized module, and new work added more oversized modules than that removed.
+The template count has not moved at all: Phase 5 has not started. Treat the
+per-phase tables as the source of truth for what has actually landed, and
+re-run the count rather than trusting any number written here.
 
 ---
 
@@ -207,7 +223,7 @@ render      -> drawing, fonts, layout, logo, maps, palette, panels,
 Here the package `__init__.py` *is* the compatibility shim — it re-exports all
 125 names the single-file module exposed (including `logger`), so
 `from app_utils.image_export import …` is unchanged for
-`app_core/notifications/alert_image.py` and `webapp/admin/api.py`.
+`app_core/notifications/alert_image.py` and `webapp/admin/api/`.
 
 **Verification.** 68 top-level definitions, 68 `ast.dump()` matches, zero
 differences. The slicing script also asserted that every non-blank line of the
@@ -468,11 +484,11 @@ modules, `routes.py` holding only handlers.
 | `webapp/admin/audio_ingest.py` | 3180 | `webapp/admin/audio_ingest/` package | ✅ landed — see 3a |
 | `webapp/routes_public.py` | 2849 | `webapp/public/` package, split by surface | ✅ landed — see 3b; `logs_data.py` follow-up in 3b-ii |
 | `webapp/routes_settings_radio.py` | 2781 | `webapp/radio_settings/` package, split by topic | ✅ landed — see 3c |
-| `webapp/admin/api.py` | 2105 | group endpoints by resource | ⏳ |
-| `webapp/admin/certbot.py` | 1946 | certificate ops vs. routes | ⏳ |
-| `app.py` | 1869 | move remaining inline routes/factory helpers into `webapp/` | ⏳ |
-| `webapp/admin/maintenance.py` | 1802 | task definitions vs. routes | ⏳ |
-| `webapp/routes/alert_verification.py` | 1668 | verification engine vs. routes | ⏳ |
+| `webapp/admin/api.py` | 2105 | `webapp/admin/api/` package, split by resource | ✅ landed — see 3d |
+| `webapp/admin/certbot.py` | 1946 | `webapp/admin/certbot/` package | ✅ landed — see 3e |
+| `app.py` | 1869 | **not the same kind of split** — see 3g below before starting | ⏳ |
+| `webapp/admin/maintenance.py` | 1802 | `webapp/admin/maintenance/` package | ✅ landed — see 3f |
+| `webapp/routes/alert_verification.py` | 1668 | `webapp/routes/alert_verification/` package | ✅ landed — see 3h |
 
 ### 3a. `webapp/admin/audio_ingest.py` → `webapp/admin/audio_ingest/` ✅
 
@@ -996,6 +1012,380 @@ safe: all 11 patch sites failed immediately and pointed at the real seam.
    was a plausible-looking count (46 rewrites instead of 51). Cut nested
    `FunctionDef`/`Lambda`/`ClassDef` off explicitly when computing a scope.
 
+### 3d. `webapp/admin/api.py` → `webapp/admin/api/` ✅
+
+The easiest of the four web-layer splits so far, and worth recording *why*:
+3b and 3c were each one enormous `register()` with the handlers nested inside
+it, so the unit of motion was a closure. This file was 21 ordinary top-level
+definitions decorated with `@api_bp.route`, which is the 2a–2c shape. Every
+definition moved verbatim.
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `blueprint.py` | 45 | The shared `api_bp` |
+| `hostinfo.py` | 81 | Host CPU sample cache, primary-IP detection |
+| `motion.py` | 98 | The NWS storm-motion parameter parser |
+| `county.py` | 164 | The county-wide heuristic and location terms |
+| `display_data.py` | 322 | One alert flattened for the detail views |
+| `routes_geometry.py` | 176 | `/api/alerts/<id>/geometry` |
+| `routes_alert_detail.py` | 337 | `/alerts/<id>` |
+| `routes_alert_export.py` | 265 | PDF, social-share image, IPAWS audio |
+| `routes_alerts_list.py` | 321 | `/api/alerts`, `/api/alerts/historical` |
+| `routes_boundaries.py` | 141 | `/api/boundaries` |
+| `routes_system.py` | 281 | `/api/system_status`, `/api/system_health` |
+| `routes_system_history.py` | 136 | `/api/system_health/history` |
+| `routes_smart.py` | 165 | `/api/smart_diag` |
+| `__init__.py` | 95 | `register_api_routes`, side-effect imports |
+
+```
+blueprint, county, hostinfo, motion       leaves
+display_data           -> motion
+routes_geometry        -> blueprint, county
+routes_alert_detail    -> blueprint, county, display_data
+routes_alert_export    -> blueprint, display_data
+routes_alerts_list     -> blueprint, county
+routes_boundaries      -> blueprint
+routes_system          -> blueprint, hostinfo
+routes_system_history  -> blueprint
+routes_smart           -> blueprint
+```
+
+All 14 modules are within the guidance. `register_api_routes(app, logger)` is
+unchanged and is the package's only `__all__` entry.
+
+**Verification.** 21 of 21 top-level definitions are `ast.dump()`-identical,
+every non-blank line of the original lands in exactly one module, and the URL
+map is unchanged at **549 rules, 0 differences** against a worktree at the
+pre-split commit. The 11 original lines that appear nowhere in the package are
+the re-rendered import statements, the module docstring and the
+`Blueprint(...)` line.
+
+**Derive import blocks; do not write them.** Hand-writing them produced **127
+ruff errors** on the first attempt — a mix of F401 (imports the module does not
+need) and F821 (names it does need and did not get). The generator now narrows
+each of the *original's* import statements to the names a module actually uses,
+which keeps the original grouping and gets the answer right.
+
+**Compute free variables with `symtable`, not by counting `ast.Name` nodes.**
+The first derived version still emitted two errors, because
+`_extract_alert_display_data` has a local variable named `desc` and name
+counting read that as a use of `from sqlalchemy import desc` (F401 + F811).
+This is the third appearance of the same bug — Phase 4a hit it with a parameter
+named `text`, and 3c with `ast.walk()` ignoring scope boundaries. `symtable`
+answers the question directly: at module scope keep names that are referenced
+and never bound, and inside a function keep the symbols `is_global()` reports.
+
+**Three dead imports fell out** — `flask.current_app`,
+`app_utils.vtec.extract_vtec_identity` and `optimized_parsing.json_dumps` were
+imported by the single-file module and used by none of it. Deriving the import
+blocks removes this class of cruft for free.
+
+**A blueprint's `root_path` changes even when `import_name` does not.** The
+checklist already says to pass the package name rather than the module's
+`__name__` (Phase 3a), and `blueprint.py` does — `__package__` is exactly
+`webapp.admin.api`. But `import_name` now names a *package* rather than a
+module, so Flask derives `root_path` as `webapp/admin/api` where it used to be
+`webapp/admin`. It is inert here (no `template_folder`, no `static_folder`, no
+`open_resource`), and a test pins that so adding one later is deliberate. Any
+split that converts a module into a package of the same name inherits this.
+
+**Tests that read the source as text break on the move, and the failure mode
+is asymmetric.** `tests/test_api_field_fixes.py` and
+`tests/test_detect_county_wide_false_positive.py` both `open()` the API source
+and assert against the text. Pointed at a deleted file they fail loudly, which
+is fine — but pointed at a *shim* that no longer holds the code they would pass
+vacuously, which is worse than deleting them. Both now scan the package
+directory. Add this to the pre-split checklist alongside the
+`spec_from_file_location` item: grep the tests for the module's *path*, not
+just its import name.
+
+**A new test that passes alone can still fail in the suite — pytest imports
+every test module during collection.** The new `putnam_ohio` fixture did
+`import app_core.location` and then reached through `app_core.location`. That
+works in isolation but raises `AttributeError: module 'app_core' has no
+attribute 'location'` under a full run: the submodule attribute is only set on
+the parent package by the import that first *executes* the submodule, and by
+collection time something else has already put it in `sys.modules`. Use
+`importlib.import_module('app_core.location')`, which returns
+`sys.modules[name]` and never touches the parent. `tests/conftest.py` documents
+the identical trap for `app_core.auth`. **Run a new test file inside the whole
+suite, not just on its own** — the failure only appears there, and the first
+full run of this phase reported 11 errors that a targeted run could not
+reproduce.
+
+**A test that mirrors the logic cannot catch a change to the original.**
+`test_detect_county_wide_false_positive.py` reimplemented both heuristics
+locally and then grepped the source to confirm the original still matched —
+which is what the two brittle source checks were doing there. `_detect_county_wide`
+only reads `alert.area_desc` and `alert.raw_json`, so
+`tests/test_api_package.py` now exercises the real function against a stub
+alert and a monkeypatched `get_location_settings`. Both heuristics are
+mutation-checked (2 failures each). Writing those cases also surfaced that
+`state_code` holds the two-letter postal code (`OH`), not the spelled-out
+state — the `_multi_county_list` guard counts `", <state_code>"` occurrences,
+so a fixture using `"ohio"` reinstates the false positive it was written to
+prevent.
+
+### 3e. `webapp/admin/certbot.py` → `webapp/admin/certbot/` ✅
+
+The same shape as 3d — 22 ordinary top-level definitions — so the motion was
+easy. What made this one interesting is that it carried **both** hazards the
+checklist warns about, and it had **no test coverage at all** to catch either.
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `blueprint.py` | 40 | `certbot_bp`, the domain/email patterns |
+| `log.py` | 43 | The one logger, named `webapp.admin.certbot` |
+| `failures.py` | 50 | certbot exit → operator-readable explanation |
+| `routes_pages.py` | 50 | The rendered settings page |
+| `nginx.py` | 93 | Is nginx up, and bring it up |
+| `routes_status.py` | 119 | Certificate status and the log tail |
+| `routes_settings.py` | 134 | Reading and writing stored settings |
+| `staging.py` | 149 | Detect and clear staging certificates |
+| `paths.py` | 157 | The writable `certbot_data` tree |
+| `routes_actions.py` | 228 | Auto-renewal, download, install |
+| `routes_obtain.py` | 273 | Obtain dry-run, domain test |
+| `routes_renew.py` | 286 | Renew dry-run, real run |
+| `install.py` | 293 | Install a certificate into nginx |
+| `routes_obtain_execute.py` | 449 | The real certificate run — over, see below |
+| `__init__.py` | 105 | `register_certbot_routes`, side-effect imports |
+
+```
+log, blueprint                 leaves
+paths                  -> log
+failures               -> paths
+nginx                  -> log
+staging                -> log, paths
+install                -> log, nginx, paths
+routes_pages           -> blueprint, log
+routes_settings        -> blueprint, log
+routes_status          -> blueprint, log, paths
+routes_obtain          -> blueprint, log, paths
+routes_obtain_execute  -> blueprint, failures, install, log, nginx, paths, staging
+routes_renew           -> blueprint, failures, log, paths, staging
+routes_actions         -> blueprint, install, log, paths
+```
+
+**The `__file__` hazard fired, exactly as the checklist predicted.**
+`CERTBOT_BASE_DIR = Path(__file__).parent.parent.parent / 'certbot_data'` —
+three hops from `webapp/admin/certbot.py` to the repository root, but only two
+thirds of the way from `webapp/admin/certbot/paths.py`. Unfixed it resolves to
+`<repo>/webapp/certbot_data`, and *nothing raises*: certbot builds a fresh
+empty tree there and every existing certificate appears to have vanished. This
+is the same failure shape as Phase 2b's brand logo, and the same reason
+AST-equality cannot see it — the code really is identical, it just means
+something else. Fixed to four hops, pinned by a test asserting the resolved
+value, and a second test rejects any *new*
+`Path(__file__).parent.parent.parent` added at this depth.
+
+**A module-level logger is a `__name__` hazard too, not just `Blueprint` and
+`getLogger` in the checklist sense.** One `logging.getLogger(__name__)` served
+all 92 call sites, so per-module loggers would have renamed every record from
+`webapp.admin.certbot` to `webapp.admin.certbot.<submodule>` — invisible in
+tests, but it breaks a journald grep or a log filter keyed on the old name.
+There is one `log.py` holding `getLogger(__package__)` and every module
+imports `logger` from it.
+
+**Whether a by-value logger import is safe depends on the registration
+hook.** 3a needed a fan-out list because `register_audio_ingest_routes`
+*rebinds* the module's `logger`; here `register_certbot_routes` only writes one
+line through the logger it is handed and never rebinds, so `from .log import
+logger` is safe. Check which kind you have before copying either pattern —
+the fan-out is unnecessary machinery when nothing rebinds, and a by-value
+import is silently wrong when something does.
+
+**`routes_obtain_execute.py` is 449 lines — over, and left that way.**
+`obtain_certificate_execute` is a single 387-line `try` block. Module-level
+splitting cannot shrink one function; that needs collaborators extracted from
+the body, which is behavioural and needs the behaviour pinned first. Doing
+that on a module with *zero* existing coverage is its own piece of work.
+Tracked as **Phase 3e-ii**. The size test names it as a known exception and
+fails if another module silently joins it.
+
+**Zero coverage is worth stating before the move, not after.** Ground rule 5
+says to run the tests that cover the file and name them in the commit message;
+here there were none, on the code that drives certificate issuance. The split
+added `tests/test_certbot_package.py` — 11 tests, all three structural guards
+mutation-checked.
+
+**Verification.** 22 of 23 definitions `ast.dump()`-identical; the one
+difference is `register_certbot_routes`, retyped into the package `__init__`,
+whose docstring lost the trailing whitespace on one blank line. URL map
+unchanged at **549 rules, 0 differences**, 14 certbot endpoints intact, and all
+four `CERTBOT_*` paths resolve to their pre-split values.
+
+### 3f. `webapp/admin/maintenance.py` → `webapp/admin/maintenance/` ✅
+
+31 top-level definitions, none over 250 lines, no module-level calls — the
+3d/3e shape, and every one of the 15 modules landed under the guidance.
+**31/31 `ast.dump()`-identical**, URL map unchanged at 549 rules / 0
+differences.
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `blueprint.py` | 28 | `maintenance_bp` |
+| `paths.py` | 41 | `repo_root` |
+| `routes_poll.py` | 53 | Out-of-band feed poll |
+| `serialization.py` | 65 | A CAP alert row for the admin views |
+| `eas_settings.py` | 85 | The singleton EAS settings row |
+| `routes_env.py` | 122 | The `.env` editor |
+| `routes_operations.py` | 140 | Operation status, backup, upgrade |
+| `routes_database.py` | 153 | DB health and optimize |
+| `routes_expiry.py` | 162 | Mark and clear expired alerts |
+| `operations.py` | 165 | Backup/upgrade progress state and its lock |
+| `routes_location.py` | 178 | Location settings, filtering, FIPS lookup |
+| `routes_import.py` | 249 | Manual single-alert import |
+| `routes_eas_settings.py` | 259 | The EAS settings page |
+| `routes_alerts.py` | 264 | Admin alert list and detail |
+| `noaa.py` | 271 | The `api.weather.gov` client |
+| `__init__.py` | 118 | `register_maintenance_routes`, `__all__` |
+
+**The `__file__` hazard fired again — second phase running.** `repo_root`
+resolves `tools/create_backup.py` and `tools/inplace_upgrade.py`, is passed as
+their `cwd`, *and* locates the `.env` the environment editor writes. One hop
+short and all three point into `webapp/`. Two consecutive files have now
+carried this; assume the next one does too and grep for it first.
+
+**`__all__` is not the public surface — the tree is.** `get_operation_status`
+is a route handler, absent from this module's ten-name `__all__`, and imported
+by `app_core/websocket_push.py` inside a function whose caller swallows
+failures. Listing exports by hand is what let `AudioSourceConfigDB` break; the
+test AST-walks the repository for `from webapp.admin.maintenance import …` and
+asserts each name resolves.
+
+**Two adjacent blueprints, two opposite prefix conventions.** `maintenance_bp`
+is registered with *no* `url_prefix` and writes `/admin` into every route
+decorator. `certbot_bp`, in the sibling package, is registered *with*
+`url_prefix='/admin'` and its decorators must not repeat it. Both are correct;
+either one "corrected" to match the other silently doubles or drops the
+prefix. The package tests now pin the resulting rules on both sides.
+
+**Check a retyped function against the original, not against memory.**
+`register_maintenance_routes` is the one definition that does not move as a
+slice — it goes into the package `__init__`. Writing it from memory produced
+`app.register_blueprint(maintenance_bp, url_prefix='/admin')`, which is the
+*certbot* convention and would have moved all 17 routes to `/admin/admin/…`.
+The AST check would have caught it, but only after the fact; reading the six
+original lines first is cheaper.
+
+### 3h. `webapp/routes/alert_verification.py` → package ✅
+
+The second-hardest shape in Phase 3, and the one that best shows why the
+closure has to be *measured*. 687 of 1,668 lines were one
+`register(app, logger)` holding eight helpers and seven handlers.
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `errors.py` | 26 | The self-test error type |
+| `samples.py` | 31 | The bundled sample recordings |
+| `routes_export.py` | 77 | The CSV export |
+| `temp_audio.py` | 77 | Decode an upload, then persist |
+| `helpers.py` | 89 | The capture-free helpers from `register` |
+| `decode_serialization.py` | 100 | A decode result across the thread boundary |
+| `composite_audio.py` | 124 | Stitching segments into one file |
+| `routes_api.py` | 141 | Progress, header decode, decode audio |
+| `routes_self_test.py` | 170 | The end-to-end self test |
+| `audio_buffer.py` | 174 | PCM extraction and caching |
+| `routes_operations.py` | 203 | Starting an async run |
+| `routes_page.py` | 269 | The verification dashboard |
+| `progress.py` | 289 | On-disk progress and result stores |
+| `eas_detection.py` | 316 | Locating every EAS burst in a file |
+| `__init__.py` | 123 | `register`, fanning out to the route modules |
+
+**Two kinds of motion, chosen by `symtable` rather than by eye.** Four nested
+helpers capture nothing from `register`, so they were dedented to module scope
+— semantically identical, and `ast.dump` is unchanged because it ignores
+`col_offset`. The other four capture `route_logger`, `repo_root` or `app`, so
+each topic module keeps its own `register(app, logger)` rebuilding exactly
+those locals. Emitting both locals unconditionally left an unused `repo_root`
+in three modules (F841); emit only what that module's handlers actually
+capture.
+
+**The silent-no-op hazard, demonstrated rather than asserted.** The checklist
+has said since 3a not to re-export mutable globals a test patches. This split
+is where that was actually measured: with `_progress_dir` and friends
+re-exported and the async tests patching the package, **all six tests still
+pass** — writing to the real temp directory instead of `tmp_path`. The patch
+rebinds a copy; `OperationResultStore` keeps reading the original. Nothing
+fails, and the test quietly stops testing isolation. Left off the package, the
+same call raises `AttributeError` naming the module. If you are ever unsure
+whether a re-export matters, re-export it and run the tests: passing is the
+bad outcome.
+
+**Group by the call graph, not by topic name.** `_process_temp_audio_file` →
+`_detect_comprehensive_eas_segments` → `_build_composite_audio_segment` is one
+chain crossing three layers. Putting the two ends in one `composite_audio`
+module — which their names invite — sandwiched `eas_detection` into an import
+cycle. Python reports that as a partially-initialised module at startup, which
+names the symptom, not the mistake. The generator now walks the emitted
+imports and fails with the cycle spelled out; the package test does the same
+so a later edit cannot reintroduce one.
+
+**Inspect handlers through `__wrapped__`.** `app.view_functions[name]` is the
+outermost decorator (`require_auth`), whose only free variable is the function
+it wraps — the first closure assertions passed nothing but `{'f'}`. Unwrap
+before reading `co_freevars`.
+
+**Do not assert `co_freevars == ()` on a module-level function.** It is always
+empty; the test is tautological. The invariant that can actually break is
+textual — a future edit inside a dedented helper reaching for `route_logger`
+compiles fine and raises `NameError` only on the branch that runs it. Assert
+on the source instead.
+
+**No `__file__` hazard here**: `repo_root` comes from `app.root_path`, so it
+does not move with the module's depth. Worth checking for explicitly rather
+than assuming, given 3e and 3f both had one.
+
+**Verification.** 27 of 28 definitions — top-level *and* nested —
+`ast.dump()`-identical; the one difference is `register`, deliberately
+restructured to fan out. URL map unchanged at **549 rules, 0 differences**,
+all 7 endpoints intact.
+
+### 3g. `app.py` (1869) — assessed, not started ⚠️
+
+**Do not plan this one as another package split.** It is a different problem
+from every file in Phase 3 so far, and the difference is not visible from the
+line count.
+
+`app.py` does not contain an application *factory*. It builds the app at
+import time — `app = Flask(__name__)` at line 324 — and then configures it
+with **103 module-level statements** (52 `Assign`, 24 bare calls, 20 `If`, 6
+`Try`, 1 `AnnAssign`) interleaved with the decorated handlers. `create_app()`,
+at line 1839, is fifteen lines that update `app.config`, optionally call
+`initialize_database()`, and hand back the module-level singleton. Its shape:
+
+* 103 module-level configuration statements, against only 28 definitions
+* 4 error handlers, 2 context processors, 2 template filters
+* `before_request` (200 lines), `after_request` (72), `_record_traffic` (120)
+* `initialize_database` (192), `_load_db_settings_into_config` (71)
+* 4 Click CLI commands
+* an `if __name__ == '__main__'` block
+
+**The behaviour here is the statement order, and `ast.dump()` cannot verify
+order.** Every check this plan leans on — definitions compare equal, every
+line lands once, the URL map is unchanged — would pass on a split that
+reorders configuration and silently changes what the app does. Secret-key
+resolution, `SETUP_MODE`, the database URL, session-cookie flags and the
+background-service guards all read and write `app.config` in sequence, and
+several are conditional on values set a few lines earlier.
+
+What it actually needs, roughly in order:
+
+1. **Turn the module-level singleton into a real factory first**, as its own
+   commit with no file movement. Until construction is a function, "where a
+   statement lives" and "when it runs" are the same thing, and nothing can
+   move safely.
+2. **Characterize the resulting config**: build the app under several
+   environment combinations (setup mode on/off, sqlite vs. postgres,
+   `SKIP_BACKGROUND_SERVICES`, secret key present/absent/placeholder) and
+   snapshot the full `app.config` plus the registered extension list. That
+   snapshot is the baseline a reorder is checked against — the URL map alone
+   is not enough here.
+3. Only then extract the handler groups, which are ordinary motion.
+
+Step 1 is the whole risk. Budget it as its own phase, and do not start it in
+the same session as a routine split.
+
 ## Phase 4 — Long-running services
 
 Highest risk: these are the alert path. Each is dominated by one very large
@@ -1055,7 +1445,7 @@ snapshot      -> badges, dependencies, hardware, network, rtc,
 differences, plus the every-non-blank-line-placed-exactly-once assertion.
 `ruff check --select F,E9` is clean on the package apart from one pre-existing
 F841. All four production consumers were imported to confirm the shim resolves
-(`app_utils/__init__.py`, `app_core/system_health.py`, `webapp/admin/api.py`,
+(`app_utils/__init__.py`, `app_core/system_health.py`, `webapp/admin/api/`,
 `scripts/diagnose_smart.sh`). 43 system-health tests pass.
 
 **The mutable-global rule paid for itself again.** `DEVICE_TREE_CANDIDATES` is
@@ -1119,6 +1509,11 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-08-08 | 2.144.0 | Phase 3b-ii cont. (`stats()`, 645 lines in one handler → the `webapp/public/stats_sections/` package; `stats.py` 693 → 50). Seventeen inline try/except blocks became a `StatsSection` contract. 32 characterization tests, mutation-checked 17/17 before and after; payload compared key-by-key against the pre-refactor handler (70 keys, 0 differences). Found 29 of 31 trailing `setdefault` calls to be dead. |
 | 2026-08-08 | 2.145.0 | Phase 3b-ii cont. (`alerts()` + its PDF export → the `webapp/public/alerts_page/` package; `alerts.py` 648 → 112). A pipeline rather than a dispatch or an accumulation, so the modules are stages. 73 characterization tests, mutation-checked 26/26 before and after (all 26 needed retargeting); 68-scenario output diff, 0 differences. **Phase 3b-ii complete** — every `webapp/public/` module is within the guidance. |
 | 2026-08-08 | 2.146.0 | Phase 3c (`webapp/routes_settings_radio.py`, 2781 → 17 modules + a 52-line shim). All 26 handlers captured only `app` and `route_logger`, so they moved verbatim. 34/34 AST matches; URL map diffed at 549 rules, 0 differences. The one deliberate change is a `deps.py` of injectable seams, reached through the module so a test has a single patch point. |
+| 2026-08-08 | 2.146.1 | Not a split — a **regression the Phase 3a split caused**, found while baselining the next one. `webapp/admin/audio_ingest.py` had imported `AudioSourceConfigDB` at its top, so the model was incidentally importable from it; the package `__init__` re-exports only what it means to. `app_core/websocket_push.py` imported it from there twice and both broke silently, taking the audio-source WebSocket push with them. The package's guard test listed its exports by hand and nobody had added this one — it now AST-walks the tree for every `from webapp.admin.audio_ingest import …` and asserts each name resolves. |
+| 2026-08-08 | 2.147.0 | Phase 3d (`webapp/admin/api.py`, 2105 → 13 modules + a 95-line `__init__`). 21 ordinary top-level definitions rather than one giant `register()`, so pure motion: 21/21 AST matches, URL map 549 rules / 0 differences. Import blocks are derived with `symtable` after hand-writing them produced 127 ruff errors. Two source-text test files were retargeted, and `_detect_county_wide` is now tested through the real function instead of a local mirror. |
+| 2026-08-08 | 2.150.0 | Phase 3h (`webapp/routes/alert_verification.py`, 1668 → 14 modules + a 123-line `__init__`). 27/28 AST matches including nested definitions; URL map 549 rules / 0 differences. The closure was reproduced from `symtable`: four capture-free helpers dedented to module scope, four capturing ones kept inside per-module `register`s. The silent-no-op hazard was *measured* — with the mutable globals re-exported, all six async tests pass while writing to the real temp dir. An import cycle from grouping by topic name instead of the call graph was caught and is now checked. **Phase 3 complete except `app.py`.** |
+| 2026-08-08 | 2.149.0 | Phase 3f (`webapp/admin/maintenance.py`, 1802 → 15 modules + a 118-line `__init__`). 31/31 AST matches, URL map 549 rules / 0 differences, every module under the cap. The `__file__` hazard fired for the second phase running — `repo_root` drives backup, upgrade *and* the `.env` editor. `get_operation_status` is imported by `websocket_push` but absent from `__all__`, so the export test derives its list from the tree. `app.py` was assessed and deliberately deferred — see 3g. |
+| 2026-08-08 | 2.148.0 | Phase 3e (`webapp/admin/certbot.py`, 1946 → 14 modules + a 105-line `__init__`). 22/23 AST matches, URL map 549 rules / 0 differences. Carried both `__file__` hazards at once: `CERTBOT_BASE_DIR` would have silently moved the whole certbot tree to `webapp/certbot_data`, and per-module loggers would have renamed every log record. The module had **zero** test coverage beforehand; the split added 11 tests, three guards mutation-checked. `routes_obtain_execute.py` (449) is left over the cap as Phase 3e-ii — it is one 387-line `try` block. |
 
 ## Next up
 
@@ -1126,10 +1521,27 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 left over the cap — `logs_data.py`, `stats.py` and `alerts.py` — have landed,
 and every module in the package is now within the guidance.
 
-**Phase 3 continued — the remaining web-layer files.** `webapp/admin/api.py`
-(2105), `webapp/admin/certbot.py` (1946), `app.py` (1869),
-`webapp/admin/maintenance.py` (1802) and
-`webapp/routes/alert_verification.py` (1668) are what is left in Phase 3.
+**Phase 3 is complete except for `app.py`.** `api.py` landed as 3d,
+`certbot.py` as 3e, `maintenance.py` as 3f and `alert_verification.py` as 3h.
+Every web-layer file the plan listed is now a package of modules within the
+guidance, bar two known exceptions (`routes_obtain_execute.py` at 449, tracked
+as 3e-ii) and `app.py` itself.
+
+**`app.py` (1869) is assessed in 3g above and deliberately deferred.** It is
+not a package split at all: it needs the module-level singleton turned into a
+real factory first, as its own commit, because until then statement order *is*
+the behaviour and none of this plan's verification catches a reorder. Budget
+it as its own phase.
+
+Check which shape a file is before planning it. 3d/3e/3f were ordinary
+top-level definitions and went quickly; 3b, 3c and 3h were single enormous
+`register()` functions and needed the closure mapped first.
+
+**Phase 3e-ii — `routes_obtain_execute.py` (449).** The one module 3e left
+over the cap. `obtain_certificate_execute` is a single 387-line `try` block,
+so it needs collaborators extracted from the body rather than module-level
+splitting. It shells out to certbot and nginx, so a characterization harness
+has to fake both; build that first. Same technique as 2e / 3a-ii / 3b-ii.
 
 **Phase 4a-ii — `snapshot.py` (478) and `smart.py` (429)**, the two modules
 4a left over the cap. Each is one function; `build_system_health_snapshot` is
@@ -1157,6 +1569,50 @@ cost a debugging cycle in an earlier phase.
 - [ ] **Check for tests loading the module by file path**
       (`spec_from_file_location`). A package needs `submodule_search_locations`
       on the spec. (Phase 2b.)
+- [ ] **Lay the modules out by the call graph, not by topic name.** A chain
+      that crosses three layers (`_process_temp_audio_file` →
+      `_detect_comprehensive_eas_segments` → `_build_composite_audio_segment`)
+      looks like one topic and is three. Putting its two ends in one module
+      sandwiches the middle into an import cycle. Walk the emitted imports and
+      fail on a cycle by name — Python's own error names the symptom, not the
+      layering. (Phase 3h.)
+- [ ] **Unwrap `__wrapped__` before inspecting a handler's closure.**
+      `app.view_functions[name]` is the outermost decorator; its only free
+      variable is the function it wraps. (Phase 3h.)
+- [ ] **Never assert `co_freevars == ()` on a module-level function** — it is
+      always empty, so the test cannot fail. Assert on the source that the
+      function does not reference names its old enclosing scope provided.
+      (Phase 3h.)
+- [ ] **Read the original of any definition you retype rather than move.**
+      Exactly one function usually does not travel as a source slice — the
+      `register_*` that goes into the package `__init__`. Writing it from
+      memory gave `maintenance` the *certbot* blueprint convention
+      (`url_prefix='/admin'` on a blueprint whose decorators already carry
+      `/admin`), which would have moved all 17 routes to `/admin/admin/…`.
+      (Phase 3f.)
+- [ ] **Check the blueprint's prefix convention against its own decorators.**
+      Sibling packages here use opposite ones: `certbot_bp` takes
+      `url_prefix='/admin'` and its routes omit it; `maintenance_bp` takes no
+      prefix and its routes include it. Neither is wrong; making one match the
+      other silently doubles or drops the prefix. (Phase 3f.)
+- [ ] **Grep the tests for the module's *path*, not just its import name** —
+      `open('webapp/admin/api.py')`, `py_compile.compile(...)`, `Path(...)`.
+      Tests that assert against source *text* break on the move, and the
+      failure mode is asymmetric: pointed at a deleted file they fail loudly,
+      but pointed at a shim that no longer holds the code they pass vacuously.
+      Retarget them at the package directory. (Phase 3d: five such tests.)
+- [ ] **Run any new test file inside the full suite, not just on its own.**
+      pytest imports *every* test module during collection, so a module you
+      never look at can change what yours sees. Reaching a submodule as
+      `parent.child` after `import parent.child` is the usual casualty — use
+      `importlib.import_module('parent.child')`. (Phase 3d: 11 errors that no
+      targeted run reproduced.)
+- [ ] **Prefer replacing a source-text assertion with a call to the real
+      function.** A test that mirrors the logic locally and then greps the
+      original to confirm they still match cannot catch a change to the
+      original — that is what the grep was standing in for. If the function
+      only needs a stub object and one monkeypatched lookup, test it directly
+      and mutation-check it. (Phase 3d.)
 - [ ] **Do not name a module `types.py`** — it shadows the stdlib. (Phase 2c.)
 - [ ] **Assert every non-blank line of the original lands in exactly one
       module**, so nothing is silently dropped by an off-by-one slice.
@@ -1168,7 +1624,18 @@ cost a debugging cycle in an earlier phase.
 - [ ] **Check what `__name__` is passed to.** A `Blueprint(name, __name__)` or
       `logging.getLogger(__name__)` means something different one directory
       deeper. Pass `__package__` where the pre-split value is what matters.
-      (Phase 3a.)
+      (Phase 3a.) **A module-level logger counts**: one
+      `getLogger(__name__)` serving the whole file becomes one logger *per
+      module*, renaming every record from `webapp.admin.certbot` to
+      `webapp.admin.certbot.<submodule>`. No test sees it; a journald grep or
+      log filter keyed on the old name does. Put the logger in its own module
+      and import it. (Phase 3e.)
+- [ ] **Decide by-value vs. fan-out for the logger by asking whether the
+      registration hook rebinds it.** If `register_*` reassigns the module's
+      `logger`, a by-value `from .log import logger` is silently wrong and you
+      need 3a's fan-out list. If it only *writes through* the logger it is
+      handed — as `register_certbot_routes` does — the fan-out is unnecessary
+      machinery and a by-value import is correct. (Phase 3a vs. 3e.)
 - [ ] **Never let a module import a mutable global from a sibling.**
       `from .x import _some_global` snapshots the value at import time. Add an
       accessor function instead, and AST-scan the package to prove none crept
@@ -1176,7 +1643,11 @@ cost a debugging cycle in an earlier phase.
 - [ ] **Do not re-export mutable globals from the shim.** Tests reset them with
       `monkeypatch.setattr`, which raises on a missing attribute but silently
       no-ops on a re-exported one. The loud failure is what tells you where the
-      patch has to point. (Phase 3a.)
+      patch has to point. (Phase 3a.) **Phase 3h measured the cost**: with
+      `_progress_dir` and friends re-exported and the patch aimed at the
+      package, all six async tests still *passed* — writing to the real temp
+      directory instead of `tmp_path`. If you are unsure whether a re-export
+      matters, add it and run the tests: **passing is the bad outcome.**
 - [ ] **Fan out any global a registration hook rebinds** — `logger` is the
       usual one. One module meant one global; a package means one per module.
       (Phase 3a.)
@@ -1195,11 +1666,21 @@ cost a debugging cycle in an earlier phase.
       captures. Walk the AST for `Name` nodes resolving to the outer scope
       rather than eyeballing it. (Phase 3b: all 21 handlers captured just
       `app` and `route_logger`, which is what made the split pure motion.)
-- [ ] **Lint the generated package — an inferred import block cannot see
-      scope.** If the per-module imports are derived from the names each
-      definition references, a *parameter* called `text` reads as a use of
-      `from sqlalchemy import text`. `ruff check --select F,E9` catches both
-      halves (F401 unused, F811 shadowed). (Phase 4a.)
+- [ ] **Derive per-module import blocks from the original's own import
+      statements; do not hand-write them.** Narrowing each original statement
+      to the names a module uses keeps the grouping and gets the answer right.
+      Hand-writing them cost 127 ruff errors in one go. (Phase 3d.)
+- [ ] **Compute the free-variable set with `symtable`, not `ast.Name` counting
+      — name counting cannot see scope.** A *parameter* called `text` reads as
+      a use of `from sqlalchemy import text`, and so does a *local variable*
+      called `desc`. `symtable` answers directly: at module scope keep names
+      referenced but never bound; inside a function keep the symbols
+      `is_global()` reports. This bug has now appeared three times (4a, 3c, 3d)
+      in three different disguises — it is the single most repeated mistake in
+      this plan.
+- [ ] **Lint the generated package anyway.** `ruff check --select F,E9` is the
+      gate, whatever produced the imports: F401 catches an import nothing
+      needs, F821 an import a module needed and did not get. (Phase 4a.)
 - [ ] **Rewrite names with the AST, never a regex — a regex has no scope.**
       It will rewrite the alias inside `from x import name` (a syntax error, if
       you are lucky enough for the linter to catch it) and, worse, call sites

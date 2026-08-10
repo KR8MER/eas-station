@@ -77,7 +77,7 @@ by single dimension (e.g. all alerts from `KIWX`).
 
 Migration: `app_core/migrations/versions/20260327_add_vtec_columns_to_cap_alerts.py`
 
-### 3. Alert Detail Page (webapp/admin/api.py)
+### 3. Alert Detail Page (webapp/admin/api/routes_alert_detail.py)
 
 When a user opens an alert detail page the route queries for siblings:
 
@@ -138,7 +138,7 @@ both `cap_poller.py` and `auto_forward.py`, keeping the logic in one place.
 | Alembic migration                 | `app_core/migrations/versions/20260327_add_vtec_columns_to_cap_alerts.py` |
 | Ingest: extract & persist VTEC    | `poller/cap_poller.py` → `_insert_new_alert`, `_update_existing_alert` |
 | Broadcast dedup gating            | `app_core/audio/auto_forward.py` → `auto_forward_cap_alert` |
-| Related alerts query              | `webapp/admin/api.py` → `alert_detail`                    |
+| Related alerts query              | `webapp/admin/api/routes_alert_detail.py` → `alert_detail` |
 | Event chain timeline (UI)         | `templates/alert_detail.html` (VTEC Event Chain block)    |
 
 ---
