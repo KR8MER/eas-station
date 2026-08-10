@@ -34,8 +34,6 @@ from pathlib import Path
 from threading import Lock, Thread
 from typing import Any, Dict, List, Optional
 
-from flask import current_app
-
 from app_utils import UTC_TZ, utc_now
 
 
@@ -127,7 +125,7 @@ def _start_background_operation(
         returncode: Optional[int] = None
         try:
             # Log operation name only, not full command (may contain sensitive data)
-            current_app.logger.info("Starting %s operation", name)
+            logger.info("Starting %s operation", name)
             completed = subprocess.run(
                 command,
                 capture_output=True,
@@ -140,15 +138,15 @@ def _start_background_operation(
             success = returncode == 0
             if success:
                 message = stdout_text.splitlines()[-1] if stdout_text else f"{description} completed successfully."
-                current_app.logger.info("%s operation finished successfully", name)
+                logger.info("%s operation finished successfully", name)
             else:
                 fallback_message = stderr_text.splitlines()[-1] if stderr_text else ""
                 if not fallback_message and stdout_text:
                     fallback_message = stdout_text.splitlines()[-1]
                 message = fallback_message or f"{description} failed with exit code {returncode}."
-                current_app.logger.error("%s operation failed with exit code %s", name, returncode)
+                logger.error("%s operation failed with exit code %s", name, returncode)
         except Exception as exc:  # pragma: no cover - defensive
-            current_app.logger.exception("%s operation failed with an unexpected error", name)
+            logger.exception("%s operation failed with an unexpected error", name)
             message = f"{description} failed: {exc}"
             stderr_text = str(exc)
         finally:

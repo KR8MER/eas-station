@@ -35,6 +35,10 @@ the fix that generalises.
 
 import ast
 import logging
+import os
+import sys
+import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -228,6 +232,65 @@ def test_operation_state_is_shared_not_copied():
                 if path.name != 'operations.py':
                     rebinding.append(path.name)
     assert not rebinding, f'_OPERATION_STATE rebound outside operations.py: {rebinding}'
+
+
+@pytest.mark.unit
+def test_background_operation_runs_without_an_application_context():
+    """The worker thread must log through the injected logger, not current_app.
+
+    ``_start_background_operation`` spawns a bare daemon thread. Flask contexts
+    are per-thread, so ``current_app`` is unavailable there. Using it meant the
+    very first statement in the worker raised ``RuntimeError``, the ``except``
+    handler raised again on its own ``current_app`` call, and the subprocess
+    was never launched — one-click backup and one-click upgrade both reported a
+    failed operation with an empty message and did nothing.
+
+    The caller already resolves ``current_app.logger`` inside the request
+    context and passes it in; the worker just has to use it.
+    """
+    marker = Path(tempfile.gettempdir()) / f'eas-op-test-{os.getpid()}'
+    if marker.exists():
+        marker.unlink()
+
+    operations_state = operations_mod._OPERATION_STATE['backup']
+    operations_state['running'] = False
+
+    operations_mod._start_background_operation(
+        'backup',
+        [sys.executable, '-c', f'open({str(marker)!r}, "w").write("ran")'],
+        cwd=Path.cwd(),
+        logger=logging.getLogger('maintenance-op-test'),
+        description='Backup',
+    )
+
+    deadline = time.time() + 15
+    while time.time() < deadline and operations_state['running']:
+        time.sleep(0.05)
+
+    try:
+        assert not operations_state['running'], 'operation never finished'
+        assert marker.exists(), (
+            'the subprocess never ran — the worker raised before reaching it'
+        )
+        assert operations_state['last_status'] == 'success', (
+            operations_state['last_status'], operations_state['last_message']
+        )
+    finally:
+        if marker.exists():
+            marker.unlink()
+
+
+@pytest.mark.unit
+def test_no_module_uses_current_app_inside_a_background_thread():
+    """Guard the shape, not just the one instance.
+
+    ``operations.py`` is the only module here that runs code off the request
+    thread, so ``current_app`` must not appear in it at all.
+    """
+    source = (PACKAGE_DIR / 'operations.py').read_text(encoding='utf-8')
+    assert 'current_app' not in source, (
+        'operations.py runs work in a daemon thread, where current_app raises'
+    )
 
 
 @pytest.mark.unit

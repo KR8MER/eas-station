@@ -8,6 +8,37 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.150.1] - 2026-08-10 - Fix one-click backup and upgrade
+
+### Fixed
+- **One-click backup and one-click upgrade never ran.** The worker that
+  `_start_background_operation` spawns is a bare daemon thread, and Flask
+  contexts are per-thread, so `current_app` is unavailable there. The very
+  first statement in the worker was `current_app.logger.info(...)`, which
+  raised `RuntimeError: Working outside of application context`. The `except`
+  handler then called `current_app.logger.exception(...)` and raised again, so
+  `message` was never assigned. The net effect: the `subprocess.run` was never
+  reached, and the UI showed a *failed* operation with an empty message.
+
+  The caller already resolves `current_app.logger` inside the request context
+  and passes it in as the `logger` argument — the worker simply was not using
+  it. All four call sites now use the injected logger, and `current_app` is no
+  longer imported by that module.
+
+  This is **pre-existing**, not a regression from the Phase 3f split: the same
+  four `current_app.logger` calls are in the single-file
+  `webapp/admin/maintenance.py`, which is why the split was still 31/31
+  AST-identical. Found by CodeRabbit's review of #2355 and verified against
+  the pre-split file.
+
+### Added
+- `tests/test_maintenance_package.py` gains two guards. One runs a real
+  background operation with no application context and asserts the subprocess
+  actually executed — it fails against the pre-fix source, so it pins the
+  behaviour rather than the spelling. The other asserts `current_app` does not
+  appear in `operations.py` at all, since that is the one module here doing
+  work off the request thread.
+
 ## [2.150.0] - 2026-08-08 - Phase 3h: split the alert verification routes
 
 ### Changed
