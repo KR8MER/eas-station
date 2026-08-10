@@ -50,19 +50,25 @@ This package was split out of the former single-file
     text        (leaf - no package deps)
     icons       (leaf - no package deps)
     nws_text    (leaf - no package deps)
+    map_style   fonts
+    map_data    (leaf - no package deps)
     theme       palette
     drawing     fonts, palette
     weather_fx  drawing, layout, theme
     tiles       layout
-    maps        fonts, layout, palette, theme, tiles
+    storm_overlay  fonts, layout, tiles
+    maps        fonts, layout, map_data, map_style, palette,
+                storm_overlay, theme, tiles
     panels_text drawing, fonts, nws_text, palette, text
     panels      drawing, fonts, icons, nws_text, palette, panels_text
     render      drawing, fonts, layout, logo, maps, palette, panels,
                 panels_text, text, theme, weather_fx
 
 Every name the single-file module exposed is re-exported here, so
-``from app_utils.image_export import <anything>`` keeps working. Import
-from the submodules directly in new code.
+``from app_utils.image_export import <anything>`` keeps working — the one
+exception is ``_best_zoom``, deleted in 2.152.0 when the map started
+framing its own crop rather than fitting the bbox to an integer zoom.
+Import from the submodules directly in new code.
 """
 
 
@@ -123,18 +129,30 @@ from .weather_fx import (  # noqa: F401
     _draw_wind_streaks, _lb_branches, _lb_render_polyline, _lb_trunk,
 )
 
+from .map_style import (  # noqa: F401
+    apply_vignette, place_labels, tone_basemap,
+)
+
 from .tiles import (  # noqa: F401
     _TILE_CACHE, _TILE_CACHE_LOCK, _TILE_CACHE_MAX,
-    _TILE_DISK_CACHE_DIR_DEFAULT, _best_zoom, _fetch_tile, _geojson_bbox,
+    _TILE_DISK_CACHE_DIR_DEFAULT, _detail_zoom, _fetch_tile,
+    _geojson_bbox,
     _geojson_centroid, _lat_to_ty, _lon_to_tx, _tile_cache_clear,
     _tile_cache_get, _tile_cache_put, _tile_disk_cache_dir,
     _tile_disk_get, _tile_disk_path, _tile_disk_put,
 )
 
+from .map_data import (  # noqa: F401
+    _alert_same_codes, _fetch_county_outlines, _fetch_same_union_geom,
+)
+
+from .storm_overlay import (  # noqa: F401
+    _draw_storm_track,
+)
+
 from .maps import (  # noqa: F401
-    _SCALE_BAR_MILES, _alert_same_codes, _draw_scale_bar,
-    _draw_storm_track, _fetch_county_outlines, _fetch_same_union_geom,
-    _nice_scale_miles, _render_map,
+    _SCALE_BAR_MILES, _crop_window, _draw_scale_bar, _nice_scale_miles,
+    _render_map,
 )
 
 from .icons import (  # noqa: F401

@@ -88,19 +88,48 @@ def _geojson_centroid(geom: Dict) -> Optional[Tuple[float, float]]:
     return ((bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0)
 
 
-def _best_zoom(min_lon: float, min_lat: float, max_lon: float, max_lat: float,
-               map_w: int, map_h: int) -> int:
-    """Highest OSM zoom where bbox comfortably fits inside the map dimensions."""
-    for z in range(15, 3, -1):
-        tx1 = _lon_to_tx(min_lon, z)
-        tx2 = _lon_to_tx(max_lon, z)
-        ty1 = _lat_to_ty(max_lat, z)   # higher lat → lower tile-y
-        ty2 = _lat_to_ty(min_lat, z)
+def _detail_zoom(min_lon: float, min_lat: float, max_lon: float, max_lat: float,
+                 map_w: int, map_h: int, *, max_tiles: int = 30) -> int:
+    """Zoom to *source* tiles from, given that the crop is resampled anyway.
+
+The renderer used to pick the integer zoom at which the bbox fit 1:1
+    inside the map slot, and then crop a fixed window at that zoom.  That
+    conflated detail with framing and made the subject small: the bbox had
+    to occupy under 60% of the frame, and flooring to an integer zoom could
+    halve that again, so an alert polygon could end up covering barely a
+    tenth of the map.
+
+    Now the renderer crops to the bbox and resamples to the slot, so the
+    zoom only has to decide *tile detail*, not framing.  So pick the highest zoom
+    whose native pixels still cover the bbox at least as densely as the
+    output needs (downscaling stays sharp; upscaling goes soft), subject to
+    a tile budget so a state-wide watch does not fetch hundreds of tiles.
+    """
+    best = 4
+    for z in range(4, 16):
+        tx1, tx2 = _lon_to_tx(min_lon, z), _lon_to_tx(max_lon, z)
+        ty1, ty2 = _lat_to_ty(max_lat, z), _lat_to_ty(min_lat, z)
         span_w = (tx2 - tx1) * TILE_SIZE
         span_h = (ty2 - ty1) * TILE_SIZE
-        if span_w <= map_w * 0.60 and span_h <= map_h * 0.60:
-            return z
-    return 7
+        if span_w <= 0 or span_h <= 0:
+            continue
+        # Count tiles exactly the way ``_render_map`` will — floor/ceil of the
+        # bbox edges plus a one-tile margin on each side.  An approximation
+        # here silently under-counts and the renderer then bails out to the
+        # "Map not available" placeholder, which is worse than a coarser zoom.
+        n_tiles = (
+            (math.ceil(tx2) + 1) - (math.floor(tx1) - 1) + 1
+        ) * (
+            (math.ceil(ty2) + 1) - (math.floor(ty1) - 1) + 1
+        )
+        if n_tiles > max_tiles:
+            break
+        best = z
+        # Native resolution now meets or exceeds the output slot in both
+        # axes; going further only fetches more tiles to throw pixels away.
+        if span_w >= map_w and span_h >= map_h:
+            break
+    return best
 
 
 # ─── OSM tile fetch + cache ─────────────────────────────────────────────────

@@ -202,7 +202,10 @@ comments in the file.
 | `drawing.py` | 143 | `_draw_pill`, `_composite`, `_round_image_corners`, `_section_header`, `_card_row` |
 | `weather_fx.py` | 429 | Lightning, snow, rain, sun, embers, wind, haze, `_draw_themed_header` |
 | `tiles.py` | 257 | Slippy-tile maths, bbox/centroid/zoom, memory LRU + disk cache, `_fetch_tile` |
-| `maps.py` | 731 | `_render_map`, storm track, county outlines, SAME union geometry, scale bar |
+| `map_style.py` | 193 | Basemap toning, vignette, collision-avoiding label placement |
+| `map_data.py` | 229 | County outlines, SAME geocodes, county-union fallback geometry (PostGIS) |
+| `storm_overlay.py` | 278 | `_draw_storm_track` — cone of uncertainty, arrow, callout |
+| `maps.py` | 473 | `_render_map`, `_crop_window`, scale bar |
 | `nws_text.py` | 272 | NWS tagged-bullet parser (`parse_nws_segments`, `select_share_segments`), `areaDesc` compaction, URL stripping |
 | `panels_text.py` | 367 | The prose info-panel drawers: headline, description (labelled NWS outline), action |
 | `panels.py` | 383 | The remaining info-panel section drawers: threats, coverage, areas, compass |
@@ -216,7 +219,10 @@ theme       -> palette
 drawing     -> fonts, palette
 weather_fx  -> drawing, layout, theme
 tiles       -> layout
-maps        -> fonts, layout, palette, theme, tiles
+map_style     -> fonts
+storm_overlay -> fonts, layout, tiles
+maps        -> fonts, layout, map_data, map_style, palette,
+               storm_overlay, theme, tiles
 panels_text -> drawing, fonts, nws_text, palette, text
 panels      -> drawing, fonts, icons, nws_text, palette, panels_text
 render      -> drawing, fonts, layout, logo, maps, palette, panels,
@@ -232,6 +238,10 @@ Here the package `__init__.py` *is* the compatibility shim — it re-exports all
 differences. The slicing script also asserted that every non-blank line of the
 original landed in exactly one module — nothing silently dropped.
 `tests/test_image_export_themes.py` passes (123 tests, up from 120).
+
+**Follow-up (2.152.0).** `maps.py` was split again when the map gained its
+basemap treatment: the storm overlay and the PostGIS lookups moved to
+siblings, bringing it from 904 back to 473 lines.
 
 **Follow-up (2.151.0).** `panels.py` was still over the ~400-line guidance, so
 the three prose drawers moved into a new `panels_text.py` alongside the new

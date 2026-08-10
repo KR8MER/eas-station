@@ -926,7 +926,8 @@ def test_render_map_draws_counties_and_scale_bar(monkeypatch):
     monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
 
     # Stub a 3×3 grid of square "counties" around the alert polygon.
-    def _fake_counties(min_lon, min_lat, max_lon, max_lat, db_session=None):
+    def _fake_counties(min_lon, min_lat, max_lon, max_lat, db_session=None,
+                       **kwargs):
         xs = [-84.4, -84.0, -83.6, -83.2]
         ys = [39.8, 40.2, 40.6, 41.0]
         out = []

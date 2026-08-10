@@ -8,6 +8,69 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.152.0] - 2026-08-10 - The share-card map reads like a warning graphic
+
+### Changed
+- **The alert now fills the map instead of sitting in it.** The renderer
+  picked the integer OSM zoom at which the alert's bounding box fit inside
+  60% of the map slot, then cropped a fixed `map_w x map_h` window at that
+  zoom. Two lossy steps stacked: the 60% fit factor, and flooring to an
+  integer zoom, which can nearly halve the apparent size again. Together with
+  30%-per-side bbox padding, a county-scale flood advisory rendered with its
+  polygon covering barely a tenth of the frame, adrift in unrelated
+  geography.
+
+  Zoom now decides *tile detail* only (`_detail_zoom`), and the crop frames
+  the padded bbox itself, widened to the slot's aspect ratio and resampled
+  (`_crop_window`). The subject fills the frame at any zoom. Padding dropped
+  to 16% per side now that it is the entire margin rather than compounding
+  with a fit factor.
+
+  Because overlays are drawn on the tile canvas *before* that resample, every
+  overlay dimension is now pre-divided by the resample factor — polygon
+  strokes, the storm cone, arrow and its callout (which also switches to a
+  proportionally larger font) all arrive at their intended size instead of
+  shrinking.
+
+- **The basemap is toned down so the hazard is what reads.** A raw OSM tile
+  is the loudest thing on the card — pastel landcover, orange motorways,
+  dozens of town labels, all at full saturation — and dropped into a dark
+  card it reads as a bright rectangle pasted in from elsewhere. New
+  `map_style.tone_basemap()` desaturates, lifts contrast, darkens and tints
+  toward the card's slate before any overlay is drawn, so the alert polygon
+  is the only saturated thing in frame (mean luminance on a typical mosaic:
+  223 → 93). `apply_vignette()` fades the edges so the inset blends into the
+  card rather than ending in four hard borders.
+
+- **County names are back on the map, with collision avoidance.** Labels were
+  removed once because drawing one per boundary produced overlapping,
+  unreadable text — but a map with no place names cannot answer "where is
+  this?". `map_style.place_labels()` places them greedily in priority order
+  (counties inside the alert first), skipping any label that would overlap an
+  already-placed one, land on the scale bar or attribution, or clip the
+  frame, and caps the total so a 40-county watch does not become a wall of
+  text.
+
+- **Counties inside the alert are drawn brighter than the surrounding
+  reference lines**, the way NWS warning graphics separate "in the warning"
+  from "here for context". `_fetch_county_outlines()` now asks PostGIS which
+  counties intersect the alert geometry and returns an `ST_PointOnSurface`
+  anchor for each label (point-on-surface, not centroid, so the anchor cannot
+  fall outside a crescent-shaped or multi-part county).
+
+### Fixed
+- **The storm-motion callout no longer covers the arrow it labels.** The pill
+  was centred just past the arrow tip, so its own width laid it back over the
+  arrow; it is now offset far enough that its near edge clears the tip.
+
+### Internal
+- `maps.py` (904 lines after the changes above) was split: the storm-motion
+  overlay moved to `storm_overlay.py`, the PostGIS lookups to `map_data.py`,
+  and the new basemap treatment and label placement live in `map_style.py`.
+  `maps` re-exports every moved name, so no caller changed.
+- Removed `_best_zoom()`, dead once the map started framing its own crop. It
+  is the one name the package `__init__` no longer re-exports.
+
 ## [2.151.0] - 2026-08-10 - Share cards keep the outline NWS wrote
 
 ### Changed
