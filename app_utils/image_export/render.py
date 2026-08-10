@@ -55,8 +55,10 @@ from .maps import (
     _alert_same_codes, _fetch_same_union_geom, _render_map,
 )
 from .panels import (
-    _draw_areas, _draw_compass_section, _draw_coverage,
-    _draw_description, _draw_instruction, _draw_nws_headline, _draw_threats,
+    _draw_areas, _draw_compass_section, _draw_coverage, _draw_threats,
+)
+from .panels_text import (
+    _draw_description, _draw_instruction, _draw_nws_headline,
 )
 
 logger = logging.getLogger(__name__)
@@ -398,8 +400,20 @@ def generate_alert_image(
     # main reason long descriptions were being clipped.
     iy = _draw_threats(draw, fonts, alr_clr, ix, iy, iw, bot, ipaws_data)
     iy = _draw_nws_headline(draw, fonts, alr_clr, ix, iy, iw, bot, alert, ipaws_data)
+
+    # Track whether the areas section actually rendered: when it did, the
+    # description's WHERE bullet is that same county list written out as a
+    # sentence, and repeating it costs two lines the hazard copy needs.
+    iy_before_areas = iy
     iy = _draw_areas(draw, fonts, alr_clr, ix, iy, iw, bot, alert)
-    iy = _draw_description(draw, fonts, alr_clr, ix, iy, iw, bot, alert)
+    areas_shown = iy > iy_before_areas
+
+    # Likewise the WHEN bullet ("Until 1245 PM EDT") only restates the
+    # expiry stamp the footer already carries.
+    timing_shown = bool(getattr(alert, 'expires', None))
+
+    iy = _draw_description(draw, fonts, alr_clr, ix, iy, iw, bot, alert,
+                           areas_shown=areas_shown, timing_shown=timing_shown)
     iy = _draw_instruction(draw, fonts, alr_clr, ix, iy, iw, bot, alert)
     iy = _draw_coverage(draw, fonts, alr_clr, ix, iy, iw, bot, coverage_data, county_name)
     iy = _draw_compass_section(draw, fonts, alr_clr, ix, iy, iw, bot, ipaws_data)

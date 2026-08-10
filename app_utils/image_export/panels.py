@@ -22,29 +22,35 @@ from __future__ import annotations
 """Info-panel section drawers.
 
 One function per section of the right-hand (or lower) information panel:
-threats, coverage, affected areas, compass, NWS headline, description and
-safety instruction.
+threats, coverage, affected areas and the storm-motion compass.
+
+The prose sections — headline, description and action — live in the
+sibling :mod:`panels_text` module (they reason about NWS text conventions,
+so they sit next to the parser in :mod:`nws_text`) and are re-exported
+here so existing ``from .panels import _draw_description`` imports keep
+resolving.
 """
 
 import math
-import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from PIL import ImageDraw, ImageFont
+from PIL import ImageDraw
 
 from .palette import (
-    _CARD, _TEXT, _TEXT_MUT, _TEXT_SEC, _THREAT_CLR, _darken, _pct_bar_color,
+    _CARD, _TEXT, _TEXT_MUT, _TEXT_SEC, _THREAT_CLR, _pct_bar_color,
 )
 from .fonts import (
     _th, _truncate, _tw,
-)
-from .text import (
-    _humanize_caps_text,
 )
 from .drawing import (
     _card_row, _section_header,
 )
 from .icons import _ICON_FN
+from .nws_text import compact_area_desc
+from .panels_text import (  # noqa: F401  (re-exported for compatibility)
+    _INSTR_ACCENT, _draw_description, _draw_instruction, _draw_labeled_segments,
+    _draw_nws_headline, _wrap_text,
+)
 
 
 # ─── Info-panel section drawers ───────────────────────────────────────────────
@@ -211,6 +217,11 @@ def _draw_areas(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
 
     iy = _section_header(draw, fonts, alr_clr, ix, iy, iw, 'AFFECTED AREAS')
 
+    # Factor the repeated state code out of the CAP list first — NWS sends
+    # "Allen, OH; Defiance, OH; Henry, OH; …", which spends a whole extra
+    # wrapped row restating the state.
+    area_desc = compact_area_desc(area_desc)
+
     # Split on semicolons, clean up, pack segments onto as few rows as
     # possible.
     segments = [s.strip() for s in area_desc.split(';') if s.strip()]
@@ -370,208 +381,3 @@ def _draw_compass_section(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple
             pass
 
     return iy + section_h + 6
-
-
-def _draw_nws_headline(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
-                       ix: int, iy: int, iw: int, bot: int,
-                       alert: Any, ipaws_data: Optional[Dict]) -> int:
-    """Render the NWS operational headline (ALL-CAPS quote block).
-
-    Falls back to alert.headline when nws_headline is absent.
-    The alert.description is intentionally omitted — it's too long to
-    truncate meaningfully in a social-media image.
-    """
-    nws_head = (ipaws_data or {}).get('nws_headline', '').strip()
-    pub_head = (getattr(alert, 'headline', '') or '').strip()
-    text     = nws_head or pub_head
-
-    if not text or iy + 30 > bot:
-        return iy
-
-    # NWS-style headlines are often shouted; humanise before rendering.
-    text = _humanize_caps_text(text)
-
-    iy = _section_header(draw, fonts, alr_clr, ix, iy, iw, 'HEADLINE')
-
-    # Word-wrap (leave room for the quote bar + insets on the left)
-    font  = fonts['small']
-    max_w = iw - 20
-    words = text.split()
-    lines: List[str] = []
-    line  = ''
-    for word in words:
-        candidate = (line + ' ' + word).strip()
-        if _tw(font, candidate) <= max_w:
-            line = candidate
-        else:
-            if line:
-                lines.append(line)
-            line = word
-    if line:
-        lines.append(line)
-
-    # One continuous card block instead of per-row stripes — the old
-    # 1-px gaps between rows turned into shimmering scan-lines after
-    # social platforms re-encoded the upload as JPEG.
-    row_h = 20
-    pad_v = 4
-    n_fit = min(len(lines), max(0, (bot - iy - pad_v * 2) // row_h))
-    if n_fit <= 0:
-        return iy
-    if n_fit < len(lines):
-        lines[n_fit - 1] = _truncate(
-            font, lines[n_fit - 1] + ' ' + lines[n_fit], max_w)
-
-    block_h = n_fit * row_h + pad_v * 2
-    draw.rectangle((ix, iy, ix + iw, iy + block_h), fill=_CARD)
-    # Coloured quote bar on the left edge
-    draw.rectangle((ix, iy, ix + 3, iy + block_h), fill=alr_clr)
-    ty = iy + pad_v
-    for ltext in lines[:n_fit]:
-        draw.text((ix + 12, ty + (row_h - _th(font, ltext)) // 2),
-                  ltext, font=font, fill=_TEXT)
-        ty += row_h
-
-    return iy + block_h + 6
-
-
-def _wrap_text(font: ImageFont.FreeTypeFont, text: str,
-               max_w: int, max_lines: int = 8) -> List[str]:
-    """Word-wrap *text* into lines that fit within *max_w* pixels."""
-    words = text.split()
-    lines: List[str] = []
-    line = ''
-    for word in words:
-        candidate = (line + ' ' + word).strip()
-        if _tw(font, candidate) <= max_w:
-            line = candidate
-        else:
-            if line:
-                lines.append(line)
-                if len(lines) >= max_lines:
-                    # Truncate the last line with ellipsis
-                    lines[-1] = _truncate(font, lines[-1], max_w)
-                    return lines
-            line = word
-    if line:
-        if len(lines) >= max_lines:
-            lines[-1] = _truncate(font, lines[-1] + ' ' + line, max_w)
-        else:
-            lines.append(line)
-    return lines
-
-
-def _draw_description(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
-                      ix: int, iy: int, iw: int, bot: int,
-                      alert: Any) -> int:
-    """Render the alert description text (word-wrapped, space-limited)."""
-    desc = (getattr(alert, 'description', '') or '').strip()
-    if not desc or iy + 30 > bot:
-        return iy
-
-    # Clean up NWS description formatting: collapse multiple whitespace,
-    # strip leading asterisks/bullets, normalise newlines to spaces.
-    desc = re.sub(r'\s*\n\s*', ' ', desc)
-    desc = re.sub(r'\s{2,}', ' ', desc)
-    desc = re.sub(r'^\*\s*', '', desc)
-    desc = desc.strip()
-
-    if not desc:
-        return iy
-
-    # De-shout NWS text — bodies of all-caps are noticeably slower to read.
-    desc = _humanize_caps_text(desc)
-
-    font = fonts['small']
-    row_h = 20
-    pad_v = 4
-    # Reserve the 22px section header + at least one row before committing.
-    if iy + 22 + row_h + pad_v * 2 > bot:
-        return iy
-
-    iy = _section_header(draw, fonts, alr_clr, ix, iy, iw, 'DESCRIPTION')
-
-    max_w = iw - 16
-    # Fill all remaining vertical space rather than capping at an arbitrary
-    # line count — long descriptions previously ended mid-sentence because
-    # the cap was 6 lines regardless of how much room was left.
-    avail_lines = max(1, (bot - iy - pad_v * 2) // row_h)
-    lines = _wrap_text(font, desc, max_w, max_lines=avail_lines)
-
-    # Single continuous card block — see _draw_nws_headline for why the
-    # old per-row stripes (1-px gaps) were dropped.
-    block_h = len(lines) * row_h + pad_v * 2
-    draw.rectangle((ix, iy, ix + iw, iy + block_h), fill=_CARD)
-    ty = iy + pad_v
-    for ltext in lines:
-        draw.text((ix + 8, ty + (row_h - _th(font, ltext)) // 2),
-                  ltext, font=font, fill=_TEXT)
-        ty += row_h
-
-    return iy + block_h + 6
-
-
-_INSTR_ACCENT = (255, 193, 7)  # warning-yellow accent bar
-
-
-def _draw_instruction(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
-                      ix: int, iy: int, iw: int, bot: int,
-                      alert: Any) -> int:
-    """Render safety guidance with a stronger visual treatment.
-
-    The CAP ``instruction`` field is the one thing on a share card a
-    reader can act on — "move to an interior room", "shelter in
-    place", "evacuate if instructed" — so it gets a warning-yellow
-    section header (visually distinct from the neutral event-coloured
-    headers used for HEADLINE / DESCRIPTION) plus a thicker accent bar
-    on each row.  The header reads "ACTION" instead of "INSTRUCTIONS"
-    because "ACTION" is shorter and imperative — it tells the reader
-    *what this section is for*, not just *what's in it*.
-    """
-    instr = (getattr(alert, 'instruction', '') or '').strip()
-    if not instr or iy + 30 > bot:
-        return iy
-
-    instr = re.sub(r'\s*\n\s*', ' ', instr)
-    instr = re.sub(r'\s{2,}', ' ', instr)
-    instr = instr.strip()
-
-    if not instr:
-        return iy
-
-    instr = _humanize_caps_text(instr)
-
-    font = fonts['small']
-    row_h = 20
-    pad_v = 4
-    if iy + 22 + row_h + pad_v * 2 > bot:
-        return iy
-
-    # Warning-coloured section header so the action band reads as
-    # distinct from the neutral headline / description sections.  Using
-    # a deeply-darkened amber preserves WCAG-style contrast against the
-    # white label text.
-    iy = _section_header(
-        draw, fonts, alr_clr, ix, iy, iw, 'ACTION',
-        bg=_darken(_INSTR_ACCENT, 0.55),
-        stripe=_INSTR_ACCENT,
-    )
-
-    accent_w = 4  # was 3 — thicker bar reads better at thumbnail size
-    max_w = iw - 16 - accent_w
-    # Fill remaining vertical space instead of capping at 4 lines.
-    avail_lines = max(1, (bot - iy - pad_v * 2) // row_h)
-    lines = _wrap_text(font, instr, max_w, max_lines=avail_lines)
-
-    # Single continuous card block with a full-height amber bar — see
-    # _draw_nws_headline for why the per-row stripes were dropped.
-    block_h = len(lines) * row_h + pad_v * 2
-    draw.rectangle((ix, iy, ix + iw, iy + block_h), fill=_CARD)
-    draw.rectangle((ix, iy, ix + accent_w, iy + block_h), fill=_INSTR_ACCENT)
-    ty = iy + pad_v
-    for ltext in lines:
-        draw.text((ix + accent_w + 8, ty + (row_h - _th(font, ltext)) // 2),
-                  ltext, font=font, fill=_TEXT)
-        ty += row_h
-
-    return iy + block_h + 6

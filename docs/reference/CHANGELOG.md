@@ -8,6 +8,56 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.151.0] - 2026-08-10 - Share cards keep the outline NWS wrote
+
+### Changed
+- **Share-card descriptions render as the outline NWS actually wrote, not a
+  wall of text.** Modern NWS products are written to a tagged bullet
+  structure — WHAT is happening, WHERE, WHEN, what the IMPACTS are — but CAP
+  delivers the whole thing as one free-text `description`. The renderer
+  flattened it (collapse newlines, strip the leading asterisk), so a flood
+  advisory landed on the card as nine unbroken lines with stray `*` and `-`
+  glyphs sitting mid-sentence, and the reader had to parse the structure back
+  out by eye.
+
+  `app_utils/image_export/nws_text.py` recovers the segments and the
+  DESCRIPTION panel lays them out as a label gutter plus wrapped prose. Both
+  NWS conventions are recognised: the `* WHAT...` bullet form and the
+  asterisk-free `HAZARD...` / `SOURCE...` / `IMPACT...` form used by severe
+  thunderstorm and tornado warnings. The untagged lede that opens those
+  warnings — "At 900 PM EDT, a severe thunderstorm was located near Lima,
+  moving east at 40 mph", the most informative sentence in the product —
+  is kept and rendered full width. Text carrying no recognisable outline,
+  including shouted legacy products, still falls back to the paragraph path.
+
+- **Segments the card already shows elsewhere are dropped.** `WHERE` is the
+  AFFECTED AREAS county list written out as a sentence, `WHEN` restates the
+  footer's expiry stamp, and the `PRECAUTIONARY/PREPAREDNESS ACTIONS` block is
+  the CAP `instruction` field the card renders under its own ACTION banner.
+  Each is suppressed only when the card is genuinely carrying that
+  information, which is what buys the room for the hazard copy.
+
+- **Bare URLs no longer consume a line of copy.** NWS descriptions end with
+  links like `http://www.weather.gov/safety/flood`; printed on an image they
+  cannot be clicked, wrap badly, and displace hazard text. Stripped from both
+  the description and the instruction.
+
+- **`areaDesc` no longer repeats the state on every entry.** NWS sends
+  "Allen, OH; Defiance, OH; Henry, OH; Paulding, OH; Putnam, OH", which spends
+  a wrapped row restating "OH" four more times than needed. Entries are grouped
+  by state in first-appearance order and the code is factored out once per
+  group: "Allen, Defiance, Henry, Paulding, Putnam (OH)". Multi-state lists
+  group separately; zone and marine products that carry no state codes are
+  passed through untouched.
+
+### Internal
+- The prose section drawers (headline, description, action) moved from
+  `app_utils/image_export/panels.py` — already past the module-size guidance —
+  into a new sibling `panels_text.py`, next to the parser they depend on.
+  `panels` re-exports every name, so existing imports are unchanged.
+- Added `_lighten()` to the image-export palette so accent-coloured text stays
+  legible on the dark card whatever hue a hazard family's theme resolves to.
+
 ## [2.150.2] - 2026-08-10 - Stop a dead audio service from looking like stopped sources
 
 ### Fixed

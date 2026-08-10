@@ -49,13 +49,16 @@ This package was split out of the former single-file
     fonts       (leaf - no package deps)
     text        (leaf - no package deps)
     icons       (leaf - no package deps)
+    nws_text    (leaf - no package deps)
     theme       palette
     drawing     fonts, palette
     weather_fx  drawing, layout, theme
     tiles       layout
     maps        fonts, layout, palette, theme, tiles
-    panels      drawing, fonts, icons, palette, text
-    render      drawing, fonts, layout, logo, maps, palette, panels, text, theme, weather_fx
+    panels_text drawing, fonts, nws_text, palette, text
+    panels      drawing, fonts, icons, nws_text, palette, panels_text
+    render      drawing, fonts, layout, logo, maps, palette, panels,
+                panels_text, text, theme, weather_fx
 
 Every name the single-file module exposed is re-exported here, so
 ``from app_utils.image_export import <anything>`` keeps working. Import
@@ -83,7 +86,13 @@ from .layout import (  # noqa: F401
 
 from .palette import (  # noqa: F401
     WHITE, _BG, _CARD, _DIVIDER, _PANEL, _SECTION_BG, _SEVERITY, _STRIP,
-    _TEXT, _TEXT_MUT, _TEXT_SEC, _THREAT_CLR, _darken, _pct_bar_color,
+    _TEXT, _TEXT_MUT, _TEXT_SEC, _THREAT_CLR, _darken, _lighten,
+    _pct_bar_color,
+)
+
+from .nws_text import (  # noqa: F401
+    NWSSegment, compact_area_desc, parse_nws_segments, select_share_segments,
+    strip_urls,
 )
 
 from .theme import (  # noqa: F401
@@ -132,10 +141,13 @@ from .icons import (  # noqa: F401
     _ICON_FN, _icon_hail, _icon_tornado, _icon_wind,
 )
 
+from .panels_text import (  # noqa: F401
+    _INSTR_ACCENT, _draw_description, _draw_instruction,
+    _draw_labeled_segments, _draw_nws_headline, _wrap_text,
+)
+
 from .panels import (  # noqa: F401
-    _INSTR_ACCENT, _draw_areas, _draw_compass_section, _draw_coverage,
-    _draw_description, _draw_instruction, _draw_nws_headline,
-    _draw_threats, _wrap_text,
+    _draw_areas, _draw_compass_section, _draw_coverage, _draw_threats,
 )
 
 from .render import (  # noqa: F401

@@ -194,7 +194,7 @@ comments in the file.
 | --- | ---: | --- |
 | `logo.py` | 71 | Brand logo raster and its cache |
 | `layout.py` | 145 | `_Layout` and the landscape/square/portrait/story presets, plus the backwards-compatible `FB_WIDTH`-style constants |
-| `palette.py` | 62 | Colour palette, severity/threat colour maps, `_darken`, `_pct_bar_color` |
+| `palette.py` | 75 | Colour palette, severity/threat colour maps, `_darken`, `_lighten`, `_pct_bar_color` |
 | `fonts.py` | 116 | Font loading and caching, `_tw`/`_th`/`_truncate` |
 | `text.py` | 252 | Local-time formatting and the ALL-CAPS → sentence-case humanizer |
 | `icons.py` | 81 | `_icon_wind`, `_icon_hail`, `_icon_tornado`, `_ICON_FN` |
@@ -203,7 +203,9 @@ comments in the file.
 | `weather_fx.py` | 429 | Lightning, snow, rain, sun, embers, wind, haze, `_draw_themed_header` |
 | `tiles.py` | 257 | Slippy-tile maths, bbox/centroid/zoom, memory LRU + disk cache, `_fetch_tile` |
 | `maps.py` | 731 | `_render_map`, storm track, county outlines, SAME union geometry, scale bar |
-| `panels.py` | 577 | The seven info-panel section drawers |
+| `nws_text.py` | 272 | NWS tagged-bullet parser (`parse_nws_segments`, `select_share_segments`), `areaDesc` compaction, URL stripping |
+| `panels_text.py` | 367 | The prose info-panel drawers: headline, description (labelled NWS outline), action |
+| `panels.py` | 383 | The remaining info-panel section drawers: threats, coverage, areas, compass |
 | `render.py` | 492 | `generate_alert_image` |
 
 Dependency graph, generated from the actual imports and verified acyclic:
@@ -215,9 +217,10 @@ drawing     -> fonts, palette
 weather_fx  -> drawing, layout, theme
 tiles       -> layout
 maps        -> fonts, layout, palette, theme, tiles
-panels      -> drawing, fonts, icons, palette, text
+panels_text -> drawing, fonts, nws_text, palette, text
+panels      -> drawing, fonts, icons, nws_text, palette, panels_text
 render      -> drawing, fonts, layout, logo, maps, palette, panels,
-               text, theme, weather_fx
+               panels_text, text, theme, weather_fx
 ```
 
 Here the package `__init__.py` *is* the compatibility shim — it re-exports all
@@ -229,6 +232,11 @@ Here the package `__init__.py` *is* the compatibility shim — it re-exports all
 differences. The slicing script also asserted that every non-blank line of the
 original landed in exactly one module — nothing silently dropped.
 `tests/test_image_export_themes.py` passes (123 tests, up from 120).
+
+**Follow-up (2.151.0).** `panels.py` was still over the ~400-line guidance, so
+the three prose drawers moved into a new `panels_text.py` alongside the new
+`nws_text.py` parser they depend on. `panels` re-exports them, so no caller
+changed.
 
 **One real bug was introduced and caught.** `_LOGO_PATH` and
 `_TILE_DISK_CACHE_DIR_DEFAULT` are built by walking up two directories from
