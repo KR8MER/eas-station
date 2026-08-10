@@ -8,6 +8,57 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.150.2] - 2026-08-10 - Stop a dead audio service from looking like stopped sources
+
+### Fixed
+- **A dead audio service rendered as three deliberately-stopped sources.**
+  Live Audio showed grey "Stopped" badges and "Start the source to listen" for
+  every source while the EAS Continuous Monitor panel — reading the same Redis
+  key — correctly reported "Audio service metrics are unavailable". Only one of
+  those two statements was true, and it was not the one attached to the buttons
+  the operator would reach for.
+
+  In the separated deployment the web process builds an adapter for every
+  `audio_source_configs` row but deliberately never starts one:
+  `_start_audio_sources_background()` returns immediately because the audio
+  service owns capture. Those adapters are placeholders that permanently report
+  `STOPPED` with no error message. `build_source_listing()` preferred them over
+  the `service_dead` signal, so `_serialize_db_only`'s "Audio service is not
+  running – source failed to start" branch was **unreachable in production** —
+  the tests only reached it because they stub the controller empty.
+
+  `GET /api/audio/sources` now ignores a non-running local adapter when the
+  audio service is publishing no metrics at all, so an `auto_start` source
+  reports `error` with an actionable message. Integrated deployments are
+  unaffected: there the web process is itself the metrics publisher, so
+  `service_dead` is never True and a running adapter stays authoritative.
+
+- **Audio commands reported success when nothing received them.** Redis
+  `PUBLISH` succeeds with zero subscribers, so with the audio service down
+  every fire-and-forget command (`eas_monitor_start`, `streaming_start`,
+  `source_add`/`source_update`) returned `success: True` and went nowhere.
+  Pressing **Start Monitor** produced no error, no state change and no
+  explanation. `AudioCommandPublisher._publish_command()` now checks the
+  receiver count and fails with "The audio service is not running, so the
+  command was not delivered." This also makes the wait-for-response commands
+  (`source_start`/`source_stop`) fail immediately instead of burning their full
+  5-second timeout.
+
+- **`POST /api/eas-monitor/control` returned 500 for a down dependency.** An
+  undelivered command is now a 503 carrying a hint pointing at
+  Settings → Services.
+
+- **The Start/Stop Monitor buttons gave no feedback on success.**
+  `controlEASMonitor()` showed a toast only on failure, which was
+  indistinguishable from the command silently going nowhere. It now confirms
+  acceptance and surfaces the server's `hint` on failure.
+
+### Added
+- `tests/test_audio_command_delivery.py` — the receiver-count contract, both
+  directions, for fire-and-forget and wait-for-response commands.
+- Two cases in `tests/test_audio_source_listing.py` covering the production
+  controller shape (placeholder adapters present) rather than the stubbed-empty
+  controller the existing dead-service test relies on.
 ## [2.150.1] - 2026-08-10 - Fix one-click backup and upgrade
 
 ### Fixed

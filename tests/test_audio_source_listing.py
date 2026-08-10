@@ -538,3 +538,75 @@ def test_an_unexpected_failure_becomes_a_500(listing_app, monkeypatch):
 
     assert response.status_code == 500
     assert 'controller unavailable' in response.get_json()['error']
+
+
+# ---------------------------------------------------------------------------
+# The placeholder-adapter masking regression
+#
+# In the separated deployment the web process builds an adapter for every
+# database row but never starts one, so every adapter permanently reports
+# STOPPED.  Preferring those over the ``service_dead`` signal made a dead audio
+# service render as three deliberately-stopped sources, and made
+# ``_serialize_db_only``'s "failed to start" branch unreachable in production —
+# the tests above only reach it because they stub the controller empty.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_dead_service_ignores_never_started_placeholder_adapters(listing_app, monkeypatch):
+    """A stopped local adapter must not mask a dead audio service."""
+    monkeypatch.setattr(
+        'webapp.admin.audio_ingest.listing._read_audio_metrics_from_redis',
+        lambda: None,
+    )
+    # The production shape: the controller holds a placeholder adapter for
+    # every configured source, all of them STOPPED because the web process
+    # deliberately never starts them.
+    monkeypatch.setattr(
+        'webapp.admin.audio_ingest.listing._get_audio_controller',
+        lambda: _StubController({
+            'should-be-running': _stub_adapter('should-be-running', status='stopped'),
+            'deliberately-off': _stub_adapter('deliberately-off', status='stopped'),
+        }),
+    )
+
+    with listing_app.app_context():
+        _add_source('should-be-running', auto_start=True)
+        _add_source('deliberately-off', auto_start=False)
+        payload = _get(listing_app)
+
+    by_name = {s['name']: s for s in payload['sources']}
+
+    # The auto-start source is a failure, not a choice, and must say so.
+    assert by_name['should-be-running']['status'] == 'error'
+    assert 'not running' in by_name['should-be-running']['error_message'].lower()
+    assert by_name['should-be-running']['in_memory'] is False
+
+    # A source that was never meant to run still reads as stopped.
+    assert by_name['deliberately-off']['status'] == 'stopped'
+    assert by_name['deliberately-off']['error_message'] == 'Not started'
+
+    assert payload['db_only_count'] == 2
+
+
+@pytest.mark.unit
+def test_running_local_adapter_still_wins_when_redis_is_silent(listing_app, monkeypatch):
+    """Integrated mode is untouched: a genuinely running adapter is authoritative."""
+    monkeypatch.setattr(
+        'webapp.admin.audio_ingest.listing._read_audio_metrics_from_redis',
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        'webapp.admin.audio_ingest.listing._get_audio_controller',
+        lambda: _StubController({'live-one': _stub_adapter('live-one', status='running')}),
+    )
+
+    with listing_app.app_context():
+        _add_source('live-one', auto_start=True)
+        payload = _get(listing_app)
+
+    source = payload['sources'][0]
+    assert source['status'] == 'running'
+    assert payload['active_count'] == 1
+    # The adapter path carries no 'in_memory' key — proof it was taken.
+    assert 'in_memory' not in source

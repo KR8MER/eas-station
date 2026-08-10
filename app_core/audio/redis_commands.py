@@ -113,8 +113,34 @@ class AudioCommandPublisher:
         }
 
         try:
-            # Publish command
-            self.redis_client.publish(AUDIO_COMMAND_CHANNEL, json.dumps(message))
+            # Publish command.  PUBLISH returns the number of subscribers that
+            # received the message; the audio service's AudioCommandSubscriber
+            # is the only one on this channel.  Zero receivers means the audio
+            # service is not running, and the command has gone nowhere.
+            #
+            # Without this check a fire-and-forget command (eas_monitor_start,
+            # streaming_start, source_add/update) reported success no matter
+            # what: the operator pressed "Start Monitor" against a dead audio
+            # service, got no error, and the panel stayed "Unavailable" with
+            # nothing explaining why.  A wait-for-response command merely burned
+            # its full timeout before saying anything.
+            receivers = self.redis_client.publish(AUDIO_COMMAND_CHANNEL, json.dumps(message))
+
+            if not receivers:
+                logger.error(
+                    "Command %s (id: %s) had no subscribers — the audio service "
+                    "is not running", command, command_id
+                )
+                return {
+                    'success': False,
+                    'message': (
+                        'The audio service is not running, so the command was not '
+                        'delivered. Start the eas-station-audio service and try again.'
+                    ),
+                    'command_id': command_id,
+                    'no_subscribers': True,
+                }
+
             logger.info(f"Published command: {command} (id: {command_id}, wait_response: {wait_for_response})")
 
             if not wait_for_response:

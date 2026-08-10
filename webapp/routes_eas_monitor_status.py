@@ -336,34 +336,32 @@ def register_eas_monitor_routes(app: Flask, logger_instance) -> None:
 
                 if action == "start":
                     result = publisher.start_eas_monitor()
-                    if result.get('success'):
-                        return jsonify({
-                            "success": True,
-                            "action": "start",
-                            "message": "EAS monitor start command sent to audio-service",
-                            "command_id": result.get('command_id')
-                        })
-                    else:
-                        return jsonify({
-                            "success": False,
-                            "action": "start",
-                            "message": result.get('message', 'Failed to send start command')
-                        }), 500
-                else:  # stop
+                else:
                     result = publisher.stop_eas_monitor()
-                    if result.get('success'):
-                        return jsonify({
-                            "success": True,
-                            "action": "stop",
-                            "message": "EAS monitor stop command sent to audio-service",
-                            "command_id": result.get('command_id')
-                        })
-                    else:
-                        return jsonify({
-                            "success": False,
-                            "action": "stop",
-                            "message": result.get('message', 'Failed to send stop command')
-                        }), 500
+
+                if result.get('success'):
+                    return jsonify({
+                        "success": True,
+                        "action": action,
+                        "message": f"EAS monitor {action} command sent to audio-service",
+                        "command_id": result.get('command_id')
+                    })
+
+                # No subscribers means the audio service is down — that is a
+                # dependency failure (503), not an internal error (500), and
+                # the operator needs to be told which service to start.
+                status_code = 503 if result.get('no_subscribers') else 500
+                return jsonify({
+                    "success": False,
+                    "action": action,
+                    "error": result.get('message', f'Failed to send {action} command'),
+                    "message": result.get('message', f'Failed to send {action} command'),
+                    "hint": (
+                        "Start the eas-station-audio service from "
+                        "Settings → Services, then retry."
+                        if result.get('no_subscribers') else None
+                    ),
+                }), status_code
 
             except Exception as redis_error:
                 logger.error(f"Redis communication failed: {redis_error}")

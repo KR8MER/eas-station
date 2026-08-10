@@ -2276,13 +2276,19 @@ async function controlEASMonitor(action) {
 
         if (!response.ok) {
             const error = await response.json();
-            showToast(`Failed to ${action} monitor: ${error.error || 'Unknown error'}`, 'danger');
+            const detail = error.error || error.message || 'Unknown error';
+            const hint = error.hint ? ` ${error.hint}` : '';
+            showToast(`Failed to ${action} monitor: ${detail}${hint}`, 'danger');
             return;
         }
 
         const result = await response.json();
 
         if (result.success) {
+            // Confirm the command was accepted.  Without this the button gave
+            // no feedback at all on success, which was indistinguishable from
+            // the command silently going nowhere.
+            showToast(`Monitor ${action} command sent to the audio service.`, 'success');
             // Reload status after a brief delay
             setTimeout(loadEASMonitorStatus, 500);
         } else {
