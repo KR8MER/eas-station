@@ -3,6 +3,7 @@
    tab in the Security Center. #}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}?v={{ static_asset_version }}">
 <style>
     /* Appliance-style chrome mirroring the System Health & GNSS dashboards so
        Traffic Analytics reads as part of the same operator UI. */
@@ -179,8 +180,7 @@
     .traffic-dash-root .health-status-tile canvas { max-height: 30px; }
 
     /* Leaflet world map — flag/dot markers sized by traffic share. */
-    .traffic-dash-root #trafficMap { height: 420px; border-radius: 6px; overflow: hidden; z-index: 0; }
-    .traffic-dash-root .leaflet-container { background: var(--surface-color, #0d1117); font-family: inherit; }
+    .traffic-dash-root #trafficMap { height: 420px; z-index: 0; }
     .traffic-dash-root .traffic-geo-dot {
         border-radius: 50%; background: rgba(88,166,255,0.55);
         border: 2px solid #58a6ff; box-shadow: 0 0 0 1px rgba(0,0,0,0.25);

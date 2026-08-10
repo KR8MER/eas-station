@@ -72,12 +72,6 @@
 # templates/index.html, templates/partials/doc_page_styles.html
 .page-shell
 
-# templates/alert_detail.html, templates/index.html
-.popup-detail
-
-# templates/alert_detail.html, templates/index.html
-.popup-title
-
 # templates/led_control.html, templates/screens.html
 .preview-line
 

@@ -5262,64 +5262,9 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     50% { background-position: 100% 50%; }
 }
 
-/* Leaflet Control Enhancements */
-.leaflet-control-zoom {
-    border: none !important;
-    box-shadow: 0 8px 24px var(--shadow-color) !important;
-    border-radius: var(--radius-lg) !important;
-    overflow: hidden;
-    backdrop-filter: blur(12px);
-}
-
-.leaflet-control-zoom a {
-    background: color-mix(in srgb, var(--surface-color) 95%, transparent) !important;
-    backdrop-filter: blur(12px) saturate(180%) !important;
-    border: none !important;
-    color: var(--primary-color) !important;
-    transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1) !important;
-}
-
-.leaflet-control-zoom a:hover {
-    background: linear-gradient(135deg,
-        var(--primary-color),
-        var(--secondary-color)) !important;
-    color: white !important;
-    transform: scale(1.1);
-}
-
-/* Leaflet Info Control */
-.leaflet-control.info-control {
-    background: var(--overlay-dark);
-    color: var(--text-on-dark);
-    padding: 6px 10px;
-    border-radius: 4px;
-    font-size: 12px;
-    max-width: 200px;
-}
-
-/* Leaflet Popup Enhancements */
-.leaflet-popup-content-wrapper {
-    background: color-mix(in srgb, var(--surface-color) 98%, transparent) !important;
-    backdrop-filter: blur(20px) saturate(180%) !important;
-    border-radius: var(--radius-lg) !important;
-    box-shadow: 0 20px 60px var(--shadow-color) !important;
-    padding: 20px !important;
-    border: 2px solid var(--border-color);
-    color: var(--text-color) !important;
-}
-
-.leaflet-popup-close-button {
-    color: var(--primary-color) !important;
-    font-size: 24px !important;
-    font-weight: var(--font-weight-bold) !important;
-    padding: 8px 12px !important;
-    transition: all 0.3s ease !important;
-}
-
-.leaflet-popup-close-button:hover {
-    color: var(--secondary-color) !important;
-    transform: rotate(90deg) scale(1.2);
-}
+/* Leaflet chrome (zoom control, popups, info control) now lives in
+   static/css/map.css alongside the rest of the shared map skin, so only
+   pages that actually render a map download it. */
 
 /* Map Layer Controls */
 .layer-section {

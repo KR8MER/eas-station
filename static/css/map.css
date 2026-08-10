@@ -1,0 +1,331 @@
+/* ==========================================================================
+   EAS Station™ — Shared Leaflet map skin
+   ==========================================================================
+
+   Every Leaflet map in the app used to render a raw OpenStreetMap mosaic:
+   pastel landcover, orange motorways and dozens of town labels at full
+   saturation, dropped straight into a themed card. In a dark theme that
+   reads as a bright rectangle pasted in from somewhere else, and the alert
+   polygon — the entire point of the map — has to compete with the road
+   network for attention.
+
+   The share-image renderer already solved this
+   (`app_utils/image_export/map_style.py`): knock the basemap back to a
+   desaturated, darkened, tinted ground, then let the hazard be the only
+   saturated thing in frame. This stylesheet is the browser-side twin of
+   that treatment, expressed through the theme's own CSS variables so all
+   20 themes get a basemap that belongs to them.
+
+   The tone chain mirrors `tone_basemap()` exactly, and the order is
+   load-bearing there for the same reason it is here — `contrast()` blends
+   each pixel away from mid grey, and an OSM tile is overwhelmingly pale
+   landcover, so running it after the darkening step pushes that bright
+   majority back toward white and quietly undoes it:
+
+       saturate() → contrast() → brightness() → tint
+
+   The tint is the tile pane's own opacity letting `--map-ground` (the
+   theme background) show through, which is the CSS equivalent of the
+   renderer's `Image.blend(tint, 0.30)`.
+
+   Loaded only on pages that use Leaflet — alongside `vendor/leaflet/leaflet.css`.
+   ========================================================================== */
+
+/* ── Tone tokens ─────────────────────────────────────────────────────────
+   Light themes get a gentle treatment: their cards are already bright, so a
+   heavily darkened basemap would look like a hole in the page. Dark themes
+   get the full share-card tone. `data-theme-mode` is stamped on <html> by
+   static/js/core/theme.js (and by the anti-flash script in base.html). */
+:root {
+    --map-ground: var(--bg-color);
+    --map-tile-filter: saturate(0.66) contrast(1.04) brightness(0.99);
+    --map-tile-opacity: 0.93;
+    --map-vignette: 0.16;
+    --map-frame: var(--border-color);
+    --map-reference-line: rgba(28, 36, 54, 0.42);
+    --map-chrome-bg: rgba(252, 253, 255, 0.9);
+    --map-chrome-ink: #1b2333;
+    --map-chrome-border: rgba(28, 36, 54, 0.18);
+    --map-hazard-glow: rgba(220, 53, 69, 0.55);
+}
+
+[data-theme-mode="dark"] {
+    /* Same numbers as `tone_basemap()`'s defaults. */
+    --map-tile-filter: saturate(0.38) contrast(1.18) brightness(0.58);
+    /* A quarter of the theme ground showing through. The share card blends
+       0.30 toward its slate; this stops a little short because an interactive
+       map still has to be readable enough to pan and zoom by. */
+    --map-tile-opacity: 0.75;
+    --map-vignette: 0.44;
+    --map-reference-line: rgba(232, 238, 248, 0.45);
+    --map-chrome-bg: rgba(12, 16, 26, 0.82);
+    --map-chrome-ink: #eef3fc;
+    --map-chrome-border: rgba(140, 155, 185, 0.45);
+}
+
+/* Obsidian is a true-black AMOLED theme; letting the ground through at the
+   usual strength turns the basemap into an unreadable smear. */
+[data-theme="obsidian"] {
+    --map-tile-opacity: 0.92;
+    --map-tile-filter: saturate(0.42) contrast(1.22) brightness(0.62);
+}
+
+/* ── The map frame ───────────────────────────────────────────────────────
+   `.eas-map` is added to the Leaflet container by EASMap.init(). */
+.eas-map.leaflet-container {
+    background: var(--map-ground);
+    border-radius: var(--radius-md, 1rem);
+    box-shadow:
+        inset 0 0 0 1px var(--map-frame),
+        0 12px 32px -22px var(--shadow-color, rgba(0, 0, 0, 0.5));
+    font-family: inherit;
+}
+
+/* The tone goes on the tiles, the wash goes on the pane.
+   A Leaflet pane is a 0×0 absolutely-positioned div, and a CSS filter's
+   region is derived from the element's own box — on a zero-size box the
+   filter quietly does nothing at all, so putting the tone chain on the pane
+   looks correct in devtools and changes not a single pixel. Each tile is a
+   real 256×256 image, so the filter has somewhere to live. `opacity` has no
+   such region and does work on the pane, which is where the tint wants to
+   be anyway: one blend of the whole mosaic toward `--map-ground`, not one
+   per tile (which would show every seam). */
+.eas-map .leaflet-tile {
+    filter: var(--map-tile-filter);
+}
+
+.eas-map .leaflet-tile-pane {
+    opacity: var(--map-tile-opacity);
+}
+
+/* Vignette. In the share card this is composited over the finished map so
+   the inset fades into the panel instead of ending in four hard bright
+   edges — the single strongest "screenshot pasted in" cue. Here it has to
+   be a container-level pseudo-element rather than a Leaflet pane, because
+   panes are translated during a pan and a vignette must stay pinned to the
+   frame. It sits above the map pane (z-index 400) and is inert to input. */
+.eas-map.leaflet-container::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 450;
+    pointer-events: none;
+    border-radius: inherit;
+    background: radial-gradient(
+        ellipse at center,
+        rgba(0, 0, 0, 0) 52%,
+        rgba(0, 0, 0, calc(var(--map-vignette) * 0.4)) 78%,
+        rgba(0, 0, 0, var(--map-vignette)) 100%
+    );
+}
+
+.eas-map--flat.leaflet-container::after {
+    /* Opt-out for maps that are mostly chrome (marker clouds, world views)
+       where edge darkening only hides data. */
+    display: none;
+}
+
+/* ── Hazard overlay ──────────────────────────────────────────────────────
+   A blurred wider stroke behind the crisp outline so the affected area
+   lifts off the basemap and is unmistakable at a glance — the browser
+   equivalent of the renderer's Gaussian-blurred glow ring. Applied to the
+   whole overlay rather than per path so a 40-county watch pays for one
+   filter instead of forty. The glow colour is written onto the pane element
+   by EASMap as `--map-hazard-glow` and inherits down to the renderer.
+
+   The filter goes on the renderer element, NOT on the pane. A Leaflet pane
+   is a zero-size absolutely-positioned div, and a CSS filter's default
+   filter region is derived from the element's own bounding box — on a 0×0
+   box that region is empty and the browser draws nothing at all, silently
+   erasing the overlay. The <svg>/<canvas> Leaflet puts inside the pane does
+   have real dimensions. */
+.eas-map .leaflet-pane.eas-pane-hazard > svg,
+.eas-map .leaflet-pane.eas-pane-hazard > canvas {
+    filter: drop-shadow(0 0 5px var(--map-hazard-glow));
+}
+
+/* Custom panes need Leaflet's own defence against global media caps, which
+   it only ships scoped to `.leaflet-overlay-pane`:
+   `svg, canvas { max-width: 100% }` in styles.css resolves against the
+   pane, and a Leaflet pane is a 0×0 positioned box — so the overlay's
+   max-width computes to 0 and every vector layer in a custom pane silently
+   renders nothing at all. */
+.leaflet-container .leaflet-easReference-pane svg,
+.leaflet-container .leaflet-easReference-pane canvas,
+.leaflet-container .leaflet-easHazard-pane svg,
+.leaflet-container .leaflet-easHazard-pane canvas {
+    max-width: none !important;
+}
+
+.eas-map .leaflet-pane.eas-pane-hazard path {
+    /* Rounded joins keep the white casing from spiking at sharp county
+       corners, where a miter join can shoot a long way past the vertex. */
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+/* ── Map chrome ──────────────────────────────────────────────────────────
+   Zoom, scale, attribution and the info notice all read as dark pills with
+   light text in dark themes and light pills with dark text in light ones —
+   legible on both bright landcover and dark water without knowing what is
+   underneath, which is the same reason the share card draws its labels
+   that way. */
+.leaflet-control-zoom {
+    border: none !important;
+    border-radius: var(--radius-md, 1rem) !important;
+    overflow: hidden;
+    box-shadow: 0 8px 24px var(--shadow-color) !important;
+}
+
+.leaflet-control-zoom a {
+    background: var(--map-chrome-bg) !important;
+    backdrop-filter: blur(10px) saturate(150%);
+    border: none !important;
+    color: var(--map-chrome-ink) !important;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.leaflet-control-zoom a:hover {
+    background: var(--primary-color) !important;
+    color: var(--text-on-dark, #fff) !important;
+}
+
+.leaflet-control-attribution {
+    background: var(--map-chrome-bg) !important;
+    color: var(--map-chrome-ink) !important;
+    border-radius: 6px 0 0 0;
+    padding: 2px 8px;
+    font-size: 0.68rem;
+    backdrop-filter: blur(8px);
+}
+
+.leaflet-control-attribution a {
+    color: var(--primary-color) !important;
+}
+
+.leaflet-control-scale-line {
+    background: var(--map-chrome-bg);
+    border: 1px solid var(--map-chrome-border);
+    border-top: none;
+    color: var(--map-chrome-ink);
+    font-size: 0.68rem;
+    line-height: 1.3;
+    padding: 1px 6px;
+    backdrop-filter: blur(8px);
+    text-shadow: none;
+}
+
+.leaflet-control-scale-line:first-child {
+    border-top: 1px solid var(--map-chrome-border);
+    border-radius: 4px 4px 0 0;
+}
+
+.leaflet-control-scale-line:last-child {
+    border-radius: 0 0 4px 4px;
+}
+
+.leaflet-control-scale-line:only-child {
+    border-top: 1px solid var(--map-chrome-border);
+    border-radius: 4px;
+}
+
+/* Place-name pill matching `map_style.place_labels()` — used by callers
+   that drop a permanent tooltip on a boundary centroid. */
+.leaflet-tooltip.eas-map-label {
+    background: var(--map-chrome-bg);
+    border: 1px solid var(--map-chrome-border);
+    border-radius: 999px;
+    box-shadow: none;
+    color: var(--map-chrome-ink);
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    white-space: nowrap;
+}
+
+.leaflet-tooltip.eas-map-label::before {
+    display: none;
+}
+
+/* ── Legacy Leaflet chrome (applies to every map, themed or not) ─────────
+   Moved here from styles.css so the Leaflet skin lives in one file that is
+   only downloaded by pages that actually render a map. */
+.leaflet-control.info-control {
+    background: var(--overlay-dark);
+    color: var(--text-on-dark);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    max-width: 200px;
+}
+
+.leaflet-popup-content-wrapper {
+    background: color-mix(in srgb, var(--surface-color) 98%, transparent) !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: 0 20px 60px var(--shadow-color) !important;
+    padding: 20px !important;
+    border: 2px solid var(--border-color);
+    color: var(--text-color) !important;
+}
+
+.leaflet-popup-tip {
+    background: var(--surface-color) !important;
+    border: 2px solid var(--border-color);
+    border-top: none;
+    border-left: none;
+}
+
+.leaflet-popup-close-button {
+    color: var(--primary-color) !important;
+    font-size: 24px !important;
+    font-weight: var(--font-weight-bold) !important;
+    padding: 8px 12px !important;
+    transition: all 0.3s ease !important;
+}
+
+.leaflet-popup-close-button:hover {
+    color: var(--secondary-color) !important;
+    transform: rotate(90deg) scale(1.2);
+}
+
+/* Popup body typography. Promoted here from the page-local <style> blocks of
+   index.html and alert_detail.html, which each carried their own near-identical
+   copy (see tests/css_collisions_allowlist.txt). */
+.leaflet-popup-content {
+    max-width: 300px;
+}
+
+.popup-title {
+    font-weight: bold;
+    color: var(--primary-color);
+    margin-bottom: 8px;
+    font-size: 1.1em;
+}
+
+.popup-detail {
+    margin-bottom: 5px;
+    font-size: 0.9em;
+}
+
+.popup-detail code {
+    color: var(--primary-color);
+}
+
+/* ── Motion & print ──────────────────────────────────────────────────────
+   The tone filter and glow are decorative; drop them where they cost more
+   than they give (printing a dark map wastes ink and hides detail). */
+@media print {
+    .eas-map .leaflet-tile-pane {
+        filter: none;
+        opacity: 1;
+    }
+
+    .eas-map.leaflet-container::after {
+        display: none;
+    }
+
+    .eas-map .leaflet-pane.eas-pane-hazard {
+        filter: none;
+    }
+}

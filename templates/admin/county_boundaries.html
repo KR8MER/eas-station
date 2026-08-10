@@ -6,6 +6,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 <!-- Leaflet CSS (local to avoid CDN tracking prevention) -->
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}?v={{ static_asset_version }}" />
 <style>
 .county-result {
     padding: 10px;
@@ -424,6 +425,7 @@ GET /admin/county_boundaries/geojson?state=OH</pre>
 {% block scripts %}
 <!-- Leaflet JS (local to avoid CDN tracking prevention) -->
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/map_theme.js') }}?v={{ static_asset_version }}"></script>
 
 <script>
 function createToastContainer() {
@@ -506,11 +508,10 @@ let countyMap = null;
 let countyLayer = null;
 
 function initMap() {
-    countyMap = L.map('county-map', { preferCanvas: true }).setView([39.5, -98.35], 4);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 18,
-    }).addTo(countyMap);
+    // Themed basemap. No vignette here: this is a browsing tool where the
+    // counties near the frame edge matter as much as the ones in the middle.
+    countyMap = EASMap.create('county-map', { preferCanvas: true, vignette: false })
+        .setView([39.5, -98.35], 4);
 }
 
 function loadStateOnMap(stateAbbrev) {
@@ -531,8 +532,9 @@ function loadStateOnMap(stateAbbrev) {
                 showToast('No county boundaries found for ' + stateAbbrev, 'warning');
                 return;
             }
+            const countyInk = EASMap.cssVar('--primary-color', '#2563eb');
             countyLayer = L.geoJSON(geojson, {
-                style: { color: '#2563eb', weight: 1.5, opacity: 0.8, fillColor: '#3b82f6', fillOpacity: 0.15 },
+                style: { color: countyInk, weight: 1.5, opacity: 0.85, fillColor: countyInk, fillOpacity: 0.15 },
                 onEachFeature: function(feature, layer) {
                     const p = feature.properties;
                     layer.bindPopup(

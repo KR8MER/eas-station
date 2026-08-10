@@ -344,16 +344,8 @@
         margin-left: 5px;
     }
 
-    .popup-title {
-        font-weight: bold;
-        color: var(--primary-color);
-        margin-bottom: 8px;
-    }
-
-    .popup-detail {
-        margin-bottom: 5px;
-        font-size: 0.9em;
-    }
+    /* .popup-title / .popup-detail are shared map-popup styles and live in
+       static/css/map.css — index.html carried a near-identical copy. */
 
     .alert-actions {
         position: sticky;
@@ -633,7 +625,9 @@
                             </h5>
                         </div>
                         <div class="card-body">
-                            <div id="map" style="height: 500px; background: var(--bg-color); border-radius: 5px;">
+                            {# Frame, ground colour and radius come from the
+                               shared map skin (static/css/map.css). #}
+                            <div id="map" style="height: 500px;">
                                 <div class="d-flex align-items-center justify-content-center h-100">
                                     <div class="text-center">
                                         <div class="spinner-border text-primary" role="status"></div>
@@ -2044,7 +2038,9 @@
 {% block scripts %}
 <!-- Leaflet for maps (local to avoid CDN tracking prevention) -->
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}?v={{ static_asset_version }}" />
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/map_theme.js') }}?v={{ static_asset_version }}"></script>
 
 <script>
 async function resendEASMessage(messageId, btn) {
@@ -2095,21 +2091,11 @@ document.addEventListener('click', function(e) {
 console.log('Alert detail page scripts loading...');
 
 // Helper function to get CSS variable colors
-function getCSSVar(varName, fallback) {
-    const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
-    return value || fallback;
-}
+const getCSSVar = EASMap.cssVar;
 
-// Severity color mapping
-function getSeverityColor(severity) {
-    switch(severity) {
-        case 'Extreme': return getCSSVar('--severity-extreme', '#e74c3c');
-        case 'Severe': return getCSSVar('--severity-severe', '#e67e22');
-        case 'Moderate': return getCSSVar('--severity-moderate', '#f39c12');
-        case 'Minor': return getCSSVar('--severity-minor', '#3498db');
-        default: return getCSSVar('--severity-unknown', '#ff6b35');
-    }
-}
+// Severity color mapping — EASMap resolves this from the active theme's
+// --severity-* variables, the same names the share image reads.
+const getSeverityColor = EASMap.severityColor;
 
 // Boundary type color mapping
 function getBoundaryColor(type) {
@@ -2153,13 +2139,10 @@ function initializeMap() {
     try {
         console.log('Initializing map...');
 
-        // Create map
-        map = L.map('map').setView([41.0167, -84.1330], 11);
-
-        // Add tile layer
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
+        // Themed basemap + hazard/reference panes + scale bar. The tone,
+        // vignette and hazard glow mirror the share-image renderer so the
+        // page and the exported graphic read as the same map.
+        map = EASMap.create('map').setView([41.0167, -84.1330], 11);
 
         console.log('Map created successfully');
 
@@ -2270,17 +2253,12 @@ function loadCountiesFromSameCodes(sameCodes, alertFeature) {
             return;
         }
 
-        const color = getSeverityColor(alertData.severity);
-        alertLayer = L.geoJSON(
+        alertLayer = EASMap.hazardLayer(
             { type: 'FeatureCollection', features: matchedFeatures },
             {
-                style: {
-                    color: color,
-                    weight: 2,
-                    opacity: 0.9,
-                    fillColor: color,
-                    fillOpacity: 0.25,
-                },
+                severity: alertData.severity,
+                weight: 2,
+                fillOpacity: 0.25,
                 onEachFeature: function(feature, layer) {
                     const p = feature.properties;
                     layer.bindPopup(
@@ -2337,6 +2315,7 @@ function showApproximateCountyCoverage() {
 
         // Draw an approximate county-sized circle (~15km radius)
         alertLayer = L.circle(center, {
+            pane: EASMap.PANE_HAZARD,
             radius: 15000,
             color: color,
             weight: 3,
@@ -2378,19 +2357,13 @@ function displayAlertOnMap(alertGeoData) {
     try {
         console.log('Displaying alert on map...');
 
-        // Determine color based on severity
-        const color = getSeverityColor(alertData.severity);
-
-        // Create alert layer
-        alertLayer = L.geoJSON(alertGeoData, {
-            style: {
-                color: color,
-                weight: alertData.is_county_wide ? 4 : 3,
-                opacity: 0.8,
-                fillOpacity: alertData.is_county_wide ? 0.2 : 0.3,
-                fillColor: color,
-                dashArray: alertData.is_county_wide ? '10, 5' : ''
-            }
+        // Create alert layer — glow + white casing + severity core, the
+        // same treatment the share image uses.
+        alertLayer = EASMap.hazardLayer(alertGeoData, {
+            severity: alertData.severity,
+            weight: alertData.is_county_wide ? 4 : 3,
+            fillOpacity: alertData.is_county_wide ? 0.2 : 0.3,
+            dashArray: alertData.is_county_wide ? '10, 5' : null
         }).addTo(map);
 
         // Fit map to alert bounds
@@ -2430,17 +2403,13 @@ function loadBoundaries() {
             .then(response => response.json())
             .then(data => {
                 if (data.features && data.features.length > 0) {
-                    const color = getBoundaryColor(type);
-                    
-                    // Create boundary layer
-                    boundaryLayers[type] = L.geoJSON(data, {
-                        style: {
-                            color: color,
-                            weight: type === 'county' ? 3 : 1,
-                            opacity: 0.6,
-                            fillOpacity: type === 'county' ? 0.05 : 0.1,
-                            fillColor: color
-                        },
+                    // Context, not subject: these go in the reference pane
+                    // underneath the alert as quiet lines, the way the share
+                    // image draws its county outlines. The category colour is
+                    // kept so the legend still means something, but muted.
+                    boundaryLayers[type] = EASMap.referenceLayer(data, {
+                        color: getBoundaryColor(type),
+                        emphasis: type === 'county',
                         onEachFeature: function(feature, layer) {
                             const props = feature.properties;
                             layer.bindPopup(`
@@ -2488,6 +2457,7 @@ function addStormTrackToMap() {
 
     // Draw the observed track as a dashed polyline
     const trackLine = L.polyline(sm.track, {
+        pane: EASMap.PANE_HAZARD,
         color: '#ff6b00',
         weight: 3,
         dashArray: '8, 5',
@@ -2503,6 +2473,7 @@ function addStormTrackToMap() {
     sm.track.forEach((pt, i) => {
         const isLast = i === sm.track.length - 1;
         L.circleMarker(pt, {
+            pane: EASMap.PANE_HAZARD,
             radius: isLast ? 7 : 4,
             color: isLast ? '#ff6b00' : '#cc5500',
             fillColor: isLast ? '#ff6b00' : '#ff9944',
@@ -2530,6 +2501,7 @@ function addStormTrackToMap() {
         const projPt = [lastPt[0] + dLat, lastPt[1] + dLon];
 
         L.polyline([lastPt, projPt], {
+            pane: EASMap.PANE_HAZARD,
             color: '#ff6b00',
             weight: 2,
             dashArray: '4, 8',

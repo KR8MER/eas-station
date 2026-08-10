@@ -5,17 +5,16 @@
 {% block extra_css %}
 <!-- Leaflet CSS (local to avoid CDN tracking prevention) -->
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}?v={{ static_asset_version }}" />
 
 <style>
+    /* Frame, ground colour and radius come from the shared map skin
+       (static/css/map.css); only the sizing is page-specific. */
     #map {
         height: 60vh;
         min-height: 400px;
         max-height: 800px;
         width: 100%;
-        border-radius: var(--radius-md);
-        border: 1px solid var(--border-color);
-        box-shadow: 0 12px 30px rgba(32, 72, 133, 0.16);
-        overflow: hidden;
     }
     
     @media (max-width: 768px) {
@@ -342,22 +341,9 @@
         opacity: 0.7;
     }
 
-    /* Leaflet popup customization */
-    .leaflet-popup-content {
-        max-width: 300px;
-    }
-
-    .popup-title {
-        font-weight: bold;
-        color: var(--primary-color);
-        margin-bottom: 8px;
-        font-size: 1.1em;
-    }
-
-    .popup-detail {
-        margin-bottom: 5px;
-        font-size: 0.9em;
-    }
+    /* Leaflet popup customization (.leaflet-popup-content, .popup-title and
+       .popup-detail) is shared with alert_detail.html and lives in
+       static/css/map.css. */
 
     .popup-badge {
         display: inline-block;
@@ -746,6 +732,7 @@
 {% block scripts %}
 <!-- Load Leaflet (local to avoid CDN tracking prevention) -->
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/map_theme.js') }}?v={{ static_asset_version }}"></script>
 
 <script>
 console.log('🗺️ Interactive map page initializing...');
@@ -948,24 +935,16 @@ async function initMap() {
     try {
         console.log(`🗺️ Initializing Leaflet map for ${LOCATION_LABEL}...`);
 
-        // Create map centered on configured location
-        map = L.map('map').setView(MAP_CENTER, MAP_ZOOM);
-
-        // Add OpenStreetMap tile layer
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 18,
-            minZoom: 8
-        }).addTo(map);
+        // Create map centered on configured location. EASMap adds the
+        // toned basemap, the hazard/reference panes and the scale bar so
+        // this map matches the exported share graphics.
+        map = EASMap.create('map', {
+            tile: { minZoom: 8 }
+        }).setView(MAP_CENTER, MAP_ZOOM);
 
         // Initialize layer groups
         alertLayer = L.layerGroup().addTo(map);
         boundaryLayers = {};
-
-        // Add scale control
-        L.control.scale({
-            position: 'bottomleft'
-        }).addTo(map);
 
         console.log('✅ Map initialized successfully');
         updateMapStatus('Ready', 'success');
@@ -1058,19 +1037,14 @@ function displayAlerts(alerts) {
     alerts.forEach(alert => {
         if (alert.geometry) {
             const severity = alert.properties.severity || 'Unknown';
-            const color = getSeverityColor(severity);
             const isActive = !isAlertExpired(alert.properties.expires);
 
-            const alertFeature = L.geoJSON(alert, {
-                style: {
-                    color: color,
-                    weight: alert.properties.is_county_wide ? 4 : 3,
-                    opacity: isActive ? 0.8 : 0.5,
-                    fillOpacity: alert.properties.is_county_wide ? 0.3 : 0.4,
-                    fillColor: color,
-                    dashArray: alert.properties.is_county_wide ? '10,5' : null,
-                    className: isActive ? 'alert-active' : 'alert-expired'
-                },
+            const alertFeature = EASMap.hazardLayer(alert, {
+                severity: severity,
+                weight: alert.properties.is_county_wide ? 4 : 3,
+                fillOpacity: alert.properties.is_county_wide ? 0.3 : 0.4,
+                dashArray: alert.properties.is_county_wide ? '10,5' : null,
+                className: isActive ? 'alert-active' : 'alert-expired',
                 onEachFeature: function(feature, layer) {
                     const props = feature.properties;
                     const popupContent = createAlertPopup(props);
@@ -1089,7 +1063,11 @@ function displayAlerts(alerts) {
 function displayHistoricalAlerts(alerts) {
     alerts.forEach(alert => {
         if (alert.geometry) {
+            // Reference pane, not the hazard pane: an expired alert is
+            // context. Left in the default overlay pane it would render
+            // *under* the boundary lines, which load asynchronously.
             const alertFeature = L.geoJSON(alert, {
+                pane: EASMap.PANE_REFERENCE,
                 style: {
                     color: getColorVar('--text-muted'),
                     weight: 2,
@@ -1156,14 +1134,11 @@ async function loadBoundaries() {
                     layerGroup.clearLayers();
                 }
 
-                const boundaryFeature = L.geoJSON(features, {
-                    style: {
-                        color: metadata.color,
-                        weight: 1,
-                        opacity: 0.6,
-                        fillOpacity: 0.1,
-                        fillColor: metadata.color
-                    },
+                // Reference pane: boundaries are geographic context under
+                // the alerts, so they keep their category colour but read as
+                // quiet lines rather than competing with the hazard.
+                const boundaryFeature = EASMap.referenceLayer(features, {
+                    color: metadata.color,
                     onEachFeature: function(feature, layer) {
                         const props = feature.properties || {};
                         const popupContent = createBoundaryPopup(props, typeKey);

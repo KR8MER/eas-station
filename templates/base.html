@@ -6,6 +6,15 @@
         (function() {
             const savedTheme = localStorage.getItem('theme') || 'cosmo';
             document.documentElement.setAttribute('data-theme', savedTheme);
+            // data-theme-mode is normally stamped by theme.js on DOMContentLoaded,
+            // which is too late for rules keyed on it (the Leaflet basemap tone in
+            // static/css/map.css, the chart palettes) — those would paint their
+            // light variant first and snap to dark a moment later. Keep this list
+            // in sync with the dark-mode entries in static/js/core/theme.js.
+            const DARK_THEMES = ['dark', 'coffee', 'aurora', 'nebula', 'midnight',
+                                 'charcoal', 'obsidian', 'slate', 'lightning'];
+            document.documentElement.setAttribute(
+                'data-theme-mode', DARK_THEMES.includes(savedTheme) ? 'dark' : 'light');
         })();
     </script>
     

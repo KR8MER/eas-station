@@ -229,21 +229,23 @@
 {# Leaflet map for the alert polygon — only loaded when geometry exists #}
 {% if payload.alert and payload.alert.geom is not none %}
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}?v={{ static_asset_version }}" />
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/map_theme.js') }}?v={{ static_asset_version }}"></script>
 <script>
 (function () {
-    var map = L.map('trail-map', { scrollWheelZoom: false }).setView([39.5, -98.5], 4);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap',
-        maxZoom: 18,
-    }).addTo(map);
+    var map = EASMap.create('trail-map', { scrollWheelZoom: false })
+        .setView([39.5, -98.5], 4);
 
     fetch("{{ url_for('api.get_alert_geometry', alert_id=payload.alert.id) }}")
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (data) {
             if (!data || !data.alert) { return; }
-            var layer = L.geoJSON(data.alert, {
-                style: { color: '#dc3545', weight: 2, fillOpacity: 0.2 }
+            var severity = (data.alert.properties || {}).severity;
+            var layer = EASMap.hazardLayer(data.alert, {
+                severity: severity,
+                weight: 2,
+                fillOpacity: 0.2,
             }).addTo(map);
             try { map.fitBounds(layer.getBounds(), { padding: [12, 12] }); }
             catch (_e) { /* empty geometry — leave default view */ }

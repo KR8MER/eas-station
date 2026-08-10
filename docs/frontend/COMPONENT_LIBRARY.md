@@ -778,16 +778,18 @@ Highcharts.chart('alertChart', {
 
 ### Maps
 
-> **Leaflet must be loaded by the page template** — it is not included in `base.html`.
-> Add these to every template that uses a Leaflet map:
+> **Leaflet and the shared map skin must be loaded by the page template** — neither is
+> included in `base.html`. Add all four to every template that uses a Leaflet map:
 >
 > ```html
 > {% block extra_css %}
 > <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}" />
+> <link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}?v={{ static_asset_version }}" />
 > {% endblock %}
 >
 > {% block scripts %}
 > <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.min.js') }}"></script>
+> <script src="{{ url_for('static', filename='js/core/map_theme.js') }}?v={{ static_asset_version }}"></script>
 > <script>
 > // map code here
 > </script>
@@ -796,6 +798,10 @@ Highcharts.chart('alertChart', {
 >
 > Omitting the Leaflet JS causes `ReferenceError: L is not defined` which silently prevents
 > **all** `DOMContentLoaded` event listeners on the page from being attached.
+>
+> Omitting `map.css` / `map_theme.js` is quieter but just as wrong: the map renders a raw,
+> full-saturation OpenStreetMap mosaic that ignores the active theme entirely.
+> `tests/test_map_theme.py` fails on either omission.
 
 ```html
 <!-- Interactive Map Container -->
@@ -815,24 +821,23 @@ Highcharts.chart('alertChart', {
 
 <!-- Map JavaScript -->
 <script>
-// Initialize Leaflet map
-const map = L.map('alertMap').setView([39.8283, -98.5795], 4);
+// EASMap.create() = L.map() + a toned, theme-aware basemap + the hazard and
+// reference panes + a scale bar. Never call L.map() directly.
+const map = EASMap.create('alertMap').setView([39.8283, -98.5795], 4);
 
-// Add tile layer
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© OpenStreetMap contributors'
+// Context boundaries first — they live in a pane *under* the alert, so an
+// async fetch that finishes late can never paint over the warning.
+EASMap.referenceLayer(boundaryGeoJson, { color: countyColor }).addTo(map);
+
+// The alert itself: glow + white casing + severity-coloured core, the same
+// treatment the exported share image uses. Colours track the active theme.
+const hazard = EASMap.hazardLayer(alertGeoJson, {
+  severity: 'Severe',
+  onEachFeature: (feature, layer) =>
+    layer.bindPopup(`<div class="popup-title">${feature.properties.event}</div>`)
 }).addTo(map);
 
-// Add alert markers
-const alerts = [
-  { lat: 41.8781, lng: -87.6298, type: 'torwarning' },
-  { lat: 39.7392, lng: -104.9903, type: 'sevthunder' }
-];
-
-alerts.forEach(alert => {
-  const marker = L.marker([alert.lat, alert.lng]).addTo(map);
-  marker.bindPopup(`Alert Type: ${alert.type}`);
-});
+map.fitBounds(hazard.getBounds(), { padding: [30, 30] });
 </script>
 ```
 
