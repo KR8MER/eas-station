@@ -700,8 +700,39 @@ EAS Station™ features a comprehensive theme system with 20 built-in themes and
 **Core Files:**
 - `static/js/core/theme.js` - Theme management, switching, import/export
 - `static/css/base.css` - All theme color definitions (CSS variables)
-- `templates/base.html` - Theme initialization (`data-theme="cosmo"`)
+- `templates/base.html` - Theme initialization (`data-theme="cosmo"`, plus the
+  anti-flash script that also stamps `data-theme-mode` before first paint)
 - `templates/components/navbar.html` - Theme selector UI (palette icon + quick toggle)
+- `static/css/map.css` + `static/js/core/map_theme.js` - Theme-aware Leaflet skin
+  (see [Maps](#maps-always-go-through-easmap))
+
+### Maps: always go through `EASMap`
+
+Never call `L.map()` in a template. Build maps with
+**`EASMap.create(id, opts)`** (or `EASMap.init(map)` if the map has to be
+constructed by hand) from `static/js/core/map_theme.js`, and load
+`static/css/map.css` next to `vendor/leaflet/leaflet.css`. That gives the map
+the toned basemap, the hazard and reference panes, the scale bar and the
+themed chrome, and keeps it in step with theme switches.
+`tests/test_map_theme.py` fails the build on a page that skips either asset or
+reaches for `L.map()` directly.
+
+Draw alert geometry with `EASMap.hazardLayer(geojson, {severity})` and context
+boundaries with `EASMap.referenceLayer(geojson, {color})` — the panes fix the
+draw order so an async boundary fetch can never land on top of the alert. Full
+API in [JavaScript API → Map Skin](../frontend/JAVASCRIPT_API.md#map-skin-easmap).
+
+⚠️ **Two silent traps if you hand-roll Leaflet panes.** A Leaflet pane is a
+0×0 absolutely-positioned div, and that breaks two CSS features in ways that
+leave no error and no clue in devtools:
+
+1. A CSS `filter` on a pane is discarded — the filter region derives from the
+   element's own (empty) box — while `getComputedStyle` still reports it.
+   Filter the `.leaflet-tile` images or the pane's `<svg>`, never the pane.
+2. The global `svg, canvas { max-width: 100% }` mobile-overflow rule in
+   `styles.css` resolves to **zero** inside a pane, so the overlay renders
+   nothing at all. Leaflet ships a `max-width: none` reset for exactly this
+   but scopes it to `.leaflet-overlay-pane`; custom panes must repeat it.
 
 ### CSS Variable Structure
 

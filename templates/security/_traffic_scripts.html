@@ -3,6 +3,7 @@
    dashboard logic). Loaded by the Security Center page. #}
 <script src="{{ url_for('static', filename='vendor/chartjs/chart-v3.min.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/map_theme.js') }}?v={{ static_asset_version }}"></script>
 <script src="{{ url_for('static', filename='js/data/country_centroids.js') }}"></script>
 <script src="{{ url_for('static', filename='js/data/us_state_centroids.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/jspdf/jspdf.umd.min.js') }}"></script>
@@ -722,11 +723,12 @@
         const stateCentroids = window.US_STATE_CENTROIDS || {};
         if (typeof L === 'undefined') return;
         if (!trafficMap) {
-            trafficMap = L.map('trafficMap', { worldCopyJump: true, minZoom: 1, attributionControl: true })
-                .setView([20, 0], 2);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 8, attribution: '© OpenStreetMap'
-            }).addTo(trafficMap);
+            // Themed basemap; no vignette or scale bar — this is a marker
+            // cloud over a world view, where edge darkening only hides dots.
+            trafficMap = EASMap.create('trafficMap', {
+                worldCopyJump: true, minZoom: 1, attributionControl: true,
+                vignette: false, scale: false, tile: { maxZoom: 8 }
+            }).setView([20, 0], 2);
         }
         _ensureMapLegend();
         if (trafficMapLayer) { trafficMap.removeLayer(trafficMapLayer); trafficMapLayer = null; }

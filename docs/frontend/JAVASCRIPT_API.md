@@ -591,56 +591,76 @@ lineChart.updateOptions({
 });
 ```
 
-### Map Manager (`EASMap`)
+### Map Skin (`EASMap`)
 
-Leaflet integration with EAS Station™ specific features.
+`static/js/core/map_theme.js` — the shared, theme-aware Leaflet helpers. Load
+it alongside `static/css/map.css` on any page that renders a map; every
+Leaflet page in the app does.
+
+It is the browser-side twin of the share-image renderer
+(`app_utils/image_export/`): the basemap is toned back to a quiet ground in
+the active theme's colours, and the alert polygon is drawn as the only
+saturated thing in frame — a blurred glow behind a white casing stroke behind
+a severity-coloured core. Overlay colours are read from the theme's
+`--severity-*` variables and re-resolved when the theme changes, so a live map
+restyles itself without a reload.
+
+```html
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}?v={{ static_asset_version }}">
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/map_theme.js') }}?v={{ static_asset_version }}"></script>
+```
 
 ```javascript
-// Initialize map
-const map = new EASMap('#alertMap', {
-  center: [39.8283, -98.5795],
-  zoom: 4,
-  layers: {
-    base: 'openstreetmap',
-    overlays: {
-      alerts: true,
-      boundaries: true
-    }
-  }
-});
+// Toned basemap + hazard/reference panes + scale bar, in one call.
+// Never call L.map() directly — a hand-built map gets none of this.
+const map = EASMap.create('map').setView([41.02, -84.13], 9);
 
-// Add alert markers
-map.addAlerts([
-  {
-    id: 1,
-    lat: 41.8781,
-    lng: -87.6298,
-    type: 'torwarning',
-    title: 'Tornado Warning'
-  }
-]);
+// Browsing maps (marker clouds, world views) can drop the edge vignette:
+EASMap.create('trafficMap', { vignette: false, scale: false, tile: { maxZoom: 8 } });
 
-// Add boundary layer
-map.addBoundaries('/api/boundaries', {
-  style: {
-    color: '#3d73cd',
-    weight: 2,
-    opacity: 0.7
-  }
-});
+// Alert geometry: glow + white casing + severity core over a translucent fill.
+// Returns an L.FeatureGroup, so getBounds()/bindPopup()/addTo() all work.
+const hazard = EASMap.hazardLayer(geojson, {
+    severity: 'Severe',        // resolves --severity-severe; follows theme switches
+    weight: 3,
+    fillOpacity: 0.28,
+    onEachFeature: (feature, layer) => layer.bindPopup(popupHtml(feature))
+}).addTo(map);
+map.fitBounds(hazard.getBounds(), { padding: [30, 30] });
 
-// Handle map events
-map.on('markerClick', (alertData) => {
-  showAlertDetails(alertData);
-});
+// Context boundaries: quiet reference lines in a pane *underneath* the hazard,
+// so load order can never leave a boundary painted over the alert.
+EASMap.referenceLayer(boundaries, {
+    color: categoryColor,      // keeps the legend meaningful, muted in weight
+    emphasis: true             // slightly heavier line for the primary county
+}).addTo(map);
 
-map.on('boundaryClick', (boundaryData) => {
-  showBoundaryInfo(boundaryData);
-});
-
-// Update map bounds
-map.fitBounds(alertsData);
+// Re-colour page-owned layers on a theme switch (fires once immediately too).
+EASMap.onThemeChange((isDark) => redrawMyOwnLayers());
 ```
+
+| Member | Purpose |
+| --- | --- |
+| `create(el, opts)` | `L.map` + toned basemap + `init()`. `opts` also accepts `tile` (tile-layer options), `scale`, `vignette`. |
+| `init(map, opts)` | Apply the skin to a map you built yourself. |
+| `tileLayer(opts)` | The OSM layer with the attribution the tile policy requires. |
+| `hazardLayer(geojson, opts)` | Alert geometry, share-card styling. `severity` \| `color`, `weight`, `fillOpacity`, `dashArray`, `className`, `onEachFeature`. |
+| `referenceLayer(geojson, opts)` / `referenceStyle(opts)` | Context boundaries under the hazard. |
+| `severityColor(severity)` | The active theme's colour for a CAP severity. |
+| `cssVar(name, fallback)` / `withAlpha(color, a)` | Colour helpers (`withAlpha` normalises through a canvas, so `color-mix()` values survive). |
+| `onThemeChange(fn)` | Callback on `theme-changed`, plus one immediate call. |
+| `PANE_HAZARD` / `PANE_REFERENCE` | Pane names, for layers built directly with Leaflet (`L.circle(latlng, { pane: EASMap.PANE_HAZARD })`). |
+
+> **Two silent CSS traps live behind this**, both guarded by
+> `tests/test_map_theme.py`. A Leaflet pane is a 0x0 absolutely-positioned
+> div, so (1) a CSS `filter` on a pane is discarded while devtools still
+> reports it — the tone goes on `.leaflet-tile`, the glow on the pane's
+> `<svg>`; and (2) the global `svg { max-width: 100% }` mobile-overflow rule
+> resolves to zero inside a pane, so custom panes need Leaflet's
+> `max-width: none` reset, which Leaflet only ships for its own
+> `.leaflet-overlay-pane`. Without it, vector layers render nothing at all.
 
 ---
 

@@ -8,6 +8,65 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.153.0] - 2026-08-10 - The in-app maps get the share card's treatment
+
+### Added
+- **A shared, theme-aware Leaflet skin** — `static/css/map.css` plus
+  `static/js/core/map_theme.js` (`window.EASMap`). Release 2.152.0 gave the
+  exported share card a toned basemap and a hazard that reads as the subject;
+  the maps inside the app kept rendering raw OpenStreetMap: pastel landcover,
+  orange motorways and dozens of town labels at full saturation, dropped into
+  a themed card and completely indifferent to which of the 20 themes was
+  active. The alert polygon had to compete with the road network to be seen.
+
+  The skin is the browser-side twin of `app_utils/image_export/map_style.py`
+  and reuses its numbers. The basemap runs the same tone chain in the same
+  load-bearing order — `saturate(0.38) contrast(1.18) brightness(0.58)` on
+  dark themes, gentler on light ones — then blends toward the theme's own
+  background, which is what makes the map belong to the current theme instead
+  of merely sitting on top of it. A radial vignette fades the frame edges so
+  the map stops looking like a screenshot pasted into the card, and zoom,
+  scale, attribution and popups all read as chrome in the active palette.
+
+  Alert geometry is drawn the way the share card draws it: a blurred glow
+  behind a white casing stroke behind a severity-coloured core, over a
+  semi-transparent fill, in a dedicated pane that always sits above the
+  context boundaries no matter which finishes loading first. Boundaries move
+  to their own pane underneath as quiet reference lines — still in their
+  category colour, no longer competing.
+
+  Overlay colours are resolved from the theme's `--severity-*` variables at
+  draw time and re-resolved on the `theme-changed` event, so switching themes
+  restyles a live map without a reload.
+
+### Changed
+- **Every Leaflet map in the app now goes through the skin**: the alert
+  detail coverage map, the dashboard's interactive map, the alert trail map,
+  the county-boundary browser and the Security Center traffic map. The two
+  browsing maps opt out of the vignette (`EASMap.create(..., {vignette:
+  false})`), where edge darkening would only hide data.
+- **`base.html` stamps `data-theme-mode` in its anti-flash script.** It was
+  only set by `theme.js` on `DOMContentLoaded`, so anything keyed on it —
+  the new basemap tone, the chart palettes — painted its light variant first
+  and snapped to dark a moment later. `tests/test_map_theme.py` keeps the
+  hardcoded dark-theme list in sync with `theme.js`.
+- **The Leaflet chrome moved out of `styles.css`** (loaded on every page)
+  into `map.css` (loaded only by pages with a map), and the duplicated
+  `.popup-title` / `.popup-detail` rules that `index.html` and
+  `alert_detail.html` each carried their own copy of were promoted with it —
+  clearing two entries from `tests/css_collisions_allowlist.txt`.
+
+### Fixed
+- **Vector layers in a custom Leaflet pane rendered nothing.** Leaflet ships
+  a `max-width: none` reset for exactly this, but scopes it to
+  `.leaflet-overlay-pane`; the mobile-overflow rule `svg, canvas { max-width:
+  100% }` in `styles.css` resolves against the pane, and a Leaflet pane is a
+  0x0 positioned box, so the overlay's width computed to zero. The same trap
+  applies to CSS `filter`, whose region derives from the element's own box —
+  a filter on a pane is silently discarded while devtools still reports it,
+  which is why the tone chain lives on `.leaflet-tile` and the hazard glow on
+  the pane's `<svg>`.
+
 ## [2.152.0] - 2026-08-10 - The share-card map reads like a warning graphic
 
 ### Changed
