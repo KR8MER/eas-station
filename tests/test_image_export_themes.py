@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 
 try:  # pragma: no cover - Pillow is a hard requirement of the renderer
-    from PIL import Image
+    from PIL import Image, ImageDraw
 except ImportError:  # pragma: no cover
     pytest.skip("Pillow is required for image_export tests", allow_module_level=True)
 
@@ -926,7 +926,8 @@ def test_render_map_draws_counties_and_scale_bar(monkeypatch):
     monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
 
     # Stub a 3×3 grid of square "counties" around the alert polygon.
-    def _fake_counties(min_lon, min_lat, max_lon, max_lat, db_session=None):
+    def _fake_counties(min_lon, min_lat, max_lon, max_lat, db_session=None,
+                       **kwargs):
         xs = [-84.4, -84.0, -83.6, -83.2]
         ys = [39.8, 40.2, 40.6, 41.0]
         out = []
@@ -1197,3 +1198,107 @@ def test_logo_actually_loads():
 def test_tile_disk_cache_default_dir_is_repository_data_dir():
     repo_root = Path(__file__).resolve().parent.parent
     assert Path(image_export._TILE_DISK_CACHE_DIR_DEFAULT) == repo_root / "data" / "tile-cache"
+
+
+# ── Tagged NWS descriptions render as a labelled outline ────────────────────
+# NWS writes descriptions to a bullet outline (WHAT / WHERE / WHEN /
+# IMPACTS / ADDITIONAL DETAILS) that CAP delivers as one free-text field.
+# The renderer used to flatten it to a paragraph, producing a run-on wall
+# with stray "*" and "-" glyphs mid-sentence.  These tests pin the
+# structured path end-to-end.
+
+_TAGGED_DESCRIPTION = """* WHAT...Flooding caused by excessive rainfall is expected.
+
+* WHERE...A portion of northwest Ohio, including Allen, Defiance and Putnam.
+
+* WHEN...Until 1245 PM EDT.
+
+* IMPACTS...Minor flooding in low-lying and poor drainage areas.
+
+* ADDITIONAL DETAILS...
+- At 935 AM EDT, Doppler radar indicated heavy rain due to thunderstorms.
+- http://www.weather.gov/safety/flood"""
+
+
+def _render_description_panel(description, *, areas_shown=False,
+                              timing_shown=False, height=400):
+    """Draw just the description section onto a blank panel.
+
+    Returns ``(image, y_after)`` so tests can assert on both the pixels and
+    the advanced cursor without standing up a whole card.
+    """
+    alert = _FakeAlert()
+    alert.description = description
+    img = Image.new("RGB", (600, height), image_export._BG)
+    draw = ImageDraw.Draw(img)
+    y_after = image_export._draw_description(
+        draw, image_export._load_fonts(), (80, 160, 240),
+        0, 0, 594, height, alert,
+        areas_shown=areas_shown, timing_shown=timing_shown,
+    )
+    return img, y_after
+
+
+def test_tagged_description_drops_sections_shown_elsewhere():
+    """WHERE duplicates AFFECTED AREAS; WHEN duplicates the footer stamp.
+
+    Dropping both is what buys the room for the hazard copy, so the
+    saving is asserted in pixels: the panel must be materially shorter
+    when the card is already carrying that information.
+    """
+    _, tall = _render_description_panel(_TAGGED_DESCRIPTION)
+    _, short = _render_description_panel(
+        _TAGGED_DESCRIPTION, areas_shown=True, timing_shown=True)
+    assert 0 < short < tall, (
+        f"expected the trimmed panel to be shorter (got {short} vs {tall})"
+    )
+
+
+def test_tagged_description_paints_within_its_reported_height():
+    """The block background must cover every row the drawer claims.
+
+    A mismatch between the laid-out height and the painted rectangle is
+    invisible in a unit test but shows up on the card as text sitting on
+    the page background instead of the card fill.
+    """
+    img, y_after = _render_description_panel(
+        _TAGGED_DESCRIPTION, areas_shown=True, timing_shown=True)
+    assert y_after > 0
+    # Every row between the section header and the end of the block should
+    # be card-coloured, not the page background.
+    for y in range(24, y_after - 8):
+        assert img.getpixel((300, y)) != image_export._BG, (
+            f"row {y} was left on the page background"
+        )
+
+
+def test_untagged_description_still_renders_as_a_paragraph():
+    """Prose without tags must fall back to the original paragraph path."""
+    prose = ("A strong line of storms will move through the area this "
+             "afternoon bringing heavy rain and gusty winds to the region.")
+    img, y_after = _render_description_panel(prose)
+    assert y_after > 0
+    assert img.getpixel((300, 30)) != image_export._BG
+
+
+def test_description_with_no_room_draws_nothing():
+    """Too little space left must not leave an orphan section header."""
+    _, y_after = _render_description_panel(_TAGGED_DESCRIPTION, height=20)
+    assert y_after == 0
+
+
+@pytest.mark.parametrize("ratio", ["landscape", "square", "portrait", "story"])
+def test_tagged_description_renders_in_every_aspect_ratio(ratio):
+    alert = _FakeAlert()
+    alert.id = 7700
+    alert.event = "Flood Advisory"
+    alert.description = _TAGGED_DESCRIPTION
+    alert.area_desc = "Allen, OH; Defiance, OH; Putnam, OH"
+    png = image_export.generate_alert_image(
+        alert, {}, None, {"county_name": "Putnam County, OH"},
+        aspect_ratio=ratio,
+    )
+    assert png.startswith(b"\x89PNG")
+    img = Image.open(io.BytesIO(png))
+    layout = image_export._LAYOUTS[ratio]
+    assert img.size == (layout.width, layout.height)

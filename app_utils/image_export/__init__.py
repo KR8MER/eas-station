@@ -49,17 +49,26 @@ This package was split out of the former single-file
     fonts       (leaf - no package deps)
     text        (leaf - no package deps)
     icons       (leaf - no package deps)
+    nws_text    (leaf - no package deps)
+    map_style   fonts
+    map_data    (leaf - no package deps)
     theme       palette
     drawing     fonts, palette
     weather_fx  drawing, layout, theme
     tiles       layout
-    maps        fonts, layout, palette, theme, tiles
-    panels      drawing, fonts, icons, palette, text
-    render      drawing, fonts, layout, logo, maps, palette, panels, text, theme, weather_fx
+    storm_overlay  fonts, layout, tiles
+    maps        fonts, layout, map_data, map_style, palette,
+                storm_overlay, theme, tiles
+    panels_text drawing, fonts, nws_text, palette, text
+    panels      drawing, fonts, icons, nws_text, palette, panels_text
+    render      drawing, fonts, layout, logo, maps, palette, panels,
+                panels_text, text, theme, weather_fx
 
 Every name the single-file module exposed is re-exported here, so
-``from app_utils.image_export import <anything>`` keeps working. Import
-from the submodules directly in new code.
+``from app_utils.image_export import <anything>`` keeps working — the one
+exception is ``_best_zoom``, deleted in 2.152.0 when the map started
+framing its own crop rather than fitting the bbox to an integer zoom.
+Import from the submodules directly in new code.
 """
 
 
@@ -83,7 +92,13 @@ from .layout import (  # noqa: F401
 
 from .palette import (  # noqa: F401
     WHITE, _BG, _CARD, _DIVIDER, _PANEL, _SECTION_BG, _SEVERITY, _STRIP,
-    _TEXT, _TEXT_MUT, _TEXT_SEC, _THREAT_CLR, _darken, _pct_bar_color,
+    _TEXT, _TEXT_MUT, _TEXT_SEC, _THREAT_CLR, _darken, _lighten,
+    _pct_bar_color,
+)
+
+from .nws_text import (  # noqa: F401
+    NWSSegment, compact_area_desc, parse_nws_segments, select_share_segments,
+    strip_urls,
 )
 
 from .theme import (  # noqa: F401
@@ -114,28 +129,43 @@ from .weather_fx import (  # noqa: F401
     _draw_wind_streaks, _lb_branches, _lb_render_polyline, _lb_trunk,
 )
 
+from .map_style import (  # noqa: F401
+    apply_vignette, place_labels, tone_basemap,
+)
+
 from .tiles import (  # noqa: F401
     _TILE_CACHE, _TILE_CACHE_LOCK, _TILE_CACHE_MAX,
-    _TILE_DISK_CACHE_DIR_DEFAULT, _best_zoom, _fetch_tile, _geojson_bbox,
+    _TILE_DISK_CACHE_DIR_DEFAULT, _detail_zoom, _fetch_tile,
+    _geojson_bbox,
     _geojson_centroid, _lat_to_ty, _lon_to_tx, _tile_cache_clear,
     _tile_cache_get, _tile_cache_put, _tile_disk_cache_dir,
     _tile_disk_get, _tile_disk_path, _tile_disk_put,
 )
 
+from .map_data import (  # noqa: F401
+    _alert_same_codes, _fetch_county_outlines, _fetch_same_union_geom,
+)
+
+from .storm_overlay import (  # noqa: F401
+    _draw_storm_track,
+)
+
 from .maps import (  # noqa: F401
-    _SCALE_BAR_MILES, _alert_same_codes, _draw_scale_bar,
-    _draw_storm_track, _fetch_county_outlines, _fetch_same_union_geom,
-    _nice_scale_miles, _render_map,
+    _SCALE_BAR_MILES, _crop_window, _draw_scale_bar, _nice_scale_miles,
+    _render_map,
 )
 
 from .icons import (  # noqa: F401
     _ICON_FN, _icon_hail, _icon_tornado, _icon_wind,
 )
 
+from .panels_text import (  # noqa: F401
+    _INSTR_ACCENT, _draw_description, _draw_instruction,
+    _draw_labeled_segments, _draw_nws_headline, _wrap_text,
+)
+
 from .panels import (  # noqa: F401
-    _INSTR_ACCENT, _draw_areas, _draw_compass_section, _draw_coverage,
-    _draw_description, _draw_instruction, _draw_nws_headline,
-    _draw_threats, _wrap_text,
+    _draw_areas, _draw_compass_section, _draw_coverage, _draw_threats,
 )
 
 from .render import (  # noqa: F401

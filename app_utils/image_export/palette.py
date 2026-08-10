@@ -55,6 +55,19 @@ def _darken(c: Tuple[int, int, int], f: float) -> Tuple[int, int, int]:
     return tuple(max(0, int(v * (1.0 - f))) for v in c)  # type: ignore[return-value]
 
 
+def _lighten(c: Tuple[int, int, int], f: float) -> Tuple[int, int, int]:
+    """Blend *c* *f* of the way toward white (0.0 = unchanged, 1.0 = white).
+
+    Used where a theme accent has to stay legible as text on the dark card
+    background: hazard families range from bright amber to deep navy, so
+    the raw accent cannot be trusted to carry enough contrast on its own.
+    """
+    f = max(0.0, min(1.0, f))
+    return tuple(  # type: ignore[return-value]
+        min(255, int(v + (255 - v) * f)) for v in c
+    )
+
+
 def _pct_bar_color(pct: float) -> Tuple[int, int, int]:
     if pct >= 95:  return (40, 167,  69)
     if pct >= 75:  return (255, 193,   7)
