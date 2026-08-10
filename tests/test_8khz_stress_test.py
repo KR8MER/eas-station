@@ -29,9 +29,31 @@ def _write_same_audio(
     sample_rate: int = 8000,
     scale: float = 1.0,
     noise_level: float = 0.0,
-    frequency_drift: float = 0.0
+    frequency_drift: float = 0.0,
+    noise_seed: int = 20260808,
 ) -> None:
-    """Write a synthetic SAME audio file with optional noise and frequency drift."""
+    """Write a synthetic SAME audio file with optional noise and frequency drift.
+
+    ``noise_seed`` makes the noise reproducible. It used to come from the
+    global unseeded ``random``, which put a coin flip inside a threshold
+    assertion: ``test_8khz_with_increasing_noise[0.2]`` failed roughly 2 runs
+    in 12. A decoder regression and a bad draw were indistinguishable, and a
+    suite that fails intermittently is not a signal anyone can act on.
+
+    **The seed makes this deterministic; it does not make the underlying
+    behaviour reliable.** Sweeping ten seeds across five noise levels, 6 of 50
+    combinations fail at 20-25% noise — and they fail with
+    ``len(result.headers) == 0`` while ``bit_confidence`` stays around 0.92.
+    So it is not gradual degradation: bit recovery still looks healthy and
+    header *framing* drops out entirely. Whether the decoder should tolerate
+    that much noise is a signal-processing question, not a test question, so
+    it is recorded here rather than papered over. Reproduce with::
+
+        _write_same_audio(path, header, noise_level=20000 * 0.2, noise_seed=42)
+
+    Pass a different seed to explore other draws; the default keeps the suite
+    deterministic.
+    """
     bits = encode_same_bits(header, include_preamble=True)
     base_rate = float(SAME_BAUD)
     bit_rate = base_rate * scale
@@ -49,8 +71,9 @@ def _write_same_audio(
     # Add noise if requested
     if noise_level > 0:
         import random
+        rng = random.Random(noise_seed)
         samples = [
-            int(s + random.randint(-int(noise_level), int(noise_level)))
+            int(s + rng.randint(-int(noise_level), int(noise_level)))
             for s in samples
         ]
 

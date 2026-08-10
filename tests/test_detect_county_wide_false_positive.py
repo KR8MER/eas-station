@@ -31,11 +31,23 @@ Repository: https://github.com/KR8MER/eas-station
 # heuristic fires.
 
 import re
+from pathlib import Path
+
+# _detect_county_wide moved out of the 2,105-line webapp/admin/api.py when it
+# was split into the webapp/admin/api/ package.
+COUNTY_MODULE = (
+    Path(__file__).resolve().parents[1] / 'webapp' / 'admin' / 'api' / 'county.py'
+)
 
 
 # ---------------------------------------------------------------------------
-# Helpers that mirror the exact logic from webapp/admin/api.py so the test
-# can run without Flask or a database.
+# Helpers that mirror the exact logic from webapp/admin/api/county.py so the
+# test can run without Flask or a database.
+#
+# A mirror cannot catch a change to the original, which is what the two
+# `*_source_*` checks in this file are standing in for.
+# tests/test_api_package.py exercises the real _detect_county_wide against a
+# stub alert instead; prefer adding new cases there.
 # ---------------------------------------------------------------------------
 
 def _county_and_state_check(area_lower, county_short, configured_state_code):
@@ -57,8 +69,7 @@ def test_county_and_state_requires_county_short_in_source():
     """The source of _detect_county_wide must include county_short in the
     county_and_state condition so that alerts for different counties in the
     same state are not falsely flagged."""
-    with open('webapp/admin/api.py', 'r') as f:
-        content = f.read()
+    content = COUNTY_MODULE.read_text(encoding='utf-8')
 
     # Locate the county_and_state block
     pattern = re.compile(
@@ -66,7 +77,7 @@ def test_county_and_state_requires_county_short_in_source():
         re.DOTALL,
     )
     match = pattern.search(content)
-    assert match is not None, "county_and_state expression not found in api.py"
+    assert match is not None, f"county_and_state expression not found in {COUNTY_MODULE.name}"
 
     block = match.group(0)
     assert 'county_short in area_lower' in block, (
@@ -142,9 +153,8 @@ def _short_with_list_check(area_lower, county_short, configured_state_code):
 
 
 def test_short_with_list_source_has_multi_county_guard():
-    """short_with_list in api.py must include the _multi_county_list guard."""
-    with open('webapp/admin/api.py', 'r') as f:
-        content = f.read()
+    """short_with_list must include the _multi_county_list guard."""
+    content = COUNTY_MODULE.read_text(encoding='utf-8')
     assert '_multi_county_list' in content, (
         "short_with_list must reference _multi_county_list to prevent false "
         "positives for multi-county NWS polygon alerts"

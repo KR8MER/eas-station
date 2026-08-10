@@ -26,6 +26,12 @@ import pytest
 from flask import Flask
 
 import webapp.routes.alert_verification as alert_verification
+# Patch the module that *reads* each name, not the package: rebinding a
+# package-level copy leaves the reader looking at the original.
+# get_location_settings is called by helpers._load_configured_fips;
+# AlertSelfTestHarness is constructed inside routes_self_test.
+from webapp.routes.alert_verification import helpers as av_helpers
+from webapp.routes.alert_verification import routes_self_test as av_self_test
 from app_core.audio.self_test import AlertSelfTestResult, AlertSelfTestStatus
 
 
@@ -44,7 +50,7 @@ def alert_self_test_setup(monkeypatch, tmp_path):
     app.jinja_env.globals.setdefault('current_user', SimpleNamespace(is_authenticated=True))
 
     fake_settings = {'fips_codes': ['039137', '039051']}
-    monkeypatch.setattr(alert_verification, 'get_location_settings', lambda: fake_settings)
+    monkeypatch.setattr(av_helpers, 'get_location_settings', lambda: fake_settings)
 
     class DummyHarness:
         def __init__(self, configured_fips, duplicate_cooldown_seconds, source_name):
@@ -69,7 +75,7 @@ def alert_self_test_setup(monkeypatch, tmp_path):
                 )
             ]
 
-    monkeypatch.setattr(alert_verification, 'AlertSelfTestHarness', DummyHarness)
+    monkeypatch.setattr(av_self_test, 'AlertSelfTestHarness', DummyHarness)
 
     alert_verification.register(app, logging.getLogger('alert-self-test'))
 
@@ -169,7 +175,7 @@ def test_decode_errors_fail_the_self_test(
     failure this self-test exists to surface.
     """
     monkeypatch.setattr(
-        alert_verification,
+        av_self_test,
         'AlertSelfTestHarness',
         _harness_returning([AlertSelfTestStatus.DECODE_ERROR]),
     )
@@ -184,7 +190,7 @@ def test_decode_errors_fail_the_self_test(
 
 def test_forwarded_run_passes(alert_self_test_setup, authenticated_user, monkeypatch):
     monkeypatch.setattr(
-        alert_verification,
+        av_self_test,
         'AlertSelfTestHarness',
         _harness_returning([AlertSelfTestStatus.FORWARDED]),
     )
@@ -206,7 +212,7 @@ def test_filtered_and_duplicate_results_still_pass(
     FIPS codes would see a permanent red failure.
     """
     monkeypatch.setattr(
-        alert_verification,
+        av_self_test,
         'AlertSelfTestHarness',
         _harness_returning(
             [
@@ -228,7 +234,7 @@ def test_require_match_still_fails_when_nothing_forwarded(
     alert_self_test_setup, authenticated_user, monkeypatch
 ):
     monkeypatch.setattr(
-        alert_verification,
+        av_self_test,
         'AlertSelfTestHarness',
         _harness_returning([AlertSelfTestStatus.FILTERED]),
     )
@@ -247,7 +253,7 @@ def test_empty_result_set_fails(
 ):
     """No samples processed is not a pass."""
     monkeypatch.setattr(
-        alert_verification, 'AlertSelfTestHarness', _harness_returning([])
+        av_self_test, 'AlertSelfTestHarness', _harness_returning([])
     )
     payload = _run(
         alert_self_test_setup['client'], alert_self_test_setup['sample_path']
