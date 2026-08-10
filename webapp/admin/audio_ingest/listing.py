@@ -152,6 +152,45 @@ def _collect_icecast_status(redis_streaming_status: Any) -> Dict[str, Dict[str, 
     return icecast_status_map
 
 
+def _adapter_for(state: RedisControllerState, controller, name: str):
+    """The local controller's adapter for a source, or ``None`` to fall through.
+
+    In the separated deployment the web process still builds an adapter for
+    every database row (``controller._load_audio_source_configs``) but
+    deliberately never starts one — ``_start_audio_sources_background``
+    returns immediately, because the audio service owns capture. Those
+    adapters are placeholders that permanently report ``STOPPED`` with no
+    error message.
+
+    Preferring them over the ``service_dead`` signal is what made a dead audio
+    service look like three deliberately-stopped sources: the operator saw
+    grey "Stopped" badges and "Start the source to listen" while the real
+    fault — nothing is running — was only stated in the EAS monitor panel.
+    ``_serialize_db_only``'s "failed to start" branch was unreachable in
+    production for exactly this reason.
+
+    So when the audio service is dead, a non-running local adapter carries no
+    information and is skipped. A genuinely integrated deployment is
+    unaffected: there the web process *is* the metrics publisher, so
+    ``service_dead`` is False and the adapter is always used.
+    """
+    adapter = controller._sources.get(name)
+    if adapter is None:
+        return None
+
+    if state.service_dead:
+        status = getattr(adapter.status, 'value', adapter.status)
+        if status != 'running':
+            logger.debug(
+                "Ignoring never-started placeholder adapter for '%s' — the audio "
+                "service is not publishing metrics",
+                name,
+            )
+            return None
+
+    return adapter
+
+
 def _redis_data_for(state: RedisControllerState, name: str) -> Optional[Dict[str, Any]]:
     """The Redis entry for a source, or ``None`` to fall back to the controller.
 
@@ -197,7 +236,7 @@ def build_source_listing() -> Dict[str, Any]:
         # local controller (integrated mode or Redis unavailable).
         redis_source_data = _redis_data_for(state, db_config.name)
         adapter = (
-            controller._sources.get(db_config.name)
+            _adapter_for(state, controller, db_config.name)
             if redis_source_data is None else None
         )
 
