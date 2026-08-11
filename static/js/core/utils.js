@@ -225,12 +225,49 @@
     }
 
     /**
+     * Keep dropdown menus opened inside a card from being clipped.
+     *
+     * `.card` in styles.css sets `overflow: hidden`, which slices any dropdown
+     * menu that extends past the card's edge. The CSS fix keys off
+     * `.card:has(.dropdown-menu.show)`; this mirrors it with an explicit class
+     * so browsers without `:has()` support behave the same. Bootstrap fires
+     * show/hide on the toggle button, so walk up to the owning card.
+     */
+    function trackOpenDropdowns() {
+        document.addEventListener('show.bs.dropdown', function (event) {
+            const card = event.target.closest('.card');
+            // Bootstrap adds `.show` to the menu *after* this event, so there
+            // is nothing to count yet — just mark the card.
+            if (card) {
+                card.classList.add('has-open-dropdown');
+            }
+        });
+
+        document.addEventListener('hidden.bs.dropdown', function (event) {
+            const card = event.target.closest('.card');
+            if (!card) {
+                return;
+            }
+            // A card can hold several dropdowns (the Received Alerts filter
+            // panel holds two), and clicking straight from one to the next
+            // gives no guaranteed ordering between this event and the other
+            // menu's show. Re-read the card instead of assuming.
+            card.classList.toggle(
+                'has-open-dropdown',
+                card.querySelector('.dropdown-menu.show') !== null
+            );
+        });
+    }
+
+    /**
      * Initialize utility functions
      */
     function init() {
         // Update time immediately and then every second
         updateCurrentTime();
         setInterval(updateCurrentTime, 1000);
+
+        trackOpenDropdowns();
     }
 
     // Initialize when DOM is ready
