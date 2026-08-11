@@ -1795,6 +1795,15 @@ cp "$INSTALL_DIR/systemd/"*.service /etc/systemd/system/
 cp "$INSTALL_DIR/systemd/"*.target /etc/systemd/system/
 cp "$INSTALL_DIR/systemd/"*.timer /etc/systemd/system/ 2>/dev/null || true
 
+# The earlier "chmod -R 755 $INSTALL_DIR" (setting up the install tree) makes
+# these executable along with everything else, which cp then propagates into
+# /etc/systemd/system. systemd warns "Unknown key ... marked executable" for
+# every such unit on every reload/boot. Unit files aren't meant to be run
+# directly, so strip the bit back off after copying.
+for src in "$INSTALL_DIR/systemd/"*.service "$INSTALL_DIR/systemd/"*.target "$INSTALL_DIR/systemd/"*.timer; do
+    [ -f "$src" ] && chmod 644 "/etc/systemd/system/$(basename "$src")"
+done
+
 systemctl daemon-reload
 echo_success "Systemd service files installed"
 
