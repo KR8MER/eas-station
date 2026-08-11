@@ -108,13 +108,21 @@ class ZigpyController:
 
         os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
 
-        config = ControllerApplication.SCHEMA({
+        # Pass the raw config dict -- ControllerApplication.__init__() already
+        # runs it through self.SCHEMA(config) itself. Pre-validating here too
+        # double-runs the schema: the first pass turns the default OTA
+        # provider entries from dicts into live ZigpyOtaProvider objects, and
+        # the second pass (inside ControllerApplication.__init__) then tries
+        # to validate those objects as if they were still dicts, crashing
+        # with "AttributeError: 'ZigpyOtaProvider' object has no attribute
+        # 'get'" on every startup.
+        config = {
             "database_path": self._db_path,
             "device": {
                 "path": self.port,
                 "baudrate": self.baudrate,
             },
-        })
+        }
 
         self._app = ControllerApplication(config)
         self._app.add_listener(self)
