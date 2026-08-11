@@ -1535,16 +1535,19 @@ class StreamSourceAdapter(AudioSourceAdapter):
         the HTTP connection before audio data starts flowing. Setting _had_data_activity=True
         prevents the capture loop from excessive sleeping during connection establishment.
         """
-        # CRITICAL: Set this True for stream sources to prevent capture loop from sleeping
-        # while FFmpeg is connecting to the network stream. FFmpeg needs time to:
-        # 1. Resolve DNS
-        # 2. Establish TCP connection
-        # 3. Send HTTP request
-        # 4. Receive response headers
-        # 5. Begin receiving audio stream
-        # This can take 5-10 seconds for remote streams. During this time, we want the
-        # capture loop to keep polling frequently rather than sleeping 50ms between attempts.
-        self._had_data_activity = True  # Stream sources are always "active" even when connecting
+        # Only skip the capture loop's idle-sleep while FFmpeg is still
+        # establishing the connection (DNS, TCP, HTTP headers -- can take
+        # 5-10s for remote streams) -- not for the stream's entire runtime.
+        # This used to be unconditional, which meant that once a stream
+        # connected, this thread never slept again: every empty read spun
+        # straight back into stdout.read() with no delay, burning a full
+        # CPU core's worth of GIL time 24/7 and starving other threads in
+        # this process (including the SDR/RBDS decode threads) of scheduling
+        # opportunities. _last_connection_time is set the first time real
+        # audio data arrives, so it's already the right signal for "still
+        # connecting vs. steady-state" -- reuse it here instead of pinning
+        # the flag on.
+        self._had_data_activity = self._last_connection_time is None
 
         process = self._ffmpeg_process
         if process is None or process.poll() is not None:
