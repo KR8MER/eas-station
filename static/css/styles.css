@@ -3126,6 +3126,45 @@ footer a:hover {
     opacity: 1;
 }
 
+/* Dropdown menus opened inside a card
+   ------------------------------------------------------------------------
+   `.card` sets `overflow: hidden` so the ::before accent line, the ::after
+   glow and any card media stay inside the rounded corners.  That rule also
+   clips every absolutely-positioned descendant that leaves the card box — and
+   a Bootstrap dropdown menu is exactly that.  On the Received Alerts filter
+   panel the Audio Source / Event Type menus were sliced off at the card's
+   bottom edge, leaving barely one option reachable.
+
+   While a menu is open, stop clipping and lift the card above the cards that
+   follow it.  The lift is required, not cosmetic: `backdrop-filter` makes each
+   `.card` its own stacking context, and equal-`z-index` stacking contexts
+   paint in document order, so the next card down the page would paint over an
+   un-clipped menu.  Kept well below the navbar/modal/toast layers.
+
+   `:has()` does the work in current browsers; `.has-open-dropdown` is applied
+   from Bootstrap's show/hide events in static/js/core/utils.js so the fix also
+   holds where `:has()` is unsupported. */
+.card:has(.dropdown-menu.show),
+.card.has-open-dropdown {
+    overflow: visible;
+    z-index: 3;
+}
+
+/* Both card decorations exist only because the card crops them, so they have
+   to sit out the moment it stops cropping. The ::after glow is sized 200% and
+   offset -50% — unclipped it bleeds across neighbouring content. The ::before
+   accent line is a 3px strip that the card's 24px corner arc trims at each
+   end; it cannot round itself to match, because border-radius on a 3px-tall
+   box is scaled down to a 3px radius and the ends would poke out past the
+   corner as coloured nubs. Both are hover-only flourishes at `opacity: 0`
+   otherwise, so holding them at 0 costs nothing visible. */
+.card:has(.dropdown-menu.show)::before,
+.card:has(.dropdown-menu.show)::after,
+.card.has-open-dropdown::before,
+.card.has-open-dropdown::after {
+    opacity: 0;
+}
+
 .card-header {
     background: linear-gradient(135deg,
         var(--vibrant-blue) 0%,

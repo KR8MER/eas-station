@@ -8,6 +8,52 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.153.2] - 2026-08-11 - Filter dropdowns no longer clipped by their card
+
+### Fixed
+- **Filter pull-downs were sliced off at the card's edge.** On the Received
+  Alerts page, opening the Audio Source or Event Type multi-select showed the
+  Include/Exclude toggle and roughly one option — the rest of the menu was
+  invisible and un-clickable, making the filters unusable for any event type
+  past the first.
+
+  The menus were not mis-positioned; they were clipped. `.card` in
+  `static/css/styles.css` sets `overflow: hidden` so the `::before` accent
+  line, the `::after` glow and card media stay inside the rounded corners, and
+  that declaration clips every absolutely-positioned descendant that leaves the
+  card box. A Bootstrap dropdown is exactly that: measured in a browser, the
+  Event Type menu overhung the filter card by 188px, and a hit-test at the
+  bottom of the menu landed on the *results card underneath* rather than on the
+  menu. Nothing about the markup looked wrong, which is why the fault survived
+  review — only a rendered page shows it.
+
+  A card now stops clipping while a dropdown inside it is open, and is lifted
+  above the cards that follow it. The lift is load-bearing rather than
+  cosmetic: `backdrop-filter` makes each `.card` its own stacking context, and
+  equal-`z-index` stacking contexts paint in document order, so the next card
+  down the page would paint straight over the un-clipped menu. The chosen
+  `z-index: 3` clears sibling cards while staying far below the sticky navbar
+  (1030), modals and toasts.
+
+  The card's two decorations fall out of this: both exist only because the
+  card crops them. The `::after` glow is sized 200% and offset -50%, so
+  unclipped it bleeds across neighbouring content; the `::before` accent line
+  is a 3px strip whose ends the card's 24px corner arc trims, and it cannot
+  round itself to match — `border-radius` on a 3px-tall box is scaled down to
+  a 3px radius, leaving coloured nubs sticking out past the corner. Both are
+  hover-only flourishes sitting at `opacity: 0` the rest of the time, so they
+  are simply held at 0 while the card is unclipped.
+
+  The rule is expressed as `.card:has(.dropdown-menu.show)`, with
+  `static/js/core/utils.js` mirroring it via a `has-open-dropdown` class
+  toggled from Bootstrap's `show.bs.dropdown` / `hidden.bs.dropdown` events so
+  the fix also holds where `:has()` is unsupported. Being a global rule, it
+  covers every card-hosted dropdown in the app, not just the Received Alerts
+  filters. Verified in a headless browser at 320, 360, 768 and 1024px wide in
+  both the light and dark themes: the full menu is reachable and no element
+  exceeds the viewport width. Regression coverage in
+  `tests/test_card_dropdown_clipping.py`.
+
 ## [2.153.1] - 2026-08-11 - Timestamps read in the station's local time
 
 ### Fixed
