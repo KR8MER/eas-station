@@ -28,6 +28,7 @@ from app_utils import (
     format_local_date,
     format_local_datetime,
     format_local_time,
+    get_location_timezone_name,
     is_alert_expired,
     local_now,
     to_location_time,
@@ -51,6 +52,10 @@ def register(app: Flask) -> None:
 
     app.add_template_global(utc_now, name="current_time")
     app.add_template_global(local_now, name="local_current_time")
+    # Exposed so client-side clocks can render in the station's configured zone
+    # instead of the browser's. base.html stamps it onto <body data-timezone>,
+    # which static/js/core/utils.js reads.
+    app.add_template_global(get_location_timezone_name, name="station_timezone")
     app.add_template_global(min, name="min")
     app.add_template_global(max, name="max")
 

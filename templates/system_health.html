@@ -1142,7 +1142,7 @@
                                 </div>
                                 <div class="metric-row">
                                     <div class="metric-label">Last Updated</div>
-                                    <div class="metric-value" id="current-time"></div>
+                                    <div class="metric-value" id="health-last-updated"></div>
                                 </div>
                                 <div class="mt-2">
                                     <button class="btn btn-primary btn-sm refresh-trigger" type="button">
@@ -2813,7 +2813,13 @@
         }
 
         function updateCurrentTimeDisplay() {
-            const element = document.getElementById('current-time');
+            // Not `current-time`: that ID belongs to the footer clock in
+            // base.html, and this page inherits it. Sharing the ID meant
+            // getElementById returned this metric (content renders before the
+            // footer), so utils.js's 1s wall clock and this 1s "N seconds ago"
+            // readout overwrote each other while the footer clock stayed on
+            // "Loading..." forever.
+            const element = document.getElementById('health-last-updated');
             if (!element || !lastUpdatedTime) {
                 return;
             }
