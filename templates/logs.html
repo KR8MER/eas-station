@@ -82,18 +82,30 @@
                             <i class="fas fa-satellite-dish"></i> Polling
                         </a>
                     </li>
+                    {% if polling_debug_enabled %}
                     <li class="nav-item" role="presentation">
                         <a class="nav-link {% if log_type == 'polling_debug' %}active{% endif %}"
                            href="?type=polling_debug&limit={{ limit }}">
                             <i class="fas fa-bug"></i> Debug
                         </a>
                     </li>
+                    {% endif %}
                     <li class="nav-item" role="presentation">
                         <a class="nav-link {% if log_type == 'audio' %}active{% endif %}"
                            href="?type=audio&limit={{ limit }}">
                             <i class="fas fa-volume-up"></i> Audio
                         </a>
                     </li>
+                    {#
+                        "Metrics" (audio_metrics -> AudioSourceMetrics) and "Health"
+                        (audio_health -> AudioHealthStatus) have no writer anywhere in
+                        the codebase -- nothing has ever inserted a row into either
+                        table, so these tabs are permanently empty, not just currently
+                        empty. Unlike "Debug" above (which has a real on/off switch,
+                        CAP_POLLER_DEBUG_RECORDS), there's no flag to gate these on;
+                        they're dead until someone implements the writer. Hidden here
+                        rather than deleted so it's a one-line change to bring back
+                        once that happens.
                     <li class="nav-item" role="presentation">
                         <a class="nav-link {% if log_type == 'audio_metrics' %}active{% endif %}"
                            href="?type=audio_metrics&limit={{ limit }}">
@@ -106,6 +118,7 @@
                             <i class="fas fa-heartbeat"></i> Health
                         </a>
                     </li>
+                    #}
                     <li class="nav-item" role="presentation">
                         <a class="nav-link {% if log_type == 'gpio' %}active{% endif %}"
                            href="?type=gpio&limit={{ limit }}">
