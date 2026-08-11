@@ -766,6 +766,12 @@ if [ -d "$INSTALL_DIR/systemd" ]; then
     cp "$INSTALL_DIR/systemd/"*.target /etc/systemd/system/ 2>/dev/null || true
     cp "$INSTALL_DIR/systemd/"*.timer /etc/systemd/system/ 2>/dev/null || true
 
+    # Guard against a stale executable bit riding along from $INSTALL_DIR
+    # (see install.sh) and tripping systemd's "marked executable" warning.
+    for src in "$INSTALL_DIR/systemd/"*.service "$INSTALL_DIR/systemd/"*.target "$INSTALL_DIR/systemd/"*.timer; do
+        [ -f "$src" ] && chmod 644 "/etc/systemd/system/$(basename "$src")"
+    done
+
     # Phase 4 retired the monolithic eas-station-hardware.service in favour of
     # five per-subsystem units bundled under eas-station-hardware.target.
     # Existing installs still have the old unit on disk and enabled — strip it
