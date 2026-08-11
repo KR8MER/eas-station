@@ -1,10 +1,42 @@
 (function() {
     'use strict';
 
+    /**
+     * The station's configured timezone, stamped onto <body data-timezone> by
+     * base.html from LocationSettings.timezone.
+     *
+     * These clocks used to hardcode 'America/New_York'. The station timezone is
+     * configurable (the setup wizard offers 22 US zones, Honolulu and Guam
+     * included), so a non-Eastern station got a navbar clock that was hours off
+     * *and* labelled itself EDT — the `timeZoneName: 'short'` below means a
+     * wrong zone is stated outright rather than left ambiguous.
+     *
+     * Returns undefined when the attribute is missing or unusable, which makes
+     * Intl fall back to the browser's zone — the best available guess, and what
+     * the rest of the UI's toLocaleString() calls already do.
+     */
+    function getStationTimeZone() {
+        const configured = document.body && document.body.dataset
+            ? document.body.dataset.timezone
+            : null;
+        if (!configured) {
+            return undefined;
+        }
+        // A bad IANA name makes toLocaleString throw a RangeError, which would
+        // kill the 1s interval and freeze every clock on the page.
+        try {
+            new Intl.DateTimeFormat('en-US', { timeZone: configured });
+            return configured;
+        } catch (err) {
+            return undefined;
+        }
+    }
+
     function updateCurrentTime() {
         const now = new Date();
+        const timeZone = getStationTimeZone();
         const timeString = now.toLocaleString('en-US', {
-            timeZone: 'America/New_York',
+            timeZone: timeZone,
             year: 'numeric',
             month: 'short',
             day: 'numeric',
@@ -22,7 +54,7 @@
         const navClockTime = document.getElementById('navbar-clock-time');
         if (navClockTime) {
             navClockTime.textContent = now.toLocaleString('en-US', {
-                timeZone: 'America/New_York',
+                timeZone: timeZone,
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
@@ -32,7 +64,7 @@
         const navClockDate = document.getElementById('navbar-clock-date');
         if (navClockDate) {
             navClockDate.textContent = now.toLocaleString('en-US', {
-                timeZone: 'America/New_York',
+                timeZone: timeZone,
                 month: 'short',
                 day: 'numeric',
                 timeZoneName: 'short'

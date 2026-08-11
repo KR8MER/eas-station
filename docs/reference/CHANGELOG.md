@@ -8,6 +8,51 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.153.3] - 2026-08-11 - Page-chrome clocks tell the truth
+
+### Fixed
+- **The navbar and footer clocks were hardcoded to Eastern.** Every page
+  renders a live clock from `static/js/core/utils.js`, and all three readouts
+  passed `timeZone: 'America/New_York'` literally. The station timezone is
+  configurable — it is stored in `LocationSettings.timezone`, edited from the
+  Location settings form, and the setup wizard offers 22 US zones including
+  Anchorage, Honolulu and Guam — so any station outside Eastern read a clock
+  that was hours off.
+
+  The clocks also pass `timeZoneName: 'short'`, so the wrong zone was stated
+  outright: a Honolulu station saw a time six hours ahead labelled "EDT"
+  rather than an ambiguous number it might have questioned. Server-rendered
+  timestamps had just been moved onto the configured zone in 2.153.1, which
+  left the clock in the chrome disagreeing with the tables beneath it.
+
+  `base.html` now stamps the configured zone onto `<body data-timezone>` via a
+  new `station_timezone()` template global, and `utils.js` reads it. An
+  unusable or missing value falls back to the browser's zone rather than a
+  guess — `toLocaleString` throws a `RangeError` on a bad IANA name, which
+  would have killed the one-second interval and frozen every clock on the
+  page.
+
+- **System Health showed the wrong "Last Updated" value and a dead footer
+  clock.** `system_health.html` gave its "Last Updated" metric
+  `id="current-time"`, which `base.html` already uses for the footer clock.
+  Both elements land in the same document and `{% block content %}` renders
+  before the footer, so `getElementById` returned the metric.
+
+  Two one-second timers then wrote to that one node: the global wall clock in
+  `utils.js` and the page's own `"10:06:43 (5s ago)"` readout. The field
+  alternated between the two meanings depending on which timer fired last,
+  and the footer clock stayed on "Loading..." for as long as the page was
+  open. Nothing errored — duplicate IDs are legal HTML and `getElementById`
+  just picks the first match.
+
+  The metric is now `health-last-updated`. This was the only ID collision
+  against `base.html` in the template tree.
+
+### Added
+- `tests/test_client_clock_rendering.py` fails the build if a template
+  redefines an ID that `base.html` owns, or if the chrome clocks hardcode an
+  IANA timezone again.
+
 ## [2.153.2] - 2026-08-11 - Filter dropdowns no longer clipped by their card
 
 ### Fixed
