@@ -93,10 +93,39 @@ class RedisAudioAdapter:
 
     def _initialize(self) -> None:
         """Initialize Redis connection and subscription."""
-        from app_core.redis_client import get_redis_client
+        import redis as redis_lib
+        from app_core.config.redis_config import (
+            get_redis_host,
+            get_redis_port,
+            get_redis_db,
+            get_redis_password,
+            RedisTimeouts,
+        )
 
         try:
-            self._redis_client = get_redis_client()
+            # Audio frames published on audio:samples:* are raw binary
+            # (magic + struct header + float32 samples), not UTF-8 text.
+            # The shared app-wide client from get_redis_client() is
+            # decode_responses=True, which makes redis-py try to UTF-8
+            # decode every pub/sub payload before it reaches our code --
+            # raw audio bytes are routinely not valid UTF-8, so that client
+            # raises UnicodeDecodeError out of pubsub.listen() itself and
+            # permanently kills this subscriber thread (no reconnect) on
+            # the first real audio chunk. Use a dedicated raw-bytes
+            # connection for this subscription instead.
+            self._redis_client = redis_lib.Redis(
+                host=get_redis_host(),
+                port=get_redis_port(),
+                db=get_redis_db(),
+                password=get_redis_password(),
+                decode_responses=False,
+                socket_connect_timeout=RedisTimeouts.CONNECT_TIMEOUT,
+                socket_timeout=RedisTimeouts.SOCKET_TIMEOUT,
+                socket_keepalive=True,
+                health_check_interval=RedisTimeouts.HEALTH_CHECK_INTERVAL,
+                retry_on_timeout=True,
+            )
+            self._redis_client.ping()
             logger.info(f"Redis audio adapter '{self.subscriber_id}' connected to Redis")
         except Exception as e:
             raise RuntimeError(f"Failed to connect to Redis: {e}") from e
