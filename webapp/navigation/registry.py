@@ -46,6 +46,8 @@ Permission tuples are *any-of*. Names must exist in
 ``app_core.auth.roles.PermissionDefinition``.
 """
 
+import os
+
 from .permissions import (
     ALERTS_EXPORT,
     ALERTS_VIEW,
@@ -64,6 +66,15 @@ from .types import (
 
 # Anyone who monitors the station's radio/audio chain.
 _RADIO_WATCHERS = (ALERTS_VIEW, RECEIVERS_VIEW, LOGS_VIEW)
+
+# /debug/ipaws only has anything to show when the poller was started with
+# CAP_POLLER_DEBUG_RECORDS=1 (see poller/cap_poller.py) -- it's an opt-in,
+# CPU/DB-intensive troubleshooting mode, off by default. Mirror that same
+# flag here so the nav entry doesn't lead people to a page that's
+# permanently empty for this station.
+_IPAWS_POLLER_DEBUG_ENABLED = os.environ.get(
+    "CAP_POLLER_DEBUG_RECORDS", ""
+).strip().lower() in {"1", "true", "yes", "on", "t", "y"}
 
 
 # ---------------------------------------------------------------------------
@@ -308,12 +319,17 @@ _DIAGNOSTICS = NavSection(
                     description="Per-receiver SNR, sample rate and tuning diagnostics.",
                     permissions=(RECEIVERS_VIEW,),
                 ),
-                NavItem(
-                    label="IPAWS Poller Debug",
-                    icon="fas fa-bug",
-                    href="/debug/ipaws",
-                    description="Raw IPAWS poll requests, responses and timings.",
-                ),
+            ) + (
+                (
+                    NavItem(
+                        label="IPAWS Poller Debug",
+                        icon="fas fa-bug",
+                        href="/debug/ipaws",
+                        description="Raw IPAWS poll requests, responses and timings.",
+                    ),
+                )
+                if _IPAWS_POLLER_DEBUG_ENABLED
+                else ()
             ),
         ),
     ),

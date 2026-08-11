@@ -21,12 +21,24 @@ from __future__ import annotations
 
 """The /logs hub routes and its CSV/PDF exports."""
 
+import os
+from typing import List
+
+from flask import render_template, request, Response
+
 from app_core.config import get_all_log_services
 from app_core.eas_storage import format_local_datetime
 from app_core.extensions import db
 from app_utils.pdf_generator import generate_pdf_document
-from flask import render_template, request, Response
-from typing import List
+
+# /debug/ipaws and the "Debug" logs tab share the same underlying table
+# (PollDebugRecord) and the same opt-in switch -- see poller/cap_poller.py's
+# persist_debug_records() docstring. Off by default: it's a CPU/DB-intensive
+# per-alert debug dump, meant to be turned on temporarily while actively
+# troubleshooting alert filtering, not left running.
+_POLLING_DEBUG_ENABLED = os.environ.get(
+    "CAP_POLLER_DEBUG_RECORDS", ""
+).strip().lower() in {"1", "true", "yes", "on", "t", "y"}
 
 
 def register(app, route_logger, _load_logs_data) -> None:
@@ -140,6 +152,7 @@ def register(app, route_logger, _load_logs_data) -> None:
                 available_services=get_all_log_services(),
                 compliance_summary=compliance_summary,
                 report=report_meta,
+                polling_debug_enabled=_POLLING_DEBUG_ENABLED,
             )
 
         except Exception as exc:  # pragma: no cover - fallback content
