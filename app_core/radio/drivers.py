@@ -1092,12 +1092,30 @@ class _SoapySDRReceiver(ReceiverInterface):
             external_lna_db = float(self.config.external_lna_db or 0.0)
             if self.config.gain is not None:
                 try:
+                    # Explicitly drop out of AGC before pinning a manual gain.
+                    # Without this, a device that opened in (or defaulted to)
+                    # AGC mode keeps its gain loop running and silently
+                    # overrides whatever setGain() below requests -- the call
+                    # succeeds and logs normally, but the requested gain never
+                    # actually takes hold. The external-LNA branch below this
+                    # one already does this; this branch didn't.
+                    if device.hasGainMode(SoapySDR.SOAPY_SDR_RX, channel):
+                        device.setGainMode(SoapySDR.SOAPY_SDR_RX, channel, False)
                     device.setGain(SoapySDR.SOAPY_SDR_RX, channel, float(self.config.gain))
+                    try:
+                        readback_gain = device.getGain(SoapySDR.SOAPY_SDR_RX, channel)
+                        readback_mode = device.getGainMode(SoapySDR.SOAPY_SDR_RX, channel)
+                    except Exception:
+                        readback_gain = None
+                        readback_mode = None
                     self._interface_logger.info(
-                        "Set gain to %.1f dB for %s (external LNA: %+.1f dB)",
+                        "Set gain to %.1f dB for %s (external LNA: %+.1f dB) "
+                        "[readback: gain=%s agc_mode=%s]",
                         float(self.config.gain),
                         self.config.identifier,
                         external_lna_db,
+                        readback_gain,
+                        readback_mode,
                     )
                 except Exception as exc:
                     self._interface_logger.warning(
