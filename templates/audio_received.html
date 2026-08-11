@@ -248,7 +248,7 @@
                                 {% for alert in alerts %}
                                 <tr>
                                     <td data-label="Received">
-                                        <small>{{ alert.received_at.strftime('%Y-%m-%d %H:%M:%S') if alert.received_at else 'N/A' }}</small>
+                                        <small>{{ alert.received_at | localtime('%Y-%m-%d %H:%M:%S %Z', 'N/A') }}</small>
                                     </td>
                                     <td data-label="Source">
                                         <span class="badge bg-info text-dark">{{ alert.source_name }}</span>

@@ -491,7 +491,7 @@
                         <li class="mb-0">
                             <strong>Last Updated:</strong>
                             <small class="text-muted" id="lastUpdated">
-                                {{ settings.updated_at.strftime('%Y-%m-%d %H:%M:%S UTC') if settings.updated_at else 'Never' }}
+                                {{ settings.updated_at | localtime('%Y-%m-%d %H:%M:%S %Z', 'Never') }}
                             </small>
                         </li>
                     </ul>

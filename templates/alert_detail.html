@@ -1369,7 +1369,7 @@
                                             <span class="badge bg-{{ action_colors.get(rel.vtec_action, 'secondary') }}">{{ action_labels.get(rel.vtec_action, rel.vtec_action) }}</span>
                                             {% endif %}
                                             <span class="small fw-semibold">This alert</span>
-                                            {% if rel.sent %}<span class="small text-muted">{{ rel.sent.strftime('%Y-%m-%d %H:%M UTC') }}</span>{% endif %}
+                                            {% if rel.sent %}<span class="small text-muted">{{ rel.sent | localtime('%Y-%m-%d %H:%M %Z') }}</span>{% endif %}
                                         </div>
                                     </div>
                                     {% else %}
@@ -1378,7 +1378,7 @@
                                             {% if rel.vtec_action %}
                                             <span class="badge bg-{{ action_colors.get(rel.vtec_action, 'secondary') }}">{{ action_labels.get(rel.vtec_action, rel.vtec_action) }}</span>
                                             {% endif %}
-                                            {% if rel.sent %}<span class="small text-muted">{{ rel.sent.strftime('%Y-%m-%d %H:%M UTC') }}</span>{% endif %}
+                                            {% if rel.sent %}<span class="small text-muted">{{ rel.sent | localtime('%Y-%m-%d %H:%M %Z') }}</span>{% endif %}
                                             <a href="{{ url_for('api.alert_detail', alert_id=rel.id) }}" class="small ms-auto btn btn-sm btn-outline-secondary py-0 px-2">View →</a>
                                         </div>
                                         {% if rel.headline %}

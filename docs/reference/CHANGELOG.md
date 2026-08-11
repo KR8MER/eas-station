@@ -8,6 +8,42 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.153.1] - 2026-08-11 - Timestamps read in the station's local time
+
+### Fixed
+- **Alert times displayed UTC while claiming to be local.** On the Received
+  Alerts page an alert that arrived at 6:06 AM Eastern was listed as
+  `2026-08-11 10:06:43` — four hours ahead of the operator's wall clock, with
+  nothing on the row to say the number was UTC. The same defect ran through
+  the log viewer, alert detail, search results, GPIO activation history, the
+  display/VFD message tables, security settings and three admin settings
+  pages.
+
+  Every timestamp is persisted in UTC, and these templates called
+  `.strftime()` straight on the column. That is a silent bug: `strftime`
+  formats whatever zone the value is already in, so the page renders correct
+  digits for the wrong zone and no error is raised anywhere. The FCC report
+  builders in `app_core/eas_storage.py` were unaffected — they already went
+  through `format_local_datetime()` — which is why the exported logs and the
+  on-screen tables disagreed.
+
+  `app_utils/time.py` gains `to_location_time()` and `format_local()`, wired
+  up as the `localtime` and `to_local` Jinja filters, and all 24 affected
+  template sites now use them. Naive columns (the settings tables default to
+  `datetime.utcnow`) are treated as UTC so they convert identically to the
+  timezone-aware ones. Rendered timestamps now carry a `%Z` suffix — `EDT`,
+  `EST` — so the zone is stated rather than assumed, and the offset follows
+  DST via the configured location timezone instead of a fixed value.
+
+  Client-rendered tables were already correct: those endpoints serialize
+  timezone-aware columns, so `new Date(...).toLocaleString()` converts to the
+  browser's zone. The mismatch was confined to server-rendered markup.
+
+### Added
+- `tests/test_local_time_rendering.py` — covers the DST and naive-column
+  conversions, and fails the build if `.strftime()` is called on a stored
+  timestamp in any template again.
+
 ## [2.153.0] - 2026-08-10 - The in-app maps get the share card's treatment
 
 ### Added

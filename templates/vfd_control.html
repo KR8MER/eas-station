@@ -59,7 +59,7 @@
                     {% if db_status and db_status.current_content_type %}
                     <strong>Current Display:</strong><br>
                     {{ db_status.current_content_type|title }}
-                    <small class="text-muted">(Last updated: {{ db_status.last_update.strftime('%Y-%m-%d %H:%M:%S') if db_status.last_update else 'Never' }})</small>
+                    <small class="text-muted">(Last updated: {{ db_status.last_update | localtime('%Y-%m-%d %H:%M:%S %Z', 'Never') }})</small>
                     {% endif %}
                 </div>
             </div>
@@ -306,7 +306,7 @@
                             <tbody id="historyTableBody">
                                 {% for display in recent_displays %}
                                 <tr>
-                                    <td data-label="Time">{{ display.created_at.strftime('%H:%M:%S') if display.created_at else 'N/A' }}</td>
+                                    <td data-label="Time">{{ display.created_at | localtime('%H:%M:%S %Z', 'N/A') }}</td>
                                     <td data-label="Type"><span class="badge badge-info">{{ display.content_type }}</span></td>
                                     <td data-label="Content">
                                         {% if display.content_type == 'text' %}

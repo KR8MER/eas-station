@@ -24,11 +24,13 @@ from __future__ import annotations
 from flask import Flask
 
 from app_utils import (
+    format_local,
     format_local_date,
     format_local_datetime,
     format_local_time,
     is_alert_expired,
     local_now,
+    to_location_time,
     utc_now,
 )
 
@@ -37,6 +39,11 @@ def register(app: Flask) -> None:
     """Attach the project's shared Jinja filters and globals to *app*."""
 
     app.add_template_filter(_nl2br_filter, name="nl2br")
+    # `localtime` is the filter templates should reach for when rendering a stored
+    # timestamp. Calling `.strftime()` directly on a column renders raw UTC, which
+    # reads as hours-off against the operator's wall clock.
+    app.add_template_filter(format_local, name="localtime")
+    app.add_template_filter(to_location_time, name="to_local")
     app.add_template_filter(format_local_datetime, name="format_local_datetime")
     app.add_template_filter(format_local_date, name="format_local_date")
     app.add_template_filter(format_local_time, name="format_local_time")
