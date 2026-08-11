@@ -60,7 +60,7 @@ from app_core.logging_context import (
     install_alert_filter,
 )
 logging.basicConfig(
-    level=logging.DEBUG,  # Changed from INFO to DEBUG to show diagnostic logs
+    level=logging.INFO,
     format=LOG_FORMAT_WITH_ALERT,
     handlers=[
         logging.StreamHandler(sys.stdout)
