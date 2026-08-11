@@ -623,6 +623,7 @@ function renderAudioSources(fullRender = true) {
         const safeId = sanitizeId(source.name);
         const peakValue = source.metrics?.peak_level_db;
         const rmsValue = source.metrics?.rms_level_db;
+        const streamMount = getIcecastStreamUrl(source.name);
 
         return `
         <div class="col-lg-6 col-xl-4 mb-3">
@@ -676,19 +677,24 @@ function renderAudioSources(fullRender = true) {
 
                     <!-- Audio Player -->
                     <div class="audio-player-container" id="player-container-${source.name}">
-                        ${source.status === 'running' ? `
+                        ${source.status === 'running' && streamMount ? `
                             <audio
                                 controls
                                 id="audio-${source.name}"
                                 preload="none"
                                 data-source-name="${escapeHtml(source.name)}"
-                                src="/api/audio/stream/${encodeURIComponent(source.name)}">
+                                src="${streamMount}">
                                 Your browser does not support the audio element.
                             </audio>
                             <div class="audio-player-status small mt-2 text-muted" id="player-status-${source.name}"></div>
                             <small class="text-muted d-block mt-1">
-                                <i class="fas fa-info-circle"></i> Live stream at the source's native sample rate
+                                <i class="fas fa-info-circle"></i> Live stream via Icecast
                             </small>
+                        ` : source.status === 'running' ? `
+                            <div class="alert alert-secondary mb-0">
+                                <i class="fas fa-volume-mute"></i>
+                                No Icecast stream configured for this source -- nothing to play here yet.
+                            </div>
                         ` : `
                             <div class="alert alert-secondary mb-0">
                                 <i class="fas fa-pause-circle"></i>
@@ -1112,10 +1118,13 @@ function initializeAudioPlayers(playingStates = {}, currentTimes = {}) {
 
         const wasPlaying = Boolean(playingStates[source.name]);
 
-        // Simple: Always use Flask MP3 stream
+        // Always use the source's Icecast MP3 mount
         if (!audioEl.src || audioEl.src === '') {
-            audioEl.src = `/api/audio/stream/${encodeURIComponent(source.name)}`;
-            audioEl.load();
+            const streamMount = getIcecastStreamUrl(source.name);
+            if (streamMount) {
+                audioEl.src = streamMount;
+                audioEl.load();
+            }
         }
 
         setPlayerStatus(source.name, 'Ready. Press play to listen.', 'muted');
@@ -1204,9 +1213,12 @@ function scheduleStreamRecovery(audioEl, sourceName) {
 
         // Reconnect stream with cache buster
         setPlayerStatus(sourceName, 'Reconnecting to stream…', 'warning');
-        const cacheBuster = `?ts=${Date.now()}`;
-        audioEl.src = `/api/audio/stream/${encodeURIComponent(sourceName)}${cacheBuster}`;
-        audioEl.load();
+        const streamMount = getIcecastStreamUrl(sourceName);
+        if (streamMount) {
+            const cacheBuster = `?ts=${Date.now()}`;
+            audioEl.src = `${streamMount}${cacheBuster}`;
+            audioEl.load();
+        }
         
         if (wasPlaying) {
             audioEl.play().catch(() => {});
@@ -1262,9 +1274,12 @@ function onAudioPlaybackError(event) {
         // Use exponential backoff: 3s, 6s, 12s
         const backoffMs = 3000 * Math.pow(2, retries);
         setTimeout(() => {
-            const cacheBuster = `?ts=${Date.now()}`;
-            audioEl.src = `/api/audio/stream/${encodeURIComponent(sourceName)}${cacheBuster}`;
-            audioEl.load();
+            const streamMount = getIcecastStreamUrl(sourceName);
+            if (streamMount) {
+                const cacheBuster = `?ts=${Date.now()}`;
+                audioEl.src = `${streamMount}${cacheBuster}`;
+                audioEl.load();
+            }
             
             if (wasPlaying) {
                 audioEl.play().catch(() => {});
@@ -1275,6 +1290,22 @@ function onAudioPlaybackError(event) {
     }
 
     setPlayerStatus(sourceName, 'Unable to connect to audio stream. Please refresh the page or check the source.', 'danger');
+}
+
+function getIcecastStreamUrl(sourceName) {
+    // The inline players point at each source's Icecast MP3 mount (nginx
+    // proxies /<mount>.mp3 straight through to Icecast on :8000 -- see the
+    // "Per-source live monitoring streams" block in the nginx config).
+    //
+    // This used to point at the audio-service's own /api/audio/stream/<name>
+    // endpoint, which streams raw WAV with a 0xFFFFFFFF (unknown-length)
+    // placeholder in the RIFF/data chunk-size fields -- required since a
+    // live stream has no real total length, but not reliably handled by
+    // every browser's native <audio> WAV decoder. MP3 is a self-framing,
+    // genuinely streamable format and doesn't have that problem, and every
+    // source here already has a working Icecast mount.
+    const source = audioSources.find(s => s.name === sourceName);
+    return source?.metrics?.metadata?.icecast_mount || null;
 }
 
 function getSourceIcon(type) {
