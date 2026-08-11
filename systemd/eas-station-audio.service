@@ -6,6 +6,12 @@ After=network.target redis.service eas-station-sdr.service
 Requires=redis.service
 Wants=eas-station-sdr.service
 
+# Fire a recovery hook if this unit ever ends up in 'failed' state.
+# Notably covers crashes that happen while a stop job is already in
+# flight (e.g. mid-shutdown during a full-stack restart), where
+# Restart=always does not re-trigger on its own.
+OnFailure=eas-station-failure-recovery@%N.service
+
 [Service]
 Type=simple
 User=eas-station

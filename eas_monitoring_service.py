@@ -2243,4 +2243,14 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _exit_code = main()
+    # Bypass normal interpreter finalization: numba/llvmlite's native JIT
+    # teardown races with CPython shutdown on aarch64 and can abort the
+    # process (SIGABRT / "terminate called without an active exception")
+    # *after* the graceful-shutdown code above has already completed. That
+    # abort happens outside any Python exception handler and is invisible
+    # to the app's own logging, and because it occurs while systemd already
+    # has a stop job in flight for this unit, Restart=always does not fire.
+    # os._exit() skips the problematic native teardown entirely.
+    logging.shutdown()
+    os._exit(_exit_code)

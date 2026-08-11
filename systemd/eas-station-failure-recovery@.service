@@ -1,0 +1,7 @@
+[Unit]
+Description=EAS Station Failure Recovery for %i
+Documentation=https://github.com/KR8MER/eas-station
+
+[Service]
+Type=oneshot
+ExecStart=/opt/eas-station/scripts/service_failure_recovery.sh %i
