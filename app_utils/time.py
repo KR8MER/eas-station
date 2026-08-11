@@ -166,6 +166,61 @@ def _ensure_datetime(dt: Optional[datetime]) -> Optional[datetime]:
     return dt
 
 
+def to_location_time(dt: Optional[datetime]) -> Optional[datetime]:
+    """Convert *dt* into the configured location timezone.
+
+    Timestamps are persisted in UTC throughout the system; some columns are
+    timezone-aware (``db.DateTime(timezone=True)``) and some are naive
+    ``datetime.utcnow()`` values. Naive values are treated as UTC so both
+    styles render identically.
+
+    Args:
+        dt (datetime | None): Timestamp to convert.
+
+    Returns:
+        datetime | None: ``dt`` expressed in the location timezone, or ``None``
+        when ``dt`` is falsy.
+
+    Example:
+        >>> to_location_time(datetime(2026, 8, 11, 10, 6, 43)).hour  # America/New_York
+        6
+    """
+    dt = _ensure_datetime(dt)
+    if not dt:
+        return None
+    return dt.astimezone(get_location_timezone())
+
+
+def format_local(
+    dt: Optional[datetime],
+    fmt: str = "%Y-%m-%d %H:%M:%S %Z",
+    default: str = "N/A",
+) -> str:
+    """Format *dt* in the configured location timezone.
+
+    This is the general-purpose replacement for calling ``.strftime()`` directly
+    on a stored timestamp in a template, which silently renders UTC and makes
+    on-air logs look hours off from the operator's wall clock.
+
+    Args:
+        dt (datetime | None): Timestamp to format (UTC, aware or naive).
+        fmt (str): ``strftime`` pattern. Include ``%Z`` so the rendered time
+            states which zone it is in.
+        default (str): Text returned when ``dt`` is missing.
+
+    Returns:
+        str: The formatted local timestamp, or *default*.
+
+    Example:
+        >>> format_local(utc_now(), '%Y-%m-%d %H:%M:%S %Z')
+        '2026-08-11 06:06:43 EDT'
+    """
+    local_dt = to_location_time(dt)
+    if not local_dt:
+        return default
+    return local_dt.strftime(fmt)
+
+
 def format_local_datetime(dt: Optional[datetime], include_utc: bool = True) -> str:
     """Format a datetime in the configured local time with optional UTC."""
 

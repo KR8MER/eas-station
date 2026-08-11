@@ -4,7 +4,7 @@
 <div class="container py-4">
     <div class="row justify-content-center">
         <div class="col-12 col-lg-10 col-xl-8">
-            {% set hero_lead %}Last updated: {{ current_time().strftime('%B %d, %Y') }}{% endset %}
+            {% set hero_lead %}Last updated: {{ local_current_time().strftime('%B %d, %Y') }}{% endset %}
             {% with hero_logo=true, hero_title='SMS Messaging Policy', hero_lead=hero_lead %}
                 {% include 'partials/hero.html' %}
             {% endwith %}

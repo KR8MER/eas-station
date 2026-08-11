@@ -410,11 +410,11 @@
                                 <p class="mb-1"><strong>{{ compliance_summary.window_days }}</strong> day{{ '' if compliance_summary.window_days == 1 else 's' }}</p>
                                 <small class="text-muted">
                                     {% if compliance_summary.window_start %}
-                                        {{ compliance_summary.window_start.strftime('%Y-%m-%d') }}
+                                        {{ compliance_summary.window_start | localtime('%Y-%m-%d') }}
                                     {% endif %}
                                     →
                                     {% if compliance_summary.window_end %}
-                                        {{ compliance_summary.window_end.strftime('%Y-%m-%d') }}
+                                        {{ compliance_summary.window_end | localtime('%Y-%m-%d') }}
                                     {% endif %}
                                 </small>
                             </div>
@@ -439,7 +439,7 @@
                             <tbody>
                                 {% for row in weekly.rows[:8] %}
                                 <tr>
-                                    <td data-label="Week Starting"><small>{{ row.week_start.strftime('%Y-%m-%d') if row.week_start else '—' }}</small></td>
+                                    <td data-label="Week Starting"><small>{{ row.week_start | localtime('%Y-%m-%d', '—') }}</small></td>
                                     <td data-label="Received" class="text-end">{{ row.received }}</td>
                                     <td data-label="Relayed" class="text-end">{{ row.relayed }}</td>
                                     <td data-label="Compliance" class="text-end">
@@ -562,9 +562,9 @@
                         <div class="mt-2 text-muted small">
                             <i class="fas fa-calendar-alt"></i>
                             Window:
-                            <strong>{{ report.window_start.strftime('%Y-%m-%d') }}</strong>
+                            <strong>{{ report.window_start | localtime('%Y-%m-%d') }}</strong>
                             →
-                            <strong>{{ report.window_end.strftime('%Y-%m-%d') }}</strong>
+                            <strong>{{ report.window_end | localtime('%Y-%m-%d') }}</strong>
                         </div>
                         {% endif %}
                     </div>
@@ -687,7 +687,7 @@
                                                 <tbody>
                                                     {% for log in category_logs %}
                                                     <tr class="log-row log-level-{{ log.level|lower }}">
-                                                        <td data-label="Timestamp"><small class="text-muted">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if log.timestamp else 'N/A' }}</small></td>
+                                                        <td data-label="Timestamp"><small class="text-muted">{{ log.timestamp | localtime('%Y-%m-%d %H:%M:%S %Z', 'N/A') }}</small></td>
                                                         <td data-label="Level">
                                                             <span class="badge bg-{{
                                                                 'success' if log.level == 'SUCCESS' or log.level == 'INFO'
@@ -786,7 +786,7 @@
                             <tbody>
                                 {% for log in logs %}
                                 <tr class="log-row log-level-{{ log.level|lower }}">
-                                    <td data-label="Timestamp"><small class="text-muted">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if log.timestamp else 'N/A' }}</small></td>
+                                    <td data-label="Timestamp"><small class="text-muted">{{ log.timestamp | localtime('%Y-%m-%d %H:%M:%S %Z', 'N/A') }}</small></td>
                                     <td data-label="Level">
                                         <span class="badge bg-{{
                                             'success' if log.level == 'SUCCESS' or log.level == 'INFO'

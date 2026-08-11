@@ -22,7 +22,7 @@
                         {{ match.kind|upper }}
                     </span>
                     {% if match.sent %}
-                    <div><small class="text-muted">{{ match.sent.strftime('%Y-%m-%d %H:%M') }}</small></div>
+                    <div><small class="text-muted">{{ match.sent | localtime('%Y-%m-%d %H:%M %Z') }}</small></div>
                     {% endif %}
                 </div>
             </div>

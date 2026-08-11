@@ -153,7 +153,7 @@
                                     {% endif %}
                                     <br>
                                     <small class="text-muted">
-                                        {{ log.activated_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+                                        {{ log.activated_at | localtime('%Y-%m-%d %H:%M:%S %Z') }}
                                     </small>
                                     {% if log.reason %}
                                         <br>

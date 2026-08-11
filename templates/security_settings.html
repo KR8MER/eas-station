@@ -230,8 +230,8 @@
                         </p>
                     </div>
                     <div class="col-md-6">
-                        <p><strong>Account Created:</strong> {{ current_user.created_at.strftime('%Y-%m-%d %H:%M UTC') if current_user.created_at else 'N/A' }}</p>
-                        <p><strong>Last Login:</strong> {{ current_user.last_login_at.strftime('%Y-%m-%d %H:%M UTC') if current_user.last_login_at else 'Never' }}</p>
+                        <p><strong>Account Created:</strong> {{ current_user.created_at | localtime('%Y-%m-%d %H:%M %Z', 'N/A') }}</p>
+                        <p><strong>Last Login:</strong> {{ current_user.last_login_at | localtime('%Y-%m-%d %H:%M %Z', 'Never') }}</p>
                     </div>
                 </div>
             </div>
@@ -262,7 +262,7 @@
                             {% if mfa_enabled %}
                                 Your account is protected with TOTP-based authentication.
                                 {% if mfa_enrolled_at %}
-                                    <br><small>Enrolled on: {{ mfa_enrolled_at.strftime('%Y-%m-%d %H:%M UTC') }}</small>
+                                    <br><small>Enrolled on: {{ mfa_enrolled_at | localtime('%Y-%m-%d %H:%M %Z') }}</small>
                                 {% endif %}
                             {% else %}
                                 <span class="text-warning"><strong>Recommended:</strong> Enable MFA to secure your account.</span>

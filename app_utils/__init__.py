@@ -22,6 +22,7 @@ Repository: https://github.com/KR8MER/eas-station
 from .time import (
     PUTNAM_COUNTY_TZ,
     UTC_TZ,
+    format_local,
     format_local_date,
     format_local_datetime,
     format_local_time,
@@ -31,6 +32,7 @@ from .time import (
     local_now,
     parse_nws_datetime,
     set_location_timezone,
+    to_location_time,
     utc_now,
 )
 from .formatting import format_bytes, format_uptime
@@ -54,6 +56,7 @@ __all__ = [
     "utc_now",
     "local_now",
     "parse_nws_datetime",
+    "format_local",
     "format_local_datetime",
     "format_local_date",
     "format_local_time",
@@ -65,6 +68,7 @@ __all__ = [
     "get_location_timezone",
     "get_location_timezone_name",
     "set_location_timezone",
+    "to_location_time",
     "ALERT_SOURCE_NOAA",
     "ALERT_SOURCE_IPAWS",
     "ALERT_SOURCE_MANUAL",
