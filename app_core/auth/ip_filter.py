@@ -401,30 +401,42 @@ class IPFilter(db.Model):
     @staticmethod
     def cleanup_expired() -> int:
         """
-        Clean up expired filters.
-        
+        Purge expired filters from the Global Ban List entirely.
+
+        Deletes rather than deactivating: the per-request expiry checks
+        (``is_ip_allowed`` / ``is_ip_blocked``) already flip ``is_active`` to
+        False the moment an expired entry is hit, but never remove the row,
+        so previously this method (which only touched still-``is_active``
+        rows) could never reach them either -- expired entries piled up in
+        the ban list forever, just relabeled "Inactive". Matching purely on
+        ``expires_at`` (regardless of ``is_active``) sweeps those up too.
+
+        Non-expiring entries that an admin has manually disabled via the
+        toggle button (``expires_at`` is None) are untouched -- disabling
+        is a deliberate, reversible action, not an expiry.
+
         Returns:
-            Number of filters cleaned up
+            Number of filters purged.
         """
         now = utc_now()
         expired = IPFilter.query.filter(
             IPFilter.expires_at.isnot(None),
             IPFilter.expires_at < now,
-            IPFilter.is_active == True
         ).all()
-        
+
         count = 0
         unban_ips = []
         for filter_entry in expired:
-            filter_entry.is_active = False
-            db.session.add(filter_entry)
             if filter_entry.filter_type == IPFilterType.BLOCKLIST.value:
                 unban_ips.append(filter_entry.ip_address)
+            db.session.delete(filter_entry)
             count += 1
 
         db.session.commit()
 
-        # Lift the matching host-firewall bans for the now-expired entries.
+        # Lift the matching host-firewall bans for the now-purged entries.
+        # Best-effort/idempotent: some may have already been unbanned by the
+        # per-request expiry check.
         if unban_ips:
             try:
                 from app_core.auth.firewall import firewall_unban

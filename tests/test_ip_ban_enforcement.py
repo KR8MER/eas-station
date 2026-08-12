@@ -112,3 +112,41 @@ def test_inactive_blocklist_entry_does_not_block(app_with_filters):
         db.session.commit()
 
         assert IPFilter.is_ip_blocked("203.0.113.11") == (False, None)
+
+
+def test_cleanup_expired_purges_active_and_already_inactive_expired_entries(app_with_filters):
+    """Regression test: cleanup_expired() used to only flip is_active to False
+    on still-active expired rows, so it could never reach rows the
+    is_ip_blocked/is_ip_allowed expiry check had already deactivated -- those
+    piled up in the Global Ban List forever, just relabeled "Inactive". It
+    should delete both kinds, and leave non-expiring disabled entries alone."""
+    app, db = app_with_filters
+    from app_core.auth.ip_filter import IPFilter, IPFilterReason
+
+    with app.app_context():
+        still_active_expired = IPFilter.add_to_blocklist(
+            "203.0.113.20", reason=IPFilterReason.MANUAL.value
+        )
+        still_active_expired.expires_at = utc_now() - timedelta(hours=1)
+
+        already_inactive_expired = IPFilter.add_to_blocklist(
+            "203.0.113.21", reason=IPFilterReason.MANUAL.value
+        )
+        already_inactive_expired.expires_at = utc_now() - timedelta(hours=2)
+        already_inactive_expired.is_active = False
+
+        manually_disabled_non_expiring = IPFilter.add_to_blocklist(
+            "203.0.113.22", reason=IPFilterReason.MANUAL.value
+        )
+        manually_disabled_non_expiring.is_active = False
+
+        still_active_permanent = IPFilter.add_to_blocklist(
+            "203.0.113.23", reason=IPFilterReason.MANUAL.value
+        )
+        db.session.commit()
+
+        count = IPFilter.cleanup_expired()
+
+        assert count == 2
+        remaining_ips = {f.ip_address for f in IPFilter.query.all()}
+        assert remaining_ips == {"203.0.113.22", "203.0.113.23"}
