@@ -66,6 +66,55 @@ _tty() { printf '%s\n' "$1" >/dev/tty 2>/dev/null || printf '%s\n' "$1"; }
 # Write raw bytes (no trailing newline) directly to the terminal.
 _tty_raw() { printf '%s' "$1" >/dev/tty 2>/dev/null || printf '%s' "$1"; }
 
+# Run a command with its output visible on the terminal AND still captured
+# in the log file. Both install.sh and update.sh redirect stdout/stderr to
+# LOG_FILE early on (`exec 1>>"$LOG_FILE" 2>&1`), which silently swallows
+# any subprocess that isn't explicitly re-routed like this one is -- a
+# long-running step (pip install, apt-get install, alembic migrations)
+# would otherwise print a "this may take a while, output shown below"
+# message and then show nothing for its entire duration: indistinguishable
+# from a hang, and in alembic's case defeating the point of running it
+# uncaptured in the first place (so Ctrl+C can interrupt it).
+#
+# Falls back to running the command unmodified (log-only, i.e. today's
+# behavior) when /dev/tty isn't writable, same as _tty()'s own fallback --
+# e.g. a fully detached/unattended run.
+#
+# Exit code is the wrapped command's, not tee's -- relies on PIPESTATUS,
+# which is bash-specific (both callers are already #!/bin/bash).
+ui_stream() {
+    if [ -w /dev/tty ] 2>/dev/null; then
+        # `-w /dev/tty` only checks permission bits, not whether a real
+        # controlling terminal is attached (e.g. under some service/sandbox
+        # contexts /dev/tty exists and is "writable" but has no backing
+        # terminal). tee's own stderr is silenced so that case degrades to
+        # "log-only" quietly instead of printing "tee: /dev/tty: No such
+        # device or address" on every line; the wrapped command's real
+        # stderr is unaffected since it was already merged into stdout by
+        # the `2>&1` before the pipe.
+        "$@" 2>&1 | tee -a /dev/tty 2>/dev/null
+        return "${PIPESTATUS[0]}"
+    fi
+    "$@"
+}
+
+# Echo an already-captured block of text (e.g. `git fetch` output stashed in
+# a variable for error handling) to both stdout -- which is the log file,
+# via the install/update scripts' `exec 1>>LOG 2>&1` -- and the terminal.
+# Unlike ui_stream(), there's no live command to pipe here; the output was
+# already captured earlier (often filtered with `head -N` first), so this
+# just fans the same already-truncated text out to /dev/tty too. Same silent
+# log-only fallback as _tty()/ui_stream() when /dev/tty isn't writable.
+# Usage: echo "$CAPTURED_OUTPUT" | head -20 | _tty_block
+_tty_block() {
+    local block
+    block=$(cat)
+    echo "$block"
+    if [ -w /dev/tty ] 2>/dev/null; then
+        printf '%s\n' "$block" >>/dev/tty 2>/dev/null
+    fi
+}
+
 # ── whiptail wrapper ───────────────────────────────────────────────────────
 # Forces TUI output to /dev/tty so ncurses is never swallowed by the install
 # log redirect. Callers that capture user input still use the standard

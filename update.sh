@@ -242,10 +242,51 @@ if [ -d ".git" ]; then
     
     if [ $FETCH_STATUS -eq 0 ]; then
         echo_success "Fetched latest changes from remote"
+    elif echo "$FETCH_OUTPUT" | grep -q "couldn't find remote ref"; then
+        # The branch this checkout is sitting on no longer exists upstream --
+        # normal fallout of this project's PR workflow, where feature
+        # branches get deleted on merge. Falling back to main is the correct
+        # recovery in every case: main is where every PR lands, so "my
+        # branch is gone" always means "that work is already on main (or
+        # abandoned)", never "I need to preserve local branch state".
+        echo_warning "Branch '$CURRENT_BRANCH' no longer exists on the remote"
+        echo_info "This usually means it was a feature/PR branch that already merged and was deleted."
+        echo_info "Falling back to main..."
+        echo ""
+
+        set +e
+        sudo -u "$SERVICE_USER" git checkout main 2>&1
+        CHECKOUT_STATUS=$?
+        set -e
+
+        if [ $CHECKOUT_STATUS -ne 0 ]; then
+            echo_error "Could not switch to main -- manual recovery needed:"
+            echo_info "  cd $INSTALL_DIR"
+            echo_info "  sudo -u $SERVICE_USER git checkout main"
+            echo_info "  sudo -u $SERVICE_USER git reset --hard origin/main"
+            exit 1
+        fi
+
+        CURRENT_BRANCH="main"
+        echo_success "Switched to main"
+
+        set +e
+        FETCH_OUTPUT=$(sudo -u "$SERVICE_USER" git fetch origin "$CURRENT_BRANCH:refs/remotes/origin/$CURRENT_BRANCH" 2>&1)
+        FETCH_STATUS=$?
+        set -e
+
+        if [ $FETCH_STATUS -eq 0 ]; then
+            echo_success "Fetched latest changes from remote"
+        else
+            echo_error "Git fetch failed even after falling back to main"
+            echo_error "Git output:"
+            echo "$FETCH_OUTPUT" | head -20 | _tty_block
+            exit 1
+        fi
     else
         echo_error "Git fetch failed - cannot update"
         echo_error "Git output:"
-        echo "$FETCH_OUTPUT" | head -20
+        echo "$FETCH_OUTPUT" | head -20 | _tty_block
         echo ""
         echo_warning "Possible causes:"
         echo_warning "  1. Git directory ownership issue (should be owned by $SERVICE_USER)"
@@ -351,7 +392,7 @@ if [ -d ".git" ]; then
     else
         echo_error "Git reset failed - update incomplete"
         echo_error "Git output:"
-        echo "$RESET_OUTPUT" | head -20
+        echo "$RESET_OUTPUT" | head -20 | _tty_block
         echo ""
         echo_warning "Possible causes:"
         echo_warning "  1. Git directory ownership issue (should be owned by $SERVICE_USER)"
@@ -665,7 +706,7 @@ done
 # Show output (no -qq) so user can see progress and diagnose any issues
 # Array expansion is safe and prevents command injection
 if [ ${#AVAILABLE_PACKAGES[@]} -gt 0 ]; then
-    DEBIAN_FRONTEND=noninteractive apt-get install -y "${AVAILABLE_PACKAGES[@]}"
+    ui_stream env DEBIAN_FRONTEND=noninteractive apt-get install -y "${AVAILABLE_PACKAGES[@]}"
     if [ $? -ne 0 ]; then
         echo_warning "Batch package install failed - retrying individually..."
         for pkg in "${AVAILABLE_PACKAGES[@]}"; do
@@ -692,7 +733,7 @@ if [ -f "$INSTALL_DIR/venv/bin/pip" ]; then
     echo_info "Full output shown below:"
     echo ""
     # Show full output so user can see progress (no grep filter)
-    sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/pip" install --upgrade -r "$INSTALL_DIR/requirements.txt"
+    ui_stream sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/pip" install --upgrade -r "$INSTALL_DIR/requirements.txt"
     echo ""
     echo_success "Main venv dependencies updated"
 
@@ -1090,7 +1131,7 @@ with app.app_context():
     # Run Alembic directly (no output capture) so user sees real-time feedback
     # and can interrupt with Ctrl+C if needed
     # IMPORTANT: Run from install directory to ensure .env file is found
-    sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR' && '$INSTALL_DIR/venv/bin/alembic' upgrade head"
+    ui_stream sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR' && '$INSTALL_DIR/venv/bin/alembic' upgrade head"
     ALEMBIC_EXIT_CODE=$?
     set -e
 
