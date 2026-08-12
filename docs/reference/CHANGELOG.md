@@ -8,6 +8,11 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.153.4] - 2026-08-12 - Alert Verification stops loading audio it never shows
+
+### Fixed
+- **The Alert Verification page loaded every audio blob in the display window just to show delivery status.** `collect_alert_delivery_records()` queried whole `EASMessage` ORM rows, which drags along all six `LargeBinary` audio columns even though the page only reads `same_header`, `created_at` and `metadata_payload`. Measured on production: 235 messages averaging ~6.4 MB of audio each meant the default 30-day window pulled roughly **180 MB from Postgres on every page load** — for bytes that were never rendered. Switched to `EASMessage.without_audio()`, which defers all six blob columns in SQL. Added `tests/test_alert_verification_queries.py`, which inspects the emitted SQL to pin this query shape and catch a regression back to `EASMessage.query`.
+
 ## [2.153.3] - 2026-08-11 - Page-chrome clocks tell the truth
 
 ### Fixed
