@@ -37,6 +37,7 @@ from .dependencies import _collect_dependency_versions
 from .hardware import _collect_hardware_inventory
 from .network import _collect_network_traffic, _select_primary_interface
 from .osinfo import _collect_operating_system_details
+from .raspberry_pi import collect_raspberry_pi_health
 from .rtc import _collect_rtc_status
 from .services import _collect_systemd_services
 from .smart import _collect_smart_health
@@ -403,6 +404,9 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
             "dependencies": _collect_dependency_versions(logger),
             "gps": _collect_gps_status(logger),
             "rtc": _collect_rtc_status(logger),
+            "raspberry_pi": collect_raspberry_pi_health(
+                logger, hardware_info.get("platform")
+            ),
         }
         
         # Add shields.io badges and distro logo

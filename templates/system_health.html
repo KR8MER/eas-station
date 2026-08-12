@@ -1372,6 +1372,113 @@
             </div>
         </div>
 
+        {% set pi_data = raspberry_pi or None %}
+        {% if pi_data %}
+        <div class="health-section-head">
+            <h2>Raspberry Pi</h2>
+            <span class="rule"></span>
+        </div>
+
+        <!-- Raspberry Pi-specific telemetry: none of this exists on a
+             generic/bare-metal x86 or VM deployment, so the whole section
+             is server-gated on raspberry_pi being non-null. -->
+        <div class="row mb-4">
+            <div class="col-lg-6 mb-3" id="pi-power-card">
+                {% set throttle = pi_data.throttle_status or None %}
+                {% set boot = pi_data.bootloader or None %}
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-bolt section-icon"></i> Power &amp; Firmware</h5>
+
+                        {% if throttle %}
+                            {% if throttle.healthy and not throttle.currently_degraded %}
+                            <div class="metric-row">
+                                <span class="metric-label">Power supply:</span>
+                                <span class="metric-value"><span class="badge bg-success">OK, never throttled</span></span>
+                            </div>
+                            {% else %}
+                                {% if throttle.currently_degraded %}
+                                <div class="alert alert-danger py-2 mb-2"><i class="fas fa-exclamation-triangle me-1"></i> Currently degraded -- see flags below</div>
+                                {% else %}
+                                <div class="alert alert-warning py-2 mb-2"><i class="fas fa-exclamation-triangle me-1"></i> Has occurred since boot -- see flags below</div>
+                                {% endif %}
+                                {% for key, label in [('under_voltage', 'Under-voltage'), ('frequency_capped', 'Frequency capped'), ('throttled', 'Throttled'), ('soft_temp_limit', 'Soft temp limit')] %}
+                                    {% if throttle.current.get(key) or throttle.ever_since_boot.get(key) %}
+                                    <div class="metric-row">
+                                        <span class="metric-label">{{ label }}:</span>
+                                        <span class="metric-value">
+                                            {% if throttle.current.get(key) %}<span class="badge bg-danger">Active now</span>{% endif %}
+                                            {% if throttle.ever_since_boot.get(key) %}<span class="badge bg-warning text-dark">Since boot</span>{% endif %}
+                                        </span>
+                                    </div>
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        {% else %}
+                        <div class="metric-row"><span class="metric-label text-muted"><em>Throttle status unavailable (vcgencmd)</em></span></div>
+                        {% endif %}
+
+                        <hr>
+                        {% if boot %}
+                            <div class="metric-row">
+                                <span class="metric-label">Bootloader:</span>
+                                <span class="metric-value">
+                                    {% if boot.update_available %}<span class="badge bg-warning text-dark">Update available</span>{% else %}<span class="badge bg-success">Up to date</span>{% endif %}
+                                </span>
+                            </div>
+                            {% if boot.current_date %}
+                            <div class="metric-row">
+                                <span class="metric-label">Current:</span>
+                                <span class="metric-value">{{ boot.current_date }}</span>
+                            </div>
+                            {% endif %}
+                            {% if boot.update_available and boot.latest_date %}
+                            <div class="metric-row">
+                                <span class="metric-label">Latest:</span>
+                                <span class="metric-value">{{ boot.latest_date }}</span>
+                            </div>
+                            {% endif %}
+                        {% else %}
+                        <div class="metric-row"><span class="metric-label text-muted"><em>Bootloader status unavailable</em></span></div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6 mb-3" id="pi-sensors-card">
+                {% set fans = pi_data.fans or [] %}
+                {% set rp1v = pi_data.rp1_voltages or [] %}
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-fan section-icon"></i> Fan &amp; RP1 Sensors</h5>
+
+                        {% if fans %}
+                            {% for fan in fans %}
+                            <div class="metric-row">
+                                <span class="metric-label">{{ fan.label or 'Fan' }}:</span>
+                                <span class="metric-value">{{ fan.rpm }} RPM</span>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                        <div class="metric-row"><span class="metric-label text-muted"><em>No fan detected</em></span></div>
+                        {% endif %}
+
+                        {% if rp1v %}
+                        <hr>
+                        <div class="metric-label text-muted mb-1" style="font-size: 0.8rem;">RP1 ADC channels (unlabelled by the kernel driver)</div>
+                            {% for channel in rp1v %}
+                            <div class="metric-row">
+                                <span class="metric-label">{{ channel.label }}:</span>
+                                <span class="metric-value">{{ channel.millivolts }} mV</span>
+                            </div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="health-section-head">
             <h2>Resource Usage</h2>
             <span class="rule"></span>
@@ -3258,6 +3365,94 @@
             `;
         }
 
+        const PI_THROTTLE_FLAGS = [
+            ['under_voltage', 'Under-voltage'],
+            ['frequency_capped', 'Frequency capped'],
+            ['throttled', 'Throttled'],
+            ['soft_temp_limit', 'Soft temp limit'],
+        ];
+
+        function renderPiPowerCard(piData) {
+            const data = piData && typeof piData === 'object' ? piData : {};
+            const throttle = data.throttle_status || null;
+            const boot = data.bootloader || null;
+
+            let throttleHtml;
+            if (!throttle) {
+                throttleHtml = '<div class="metric-row"><span class="metric-label text-muted"><em>Throttle status unavailable (vcgencmd)</em></span></div>';
+            } else if (throttle.healthy && !throttle.currently_degraded) {
+                throttleHtml = `
+                    <div class="metric-row">
+                        <span class="metric-label">Power supply:</span>
+                        <span class="metric-value"><span class="badge bg-success">OK, never throttled</span></span>
+                    </div>`;
+            } else {
+                const banner = throttle.currently_degraded
+                    ? '<div class="alert alert-danger py-2 mb-2"><i class="fas fa-exclamation-triangle me-1"></i> Currently degraded -- see flags below</div>'
+                    : '<div class="alert alert-warning py-2 mb-2"><i class="fas fa-exclamation-triangle me-1"></i> Has occurred since boot -- see flags below</div>';
+                const flagRows = PI_THROTTLE_FLAGS.map(([key, label]) => {
+                    const now = Boolean(throttle.current && throttle.current[key]);
+                    const ever = Boolean(throttle.ever_since_boot && throttle.ever_since_boot[key]);
+                    if (!now && !ever) return '';
+                    const badges = `${now ? '<span class="badge bg-danger">Active now</span>' : ''} ${ever ? '<span class="badge bg-warning text-dark">Since boot</span>' : ''}`;
+                    return `<div class="metric-row"><span class="metric-label">${escapeHtml(label)}:</span><span class="metric-value">${badges}</span></div>`;
+                }).join('');
+                throttleHtml = banner + flagRows;
+            }
+
+            let bootHtml;
+            if (!boot) {
+                bootHtml = '<div class="metric-row"><span class="metric-label text-muted"><em>Bootloader status unavailable</em></span></div>';
+            } else {
+                const statusBadge = boot.update_available
+                    ? '<span class="badge bg-warning text-dark">Update available</span>'
+                    : '<span class="badge bg-success">Up to date</span>';
+                const currentRow = boot.current_date
+                    ? `<div class="metric-row"><span class="metric-label">Current:</span><span class="metric-value">${escapeHtml(String(boot.current_date))}</span></div>`
+                    : '';
+                const latestRow = (boot.update_available && boot.latest_date)
+                    ? `<div class="metric-row"><span class="metric-label">Latest:</span><span class="metric-value">${escapeHtml(String(boot.latest_date))}</span></div>`
+                    : '';
+                bootHtml = `<div class="metric-row"><span class="metric-label">Bootloader:</span><span class="metric-value">${statusBadge}</span></div>${currentRow}${latestRow}`;
+            }
+
+            return `
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-bolt section-icon"></i> Power &amp; Firmware</h5>
+                        ${throttleHtml}
+                        <hr>
+                        ${bootHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderPiSensorsCard(piData) {
+            const data = piData && typeof piData === 'object' ? piData : {};
+            const fans = Array.isArray(data.fans) ? data.fans : [];
+            const rp1v = Array.isArray(data.rp1_voltages) ? data.rp1_voltages : [];
+
+            const fanHtml = fans.length
+                ? fans.map((fan) => `<div class="metric-row"><span class="metric-label">${escapeHtml(fan.label || 'Fan')}:</span><span class="metric-value">${toNumber(fan.rpm, 0)} RPM</span></div>`).join('')
+                : '<div class="metric-row"><span class="metric-label text-muted"><em>No fan detected</em></span></div>';
+
+            const rp1Html = rp1v.length
+                ? '<hr><div class="metric-label text-muted mb-1" style="font-size: 0.8rem;">RP1 ADC channels (unlabelled by the kernel driver)</div>'
+                    + rp1v.map((ch) => `<div class="metric-row"><span class="metric-label">${escapeHtml(ch.label || '')}:</span><span class="metric-value">${toNumber(ch.millivolts, 0)} mV</span></div>`).join('')
+                : '';
+
+            return `
+                <div class="card health-card h-100">
+                    <div class="card-body">
+                        <h5><i class="fas fa-fan section-icon"></i> Fan &amp; RP1 Sensors</h5>
+                        ${fanHtml}
+                        ${rp1Html}
+                    </div>
+                </div>
+            `;
+        }
+
         function renderHardwareInventoryCard(blockInfo) {
             const info = blockInfo && typeof blockInfo === 'object' ? blockInfo : {};
             const available = Boolean(info.available);
@@ -4764,6 +4959,18 @@
             const platformContainer = document.getElementById('platform-card');
             if (platformContainer) {
                 platformContainer.innerHTML = renderPlatformCard(hardware.platform || {});
+            }
+
+            // Raspberry Pi telemetry: containers only exist in the DOM when
+            // the server-rendered page detected Pi hardware (raspberry_pi
+            // was non-null on load), so these are no-ops everywhere else.
+            const piPowerContainer = document.getElementById('pi-power-card');
+            if (piPowerContainer && data.raspberry_pi) {
+                piPowerContainer.innerHTML = renderPiPowerCard(data.raspberry_pi);
+            }
+            const piSensorsContainer = document.getElementById('pi-sensors-card');
+            if (piSensorsContainer && data.raspberry_pi) {
+                piSensorsContainer.innerHTML = renderPiSensorsCard(data.raspberry_pi);
             }
 
             const cpuContainer = document.getElementById('cpu-card');
