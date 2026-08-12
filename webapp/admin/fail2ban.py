@@ -135,6 +135,25 @@ def _loaded_jails() -> set[str]:
     return {j.strip() for j in match.group(1).replace(",", " ").split() if j.strip()}
 
 
+def _wait_for_jail_loaded(jail: str, retries: int = 6, delay: float = 0.5) -> bool:
+    """Poll ``_loaded_jails()`` briefly, returning True once *jail* appears.
+
+    ``systemctl restart`` returns as soon as systemd considers the fail2ban
+    unit started, which can be a beat before fail2ban-server has finished
+    parsing jail.local and actually brought every jail up. Checking
+    ``_loaded_jails()`` exactly once right after the restart raced that
+    startup and could report a good apply as a failure (observed live: the
+    jail showed up ~1s later, and the apply had already given up).
+    """
+    if jail in _loaded_jails():
+        return True
+    for _ in range(retries):
+        time.sleep(delay)
+        if jail in _loaded_jails():
+            return True
+    return False
+
+
 def _jail_banned_ips(jail: str) -> list[str]:
     ok, out = _run(["fail2ban-client", "status", jail])
     if not ok:
@@ -574,7 +593,9 @@ def configure_fail2ban():
     # Verify the jail actually loaded before claiming success — a valid-looking
     # write can still fail to produce a running jail (missing logpath, bad
     # banaction, etc.). Don't report "enabled" if it isn't really enforcing.
-    if settings.enabled and EAS_JAIL not in _loaded_jails():
+    jail_loaded = (not settings.enabled) or _wait_for_jail_loaded(EAS_JAIL)
+
+    if settings.enabled and not jail_loaded:
         detail = _actuator_error()
         logger.error("eas-station jail did not load after configure: %s", detail)
         return jsonify({
