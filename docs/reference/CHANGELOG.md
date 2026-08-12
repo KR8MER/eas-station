@@ -8,6 +8,21 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.153.4] - 2026-08-12 - Idle-in-transaction sessions get a timeout
+
+### Fixed
+- **`idle_in_transaction_session_timeout` was unlimited (0) in production.**
+  A live audit found several `eas-station` app sessions sitting idle in an
+  open transaction for 20+ minutes on dashboard-style count queries. A
+  long-held open transaction pins Postgres's vacuum cleanup horizon, which
+  lines up with autovacuum never having completed a single run on the
+  largest tables despite heavy dead-tuple accumulation. Added
+  `scripts/database/apply_postgres_tuning.sh`, an idempotent script that
+  applies a 5-minute timeout via `ALTER SYSTEM` + reload (no restart
+  required), wired into both `install.sh` (fresh installs) and `update.sh`
+  (existing deployments) so the fix persists instead of only living in a
+  one-off manual `ALTER SYSTEM` call.
+
 ## [2.153.3] - 2026-08-11 - Page-chrome clocks tell the truth
 
 ### Fixed
