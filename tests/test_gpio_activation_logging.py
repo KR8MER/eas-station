@@ -103,7 +103,15 @@ def audit_db(monkeypatch):
 
     monkeypatch.setattr(app_models, "GPIOActivationLog", GPIOActivationLogStub)
 
-    return app, db, GPIOActivationLogStub
+    yield app, db, GPIOActivationLogStub
+
+    # Explicit teardown: a `return`-only fixture leaves the in-memory
+    # sqlite3.Connection to be closed whenever the garbage collector gets
+    # around to it, which pytest's own end-of-session gc.collect() flags as
+    # "ResourceWarning: unclosed database". Disposing the engine here closes
+    # it deterministically, in the same test run that opened it.
+    with app.app_context():
+        db.engine.dispose()
 
 
 def _make_controller(audit_db, monkeypatch):
