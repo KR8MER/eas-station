@@ -60,7 +60,14 @@ _HEALTH_WORKER_LOCK = threading.Lock()
 # push (and again on every /api/system_health request) put far more load on
 # the box than the underlying data ever changes.  A short TTL collapses all
 # concurrent callers onto a single computation while still feeling live.
-_HEALTH_SNAPSHOT_TTL_SECONDS = 30.0
+#
+# Measured cost: ~1.1s per snapshot (smartctl + systemd queries dominate).
+# 50s, kept comfortably under the /system_health page's 60s poll interval
+# (see REFRESH_INTERVAL_MS in templates/system_health.html) and above the
+# WebSocket push thread's 60s SYSTEM_HEALTH_INTERVAL, so both callers
+# reliably land inside the same cache window instead of each triggering
+# their own full (expensive) rebuild.
+_HEALTH_SNAPSHOT_TTL_SECONDS = 50.0
 _HEALTH_SNAPSHOT_LOCK = threading.Lock()
 _HEALTH_SNAPSHOT_CACHE: Optional[Dict[str, Any]] = None
 _HEALTH_SNAPSHOT_TIMESTAMP: float = 0.0
