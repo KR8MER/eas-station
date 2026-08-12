@@ -486,6 +486,13 @@
         fetch('/security/ip-filters/cleanup', { method: 'POST' })
             .then(response => response.json())
             .then(data => {
+                // Unlike its siblings (submitIPFilter, deleteFilter,
+                // toggleFilter), this used to skip the data.error check --
+                // a permission-denied or unexpected-exception JSON response
+                // has no cleaned_up field, so `data.cleaned_up || 0` quietly
+                // reported "Cleaned up 0 expired filter(s)" as if it had
+                // succeeded, with the real error swallowed.
+                if (data.error) { notify('Error: ' + data.error, true); return; }
                 loadIPFilters();
                 notify(`Cleaned up ${data.cleaned_up || 0} expired filter(s)`);
             })
