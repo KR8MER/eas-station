@@ -1290,7 +1290,11 @@ fi
 
 # Create hardware access groups if they don't exist
 echo_progress "Ensuring hardware access groups exist..."
-HARDWARE_GROUPS="gpio i2c spi audio plugdev dialout"
+# video: /dev/vcio_gencmd (vcgencmd) is root:video 0660 -- needed for the
+# Raspberry Pi throttle/under-voltage telemetry on the health dashboard.
+# Harmless no-op on non-Pi installs (the collector self-gates on Pi
+# hardware and vcgencmd just won't be present).
+HARDWARE_GROUPS="gpio i2c spi audio plugdev dialout video"
 GROUPS_CREATED=0
 for group in $HARDWARE_GROUPS; do
     if ! getent group "$group" >/dev/null 2>&1; then
