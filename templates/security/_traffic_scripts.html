@@ -1129,7 +1129,14 @@
         // largest recurring CPU cost the web process carried. Skipping a hidden
         // refresh costs nothing: the next visible tick reloads the data, and
         // becoming visible triggers an immediate reload if the data went stale.
-        const REFRESH_MS = 60000;
+        //
+        // 120s (was 60s): even while the pane genuinely is visible, traffic
+        // analytics don't need sub-2-minute freshness, and this station's CPU
+        // budget is tight enough that halving the query volume for an actively
+        // open dashboard is worth the extra minute of staleness. Keep this in
+        // sync with _DASHBOARD_CACHE_TTL_SECONDS in traffic_stats.py -- that
+        // TTL is deliberately set just under this interval.
+        const REFRESH_MS = 120000;
         let lastLoadedAt = 0;
 
         function trafficPaneVisible() {
