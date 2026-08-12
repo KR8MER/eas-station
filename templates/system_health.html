@@ -2761,7 +2761,12 @@
         }
 
         const initialHealthData = {{ health_data_raw | tojson }} || {};
-        const REFRESH_INTERVAL_MS = 30000;
+        // 60s (was 30s): matches the WebSocket push thread's own
+        // SYSTEM_HEALTH_INTERVAL, and keeps this page's polling inside
+        // _HEALTH_SNAPSHOT_TTL_SECONDS's cache window instead of usually
+        // missing it and triggering a fresh ~1.1s snapshot build (smartctl
+        // + systemd queries) on every tick.
+        const REFRESH_INTERVAL_MS = 60000;
         const numberFormatter = new Intl.NumberFormat();
         let lastUpdatedTime = null;
 
