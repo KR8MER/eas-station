@@ -1428,12 +1428,12 @@ echo_progress "Installing Python packages (main venv)..."
 echo_info "This may take 5-10 minutes depending on your system"
 echo_info "Full output shown below to track progress:"
 echo ""
-if ! sudo -u "$SERVICE_USER" "$VENV_DIR/bin/pip" install --upgrade pip setuptools wheel; then
+if ! ui_stream sudo -u "$SERVICE_USER" "$VENV_DIR/bin/pip" install --upgrade pip setuptools wheel; then
     echo_error "Failed to upgrade pip, setuptools, and wheel"
     exit 1
 fi
 echo ""
-if ! sudo -u "$SERVICE_USER" "$VENV_DIR/bin/pip" install -r "$INSTALL_DIR/requirements.txt"; then
+if ! ui_stream sudo -u "$SERVICE_USER" "$VENV_DIR/bin/pip" install -r "$INSTALL_DIR/requirements.txt"; then
     echo_error "Failed to install Python dependencies"
     exit 1
 fi
@@ -1472,10 +1472,10 @@ echo_progress "Installing SDR service dependencies..."
 echo_info "Installing SDR requirements (scipy, numba may take 5-15 min to compile)..."
 echo_info "Full output shown below to track progress:"
 echo ""
-if ! sudo -u "$SERVICE_USER" "$VENV_SDR_DIR/bin/pip" install --upgrade pip; then
+if ! ui_stream sudo -u "$SERVICE_USER" "$VENV_SDR_DIR/bin/pip" install --upgrade pip; then
     echo_warning "Failed to upgrade pip in SDR venv (non-critical)"
 fi
-if ! sudo -u "$SERVICE_USER" "$VENV_SDR_DIR/bin/pip" install -r "$INSTALL_DIR/requirements-sdr.txt"; then
+if ! ui_stream sudo -u "$SERVICE_USER" "$VENV_SDR_DIR/bin/pip" install -r "$INSTALL_DIR/requirements-sdr.txt"; then
     echo_error "Failed to install SDR dependencies"
     exit 1
 fi
@@ -2156,7 +2156,7 @@ if [ "$DB_HAS_TABLES" -eq "0" ]; then
         set +e
         # Run Alembic directly (no output capture) so user sees real-time feedback
         # IMPORTANT: Run from install directory to ensure .env file is found
-        sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR' && '$VENV_DIR/bin/alembic' upgrade head"
+        ui_stream sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR' && '$VENV_DIR/bin/alembic' upgrade head"
         ALEMBIC_EXIT_CODE=$?
         set -e
 
@@ -2187,7 +2187,7 @@ with app.app_context():
             set -e
 
             if [ $INIT_EXIT -eq 0 ]; then
-                echo "$INIT_OUTPUT"
+                echo "$INIT_OUTPUT" | _tty_block
                 echo ""
                 echo_warning "Schema created but settings tables may be empty"
                 echo_info "Configure via web UI at /admin/hardware and /settings/audio"
@@ -2235,7 +2235,7 @@ with app.app_context():
         set -e
 
         if [ $INIT_EXIT -eq 0 ]; then
-            echo "$INIT_OUTPUT"
+            echo "$INIT_OUTPUT" | _tty_block
         else
             echo_error "Database initialization failed (exit code: $INIT_EXIT)"
             echo_info "Output: $INIT_OUTPUT"
