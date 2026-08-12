@@ -1268,6 +1268,12 @@ with app.app_context():
 set -e
 echo_success "Schema updates complete"
 
+# Apply cluster-wide PostgreSQL safety tuning (e.g. idle_in_transaction_session_timeout)
+if [ -f "$INSTALL_DIR/scripts/database/apply_postgres_tuning.sh" ]; then
+    echo_step "Applying PostgreSQL Tuning"
+    bash "$INSTALL_DIR/scripts/database/apply_postgres_tuning.sh" || echo_warning "PostgreSQL tuning step failed (non-critical)"
+fi
+
 # Restart services with updated code
 echo_step "Restarting Services"
 echo_progress "Reloading systemd daemon to pick up any service file changes..."
