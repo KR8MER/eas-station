@@ -1272,21 +1272,20 @@ class _SoapySDRReceiver(ReceiverInterface):
             # AirSpy: uses internal buffering, bufflen may not be supported
             # RTL-SDR: supports bufflen parameter
             if self.driver_hint == "rtlsdr":
-                # RTL-SDR gets its own (larger) MTU rather than reusing the
-                # AirSpy-tuned value above. At 16384 samples across the
-                # driver's ~15 internal buffers, a Python-side scheduling
-                # hiccup longer than ~240ms at a typical 1.024 Msps IQ rate
-                # is enough to overrun them (SOAPY_SDR_OVERFLOW / error -4,
-                # tracked in connection_health.stream_errors) -- observed in
-                # practice at a steady ~1-per-6-minutes on this station, even
-                # with the system otherwise idle. Doubling it doubles that
-                # headroom for the same reason a bigger read buffer helps
-                # any producer/consumer pairing with an occasionally-late
-                # consumer: it doesn't fix whatever causes the scheduling
-                # delay, it just gives more room to absorb it before data
-                # actually gets dropped.
-                rtlsdr_stream_mtu = stream_mtu * 2
-                stream_args["bufflen"] = str(rtlsdr_stream_mtu)
+                # REVERTED (see commit history): doubling this to 32768
+                # eliminated SOAPY_SDR_OVERFLOW entirely (0 in 41 minutes,
+                # was ~1/6min) but broke RBDS decode -- RBDS SYNC LOST went
+                # from 0 in the prior 10.5 hours to a sustained ~5/minute
+                # immediately after the change and never recovered. Larger,
+                # less-frequent read chunks from SoapySDR most likely
+                # disrupted the RBDS bit-clock recovery's PLL-style timing,
+                # which depends on finer-grained, more frequent sample
+                # delivery than the coarser USB-buffer-overflow problem
+                # cared about. Back to the shared 16384 MTU (same as
+                # AirSpy) until a fix is found that doesn't trade one
+                # regression for a worse one -- RBDS is the more important
+                # of the two by a wide margin.
+                stream_args["bufflen"] = str(stream_mtu)
 
             stream = device.setupStream(
                 SoapySDR.SOAPY_SDR_RX,
