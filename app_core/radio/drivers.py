@@ -1272,7 +1272,21 @@ class _SoapySDRReceiver(ReceiverInterface):
             # AirSpy: uses internal buffering, bufflen may not be supported
             # RTL-SDR: supports bufflen parameter
             if self.driver_hint == "rtlsdr":
-                stream_args["bufflen"] = str(stream_mtu)
+                # RTL-SDR gets its own (larger) MTU rather than reusing the
+                # AirSpy-tuned value above. At 16384 samples across the
+                # driver's ~15 internal buffers, a Python-side scheduling
+                # hiccup longer than ~240ms at a typical 1.024 Msps IQ rate
+                # is enough to overrun them (SOAPY_SDR_OVERFLOW / error -4,
+                # tracked in connection_health.stream_errors) -- observed in
+                # practice at a steady ~1-per-6-minutes on this station, even
+                # with the system otherwise idle. Doubling it doubles that
+                # headroom for the same reason a bigger read buffer helps
+                # any producer/consumer pairing with an occasionally-late
+                # consumer: it doesn't fix whatever causes the scheduling
+                # delay, it just gives more room to absorb it before data
+                # actually gets dropped.
+                rtlsdr_stream_mtu = stream_mtu * 2
+                stream_args["bufflen"] = str(rtlsdr_stream_mtu)
 
             stream = device.setupStream(
                 SoapySDR.SOAPY_SDR_RX,
