@@ -8,6 +8,51 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.156.0] - 2026-08-13 - Installer screen is now static, not scrolling
+
+### Added
+- **`install.sh`/`update.sh` now render on a genuinely static screen instead
+  of a scrolling log** — the DOS-installer restyle in 2.155.0 changed the
+  colors and box art but not the interaction model; this changes the model
+  itself. Contained entirely to `scripts/lib/ui.sh`, as before.
+  - Banner stays fixed at the top. Below it, three rows are established
+    once and redrawn in place via cursor positioning for the rest of the
+    run: a global progress bar (`[step/total] [bar] pct%`), the current
+    operation (what `echo_step`/`echo_progress` announce), and the last
+    status message (`echo_info`/`success`/`warning`/`error` and the
+    spinner) — only the latest message is visible on screen at a time;
+    full history is unchanged, still in the log file.
+  - `ui_stream()` (wraps `pip install`, `apt-get install`, `alembic
+    upgrade head`) no longer tees the subprocess's raw output live to the
+    screen — that was the single biggest source of scrolling. It now runs
+    the command in the background with a spinner on the status row, still
+    fully captured to the log. Ctrl+C is explicitly forwarded to the child
+    process (kill, wait, then `exit 130`) so aborting still kills the real
+    work instead of leaving it orphaned in the background — a background
+    job doesn't inherit terminal process-group signal delivery the way the
+    original foreground pipeline did, so this had to be added explicitly,
+    not just inherited for free.
+  - `ui_apt_install()`'s live per-package percentage now redraws the
+    operation row instead of scrolling a `\r`-updated line.
+  - Falls back to the previous scrolling append-only behavior whenever the
+    static layout can't be established: before `ui_banner` has run, under
+    `NO_COLOR`, or when there's no real TTY to position a cursor against.
+- Verified with a real terminal emulator (`pyte`), not by eyeballing escape
+  codes: fed a captured run (banner → 6 steps with mixed info/success/
+  warning/error calls → a spinner → a simulated failure → completion) into
+  a simulated 90×30 screen and confirmed the progress bar, operation line,
+  and status line each end at their correct final state with nothing else
+  printed below them — i.e. actually static, not just visually plausible.
+  Separately verified `ui_stream`'s Ctrl+C handling end-to-end: sent a real
+  `SIGINT` mid-run and confirmed the backgrounded child was killed (no
+  orphaned process), the script exited 130, and the trap chain to
+  `cleanup_on_exit` still fired.
+- Known pre-existing gap, not introduced by this change: the scrolling
+  fallback path in `echo_step`/`echo_info`/etc. doesn't check
+  `_ui_tty_supports_color` before emitting color codes, so `NO_COLOR=1`
+  isn't fully honored in that fallback. Flagged, not fixed here — separate
+  from what this change was about.
+
 ## [2.155.0] - 2026-08-13 - Old-school DOS-style installer UI
 
 ### Added

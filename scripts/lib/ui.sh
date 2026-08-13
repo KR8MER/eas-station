@@ -3,24 +3,38 @@
 # install.sh and update.sh.
 #
 # Goals:
-#   * Old-school DOS-installer look: flat 16-color EGA/VGA palette (no
-#     256-color gradients), double-line CP437 box art, classic `| / - \`
-#     spinner, single-glyph status gutter. Blue-background "screens" are
-#     used only at the two moments the script fully owns the terminal
-#     (the opening banner, right after a screen clear, and the closing
-#     completion card) — everywhere else runs on the terminal's own
-#     background because real subprocess output (apt-get, pip, git,
-#     alembic) is interleaved there and can emit its own color resets;
-#     forcing a persistent blue background across that would silently
-#     break the moment any of those tools resets SGR state.
+#   * Old-school DOS-installer look AND feel: flat 16-color EGA/VGA palette,
+#     double-line CP437 box art, classic `| / - \` spinner, single-glyph
+#     status gutter -- and, critically, a STATIC screen. A real DOS
+#     installer never scrolled a running log at you: banner fixed at the
+#     top, one global progress bar, one "what's happening now" line, all
+#     redrawn in place via cursor positioning. Nothing here scrolls except
+#     the log file.
 #   * Works over plain SSH and on Raspberry Pi OS Lite (no GUI, no Sixel
-#     required). Degrades cleanly when stdout isn't a TTY.
+#     required). Degrades cleanly when stdout isn't a TTY -- the static
+#     layout requires knowing fixed screen rows, so any non-color/non-TTY
+#     destination (NO_COLOR, piped output, no /dev/tty) falls back to the
+#     old scrolling append-only behavior instead of attempting cursor math
+#     against a screen nobody can see.
 #   * 100% backward compatible: every function name historically defined
 #     inline in install.sh / update.sh (color codes, `_tty`, `echo_step`,
 #     `echo_info`, `whiptail` wrapper, `cleanup_on_exit`, `show_celebration`,
 #     `format_duration`, `draw_box`, `show_spinner`, etc.) is provided here
-#     with the same signature, so sourcing this file replaces the old inline
-#     preamble with no other edits required.
+#     with the same signature and the same log-file line format, so sourcing
+#     this file replaces the old inline preamble with no other edits
+#     required.
+#
+# Static layout (once ui_banner has run in a color-capable TTY):
+#   rows 1..N   banner box (fixed, drawn once)
+#   row N+2     global progress bar: [step/total] [bar] pct%
+#   row N+3     current operation (what echo_step/echo_progress announce)
+#   row N+4     last status message (what echo_info/success/warning/error
+#               and the spinner show) -- only the latest one is visible;
+#               full history is always in the log file.
+# _UI_STATIC_READY guards all of this: 0 until ui_banner sets it, so any
+# status call before the banner (or in a non-static fallback context) still
+# works via the old scrolling behavior rather than positioning against rows
+# that were never established.
 #
 # Conventions:
 #   * Public helpers are prefixed `ui_`.
@@ -64,9 +78,24 @@ TOTAL_STEPS=${TOTAL_STEPS:-1}
 CURRENT_DESC=${CURRENT_DESC:-"Initializing..."}
 START_TIME=${START_TIME:-$(date +%s)}
 
+# ── Static-screen row tracking ──────────────────────────────────────────────
+# Set once by ui_banner() once it knows how tall the banner box actually was
+# (it varies: version_line/log_line are each optional). 0 means "not
+# established yet" -- every redraw function checks this before positioning.
+_UI_STATIC_READY=0
+_UI_PROGRESS_ROW=0
+_UI_OPERATION_ROW=0
+_UI_STATUS_ROW=0
+
 # Honour NO_COLOR (https://no-color.org/) and non-TTY destinations.
 _ui_tty_supports_color() {
     [ -z "${NO_COLOR:-}" ] && { [ -t 1 ] || [ -w /dev/tty ]; }
+}
+
+# Move the cursor to column 1 of the given row and clear that line, ready
+# for a fresh redraw. No-op (silently) outside a static-ready color TTY.
+_dos_goto_row() {
+    printf '\033[%d;1H\033[K' "$1" >/dev/tty 2>/dev/null || true
 }
 
 # Write a single line directly to the terminal, bypassing any log redirect.
@@ -75,45 +104,50 @@ _tty() { printf '%s\n' "$1" >/dev/tty 2>/dev/null || printf '%s\n' "$1"; }
 # Write raw bytes (no trailing newline) directly to the terminal.
 _tty_raw() { printf '%s' "$1" >/dev/tty 2>/dev/null || printf '%s' "$1"; }
 
-# Run a command with its output visible on the terminal AND still captured
-# in the log file. Both install.sh and update.sh redirect stdout/stderr to
-# LOG_FILE early on (`exec 1>>"$LOG_FILE" 2>&1`), which silently swallows
-# any subprocess that isn't explicitly re-routed like this one is -- a
-# long-running step (pip install, apt-get install, alembic migrations)
-# would otherwise print a "this may take a while, output shown below"
-# message and then show nothing for its entire duration: indistinguishable
-# from a hang, and in alembic's case defeating the point of running it
-# uncaptured in the first place (so Ctrl+C can interrupt it).
+# Run a command with its output captured to the log file, showing only a
+# spinner on the fixed status row instead of live-scrolling the subprocess's
+# raw output -- that live tee was the single biggest source of screen
+# scrolling in the old design. The command still runs in the *foreground*
+# process group's session in the sense that matters for signal handling:
+# Ctrl+C is forwarded to it explicitly (see below) rather than relying on
+# terminal process-group semantics, because it's backgrounded to let the
+# spinner run concurrently.
 #
-# Falls back to running the command unmodified (log-only, i.e. today's
-# behavior) when /dev/tty isn't writable, same as _tty()'s own fallback --
-# e.g. a fully detached/unattended run.
+# Falls back to running the command unmodified, output going only to the
+# log (today's non-interactive behavior), when /dev/tty isn't writable.
 #
-# Exit code is the wrapped command's, not tee's -- relies on PIPESTATUS,
-# which is bash-specific (both callers are already #!/bin/bash).
+# Exit code is the wrapped command's.
 ui_stream() {
-    if [ -w /dev/tty ] 2>/dev/null; then
-        # `-w /dev/tty` only checks permission bits, not whether a real
-        # controlling terminal is attached (e.g. under some service/sandbox
-        # contexts /dev/tty exists and is "writable" but has no backing
-        # terminal). tee's own stderr is silenced so that case degrades to
-        # "log-only" quietly instead of printing "tee: /dev/tty: No such
-        # device or address" on every line; the wrapped command's real
-        # stderr is unaffected since it was already merged into stdout by
-        # the `2>&1` before the pipe.
-        "$@" 2>&1 | tee -a /dev/tty 2>/dev/null
-        return "${PIPESTATUS[0]}"
+    if ! [ -w /dev/tty ] 2>/dev/null; then
+        "$@" 2>&1
+        return $?
     fi
-    "$@"
+    local tmpout
+    tmpout=$(mktemp /tmp/eas-ui.XXXXXX) || tmpout=/tmp/eas-ui.$$
+    ( "$@" ) >"$tmpout" 2>&1 &
+    local pid=$!
+    # Forward Ctrl+C/TERM to the actual child, wait for it to die, THEN
+    # exit -- matching the whole-script-abort behavior ui_install_traps
+    # already establishes (`trap 'exit 130' INT TERM`), which a bare
+    # background job wouldn't inherit on its own: without this, Ctrl+C
+    # would kill this wrapper's wait loop immediately while orphaning the
+    # actual pip/alembic/apt process to keep running headless.
+    trap 'kill -TERM '"$pid"' 2>/dev/null; wait '"$pid"' 2>/dev/null; exit 130' INT TERM
+    show_spinner "$pid" "Working"
+    local rc=$?
+    trap 'exit 130' INT TERM
+    cat "$tmpout"
+    rm -f "$tmpout"
+    return $rc
 }
 
 # Echo an already-captured block of text (e.g. `git fetch` output stashed in
 # a variable for error handling) to both stdout -- which is the log file,
 # via the install/update scripts' `exec 1>>LOG 2>&1` -- and the terminal.
-# Unlike ui_stream(), there's no live command to pipe here; the output was
-# already captured earlier (often filtered with `head -N` first), so this
-# just fans the same already-truncated text out to /dev/tty too. Same silent
-# log-only fallback as _tty()/ui_stream() when /dev/tty isn't writable.
+# Deliberately still scrolls: this only ever runs on a failure path right
+# before the script aborts, where showing the operator why matters more
+# than screen discipline -- the same tradeoff a DOS installer made when it
+# dropped out of its TUI to show a raw error.
 # Usage: echo "$CAPTURED_OUTPUT" | head -20 | _tty_block
 _tty_block() {
     local block
@@ -167,7 +201,19 @@ format_duration() {
 # character count -- ANSI color codes have zero visible width but do count
 # toward a naive ${#string}, which would silently under-pad and misalign
 # the right border the moment any content line used color.
+#
+# Both helpers also advance _UI_ROW, a running count of terminal rows
+# printed since the last screen clear -- ui_banner uses the final count to
+# place the static progress/operation/status rows immediately below the box
+# without hand-counting lines (hand-counting is exactly how the first
+# version of this box ended up misaligned).
 _DOS_BOX_WIDTH=70
+_UI_ROW=0
+
+_dos_newline() {
+    printf '\n' >/dev/tty 2>/dev/null || true
+    _UI_ROW=$((_UI_ROW + 1))
+}
 
 # `tr` mangles multi-byte UTF-8 characters even in a UTF-8 locale (GNU tr's
 # SET1/SET2 handling isn't reliably multi-byte-aware) -- caught this the
@@ -179,7 +225,8 @@ _dos_box_rule() {
     local corner_l="$1" corner_r="$2"
     local fill="" i
     for ((i=0; i<_DOS_BOX_WIDTH; i++)); do fill+="═"; done
-    printf '%s%s%s%s%s\n' "$_DOS_GREY" "$corner_l" "$fill" "$corner_r" "$NC$_DOS_BLUEBG"
+    printf '%s%s%s%s%s\n' "$_DOS_GREY" "$corner_l" "$fill" "$corner_r" "$NC$_DOS_BLUEBG" >/dev/tty 2>/dev/null || true
+    _UI_ROW=$((_UI_ROW + 1))
 }
 
 # Usage: _dos_box_line "plain text for width" "styled text to print"
@@ -189,13 +236,17 @@ _dos_box_line() {
     local pad=$(( _DOS_BOX_WIDTH - visible ))
     [ "$pad" -lt 0 ] && pad=0
     printf '%s║%s  %s%*s%s║%s\n' \
-        "$_DOS_GREY" "$NC$_DOS_BLUEBG" "$styled" "$pad" "" "$_DOS_GREY" "$NC$_DOS_BLUEBG"
+        "$_DOS_GREY" "$NC$_DOS_BLUEBG" "$styled" "$pad" "" "$_DOS_GREY" "$NC$_DOS_BLUEBG" \
+        >/dev/tty 2>/dev/null || true
+    _UI_ROW=$((_UI_ROW + 1))
 }
 
 # ── Banner ─────────────────────────────────────────────────────────────────
 # A fully-closed double-line CP437-style box framing the banner content --
-# title, subtitle, version, log path, copyright -- all inside the same
-# right-bordered frame.
+# title, subtitle, version, log path, copyright. Establishes the static
+# progress/operation/status rows immediately below it and draws their
+# initial (empty) state, so the screen looks complete from the very first
+# frame instead of growing into place.
 #
 # Usage: ui_banner "Bare Metal Installer"
 ui_banner() {
@@ -204,41 +255,58 @@ ui_banner() {
     local log_line="${3:-}"
 
     # Clear and home cursor, then paint the screen blue for this one-shot
-    # opening screen. Safe here specifically because nothing else writes to
-    # /dev/tty until this function returns -- see the note at the top of
-    # this file about why that's NOT true for the rest of the run.
+    # opening screen.
     _tty_raw $'\033[2J\033[H'
+    _UI_ROW=1
 
     if _ui_tty_supports_color; then
         {
             printf '%s' "$_DOS_BLUEBG"
-            printf '\n'
-            _dos_box_rule '╔' '╗'
-            _dos_box_line "E A S   S T A T I O N" \
-                "$(printf '%sE A S   S T A T I O N%s' "$_DOS_WHITE" "$NC$_DOS_BLUEBG")"
-            _dos_box_rule '╠' '╣'
-            _dos_box_line "" ""
-            _dos_box_line "${subtitle}  -  Emergency Alert System" \
-                "$(printf '%s%s%s  -  %sEmergency Alert System%s' \
-                    "$_DOS_YELLOW" "$subtitle" "$NC$_DOS_BLUEBG" "$_DOS_CYAN" "$NC$_DOS_BLUEBG")"
-            if [ -n "$version_line" ]; then
-                _dos_box_line "$version_line" \
-                    "$(printf '%s%s%s' "$_DOS_GREY" "$version_line" "$NC$_DOS_BLUEBG")"
-            fi
-            if [ -n "$log_line" ]; then
-                _dos_box_line "Log: $log_line" \
-                    "$(printf '%sLog:%s %s' "$_DOS_GREY" "$NC$_DOS_BLUEBG" "$log_line")"
-            fi
-            _dos_box_line "(c) 2025-2026 EAS Station, LLC (KR8MER) - AGPL v3 / Commercial" \
-                "$(printf '%s(c) 2025-2026 EAS Station, LLC (KR8MER) - AGPL v3 / Commercial%s' \
-                    "$_DOS_GREY" "$NC$_DOS_BLUEBG")"
-            _dos_box_rule '╚' '╝'
-            printf '\n'
-            # Reset all attributes including the background before handing
-            # control back -- everything printed after this point (step
-            # headers, real command output) must NOT inherit blue.
-            printf '%s' "$NC"
         } >/dev/tty 2>/dev/null || true
+        _dos_newline
+        _dos_box_rule '╔' '╗'
+        _dos_box_line "E A S   S T A T I O N" \
+            "$(printf '%sE A S   S T A T I O N%s' "$_DOS_WHITE" "$NC$_DOS_BLUEBG")"
+        _dos_box_rule '╠' '╣'
+        _dos_box_line "" ""
+        _dos_box_line "${subtitle}  -  Emergency Alert System" \
+            "$(printf '%s%s%s  -  %sEmergency Alert System%s' \
+                "$_DOS_YELLOW" "$subtitle" "$NC$_DOS_BLUEBG" "$_DOS_CYAN" "$NC$_DOS_BLUEBG")"
+        if [ -n "$version_line" ]; then
+            _dos_box_line "$version_line" \
+                "$(printf '%s%s%s' "$_DOS_GREY" "$version_line" "$NC$_DOS_BLUEBG")"
+        fi
+        if [ -n "$log_line" ]; then
+            _dos_box_line "Log: $log_line" \
+                "$(printf '%sLog:%s %s' "$_DOS_GREY" "$NC$_DOS_BLUEBG" "$log_line")"
+        fi
+        _dos_box_line "(c) 2025-2026 EAS Station, LLC (KR8MER) - AGPL v3 / Commercial" \
+            "$(printf '%s(c) 2025-2026 EAS Station, LLC (KR8MER) - AGPL v3 / Commercial%s' \
+                "$_DOS_GREY" "$NC$_DOS_BLUEBG")"
+        _dos_box_rule '╚' '╝'
+        _dos_newline
+        # Reset all attributes including the background before handing
+        # control back -- the static status area below runs on the
+        # terminal's natural background, not blue.
+        printf '%s' "$NC" >/dev/tty 2>/dev/null || true
+
+        # Establish and draw the static area: one blank row of gap, then
+        # progress / operation / status, each on its own fixed row.
+        _UI_PROGRESS_ROW=$((_UI_ROW + 1))
+        _UI_OPERATION_ROW=$((_UI_ROW + 2))
+        _UI_STATUS_ROW=$((_UI_ROW + 3))
+        _UI_STATIC_READY=1
+
+        _dos_goto_row "$_UI_PROGRESS_ROW"
+        printf ' %s[%d/%d]%s [%s] %s%3d%%%s' \
+            "$_DOS_WHITE" 0 "$TOTAL_STEPS" "$NC" \
+            "$(_dos_bar_empty_only)" "$_DOS_YELLOW" 0 "$NC" >/dev/tty 2>/dev/null || true
+        _dos_goto_row "$_UI_OPERATION_ROW"
+        printf ' %s>%s %sReady to start...%s' "$_DOS_GREY" "$NC" "$_DOS_CYAN" "$NC" >/dev/tty 2>/dev/null || true
+
+        # Park the cursor below the static area so anything unexpected that
+        # prints later doesn't land on top of it.
+        printf '\033[%d;1H' "$((_UI_STATUS_ROW + 2))" >/dev/tty 2>/dev/null || true
     else
         {
             printf '\n'
@@ -252,37 +320,86 @@ ui_banner() {
     fi
 }
 
+# Returns a bar_width-wide string of empty-fill characters, used once by
+# ui_banner to draw the progress bar's initial (0%) state.
+_dos_bar_empty_only() {
+    local width=40 empty="" i
+    for ((i=0; i<width; i++)); do empty+="░"; done
+    printf '%s%s%s' "$_DOS_GREY" "$empty" "$NC"
+}
+
 # ── Step / status output ───────────────────────────────────────────────────
 # Each helper logs a plain-text line to the redirected stdout (the log file)
-# AND prints a styled line to /dev/tty.
+# AND updates the terminal -- in place on the fixed rows once ui_banner has
+# established them (_UI_STATIC_READY), otherwise falling back to the old
+# scrolling append behavior (e.g. a status call before the banner runs, or
+# a non-color/non-TTY destination where fixed rows can't be positioned).
 echo_step() {
     STEP_NUM=$((STEP_NUM + 1))
     CURRENT_DESC="$1"
     local pct=$((STEP_NUM * 100 / TOTAL_STEPS))
     echo "--- Step $STEP_NUM/$TOTAL_STEPS: $1 ---"
-    _tty ""
-    # Header bar with a tiny inline progress meter. Filled and empty
-    # portions are separate strings (not one string sliced visually) so
-    # each can carry its own color -- yellow fill, grey empty.
-    local bar_width=20
+
+    # Bar width matches ui_banner's initial-state bar (40) so the fill
+    # never visually jumps in size on the first real update.
+    local bar_width=40
     local filled=$(( pct * bar_width / 100 ))
     [ $filled -gt $bar_width ] && filled=$bar_width
-    local bar_filled="" bar_empty=""
-    local i
+    local bar_filled="" bar_empty="" i
     for ((i=0; i<filled; i++)); do bar_filled+="█"; done
     for ((i=filled; i<bar_width; i++)); do bar_empty+="░"; done
-    _tty "$(printf '%s║%s %s[%d/%d]%s [%s%s%s%s%s] %s%3d%%%s  %s%s%s' \
-        "$_DOS_GREY" "$NC" "$_DOS_WHITE" "$STEP_NUM" "$TOTAL_STEPS" "$NC" \
-        "$_DOS_YELLOW" "$bar_filled" "$_DOS_GREY" "$bar_empty" "$NC" \
-        "$_DOS_YELLOW" "$pct" "$NC" "$_DOS_CYAN" "$1" "$NC")"
+
+    if [ "$_UI_STATIC_READY" = "1" ]; then
+        _dos_goto_row "$_UI_PROGRESS_ROW"
+        printf ' %s[%d/%d]%s [%s%s%s%s%s] %s%3d%%%s' \
+            "$_DOS_WHITE" "$STEP_NUM" "$TOTAL_STEPS" "$NC" \
+            "$_DOS_YELLOW" "$bar_filled" "$_DOS_GREY" "$bar_empty" "$NC" \
+            "$_DOS_YELLOW" "$pct" "$NC" >/dev/tty 2>/dev/null || true
+        _dos_goto_row "$_UI_OPERATION_ROW"
+        printf ' %s>%s %s%s%s' "$_DOS_GREY" "$NC" "$_DOS_CYAN" "$1" "$NC" >/dev/tty 2>/dev/null || true
+    else
+        _tty ""
+        _tty "$(printf '%s║%s %s[%d/%d]%s [%s%s%s%s%s] %s%3d%%%s  %s%s%s' \
+            "$_DOS_GREY" "$NC" "$_DOS_WHITE" "$STEP_NUM" "$TOTAL_STEPS" "$NC" \
+            "$_DOS_YELLOW" "$bar_filled" "$_DOS_GREY" "$bar_empty" "$NC" \
+            "$_DOS_YELLOW" "$pct" "$NC" "$_DOS_CYAN" "$1" "$NC")"
+    fi
 }
 
-echo_info()     { echo "[INFO]  $1"; _tty "$(printf '  %si%s  %s' "$_DOS_CYAN" "$NC" "$1")"; }
-echo_success()  { echo "[ OK ]  $1"; _tty "$(printf '  %s*%s  %s' "$_DOS_GREEN" "$NC" "$1")"; }
-echo_warning()  { echo "[WARN]  $1"; _tty "$(printf '  %s!%s  %s' "$_DOS_YELLOW" "$NC" "$1")"; }
-echo_error()    { echo "[ERROR] $1"; _tty "$(printf '  %sX%s  %s' "$_DOS_RED" "$NC" "$1")"; }
-echo_progress() { echo "  >>    $1"; _tty "$(printf '  %s>>%s  %s' "$_DOS_GREY" "$NC" "$1")"; }
-echo_header()   { echo ""; echo "=== $1 ==="; echo ""; _tty "$(printf '%s=== %s ===%s' "$_DOS_WHITE" "$1" "$NC")"; }
+_dos_status_line() {
+    local glyph_color="$1" glyph="$2" message="$3"
+    if [ "$_UI_STATIC_READY" = "1" ]; then
+        _dos_goto_row "$_UI_STATUS_ROW"
+        printf ' %s%s%s  %s' "$glyph_color" "$glyph" "$NC" "$message" >/dev/tty 2>/dev/null || true
+    else
+        _tty "$(printf '  %s%s%s  %s' "$glyph_color" "$glyph" "$NC" "$message")"
+    fi
+}
+
+echo_info()     { echo "[INFO]  $1"; _dos_status_line "$_DOS_CYAN" "i" "$1"; }
+echo_success()  { echo "[ OK ]  $1"; _dos_status_line "$_DOS_GREEN" "*" "$1"; }
+echo_warning()  { echo "[WARN]  $1"; _dos_status_line "$_DOS_YELLOW" "!" "$1"; }
+echo_error()    { echo "[ERROR] $1"; _dos_status_line "$_DOS_RED" "X" "$1"; }
+echo_progress() {
+    echo "  >>    $1"
+    if [ "$_UI_STATIC_READY" = "1" ]; then
+        _dos_goto_row "$_UI_OPERATION_ROW"
+        printf ' %s>%s %s%s%s' "$_DOS_GREY" "$NC" "$_DOS_CYAN" "$1" "$NC" >/dev/tty 2>/dev/null || true
+    else
+        _tty "$(printf '  %s>>%s  %s' "$_DOS_GREY" "$NC" "$1")"
+    fi
+}
+echo_header() {
+    echo ""
+    echo "=== $1 ==="
+    echo ""
+    if [ "$_UI_STATIC_READY" = "1" ]; then
+        _dos_goto_row "$_UI_OPERATION_ROW"
+        printf ' %s%s%s' "$_DOS_WHITE" "$1" "$NC" >/dev/tty 2>/dev/null || true
+    else
+        _tty "$(printf '%s=== %s ===%s' "$_DOS_WHITE" "$1" "$NC")"
+    fi
+}
 echo_operation() { echo_progress "${1}${2:+ (~$2)}"; }
 
 # Legacy no-op shims kept for callers that referenced them.
@@ -293,10 +410,12 @@ show_elapsed_time() { :; }
 
 # ── Spinner ─────────────────────────────────────────────────────────────────
 # Watches an existing background PID and prints a classic 4-frame ASCII
-# spinner (the `| / - \` every DOS TSR and installer used, long before
-# Unicode braille spinners existed) with the elapsed time + supplied label
-# until the PID exits. Returns the watched command's exit code.
-# Backward-compatible signature: `show_spinner PID` (no label) still works.
+# spinner (the `| / - \` every DOS TSR and installer used) with the elapsed
+# time + supplied label until the PID exits. Updates the fixed status row in
+# place once static mode is ready, otherwise falls back to a `\r`-overwrite
+# on whatever line the cursor is already on. Returns the watched command's
+# exit code. Backward-compatible signature: `show_spinner PID` (no label)
+# still works.
 show_spinner() {
     local pid="$1"
     local label="${2:-Working}"
@@ -314,20 +433,30 @@ show_spinner() {
     while kill -0 "$pid" 2>/dev/null; do
         local elapsed=$(( $(date +%s) - start ))
         local f=${frames[i % ${#frames[@]}]}
-        printf '\r  %s%s%s %s %s(%ds)%s\033[K' \
-            "$_DOS_CYAN" "$f" "$NC" "$label" "$_DOS_GREY" "$elapsed" "$NC" >/dev/tty 2>/dev/null || true
+        if [ "$_UI_STATIC_READY" = "1" ]; then
+            printf '\033[%d;1H\033[K %s%s%s  %s %s(%ds)%s' \
+                "$_UI_STATUS_ROW" "$_DOS_CYAN" "$f" "$NC" "$label" "$_DOS_GREY" "$elapsed" "$NC" \
+                >/dev/tty 2>/dev/null || true
+        else
+            printf '\r  %s%s%s %s %s(%ds)%s\033[K' \
+                "$_DOS_CYAN" "$f" "$NC" "$label" "$_DOS_GREY" "$elapsed" "$NC" >/dev/tty 2>/dev/null || true
+        fi
         i=$((i + 1))
         sleep 0.2
     done
     wait "$pid" 2>/dev/null
     local rc=$?
-    # Clear the spinner line.
-    printf '\r\033[K' >/dev/tty 2>/dev/null || true
+    if [ "$_UI_STATIC_READY" = "1" ]; then
+        _dos_goto_row "$_UI_STATUS_ROW"
+    else
+        printf '\r\033[K' >/dev/tty 2>/dev/null || true
+    fi
     return $rc
 }
 
-# Run a command silently with a spinner; on failure dump tail of captured
-# output. Output is fully logged to the install log.
+# Run a command silently with a spinner; on failure, note it concisely on
+# the status row and point at the log rather than dumping a scrolling tail
+# on screen -- full output is always in the log file regardless.
 #
 # Usage: ui_spinner_run "Installing python3-pip" apt-get install -y python3-pip
 ui_spinner_run() {
@@ -343,34 +472,42 @@ ui_spinner_run() {
     if [ $rc -eq 0 ]; then
         echo_success "$label"
     else
-        echo_error "$label (exit $rc)"
-        _tty "  $(printf '%s%s%s' "$_DOS_GREY" "── last 10 lines ──────────────" "$NC")"
-        tail -n 10 "$tmpout" | while IFS= read -r line; do
-            _tty "  $(printf '%s%s%s' "$_DOS_GREY" "$line" "$NC")"
-        done
+        echo_error "$label (exit $rc) — see log for details"
     fi
     rm -f "$tmpout"
     return $rc
 }
 
 # ── Inline ANSI progress bar (single-line, overwrite) ──────────────────────
-# Prints a styled bar to /dev/tty using \r so consecutive calls update in
-# place. Pass `ui_progress_end` once done to advance the cursor.
+# Used by ui_apt_install()'s live apt/dpkg status parsing. Redraws the fixed
+# operation row in place once static mode is ready (the global step-based
+# bar on the progress row is left alone -- this is package-level detail
+# nested under whichever step is currently running), otherwise falls back
+# to a `\r`-overwrite on whatever line the cursor is on.
 ui_progress_bar() {
     local pct="$1"
     local label="${2:-}"
     [ -z "$pct" ] && pct=0
     [ "$pct" -lt 0 ] && pct=0
     [ "$pct" -gt 100 ] && pct=100
-    local width=32
+    local width=24
     local filled=$(( pct * width / 100 ))
     local bar="" i
     for ((i=0; i<filled; i++)); do bar+="█"; done
     for ((i=filled; i<width; i++)); do bar+="░"; done
-    printf '\r  [%s%s%s] %s%3d%%%s  %s\033[K' \
-        "$_DOS_YELLOW" "$bar" "$NC" "$_DOS_YELLOW" "$pct" "$NC" "$label" >/dev/tty 2>/dev/null || true
+    if [ "$_UI_STATIC_READY" = "1" ]; then
+        _dos_goto_row "$_UI_OPERATION_ROW"
+        printf ' [%s%s%s] %s%3d%%%s  %s' \
+            "$_DOS_YELLOW" "$bar" "$NC" "$_DOS_YELLOW" "$pct" "$NC" "$label" >/dev/tty 2>/dev/null || true
+    else
+        printf '\r  [%s%s%s] %s%3d%%%s  %s\033[K' \
+            "$_DOS_YELLOW" "$bar" "$NC" "$_DOS_YELLOW" "$pct" "$NC" "$label" >/dev/tty 2>/dev/null || true
+    fi
 }
-ui_progress_end() { printf '\n' >/dev/tty 2>/dev/null || true; }
+ui_progress_end() {
+    [ "$_UI_STATIC_READY" = "1" ] && return 0
+    printf '\n' >/dev/tty 2>/dev/null || true
+}
 
 # ── apt-get install with real progress ─────────────────────────────────────
 # Uses `-o APT::Status-Fd=3` to get machine-parseable status from apt.
@@ -426,9 +563,9 @@ ui_apt_install() {
 }
 
 # ── pip install with progress ──────────────────────────────────────────────
-# Pip's own --progress-bar is line-based; we just stream its stderr to the
-# terminal so users see "Collecting / Downloading / Installing collected
-# packages: …" in real time, while the log captures the full transcript.
+# Pip's own --progress-bar is line-based. Mirrors summary lines to the fixed
+# status row (in place) instead of scrolling them, while the log still
+# captures the full transcript.
 #
 # Usage: ui_pip_install -r requirements.txt
 #        ui_pip_install some-package==1.2.3
@@ -440,19 +577,18 @@ ui_pip_install() {
         "$pip_bin" install --progress-bar on "$@"
         return $?
     fi
-    # Tee through awk so each line is also styled on /dev/tty.
     local rc=0
     "$pip_bin" install --progress-bar on "$@" 2>&1 | \
         while IFS= read -r line; do
             # Log full line.
             printf '%s\n' "$line"
-            # Mirror styled summary lines to TTY.
+            # Mirror summary lines to the status row.
             case "$line" in
                 Collecting*|Downloading*|Installing*|Successfully*|Requirement*|Using*|Building*)
-                    _tty "  $(printf '%s▸%s %s' "$_DOS_GREY" "$NC" "$line")"
+                    _dos_status_line "$_DOS_GREY" "»" "$line"
                     ;;
                 ERROR:*|*[Ww]arning:*)
-                    _tty "  $(printf '%s▸%s %s' "$_DOS_YELLOW" "$NC" "$line")"
+                    _dos_status_line "$_DOS_YELLOW" "»" "$line"
                     ;;
             esac
         done
@@ -466,10 +602,12 @@ ui_pip_install() {
 }
 
 # ── Completion card ────────────────────────────────────────────────────────
-# Renders a fully-closed double-line CP437-box completion banner on
-# /dev/tty (same box helpers and blue-background screen as ui_banner) AND
-# shows the legacy whiptail "*** COMPLETE ***" msgbox if whiptail is
-# available, so both look and feel benefit.
+# Clears the screen and renders a fully-closed double-line CP437-box
+# completion banner on /dev/tty AND shows the legacy whiptail
+# "*** COMPLETE ***" msgbox if whiptail is available -- a clean final screen
+# on its own, matching the "Setup complete. Press any key..." screen a real
+# DOS installer ended on, rather than appearing below whatever the static
+# area last showed.
 #
 # Usage: show_celebration "Body text" [title]
 show_celebration() {
@@ -480,27 +618,29 @@ show_celebration() {
 
     # 1. Double-line CP437 box card on a blue-background screen.
     if _ui_tty_supports_color; then
+        _tty_raw $'\033[2J\033[H'
         {
             printf '%s' "$_DOS_BLUEBG"
-            printf '\n'
-            _dos_box_rule '╔' '╗'
-            _dos_box_line "$title" \
-                "$(printf '%s%s%s' "$_DOS_WHITE" "$title" "$NC$_DOS_BLUEBG")"
-            _dos_box_rule '╠' '╣'
-            # Print body, wrapped naively at ~62 chars.
-            while IFS= read -r line; do
-                _dos_box_line "$line" \
-                    "$(printf '%s%s%s' "$_DOS_CYAN" "$line" "$NC$_DOS_BLUEBG")"
-            done <<<"$body"
-            _dos_box_line "" ""
-            _dos_box_line "Total time: $elapsed" \
-                "$(printf '%sTotal time:%s %s' "$_DOS_YELLOW" "$NC$_DOS_BLUEBG" "$elapsed")"
-            _dos_box_line "Log:         $log_path" \
-                "$(printf '%sLog:%s         %s' "$_DOS_YELLOW" "$NC$_DOS_BLUEBG" "$log_path")"
-            _dos_box_rule '╚' '╝'
-            printf '\n'
-            printf '%s' "$NC"
         } >/dev/tty 2>/dev/null || true
+        printf '\n' >/dev/tty 2>/dev/null || true
+        _dos_box_rule '╔' '╗'
+        _dos_box_line "$title" \
+            "$(printf '%s%s%s' "$_DOS_WHITE" "$title" "$NC$_DOS_BLUEBG")"
+        _dos_box_rule '╠' '╣'
+        # Print body, wrapped naively at ~62 chars.
+        while IFS= read -r line; do
+            _dos_box_line "$line" \
+                "$(printf '%s%s%s' "$_DOS_CYAN" "$line" "$NC$_DOS_BLUEBG")"
+        done <<<"$body"
+        _dos_box_line "" ""
+        _dos_box_line "Total time: $elapsed" \
+            "$(printf '%sTotal time:%s %s' "$_DOS_YELLOW" "$NC$_DOS_BLUEBG" "$elapsed")"
+        _dos_box_line "Log:         $log_path" \
+            "$(printf '%sLog:%s         %s' "$_DOS_YELLOW" "$NC$_DOS_BLUEBG" "$log_path")"
+        _dos_box_rule '╚' '╝'
+        printf '\n' >/dev/tty 2>/dev/null || true
+        printf '%s' "$NC" >/dev/tty 2>/dev/null || true
+        _UI_STATIC_READY=0
     fi
 
     # 2. Legacy whiptail msgbox (preserves the existing modal experience).
