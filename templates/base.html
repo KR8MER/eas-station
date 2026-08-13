@@ -32,9 +32,17 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}?v={{ static_asset_version }}">
     <link rel="alternate icon" type="image/png" href="{{ url_for('static', filename='img/eas-system-wordmark.png') }}?v={{ static_asset_version }}">
     <link rel="shortcut icon" href="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}?v={{ static_asset_version }}">
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/eas-system-wordmark.png') }}?v={{ static_asset_version }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}?v={{ static_asset_version }}">
     <link rel="mask-icon" href="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}?v={{ static_asset_version }}" color="#204885">
     <meta name="theme-color" content="#204885">
+
+    <!-- PWA manifest — enables "Add to Home Screen" with a standalone (no browser chrome) launch -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}?v={{ static_asset_version }}">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="EAS Station">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="EAS Station">
 
     <!-- Vendor CSS (Bootstrap) -->
     <link href="{{ url_for('static', filename='css/vendor.css') }}" rel="stylesheet">

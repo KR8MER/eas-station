@@ -8,6 +8,21 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.154.0] - 2026-08-13 - Installable as a home-screen app
+
+### Added
+- **PWA manifest for "Add to Home Screen."** `static/manifest.json` (name,
+  standalone display mode, theme/background colors, 192/512/maskable icons
+  rendered from the existing `eas-app-icon.svg`) plus the matching
+  `<link rel="manifest">` and `apple-mobile-web-app-*` meta tags in
+  `base.html`. Lets phones running EAS Station launch it full-screen from a
+  home-screen icon instead of a browser tab — relevant for a system meant to
+  be checked in the field during severe weather.
+- Along the way, fixed `apple-touch-icon` pointing at the 2080×325 wordmark
+  banner (meant for the favicon/header, not a home-screen tile) — iOS was
+  squashing it into a square. Replaced with a proper 180×180 render of the
+  square app icon.
+
 ## [2.153.4] - 2026-08-12 - Idle-in-transaction sessions get a timeout
 
 ### Fixed
