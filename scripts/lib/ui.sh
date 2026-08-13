@@ -3,8 +3,16 @@
 # install.sh and update.sh.
 #
 # Goals:
-#   * Modern look (ANSI gradient banner, braille spinner, animated progress
-#     bars, real apt/pip progress) without adding hard new dependencies.
+#   * Old-school DOS-installer look: flat 16-color EGA/VGA palette (no
+#     256-color gradients), double-line CP437 box art, classic `| / - \`
+#     spinner, single-glyph status gutter. Blue-background "screens" are
+#     used only at the two moments the script fully owns the terminal
+#     (the opening banner, right after a screen clear, and the closing
+#     completion card) — everywhere else runs on the terminal's own
+#     background because real subprocess output (apt-get, pip, git,
+#     alembic) is interleaved there and can emit its own color resets;
+#     forcing a persistent blue background across that would silently
+#     break the moment any of those tools resets SGR state.
 #   * Works over plain SSH and on Raspberry Pi OS Lite (no GUI, no Sixel
 #     required). Degrades cleanly when stdout isn't a TTY.
 #   * 100% backward compatible: every function name historically defined
@@ -39,15 +47,16 @@ NC=$'\033[0m'
 BLUE=$'\033[0;34m'
 MAGENTA=$'\033[0;35m'
 
-# 256-color shades used by the banner (graceful fallback if terminal doesn't
-# support 256 — they just render as approximate ANSI colors).
-_UI_C1=$'\033[38;5;39m'    # bright cyan-blue
-_UI_C2=$'\033[38;5;33m'    # blue
-_UI_C3=$'\033[38;5;27m'    # deep blue
-_UI_C4=$'\033[38;5;75m'    # sky
-_UI_C5=$'\033[38;5;81m'    # cyan
-_UI_C6=$'\033[38;5;220m'   # amber accent
-_UI_GREY=$'\033[38;5;245m'
+# Flat 16-color EGA/VGA text-mode palette — deliberately no 256-color codes
+# anywhere in this file. This is the whole point of the DOS-installer look:
+# a handful of flat, saturated colors, not a gradient.
+_DOS_WHITE=$'\033[1;37m'   # bright white  — titles, emphasis
+_DOS_YELLOW=$'\033[1;33m'  # bright yellow — subtitle, percentages, bar fill
+_DOS_CYAN=$'\033[1;36m'    # light cyan    — secondary emphasis, spinner
+_DOS_GREEN=$'\033[1;32m'   # bright green  — success glyph
+_DOS_RED=$'\033[1;31m'     # bright red    — error glyph
+_DOS_GREY=$'\033[0;37m'    # light grey    — box art, copyright, dim text
+_DOS_BLUEBG=$'\033[44m'    # blue background — banner / completion screens only
 
 # ── Step tracking (kept as global state for backward compatibility) ────────
 STEP_NUM=${STEP_NUM:-0}
@@ -147,10 +156,46 @@ format_duration() {
     fi
 }
 
+# ── Fully-closed double-line box helpers ────────────────────────────────────
+# A real DOS-era box (Turbo Vision, Norton Commander) closes on both sides --
+# every content line ends with a right border aligned under the top/bottom
+# rule. The rule length and each line's padding both derive from
+# _DOS_BOX_WIDTH so they can never drift out of sync with each other.
+#
+# _dos_box_line takes the PLAIN (uncolored) text separately from the STYLED
+# text actually printed, because padding has to be computed from visible
+# character count -- ANSI color codes have zero visible width but do count
+# toward a naive ${#string}, which would silently under-pad and misalign
+# the right border the moment any content line used color.
+_DOS_BOX_WIDTH=70
+
+# `tr` mangles multi-byte UTF-8 characters even in a UTF-8 locale (GNU tr's
+# SET1/SET2 handling isn't reliably multi-byte-aware) -- caught this the
+# same way the progress-bar fill/empty split caught the same class of bug:
+# by actually rendering the output, not just eyeballing the source. A bash
+# loop concatenating the literal character, like the block/shade progress
+# bar already does below, has no such byte-vs-character ambiguity.
+_dos_box_rule() {
+    local corner_l="$1" corner_r="$2"
+    local fill="" i
+    for ((i=0; i<_DOS_BOX_WIDTH; i++)); do fill+="═"; done
+    printf '%s%s%s%s%s\n' "$_DOS_GREY" "$corner_l" "$fill" "$corner_r" "$NC$_DOS_BLUEBG"
+}
+
+# Usage: _dos_box_line "plain text for width" "styled text to print"
+_dos_box_line() {
+    local plain="$1" styled="$2"
+    local visible=$(( ${#plain} + 2 ))  # +2 for the two leading spaces
+    local pad=$(( _DOS_BOX_WIDTH - visible ))
+    [ "$pad" -lt 0 ] && pad=0
+    printf '%s║%s  %s%*s%s║%s\n' \
+        "$_DOS_GREY" "$NC$_DOS_BLUEBG" "$styled" "$pad" "" "$_DOS_GREY" "$NC$_DOS_BLUEBG"
+}
+
 # ── Banner ─────────────────────────────────────────────────────────────────
-# A multi-line gradient ASCII-art logo. Hand-crafted (no figlet dep) so it
-# renders identically everywhere. Suitable for both install and update flows
-# via the optional subtitle argument.
+# A fully-closed double-line CP437-style box framing the banner content --
+# title, subtitle, version, log path, copyright -- all inside the same
+# right-bordered frame.
 #
 # Usage: ui_banner "Bare Metal Installer"
 ui_banner() {
@@ -158,30 +203,41 @@ ui_banner() {
     local version_line="${2:-}"
     local log_line="${3:-}"
 
-    # Clear and home cursor.
+    # Clear and home cursor, then paint the screen blue for this one-shot
+    # opening screen. Safe here specifically because nothing else writes to
+    # /dev/tty until this function returns -- see the note at the top of
+    # this file about why that's NOT true for the rest of the run.
     _tty_raw $'\033[2J\033[H'
 
     if _ui_tty_supports_color; then
         {
+            printf '%s' "$_DOS_BLUEBG"
             printf '\n'
-            printf '%s ███████╗ █████╗ ███████╗   ███████╗████████╗ █████╗ ████████╗██╗ ██████╗ ███╗   ██╗%s\n' "$_UI_C1" "$NC"
-            printf '%s ██╔════╝██╔══██╗██╔════╝   ██╔════╝╚══██╔══╝██╔══██╗╚══██╔══╝██║██╔═══██╗████╗  ██║%s\n' "$_UI_C4" "$NC"
-            printf '%s █████╗  ███████║███████╗   ███████╗   ██║   ███████║   ██║   ██║██║   ██║██╔██╗ ██║%s\n' "$_UI_C5" "$NC"
-            printf '%s ██╔══╝  ██╔══██║╚════██║   ╚════██║   ██║   ██╔══██║   ██║   ██║██║   ██║██║╚██╗██║%s\n' "$_UI_C2" "$NC"
-            printf '%s ███████╗██║  ██║███████║██╗███████║   ██║   ██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║%s\n' "$_UI_C3" "$NC"
-            printf '%s ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝%s\n' "$_UI_C3" "$NC"
-            printf '\n'
-            printf '   %s%s%s   %s•%s   %sEmergency Alert System%s\n' \
-                "$BOLD" "$subtitle" "$NC" "$_UI_GREY" "$NC" "$_UI_C6" "$NC"
+            _dos_box_rule '╔' '╗'
+            _dos_box_line "E A S   S T A T I O N" \
+                "$(printf '%sE A S   S T A T I O N%s' "$_DOS_WHITE" "$NC$_DOS_BLUEBG")"
+            _dos_box_rule '╠' '╣'
+            _dos_box_line "" ""
+            _dos_box_line "${subtitle}  -  Emergency Alert System" \
+                "$(printf '%s%s%s  -  %sEmergency Alert System%s' \
+                    "$_DOS_YELLOW" "$subtitle" "$NC$_DOS_BLUEBG" "$_DOS_CYAN" "$NC$_DOS_BLUEBG")"
             if [ -n "$version_line" ]; then
-                printf '   %s%s%s\n' "$_UI_GREY" "$version_line" "$NC"
+                _dos_box_line "$version_line" \
+                    "$(printf '%s%s%s' "$_DOS_GREY" "$version_line" "$NC$_DOS_BLUEBG")"
             fi
             if [ -n "$log_line" ]; then
-                printf '   %sLog:%s %s\n' "$DIM" "$NC" "$log_line"
+                _dos_box_line "Log: $log_line" \
+                    "$(printf '%sLog:%s %s' "$_DOS_GREY" "$NC$_DOS_BLUEBG" "$log_line")"
             fi
-            printf '   %sCopyright (c) 2025-2026 EAS Station, LLC (KR8MER) — AGPL v3 / Commercial%s\n' \
-                "$DIM" "$NC"
+            _dos_box_line "(c) 2025-2026 EAS Station, LLC (KR8MER) - AGPL v3 / Commercial" \
+                "$(printf '%s(c) 2025-2026 EAS Station, LLC (KR8MER) - AGPL v3 / Commercial%s' \
+                    "$_DOS_GREY" "$NC$_DOS_BLUEBG")"
+            _dos_box_rule '╚' '╝'
             printf '\n'
+            # Reset all attributes including the background before handing
+            # control back -- everything printed after this point (step
+            # headers, real command output) must NOT inherit blue.
+            printf '%s' "$NC"
         } >/dev/tty 2>/dev/null || true
     else
         {
@@ -205,24 +261,28 @@ echo_step() {
     local pct=$((STEP_NUM * 100 / TOTAL_STEPS))
     echo "--- Step $STEP_NUM/$TOTAL_STEPS: $1 ---"
     _tty ""
-    # Header bar with a tiny inline progress meter.
+    # Header bar with a tiny inline progress meter. Filled and empty
+    # portions are separate strings (not one string sliced visually) so
+    # each can carry its own color -- yellow fill, grey empty.
     local bar_width=20
     local filled=$(( pct * bar_width / 100 ))
     [ $filled -gt $bar_width ] && filled=$bar_width
-    local bar=""
+    local bar_filled="" bar_empty=""
     local i
-    for ((i=0; i<filled; i++)); do bar+="█"; done
-    for ((i=filled; i<bar_width; i++)); do bar+="░"; done
-    _tty "$(printf '\033[1;34m▌\033[0m \033[1m[%d/%d]\033[0m %s%s%s \033[1;34m%3d%%\033[0m  \033[1m%s\033[0m' \
-        "$STEP_NUM" "$TOTAL_STEPS" "$_UI_C5" "$bar" "$NC" "$pct" "$1")"
+    for ((i=0; i<filled; i++)); do bar_filled+="█"; done
+    for ((i=filled; i<bar_width; i++)); do bar_empty+="░"; done
+    _tty "$(printf '%s║%s %s[%d/%d]%s [%s%s%s%s%s] %s%3d%%%s  %s%s%s' \
+        "$_DOS_GREY" "$NC" "$_DOS_WHITE" "$STEP_NUM" "$TOTAL_STEPS" "$NC" \
+        "$_DOS_YELLOW" "$bar_filled" "$_DOS_GREY" "$bar_empty" "$NC" \
+        "$_DOS_YELLOW" "$pct" "$NC" "$_DOS_CYAN" "$1" "$NC")"
 }
 
-echo_info()     { echo "[INFO]  $1"; _tty "$(printf '  \033[0;36m[INFO]\033[0m  %s' "$1")"; }
-echo_success()  { echo "[ OK ]  $1"; _tty "$(printf '  \033[1;32m[ OK ]\033[0m  %s' "$1")"; }
-echo_warning()  { echo "[WARN]  $1"; _tty "$(printf '  \033[1;33m[WARN]\033[0m  %s' "$1")"; }
-echo_error()    { echo "[ERROR] $1"; _tty "$(printf '  \033[1;31m[ERR!]\033[0m  %s' "$1")"; }
-echo_progress() { echo "  >>    $1"; _tty "$(printf '  \033[0;37m  >>  \033[0m  %s' "$1")"; }
-echo_header()   { echo ""; echo "=== $1 ==="; echo ""; _tty "$(printf '\033[1m=== %s ===\033[0m' "$1")"; }
+echo_info()     { echo "[INFO]  $1"; _tty "$(printf '  %si%s  %s' "$_DOS_CYAN" "$NC" "$1")"; }
+echo_success()  { echo "[ OK ]  $1"; _tty "$(printf '  %s*%s  %s' "$_DOS_GREEN" "$NC" "$1")"; }
+echo_warning()  { echo "[WARN]  $1"; _tty "$(printf '  %s!%s  %s' "$_DOS_YELLOW" "$NC" "$1")"; }
+echo_error()    { echo "[ERROR] $1"; _tty "$(printf '  %sX%s  %s' "$_DOS_RED" "$NC" "$1")"; }
+echo_progress() { echo "  >>    $1"; _tty "$(printf '  %s>>%s  %s' "$_DOS_GREY" "$NC" "$1")"; }
+echo_header()   { echo ""; echo "=== $1 ==="; echo ""; _tty "$(printf '%s=== %s ===%s' "$_DOS_WHITE" "$1" "$NC")"; }
 echo_operation() { echo_progress "${1}${2:+ (~$2)}"; }
 
 # Legacy no-op shims kept for callers that referenced them.
@@ -232,14 +292,15 @@ show_progress_bar() { :; }
 show_elapsed_time() { :; }
 
 # ── Spinner ─────────────────────────────────────────────────────────────────
-# Watches an existing background PID and prints a braille-spinner with the
-# elapsed time + supplied label until the PID exits. Returns the watched
-# command's exit code. Backward-compatible signature: `show_spinner PID`
-# (no label) still works.
+# Watches an existing background PID and prints a classic 4-frame ASCII
+# spinner (the `| / - \` every DOS TSR and installer used, long before
+# Unicode braille spinners existed) with the elapsed time + supplied label
+# until the PID exits. Returns the watched command's exit code.
+# Backward-compatible signature: `show_spinner PID` (no label) still works.
 show_spinner() {
     local pid="$1"
     local label="${2:-Working}"
-    local frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+    local frames=('|' '/' '-' '\')
     local i=0
     local start
     start=$(date +%s)
@@ -253,10 +314,10 @@ show_spinner() {
     while kill -0 "$pid" 2>/dev/null; do
         local elapsed=$(( $(date +%s) - start ))
         local f=${frames[i % ${#frames[@]}]}
-        printf '\r  \033[1;36m%s\033[0m %s \033[2m(%ds)\033[0m\033[K' \
-            "$f" "$label" "$elapsed" >/dev/tty 2>/dev/null || true
+        printf '\r  %s%s%s %s %s(%ds)%s\033[K' \
+            "$_DOS_CYAN" "$f" "$NC" "$label" "$_DOS_GREY" "$elapsed" "$NC" >/dev/tty 2>/dev/null || true
         i=$((i + 1))
-        sleep 0.1
+        sleep 0.2
     done
     wait "$pid" 2>/dev/null
     local rc=$?
@@ -283,9 +344,9 @@ ui_spinner_run() {
         echo_success "$label"
     else
         echo_error "$label (exit $rc)"
-        _tty "  $(printf '\033[2m─ last 10 lines ───────────────\033[0m')"
+        _tty "  $(printf '%s%s%s' "$_DOS_GREY" "── last 10 lines ──────────────" "$NC")"
         tail -n 10 "$tmpout" | while IFS= read -r line; do
-            _tty "  $(printf '\033[2m%s\033[0m' "$line")"
+            _tty "  $(printf '%s%s%s' "$_DOS_GREY" "$line" "$NC")"
         done
     fi
     rm -f "$tmpout"
@@ -306,8 +367,8 @@ ui_progress_bar() {
     local bar="" i
     for ((i=0; i<filled; i++)); do bar+="█"; done
     for ((i=filled; i<width; i++)); do bar+="░"; done
-    printf '\r  \033[1;36m%s\033[0m \033[1m%3d%%\033[0m  %s\033[K' \
-        "$bar" "$pct" "$label" >/dev/tty 2>/dev/null || true
+    printf '\r  [%s%s%s] %s%3d%%%s  %s\033[K' \
+        "$_DOS_YELLOW" "$bar" "$NC" "$_DOS_YELLOW" "$pct" "$NC" "$label" >/dev/tty 2>/dev/null || true
 }
 ui_progress_end() { printf '\n' >/dev/tty 2>/dev/null || true; }
 
@@ -388,10 +449,10 @@ ui_pip_install() {
             # Mirror styled summary lines to TTY.
             case "$line" in
                 Collecting*|Downloading*|Installing*|Successfully*|Requirement*|Using*|Building*)
-                    _tty "  $(printf '\033[2m▸\033[0m %s' "$line")"
+                    _tty "  $(printf '%s▸%s %s' "$_DOS_GREY" "$NC" "$line")"
                     ;;
                 ERROR:*|*[Ww]arning:*)
-                    _tty "  $(printf '\033[1;33m▸\033[0m %s' "$line")"
+                    _tty "  $(printf '%s▸%s %s' "$_DOS_YELLOW" "$NC" "$line")"
                     ;;
             esac
         done
@@ -405,9 +466,10 @@ ui_pip_install() {
 }
 
 # ── Completion card ────────────────────────────────────────────────────────
-# Renders a Unicode-box completion banner on /dev/tty AND shows the legacy
-# whiptail "*** COMPLETE ***" msgbox if whiptail is available, so both look
-# and feel benefit.
+# Renders a fully-closed double-line CP437-box completion banner on
+# /dev/tty (same box helpers and blue-background screen as ui_banner) AND
+# shows the legacy whiptail "*** COMPLETE ***" msgbox if whiptail is
+# available, so both look and feel benefit.
 #
 # Usage: show_celebration "Body text" [title]
 show_celebration() {
@@ -416,22 +478,28 @@ show_celebration() {
     local elapsed; elapsed=$(format_duration $(( $(date +%s) - START_TIME )))
     local log_path="${LOG_FILE:-/var/log/eas-install.log}"
 
-    # 1. ANSI Unicode-box card.
+    # 1. Double-line CP437 box card on a blue-background screen.
     if _ui_tty_supports_color; then
         {
+            printf '%s' "$_DOS_BLUEBG"
             printf '\n'
-            printf '%s╭──────────────────────────────────────────────────────────────────╮%s\n' "$_UI_C1" "$NC"
-            printf '%s│%s  %s%s%s\n' "$_UI_C1" "$NC" "$BOLD" "$title" "$NC"
-            printf '%s├──────────────────────────────────────────────────────────────────┤%s\n' "$_UI_C1" "$NC"
+            _dos_box_rule '╔' '╗'
+            _dos_box_line "$title" \
+                "$(printf '%s%s%s' "$_DOS_WHITE" "$title" "$NC$_DOS_BLUEBG")"
+            _dos_box_rule '╠' '╣'
             # Print body, wrapped naively at ~62 chars.
             while IFS= read -r line; do
-                printf '%s│%s  %s\n' "$_UI_C1" "$NC" "$line"
+                _dos_box_line "$line" \
+                    "$(printf '%s%s%s' "$_DOS_CYAN" "$line" "$NC$_DOS_BLUEBG")"
             done <<<"$body"
-            printf '%s│%s\n' "$_UI_C1" "$NC"
-            printf '%s│%s  %sTotal time:%s %s\n' "$_UI_C1" "$NC" "$DIM" "$NC" "$elapsed"
-            printf '%s│%s  %sLog:%s         %s\n' "$_UI_C1" "$NC" "$DIM" "$NC" "$log_path"
-            printf '%s╰──────────────────────────────────────────────────────────────────╯%s\n' "$_UI_C1" "$NC"
+            _dos_box_line "" ""
+            _dos_box_line "Total time: $elapsed" \
+                "$(printf '%sTotal time:%s %s' "$_DOS_YELLOW" "$NC$_DOS_BLUEBG" "$elapsed")"
+            _dos_box_line "Log:         $log_path" \
+                "$(printf '%sLog:%s         %s' "$_DOS_YELLOW" "$NC$_DOS_BLUEBG" "$log_path")"
+            _dos_box_rule '╚' '╝'
             printf '\n'
+            printf '%s' "$NC"
         } >/dev/tty 2>/dev/null || true
     fi
 
