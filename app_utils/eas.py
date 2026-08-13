@@ -2325,6 +2325,16 @@ def _normalize_audio_amplitude(samples: List[int], target_amplitude: float) -> L
     # Calculate the scaling factor needed to reach target RMS
     scale = target_rms / rms
 
+    # Speech has a much higher peak-to-RMS ratio (crest factor) than the sine
+    # tones this function was modeled on, so a pure RMS match can drive
+    # transients (sibilants, plosives) well past full scale. Cap the gain so
+    # the loudest sample in this clip lands at or under full scale instead of
+    # hard-clipping; loudness then falls a bit short of target_rms only for
+    # unusually peaky source audio.
+    peak = max(abs(s) for s in samples)
+    if peak > 0:
+        scale = min(scale, 32767 / peak)
+
     # Apply scaling to all samples
     # Clamp to prevent overflow beyond int16 range
     return [max(-32768, min(32767, int(s * scale))) for s in samples]
@@ -2963,6 +2973,14 @@ class EASAudioGenerator:
                     voice_samples = None
 
         if voice_samples:
+            # Narration comes from wildly different sources (cloud TTS, IPAWS-
+            # embedded audio, OTA relay capture) each with its own native level
+            # — none of them are mastered against the SAME/attention tone
+            # amplitude above. Without this, narration can sit 15+ dB below the
+            # tones (matches the RMS target build_manual_components() already
+            # uses for uploaded narration, so automatic and manual broadcasts
+            # are leveled the same way).
+            voice_samples = _normalize_audio_amplitude(voice_samples, amplitude * 0.7)
             pre_voice_silence = _generate_silence(1.0, self.sample_rate)
             samples.extend(pre_voice_silence)
             segment_samples['buffer'].extend(pre_voice_silence)
