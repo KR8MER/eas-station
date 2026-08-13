@@ -29,7 +29,7 @@ section in this package, and ``build_stats_data`` runs them.
 
 from typing import Any, Dict
 
-from . import alerts_overview, broadcast, coverage, polling, timeline
+from . import alerts_overview, broadcast, coverage, gating, polling, timeline
 from .common import StatsSection, empty_dow_hour_matrix, run_sections
 
 # The pipeline, in the order the original handler ran it. The order is listed
@@ -56,18 +56,17 @@ SECTIONS = (
     broadcast.BROADCAST_LATENCY,
     broadcast.RELAY_STATS,
     polling.POLLING_TREND,
+    gating.GATED_ALERTS,
 )
 
 
 def apply_derived_defaults(stats_data: Dict[str, Any]) -> None:
-    """Fill in the two keys no section produces.
+    """Fill in the one key no section produces.
 
-    ``stats.html`` indexes both unconditionally, and neither has a query behind
-    it: ``avg_durations`` is an alias the template uses for the duration table,
-    and ``lifecycle_timeline`` is a placeholder for a chart that is not wired up
-    yet.
+    ``stats.html`` indexes ``avg_durations`` unconditionally as an alias for
+    the duration table; no section owns that name directly.
 
-    The original handler followed these with 29 further ``setdefault`` calls
+    The original handler followed this with 30 further ``setdefault`` calls
     covering every other key. Those were verified redundant — each section sets
     its keys on both its success *and* its failure path, so the defaults could
     never fire — and the section contract now guarantees the same property
@@ -75,7 +74,6 @@ def apply_derived_defaults(stats_data: Dict[str, Any]) -> None:
     """
     stats_data.setdefault("duration_stats", [])
     stats_data.setdefault("avg_durations", stats_data.get("duration_stats", []))
-    stats_data.setdefault("lifecycle_timeline", [])
 
 
 def build_stats_data(logger) -> Dict[str, Any]:
@@ -94,6 +92,7 @@ __all__ = [
     "build_stats_data",
     "coverage",
     "empty_dow_hour_matrix",
+    "gating",
     "polling",
     "run_sections",
     "timeline",

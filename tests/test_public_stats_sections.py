@@ -51,9 +51,11 @@ pytestmark = pytest.mark.skipif(
 
 from app_core.extensions import db  # noqa: E402
 from app_core.models import (  # noqa: E402
+    AlertGatingSettings,
     Boundary,
     CAPAlert,
     EASMessage,
+    GatedAlert,
     GPIOActivationLog,
     Intersection,
     ManualEASActivation,
@@ -69,6 +71,7 @@ SENT = datetime(2026, 8, 7, 14, 30, 0, tzinfo=timezone.utc)
 _MODELS = (
     Intersection, EASMessage, ManualEASActivation, ReceivedEASAlert,
     GPIOActivationLog, PollHistory, CAPAlert, Boundary,
+    GatedAlert, AlertGatingSettings,
 )
 
 
@@ -457,6 +460,29 @@ def test_broadcast_latency_is_none_without_matching_rows(ctx, stats_data):
     assert data["broadcast_latency"] is None
 
 
+def test_gated_alert_stats_counts_by_status(ctx, stats_data):
+    db.session.add(AlertGatingSettings(id=1, enabled=True, hold_off_seconds=90))
+    for status in ["pending", "pending", "released", "approved", "cancelled", "cancelled"]:
+        db.session.add(GatedAlert(
+            source="cap", status=status, hold_until=SENT + timedelta(minutes=2),
+        ))
+    db.session.commit()
+
+    data = stats_data()
+    assert data["gated_alert_stats"] == {
+        "enabled": True, "hold_off_seconds": 90, "total": 6,
+        "pending": 2, "released": 1, "approved": 1, "cancelled": 2,
+    }
+
+
+def test_gated_alert_stats_default_without_settings_row(ctx, stats_data):
+    data = stats_data()
+    assert data["gated_alert_stats"] == {
+        "enabled": False, "hold_off_seconds": 0, "total": 0,
+        "pending": 0, "released": 0, "approved": 0, "cancelled": 0,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Polling
 # ---------------------------------------------------------------------------
@@ -563,9 +589,10 @@ EXPECTED_KEYS = {
     "alert_by_urgency", "alert_by_certainty", "eas_forwarding_stats",
     "manual_activation_count", "received_eas_stats", "alert_events",
     "filter_options", "daily_alerts", "recent_by_day", "dow_hour_matrix",
-    "lifecycle_timeline", "polling", "alert_by_message_type",
+    "polling", "alert_by_message_type",
     "cancellation_rate", "update_rate", "coverage_overlap_rate",
     "alerts_with_coverage", "broadcast_latency", "relay_stats", "polling_trend",
+    "gated_alert_stats",
 }
 
 
@@ -582,8 +609,11 @@ def test_shape_defaults_on_an_empty_database(ctx, stats_data):
     assert data["alert_by_month"] == [0] * 12
     assert data["dow_hour_matrix"] == [[0] * 24 for _ in range(7)]
     assert data["filter_options"] == {"severities": [], "statuses": [], "events": []}
-    assert data["lifecycle_timeline"] == []
     assert data["avg_durations"] == data["duration_stats"]
+    assert data["gated_alert_stats"] == {
+        "enabled": False, "hold_off_seconds": 0, "total": 0,
+        "pending": 0, "released": 0, "approved": 0, "cancelled": 0,
+    }
 
 
 class _Boom:
@@ -601,6 +631,10 @@ class _Boom:
         (GPIOActivationLog, {"relay_stats": {"total": 0, "success_rate": 0, "by_type": []}}),
         (ManualEASActivation, {"manual_activation_count": 0}),
         (ReceivedEASAlert, {"received_eas_stats": {"total": 0, "forwarded": 0, "ignored": 0}}),
+        (GatedAlert, {"gated_alert_stats": {
+            "enabled": False, "hold_off_seconds": 0, "total": 0,
+            "pending": 0, "released": 0, "approved": 0, "cancelled": 0,
+        }}),
     ],
 )
 def test_a_failing_collector_falls_back_without_killing_the_page(

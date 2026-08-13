@@ -486,52 +486,6 @@
         color: white;
     }
 
-    /* Settings Panel */
-    .settings-panel {
-        background: var(--glass-bg);
-        backdrop-filter: var(--glass-blur);
-        border: 1px solid var(--glass-border);
-        border-radius: var(--card-radius);
-        padding: 1.5rem 2rem;
-        margin-bottom: 2rem;
-    }
-
-    .settings-panel h4 {
-        margin: 0 0 1rem;
-        font-size: 1rem;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        color: var(--text-color);
-    }
-
-    .settings-row {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        flex-wrap: wrap;
-    }
-
-    .settings-row label {
-        font-size: 0.9rem;
-        color: var(--text-muted);
-        min-width: 120px;
-    }
-
-    .settings-row input[type="date"] {
-        padding: 0.5rem 0.75rem;
-        border: 1px solid var(--glass-border);
-        border-radius: 8px;
-        background: var(--surface-color);
-        color: var(--text-color);
-    }
-
-    .settings-row .btn-sm {
-        padding: 0.5rem 1rem;
-        font-size: 0.85rem;
-    }
-
     /* Analytics Section */
     .analytics-section {
         margin-top: 2.5rem;
@@ -818,7 +772,7 @@
 
         /* Hide chrome and interactive controls */
         nav, header, footer:not(.stats-footer),
-        .filters-actions, .settings-panel, .export-dropdown,
+        .filters-actions, .export-dropdown,
         .pdf-export-overlay, #exportToggleBtn,
         .stats-page-header .header-actions {
             display: none !important;

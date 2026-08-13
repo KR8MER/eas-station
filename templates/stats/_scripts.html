@@ -181,7 +181,7 @@ const statsData = {
     filterOptions: {{ filter_options | tojson | safe }} || { severities: [], statuses: [], events: [] },
     dailyAlerts: {{ daily_alerts | tojson | safe }} || [],
     dowHourMatrix: {{ dow_hour_matrix | tojson | safe }} || Array.from({ length: 7 }, () => Array(24).fill(0)),
-    lifecycleTimeline: {{ lifecycle_timeline | tojson | safe }} || [],
+    gatedAlertStats: {{ gated_alert_stats | tojson | safe }} || { enabled: false, hold_off_seconds: 0, total: 0, pending: 0, released: 0, approved: 0, cancelled: 0 },
     alertByUrgency: {{ alert_by_urgency | tojson | safe }} || [],
     alertByCertainty: {{ alert_by_certainty | tojson | safe }} || [],
     alertByMessageType: {{ alert_by_message_type | tojson | safe }} || [],
@@ -221,7 +221,6 @@ const state = {
     },
     filteredAlerts: [],
     aggregates: null,
-    systemStartDate: localStorage.getItem('statsSystemStartDate') || '2024-01-01',
     staticChartsInitialized: false
 };
 
@@ -337,27 +336,6 @@ function exportFilteredData() {
 }
 
 // ============================================
-// SYSTEM DATE MANAGEMENT
-// ============================================
-
-function updateSystemStartDate() {
-    const input = document.getElementById('systemStartDate');
-    if (input && input.value) {
-        state.systemStartDate = input.value;
-        localStorage.setItem('statsSystemStartDate', input.value);
-        updateSystemInfo();
-    }
-}
-
-function resetSystemStartDate() {
-    state.systemStartDate = '2024-01-01';
-    localStorage.removeItem('statsSystemStartDate');
-    const input = document.getElementById('systemStartDate');
-    if (input) input.value = state.systemStartDate;
-    updateSystemInfo();
-}
-
-// ============================================
 // UI UPDATES
 // ============================================
 
@@ -466,19 +444,6 @@ function updateQuickStats(agg, prevAgg) {
 function updateSystemInfo() {
     const timestampEl = document.getElementById('stats-timestamp');
     if (timestampEl) timestampEl.textContent = new Date().toLocaleString();
-
-    const uptimeEl = document.getElementById('uptime-days');
-    if (uptimeEl) {
-        const startDate = new Date(state.systemStartDate + 'T00:00:00');
-        const now = new Date();
-        const days = Math.max(0, Math.floor((now - startDate) / (1000 * 60 * 60 * 24)));
-        uptimeEl.textContent = days.toLocaleString();
-    }
-
-    const startInput = document.getElementById('systemStartDate');
-    if (startInput && !startInput.value) {
-        startInput.value = state.systemStartDate;
-    }
 }
 
 // ============================================
@@ -1402,8 +1367,6 @@ function initializeFilters() {
     document.getElementById('exportDashboardBtn')?.addEventListener('click', exportFilteredData);
     document.getElementById('exportDashboardPdfBtn')?.addEventListener('click', exportDashboardAsPdf);
     initializeExportDropdown();
-    document.getElementById('updateStartDateBtn')?.addEventListener('click', updateSystemStartDate);
-    document.getElementById('resetStartDateBtn')?.addEventListener('click', resetSystemStartDate);
 
     setPresetDates('last30');
 }
