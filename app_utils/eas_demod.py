@@ -53,8 +53,20 @@ logger = logging.getLogger(__name__)
 # yields a 10-50x speed-up on real workloads with bit-exact output.
 #
 # Mirrors the pattern in app_core/radio/demodulation.py: free function with
-# numpy array arguments, ``@jit(nopython=True, cache=True, fastmath=True)``,
-# and a no-op decorator fallback when Numba is unavailable.
+# numpy array arguments, ``@jit(nopython=True, fastmath=True)``, and a no-op
+# decorator fallback when Numba is unavailable.
+#
+# Deliberately NOT ``cache=True``: this module is imported by up to half a
+# dozen independent OS processes (web workers, poller, EAS/SDR/audio
+# services), several of which can start within the same second on a service
+# restart or reboot. Numba's on-disk cache (a shared .nbi/.nbc pair next to
+# this file) isn't safe against that many processes racing to compile and
+# write it on first import — one such race corrupted the cache with
+# "cannot cache function '_dll_drain_bits_numba': no locator available",
+# which made `from app import ...` fail in the poller, which fell back to
+# its stale duplicate CAPAlert model and silently broke CAP alert ingestion
+# for hours. JIT compilation still happens per-process (a few tens of ms,
+# once, at import time); it's just never persisted to a shared file.
 # ---------------------------------------------------------------------------
 
 try:
@@ -69,7 +81,7 @@ except ImportError:  # pragma: no cover - exercised only without numba
         return decorator
 
 
-@_numba_jit(nopython=True, cache=True, fastmath=True)
+@_numba_jit(nopython=True, fastmath=True)
 def _dll_drain_bits_numba(
     correlations: np.ndarray,      # float32[N]
     total_powers: np.ndarray,      # float32[N]

@@ -37,6 +37,16 @@ logger = logging.getLogger(__name__)
 
 # Try to import Numba for JIT compilation of hot DSP functions
 # Falls back to pure NumPy if Numba is not available
+#
+# None of the @jit decorators below use cache=True. This module is imported
+# by up to half a dozen independent OS processes (web workers, poller,
+# EAS/SDR/audio services), several of which can start within the same second
+# on a service restart or reboot. Numba's on-disk cache (a shared .nbi/.nbc
+# pair written next to the source file) isn't safe against that many
+# processes racing to compile and write it on first import -- see the
+# matching note in app_utils/eas_demod.py for the production incident that
+# motivated this. JIT compilation still happens per-process at import time;
+# it's just never persisted to a shared file.
 _NUMBA_AVAILABLE = False
 # Numba's internal byteflow/SSA/interpreter passes log at DEBUG, and each
 # JIT compile emits *megabytes* of those lines. On an RPi-class box the
@@ -72,7 +82,7 @@ except ImportError:
 # These functions are the hot path and benefit significantly from JIT compilation
 # =============================================================================
 
-@jit(nopython=True, cache=True, fastmath=True)
+@jit(nopython=True, fastmath=True)
 def _fm_discriminator_numba(iq_real: np.ndarray, iq_imag: np.ndarray) -> np.ndarray:
     """JIT-compiled FM phase discriminator.
 
@@ -105,7 +115,7 @@ def _fm_discriminator_numba(iq_real: np.ndarray, iq_imag: np.ndarray) -> np.ndar
     return audio
 
 
-@jit(nopython=True, cache=True, fastmath=True)
+@jit(nopython=True, fastmath=True)
 def _fm_discriminator_declick_numba(
     iq_real: np.ndarray,
     iq_imag: np.ndarray,
@@ -179,7 +189,7 @@ def _fm_discriminator_declick_numba(
 
 
 
-@jit(nopython=True, cache=True, fastmath=True)
+@jit(nopython=True, fastmath=True)
 def _costas_loop_numba(
     samples_real: np.ndarray,
     samples_imag: np.ndarray,
@@ -237,7 +247,7 @@ def _costas_loop_numba(
     return out_real, out_imag, phase, freq
 
 
-@jit(nopython=True, cache=True, fastmath=True)
+@jit(nopython=True, fastmath=True)
 def _mm_timing_loop_numba(
     samples_interp_real: np.ndarray,
     samples_interp_imag: np.ndarray,
@@ -317,7 +327,7 @@ def _mm_timing_loop_numba(
     return out_real, out_imag, i_out, i_in, mu
 
 
-@jit(nopython=True, cache=True, fastmath=True)
+@jit(nopython=True, fastmath=True)
 def _calc_syndrome_numba(x: int, mlen: int) -> int:
     """JIT-compiled RDS/RBDS syndrome calculator.
 
@@ -359,7 +369,7 @@ def _calc_syndrome_numba(x: int, mlen: int) -> int:
 _RBDS_SYNDROMES = np.array([383, 14, 303, 663, 748], dtype=np.int64)
 
 
-@jit(nopython=True, cache=True, fastmath=True)
+@jit(nopython=True, fastmath=True)
 def _presync_scan_numba(
     bits: np.ndarray,
     initial_reg: int,

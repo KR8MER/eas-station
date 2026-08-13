@@ -8,6 +8,56 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.154.3] - 2026-08-13 - Poller stopped silently dropping VTEC-bearing alerts
+
+### Fixed
+- **A Numba disk-cache race could make the poller silently drop every NWS
+  product carrying a VTEC string.** `poller/cap_poller.py` tries
+  `from app import ..., CAPAlert, ...` first and only falls back to its own
+  standalone (non-Flask) `CAPAlert` model, defined inline in an `except`
+  block, when that import fails for any reason. That fallback model was last
+  updated before `vtec_office`, `vtec_phenomenon`, `vtec_significance`,
+  `vtec_etn`, `vtec_year`, `vtec_action`, `superseded_by_id` and
+  `cancelled_at` were added to the canonical model — 8 of 36 columns
+  missing. Two call sites do unconditional attribute access on those
+  columns: `existing.vtec_office` in `_update_existing_alert()` and
+  `new_alert.vtec_action` in `_insert_new_alert()`. On the fallback model
+  neither is a real instrumented column, so the access raised a bare
+  `AttributeError` and `"Error saving CAP alert"` — for every affected
+  alert, on every poll cycle, for as long as that poller process stayed in
+  fallback mode. Confirmed in production logs: 4 distinct NWS warnings
+  failed to save on 430+ separate poll cycles across two independent poller
+  restarts (`vtec_office` AttributeError ×430, `vtec_action` ×1).
+- **Root cause of the import failure**: `_dll_drain_bits_numba()` in
+  `app_utils/eas_demod.py` was JIT-compiled with `cache=True`, persisting
+  compiled machine code to a shared `.nbi`/`.nbc` file pair next to the
+  source. Up to half a dozen independent OS processes (2 web workers,
+  poller, EAS/SDR/audio services) import this module and can start within
+  the same second on a service restart or reboot; Numba's on-disk cache
+  isn't safe against that many processes racing to compile and write it on
+  first import. One such race corrupted the cache with `cannot cache
+  function '_dll_drain_bits_numba': no locator available for file
+  '.../eas_demod.py'`, which broke `from app import ...` for the poller
+  process that hit it. Removed `cache=True` here and from the 6 equivalent
+  `@jit` kernels in `app_core/radio/demod/kernels.py` (same documented
+  pattern, same exposure) — each process still JIT-compiles independently
+  at import time (a few tens of ms, once), it's just never persisted to a
+  file multiple processes can race on. Verified bit-exact output unchanged
+  (134 existing decode/demod tests pass) and both modules still report
+  Numba JIT active.
+- Hardened both `CAPAlert` VTEC attribute-access call sites in
+  `poller/cap_poller.py` with `getattr(..., None)` as defense in depth,
+  matching the style already used by `_apply_cancellation_status()` in the
+  same file — a future schema drift degrades gracefully instead of crashing
+  the whole alert save.
+- Added `tests/test_cap_alert_fallback_model_parity.py`: statically parses
+  both `CAPAlert` class definitions and fails the build the moment a column
+  exists on one but not the other, so the next schema change can't
+  reintroduce this gap silently. Removed the now-obsolete
+  `if not hasattr(cp.CAPAlert, "vtec_action")` workaround from
+  `tests/test_forwarding_pipeline_guard.py`, added when this exact gap was
+  first noticed but never fixed at the source.
+
 ## [2.154.2] - 2026-08-13 - Alert narration no longer sits ~15 dB below the tones
 
 ### Fixed

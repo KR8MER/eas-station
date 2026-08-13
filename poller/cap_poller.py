@@ -328,6 +328,25 @@ except Exception as e:
         signature_status = Column(String(255))
         certificate_info = Column(JSON)
         ipaws_audio_url = Column(String(512))
+        # VTEC event identity and chain linkage — mirrors
+        # app_core/_models_alerts.py::CAPAlert exactly. This fallback model
+        # only loads when `from app import ...` fails (see the except block
+        # above), but every column here still needs to exist: cap_poller.py's
+        # VTEC handling (extract_vtec_identity, _mark_vtec_chain_superseded,
+        # _apply_cancellation_status) accesses these attributes unconditionally
+        # on both the insert and update paths, regardless of which CAPAlert
+        # definition is active.
+        vtec_office = Column(String(4), index=True)
+        vtec_phenomenon = Column(String(2), index=True)
+        vtec_significance = Column(String(1), index=True)
+        vtec_etn = Column(Integer, index=True)
+        vtec_year = Column(Integer, index=True)
+        vtec_action = Column(String(3))
+        superseded_by_id = Column(
+            Integer, ForeignKey('cap_alerts.id', ondelete='SET NULL'),
+            nullable=True, index=True,
+        )
+        cancelled_at = Column(DateTime, nullable=True)
         created_at = Column(DateTime, default=utc_now)
         updated_at = Column(DateTime, default=utc_now)
 
@@ -2596,7 +2615,7 @@ class CAPPoller:
 
         # Backfill VTEC identity if not yet populated (e.g. alert was ingested
         # before this feature was deployed, or an update carries fresh VTEC data)
-        if not existing.vtec_office:
+        if not getattr(existing, 'vtec_office', None):
             try:
                 vtec_fields = extract_vtec_identity(payload.get('raw_json', {}))
                 if vtec_fields:
@@ -2726,7 +2745,7 @@ class CAPPoller:
         # Mark prior products in the same VTEC event chain as superseded so the
         # UI can hide stale entries by default.  Only non-NEW actions represent
         # follow-on products (updates, extensions, cancellations, etc.).
-        if new_alert.vtec_action and new_alert.vtec_action != 'NEW':
+        if getattr(new_alert, 'vtec_action', None) and new_alert.vtec_action != 'NEW':
             try:
                 self._mark_vtec_chain_superseded(new_alert)
             except Exception as exc:
