@@ -87,6 +87,20 @@ _UI_PROGRESS_ROW=0
 _UI_OPERATION_ROW=0
 _UI_STATUS_ROW=0
 
+# ── Whiptail gauge state ────────────────────────────────────────────────────
+# The real full-screen dialog: a persistent `whiptail --gauge`, fed a live
+# percent + single-line message stream over a FIFO for the whole run. This
+# is the PRIMARY display once it successfully starts; the fixed-row system
+# above is the automatic fallback when whiptail isn't available or /dev/tty
+# isn't usable, and old-style scrolling is the fallback under that.
+_UI_GAUGE_ACTIVE=0
+_UI_GAUGE_ATTEMPTED=0   # tri-state guard: only ever try to start the gauge once
+_UI_GAUGE_PID=0
+_UI_GAUGE_FIFO=""
+_UI_GAUGE_PCT=0
+_UI_BANNER_TITLE=""       # set by ui_banner(), consumed when the gauge lazily starts
+_UI_BANNER_BACKTITLE=""
+
 # Honour NO_COLOR (https://no-color.org/) and non-TTY destinations.
 _ui_tty_supports_color() {
     [ -z "${NO_COLOR:-}" ] && { [ -t 1 ] || [ -w /dev/tty ]; }
@@ -175,6 +189,117 @@ whiptail_footer() {
     echo "Copyright (c) 2025-2026 EAS Station, LLC (KR8MER) | AGPL v3 / Commercial License"
 }
 
+# ── Whiptail gauge lifecycle ────────────────────────────────────────────────
+# whiptail --gauge reads "XXX\n<percent>\n<message>\nXXX\n" blocks from
+# stdin for as long as stdin stays open, redrawing its own bordered dialog
+# each time. A FIFO plus a writer fd held open for the whole run is the
+# standard way to drive one continuously from a script instead of a single
+# one-shot call: closing the writer fd sends EOF, which is what makes
+# whiptail exit, so the fd must stay open across every step in between.
+#
+# Deliberately only ONE line of message text renders inside the gauge box
+# (tested directly against this whiptail build: a 3-line message shows only
+# the first line) -- that's a real limitation of the widget, not a bug here,
+# so every caller collapses to a single evolving status line.
+ui_gauge_start() {
+    _UI_GAUGE_ATTEMPTED=1
+    command -v whiptail >/dev/null 2>&1 || return 1
+    [ -w /dev/tty ] 2>/dev/null || return 1
+    _ui_tty_supports_color || return 1
+
+    _UI_GAUGE_FIFO=$(mktemp -u /tmp/eas-gauge.XXXXXX) || return 1
+    mkfifo "$_UI_GAUGE_FIFO" 2>/dev/null || { _UI_GAUGE_FIFO=""; return 1; }
+
+    (
+        command whiptail --title "$_UI_BANNER_TITLE" --backtitle "$_UI_BANNER_BACKTITLE" \
+            --gauge "Starting..." 10 76 0 <"$_UI_GAUGE_FIFO" >/dev/tty 2>/dev/null
+    ) &
+    _UI_GAUGE_PID=$!
+
+    # Open read-write, NOT write-only. A write-only open on a FIFO blocks
+    # until a reader connects, and whiptail's own `<fifo` read blocks
+    # symmetrically until a writer connects -- opening write-only here in a
+    # fixed order against a backgrounded whiptail is a genuine deadlock:
+    # this shell waits for whiptail's read-open, whiptail's read-open is
+    # itself waiting for this shell's write-open, and neither side has a
+    # timeout. A read-write open never blocks regardless of which side
+    # connects first (this is the standard shell idiom for driving a FIFO
+    # from a script without racing the other end), so it also unblocks
+    # whiptail's read the moment it runs, in either order.
+    # The 2>/dev/null is deliberately scoped to a brace group, not attached
+    # directly to the bare `exec` -- `exec` with no command applies its
+    # redirects PERMANENTLY to the current shell, so `exec 9<>fifo
+    # 2>/dev/null` would silently redirect ALL subsequent stderr in this
+    # function (and the caller, since ui.sh has no subshell boundary here)
+    # to /dev/null forever, not just suppress this one open's error. A
+    # redirect on the enclosing group is scoped to the group and reverts
+    # after, while the fd-9 open inside it still persists as intended.
+    if ! { exec 9<>"$_UI_GAUGE_FIFO"; } 2>/dev/null; then
+        kill "$_UI_GAUGE_PID" 2>/dev/null
+        wait "$_UI_GAUGE_PID" 2>/dev/null
+        _UI_GAUGE_PID=0
+        rm -f "$_UI_GAUGE_FIFO"
+        _UI_GAUGE_FIFO=""
+        return 1
+    fi
+
+    # `-w /dev/tty` above only checks permission bits, not whether a real
+    # controlling terminal backs it -- a sandboxed/detached session can pass
+    # that check and still have whiptail immediately fail to open /dev/tty
+    # and die once it gets past the FIFO read. Confirm it's still alive
+    # before declaring the gauge active.
+    sleep 0.2
+    if ! kill -0 "$_UI_GAUGE_PID" 2>/dev/null; then
+        exec 9>&-
+        wait "$_UI_GAUGE_PID" 2>/dev/null
+        _UI_GAUGE_PID=0
+        rm -f "$_UI_GAUGE_FIFO"
+        _UI_GAUGE_FIFO=""
+        return 1
+    fi
+
+    _UI_GAUGE_ACTIVE=1
+    _UI_GAUGE_PCT=0
+    return 0
+}
+
+# Usage: ui_gauge_update <percent> <single-line message>
+ui_gauge_update() {
+    [ "$_UI_GAUGE_ACTIVE" = "1" ] || return 1
+    local pct="$1" text="$2"
+    _UI_GAUGE_PCT="$pct"
+    printf 'XXX\n%d\n%s\nXXX\n' "$pct" "$text" >&9 2>/dev/null || { _UI_GAUGE_ACTIVE=0; return 1; }
+}
+
+# Idempotent: safe to call whether or not the gauge is running (cleanup_on_exit
+# and show_celebration both call this defensively before drawing their own
+# whiptail dialog, since only one whiptail widget can own the screen at once).
+ui_gauge_stop() {
+    [ "$_UI_GAUGE_ACTIVE" = "1" ] || return 0
+    # Same brace-group scoping as ui_gauge_start -- a bare `exec 9>&-
+    # 2>/dev/null` would permanently silence this shell's stderr from here
+    # on, not just this one fd-close.
+    { exec 9>&-; } 2>/dev/null
+    wait "$_UI_GAUGE_PID" 2>/dev/null
+    rm -f "$_UI_GAUGE_FIFO" 2>/dev/null
+    _UI_GAUGE_ACTIVE=0
+    _UI_GAUGE_PID=0
+    stty sane </dev/tty 2>/dev/null || true
+}
+
+# Lazily starts the gauge on the first real progress event (echo_step), not
+# from ui_banner -- both install.sh and update.sh show whiptail --yesno
+# confirmation dialogs *after* the banner but before the first echo_step,
+# and a persistent gauge already holding the screen would conflict with
+# those. _UI_GAUGE_ATTEMPTED makes this a one-shot: if whiptail wasn't
+# available or the FIFO setup failed once, every later call falls straight
+# through to the fixed-row/scrolling fallback instead of retrying per step.
+_ui_ensure_gauge() {
+    [ "$_UI_GAUGE_ACTIVE" = "1" ] && return 0
+    [ "$_UI_GAUGE_ATTEMPTED" = "1" ] && return 1
+    ui_gauge_start
+}
+
 # ── Time formatting ────────────────────────────────────────────────────────
 format_duration() {
     local seconds=$1
@@ -253,6 +378,13 @@ ui_banner() {
     local subtitle="${1:-Emergency Alert System}"
     local version_line="${2:-}"
     local log_line="${3:-}"
+
+    # Recorded now, consumed later when the gauge lazily starts on the
+    # first echo_step call (see _ui_ensure_gauge) -- the gauge can't open
+    # here because install.sh/update.sh still show whiptail --yesno
+    # confirmations between the banner and the first real progress step.
+    _UI_BANNER_TITLE="EAS Station - $subtitle"
+    _UI_BANNER_BACKTITLE="$(whiptail_footer)"
 
     # Clear and home cursor, then paint the screen blue for this one-shot
     # opening screen.
@@ -340,6 +472,12 @@ echo_step() {
     local pct=$((STEP_NUM * 100 / TOTAL_STEPS))
     echo "--- Step $STEP_NUM/$TOTAL_STEPS: $1 ---"
 
+    _ui_ensure_gauge
+    if [ "$_UI_GAUGE_ACTIVE" = "1" ]; then
+        ui_gauge_update "$pct" "Step $STEP_NUM/$TOTAL_STEPS: $1"
+        return
+    fi
+
     # Bar width matches ui_banner's initial-state bar (40) so the fill
     # never visually jumps in size on the first real update.
     local bar_width=40
@@ -366,8 +504,17 @@ echo_step() {
     fi
 }
 
+# Only USES the gauge if echo_step already started it -- never triggers a
+# start here. Info/success/warning/error calls can happen before the first
+# echo_step (e.g. right after the banner, before the whiptail --yesno
+# confirmations), and starting the gauge that early would fight with those
+# confirmation dialogs for the screen.
 _dos_status_line() {
     local glyph_color="$1" glyph="$2" message="$3"
+    if [ "$_UI_GAUGE_ACTIVE" = "1" ]; then
+        ui_gauge_update "$_UI_GAUGE_PCT" "$glyph $message"
+        return
+    fi
     if [ "$_UI_STATIC_READY" = "1" ]; then
         _dos_goto_row "$_UI_STATUS_ROW"
         printf ' %s%s%s  %s' "$glyph_color" "$glyph" "$NC" "$message" >/dev/tty 2>/dev/null || true
@@ -382,6 +529,10 @@ echo_warning()  { echo "[WARN]  $1"; _dos_status_line "$_DOS_YELLOW" "!" "$1"; }
 echo_error()    { echo "[ERROR] $1"; _dos_status_line "$_DOS_RED" "X" "$1"; }
 echo_progress() {
     echo "  >>    $1"
+    if [ "$_UI_GAUGE_ACTIVE" = "1" ]; then
+        ui_gauge_update "$_UI_GAUGE_PCT" "$1"
+        return
+    fi
     if [ "$_UI_STATIC_READY" = "1" ]; then
         _dos_goto_row "$_UI_OPERATION_ROW"
         printf ' %s>%s %s%s%s' "$_DOS_GREY" "$NC" "$_DOS_CYAN" "$1" "$NC" >/dev/tty 2>/dev/null || true
@@ -393,6 +544,10 @@ echo_header() {
     echo ""
     echo "=== $1 ==="
     echo ""
+    if [ "$_UI_GAUGE_ACTIVE" = "1" ]; then
+        ui_gauge_update "$_UI_GAUGE_PCT" "$1"
+        return
+    fi
     if [ "$_UI_STATIC_READY" = "1" ]; then
         _dos_goto_row "$_UI_OPERATION_ROW"
         printf ' %s%s%s' "$_DOS_WHITE" "$1" "$NC" >/dev/tty 2>/dev/null || true
@@ -433,7 +588,9 @@ show_spinner() {
     while kill -0 "$pid" 2>/dev/null; do
         local elapsed=$(( $(date +%s) - start ))
         local f=${frames[i % ${#frames[@]}]}
-        if [ "$_UI_STATIC_READY" = "1" ]; then
+        if [ "$_UI_GAUGE_ACTIVE" = "1" ]; then
+            ui_gauge_update "$_UI_GAUGE_PCT" "$f $label (${elapsed}s)"
+        elif [ "$_UI_STATIC_READY" = "1" ]; then
             printf '\033[%d;1H\033[K %s%s%s  %s %s(%ds)%s' \
                 "$_UI_STATUS_ROW" "$_DOS_CYAN" "$f" "$NC" "$label" "$_DOS_GREY" "$elapsed" "$NC" \
                 >/dev/tty 2>/dev/null || true
@@ -446,7 +603,10 @@ show_spinner() {
     done
     wait "$pid" 2>/dev/null
     local rc=$?
-    if [ "$_UI_STATIC_READY" = "1" ]; then
+    if [ "$_UI_GAUGE_ACTIVE" = "1" ]; then
+        : # leave the gauge's last message as-is; the caller's next
+          # echo_step/echo_success/etc. will overwrite it
+    elif [ "$_UI_STATIC_READY" = "1" ]; then
         _dos_goto_row "$_UI_STATUS_ROW"
     else
         printf '\r\033[K' >/dev/tty 2>/dev/null || true
@@ -495,7 +655,12 @@ ui_progress_bar() {
     local bar="" i
     for ((i=0; i<filled; i++)); do bar+="█"; done
     for ((i=filled; i<width; i++)); do bar+="░"; done
-    if [ "$_UI_STATIC_READY" = "1" ]; then
+    if [ "$_UI_GAUGE_ACTIVE" = "1" ]; then
+        # Leaves the gauge's own percent (the global step-based one) alone --
+        # this is package-level detail nested under whichever step is
+        # currently running, not a replacement for it.
+        ui_gauge_update "$_UI_GAUGE_PCT" "$label"
+    elif [ "$_UI_STATIC_READY" = "1" ]; then
         _dos_goto_row "$_UI_OPERATION_ROW"
         printf ' [%s%s%s] %s%3d%%%s  %s' \
             "$_DOS_YELLOW" "$bar" "$NC" "$_DOS_YELLOW" "$pct" "$NC" "$label" >/dev/tty 2>/dev/null || true
@@ -505,6 +670,7 @@ ui_progress_bar() {
     fi
 }
 ui_progress_end() {
+    [ "$_UI_GAUGE_ACTIVE" = "1" ] && return 0
     [ "$_UI_STATIC_READY" = "1" ] && return 0
     printf '\n' >/dev/tty 2>/dev/null || true
 }
@@ -616,6 +782,10 @@ show_celebration() {
     local elapsed; elapsed=$(format_duration $(( $(date +%s) - START_TIME )))
     local log_path="${LOG_FILE:-/var/log/eas-install.log}"
 
+    # Only one whiptail widget can own the screen at a time -- close the
+    # gauge (if it's running) before drawing anything else.
+    ui_gauge_stop
+
     # 1. Double-line CP437 box card on a blue-background screen.
     if _ui_tty_supports_color; then
         _tty_raw $'\033[2J\033[H'
@@ -657,6 +827,10 @@ show_celebration() {
 FAILURE_TITLE="${FAILURE_TITLE:-Script Failed}"
 cleanup_on_exit() {
     local exit_code=$?
+    # A script that aborts mid-run (Ctrl+C, a hard failure) may still have
+    # the gauge open -- close it before this trap's own whiptail msgbox
+    # tries to draw, same reasoning as show_celebration.
+    ui_gauge_stop
     if [ $exit_code -ne 0 ]; then
         echo "[ERROR] Script exited with code $exit_code"
         if command -v whiptail >/dev/null 2>&1; then
