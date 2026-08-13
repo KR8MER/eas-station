@@ -8,6 +8,57 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.157.0] - 2026-08-13 - Installer runs in a real full-screen dialog
+
+### Added
+- **`install.sh`/`update.sh` now drive an actual `whiptail --gauge` for the
+  whole run** — a real bordered full-screen TUI dialog, the same widget
+  Debian-installer and Slackware's `setup` use, rather than plain text on
+  the bare terminal (the 2.156.0 static screen). A persistent gauge is
+  opened via a FIFO the first time `echo_step` fires (deliberately not from
+  `ui_banner` — both scripts show `whiptail --yesno` confirmations
+  *between* the banner and the first real step, and a gauge already
+  holding the screen would fight those dialogs), fed live
+  `percent + single-line message` updates for the rest of the run, and
+  closed by `show_celebration`/`cleanup_on_exit` before either draws its
+  own dialog. `echo_step`/`echo_info`/`success`/`warning`/`error`/
+  `progress`/`header`, the spinner, and `ui_apt_install`'s per-package
+  percentage all redirect into it automatically when it's active — no
+  caller in `install.sh`/`update.sh` changed.
+  - The gauge widget only renders **one line** of message text (confirmed
+    directly against this whiptail build: sending a 3-line message shows
+    only the first line) — a real constraint of the widget, not a bug here.
+    Every caller collapses to one evolving status line as a result: the
+    global percent comes from `STEP_NUM/TOTAL_STEPS` and stays put across
+    sub-progress (apt/pip detail, the spinner) so it only advances at step
+    boundaries, exactly like 2.156.0's fixed-row layout.
+  - Falls back automatically, in order, when whiptail can't drive the show:
+    2.156.0's fixed-row static layout when whiptail is missing or
+    `/dev/tty` isn't usable, then further to the pre-2.155.0 scrolling
+    behavior under `NO_COLOR` or no real TTY at all.
+  - **Two real bugs this testing caught, both the kind that only show up
+    when actually run, not read:**
+    1. A genuine deadlock: opening the FIFO write-only (`exec 9>fifo`)
+       blocks until a reader connects, and whiptail's own read (`<fifo`)
+       blocks symmetrically until a writer connects — with neither side
+       timing out, a fixed open order against a backgrounded whiptail
+       could hang forever. Fixed by opening read-write (`exec 9<>fifo`)
+       instead, the standard idiom for driving a FIFO from a script
+       without racing the other end — a read-write open never blocks
+       regardless of which side connects first.
+    2. `exec 9<>fifo 2>/dev/null` (and the matching close) looked like it
+       only suppressed one command's stderr, but `exec` with no command
+       applies every listed redirect *permanently* to the current shell —
+       that line was silently discarding all subsequent stderr for the
+       rest of the script, not just its own error path. Fixed by scoping
+       the redirect to a brace group (`{ exec 9<>fifo; } 2>/dev/null`)
+       instead of the bare `exec`, which reverts after the group instead
+       of persisting.
+    Caught both by tracing actual execution (`set -x`, isolating each
+    piece down to a minimal reproduction) after a real run hung for the
+    tool's full timeout with no diagnostic output — not by reading the
+    first version of the code, which looked correct.
+
 ## [2.156.0] - 2026-08-13 - Installer screen is now static, not scrolling
 
 ### Added
