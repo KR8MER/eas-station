@@ -3,7 +3,7 @@
 {% block title %}Admin Panel - EAS Station™{% endblock %}
 
 {% block extra_css %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}?v={{ static_asset_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -2039,14 +2039,14 @@
     
     <!-- Admin Page Modular JavaScript -->
     <!-- Load core utilities first (provides shared functions) -->
-    <script src="{{ url_for('static', filename='js/admin/core.js') }}?v={{ static_asset_version }}"></script>
-    <script src="{{ url_for('static', filename='js/admin/utilities.js') }}?v={{ static_asset_version }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/core.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/utilities.js') }}"></script>
     <!-- Load feature modules -->
-    <script src="{{ url_for('static', filename='js/admin/boundary-management.js') }}?v={{ static_asset_version }}"></script>
-    <script src="{{ url_for('static', filename='js/admin/user-management.js') }}?v={{ static_asset_version }}"></script>
-    <script src="{{ url_for('static', filename='js/admin/alert-management.js') }}?v={{ static_asset_version }}"></script>
-    <script src="{{ url_for('static', filename='js/admin/hardware-settings.js') }}?v={{ static_asset_version }}"></script>
-    <script src="{{ url_for('static', filename='js/admin/operations.js') }}?v={{ static_asset_version }}"></script>
-    <script src="{{ url_for('static', filename='js/admin/zone-catalog.js') }}?v={{ static_asset_version }}"></script>
-    <script src="{{ url_for('static', filename='js/admin/location-settings.js') }}?v={{ static_asset_version }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/boundary-management.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/user-management.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/alert-management.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/hardware-settings.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/operations.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/zone-catalog.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/location-settings.js') }}"></script>
 {% endblock %}

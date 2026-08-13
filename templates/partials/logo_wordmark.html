@@ -15,6 +15,6 @@
 {% set logo_style = logo_style | default('') %}
 {% set logo_label = logo_label | default('EAS Station™ logo') %}
 <img class="logo-wordmark{% if logo_classes %} {{ logo_classes }}{% endif %}"
-     src="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}?v={{ static_asset_version }}"
+     src="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}"
      alt="{{ logo_label }}"
      {% if logo_style %}style="{{ logo_style }}"{% endif %}>

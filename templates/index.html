@@ -5,7 +5,7 @@
 {% block extra_css %}
 <!-- Leaflet CSS (local to avoid CDN tracking prevention) -->
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}?v={{ static_asset_version }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}" />
 
 <style>
     /* Frame, ground colour and radius come from the shared map skin
@@ -732,7 +732,7 @@
 {% block scripts %}
 <!-- Load Leaflet (local to avoid CDN tracking prevention) -->
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.min.js') }}"></script>
-<script src="{{ url_for('static', filename='js/core/map_theme.js') }}?v={{ static_asset_version }}"></script>
+<script src="{{ url_for('static', filename='js/core/map_theme.js') }}"></script>
 
 <script>
 console.log('🗺️ Interactive map page initializing...');

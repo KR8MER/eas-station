@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 <!-- Leaflet CSS (local to avoid CDN tracking prevention) -->
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}?v={{ static_asset_version }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}" />
 <style>
 .county-result {
     padding: 10px;
@@ -425,7 +425,7 @@ GET /admin/county_boundaries/geojson?state=OH</pre>
 {% block scripts %}
 <!-- Leaflet JS (local to avoid CDN tracking prevention) -->
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.min.js') }}"></script>
-<script src="{{ url_for('static', filename='js/core/map_theme.js') }}?v={{ static_asset_version }}"></script>
+<script src="{{ url_for('static', filename='js/core/map_theme.js') }}"></script>
 
 <script>
 function createToastContainer() {
