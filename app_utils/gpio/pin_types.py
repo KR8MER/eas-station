@@ -64,6 +64,12 @@ class GPIOBehavior(Enum):
     # station program audio is muted (or switched to the EAS source) while the
     # alert is on air, then released when playout finishes.
     AUDIO_MUTE = "audio_mute"
+    # Gated-alerts hold-off timer indicator. Held active for as long as at
+    # least one alert is sitting in the Pending Alerts queue awaiting
+    # operator approval/cancel or timer release. Not tied to a single alert
+    # (unlike the other behaviors above) -- driven by queue depth, not a
+    # broadcast lifecycle event.
+    GATE_PENDING = "gate_pending"
 
     @classmethod
     def from_value(cls, value: str) -> Optional["GPIOBehavior"]:
@@ -91,6 +97,7 @@ GPIO_BEHAVIOR_LABELS = {
     GPIOBehavior.FORWARDING_ALERT: "Forwarding Alert",
     GPIOBehavior.TRANSMITTER_PTT: "Transmitter PTT",
     GPIOBehavior.AUDIO_MUTE: "Audio Mute",
+    GPIOBehavior.GATE_PENDING: "Gated Alert Pending",
 }
 
 

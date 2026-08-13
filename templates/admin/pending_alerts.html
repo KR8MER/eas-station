@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Pending Alerts - EAS Station™{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set header_icon = 'fas fa-hourglass-half' %}
+{% set header_title = 'Pending Alerts' %}
+{% set header_subtitle = 'Alerts held by the gated-alerts hold-off timer, awaiting broadcast or cancellation' %}
+{% set header_actions %}
+    <a href="{{ url_for('alert_gating.alert_gating_settings') }}" class="btn btn-outline-light">
+        <i class="fas fa-cog me-1"></i>Gating Settings
+    </a>
+{% endset %}
+{% include 'components/page_header.html' %}
+
+<div class="container-fluid">
+    <div id="pendingAlertsConfig" class="d-none"
+         data-can-approve="{{ 'true' if can_approve else 'false' }}"
+         data-can-cancel="{{ 'true' if can_cancel else 'false' }}"></div>
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-list"></i> Pending Queue</h5>
+            <span class="badge bg-secondary" id="pendingCount">{{ pending_alerts | length }}</span>
+        </div>
+        <div class="card-body">
+            <div id="emptyState" class="text-center text-muted py-4" {% if pending_alerts %}style="display:none;"{% endif %}>
+                <i class="fas fa-check-circle fa-2x mb-2"></i>
+                <p class="mb-0">No alerts are currently pending review.</p>
+            </div>
+            <div class="table-responsive" id="pendingTableWrap" {% if not pending_alerts %}style="display:none;"{% endif %}>
+                <table class="table table-hover align-middle" id="pendingTable">
+                    <thead>
+                        <tr>
+                            <th>Event</th>
+                            <th>Source</th>
+                            <th>Severity / Urgency</th>
+                            <th>Headline</th>
+                            <th>Releases In</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pendingTableBody">
+                        {% for row in pending_alerts %}
+                        <tr data-gate-id="{{ row.id }}" data-hold-until="{{ row.hold_until.isoformat() if row.hold_until else '' }}">
+                            <td>{{ row.event or row.event_code or '—' }}</td>
+                            <td><span class="badge bg-{{ 'info' if row.source == 'cap' else 'secondary' }}">{{ row.source | upper }}</span></td>
+                            <td>{{ row.severity or '—' }} / {{ row.urgency or '—' }}</td>
+                            <td class="text-break-anywhere">{{ row.headline or '—' }}</td>
+                            <td class="countdown-cell">&hellip;</td>
+                            <td class="text-end">
+                                {% if can_approve %}
+                                <button type="button" class="btn btn-sm btn-outline-success me-1" onclick="approvePendingAlert({{ row.id }})">
+                                    <i class="fas fa-check"></i> Approve
+                                </button>
+                                {% endif %}
+                                {% if can_cancel %}
+                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="cancelPendingAlert({{ row.id }})">
+                                    <i class="fas fa-ban"></i> Cancel
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/admin/pending-alerts.js') }}"></script>
+{% endblock %}

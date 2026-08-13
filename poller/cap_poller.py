@@ -258,7 +258,7 @@ try:
         RadioReceiver,
         RadioReceiverStatus,
     )  # type: ignore
-    from app_core.models import AlertFilterSettings  # type: ignore
+    from app_core.models import AlertFilterSettings, AlertGatingSettings, GatedAlert  # type: ignore
     from sqlalchemy import Column, Integer, String, DateTime, Text, JSON  # noqa: F401
 
     class PollHistory(db.Model):  # type: ignore
@@ -450,6 +450,37 @@ except Exception as e:
         zone_codes = Column(JSON)
         storage_zone_codes = Column(JSON)
         area_terms = Column(JSON)
+        updated_at = Column(DateTime, default=utc_now)
+
+    class GatedAlert(Base):
+        __tablename__ = 'gated_alerts'
+        __table_args__ = {'extend_existing': True}
+        id = Column(Integer, primary_key=True)
+        source = Column(String(10), nullable=False)
+        cap_alert_id = Column(Integer, ForeignKey('cap_alerts.id', ondelete='SET NULL'))
+        identifier = Column(String(255))
+        event_code = Column(String(16))
+        event = Column(String(255))
+        severity = Column(String(50))
+        urgency = Column(String(50))
+        headline = Column(Text)
+        status = Column(String(20), default='pending')
+        hold_until = Column(DateTime, nullable=False)
+        created_at = Column(DateTime, default=utc_now)
+        resolved_at = Column(DateTime)
+        resolved_by = Column(String(100))
+        resolved_by_ip = Column(String(45))
+        resolution_reason = Column(String(255))
+        ota_payload = Column(JSON)
+        ota_audio_wav = Column(LargeBinary)
+        broadcast_result = Column(JSON)
+
+    class AlertGatingSettings(Base):
+        __tablename__ = 'alert_gating_settings'
+        __table_args__ = {'extend_existing': True}
+        id = Column(Integer, primary_key=True)
+        enabled = Column(Boolean, default=False)
+        hold_off_seconds = Column(Integer, default=120)
         updated_at = Column(DateTime, default=utc_now)
 
     class EASMessage(Base):

@@ -349,6 +349,41 @@
                             </div>
                         </div>
 
+                        <!-- Gated Alerts / Hold-Off Timer -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="gatedAlertsHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#gatedAlertsCollapse">
+                                    <i class="fas fa-hourglass-half me-2"></i>Gated Alerts &amp; Hold-Off Timer
+                                </button>
+                            </h2>
+                            <div id="gatedAlertsCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p>
+                                        When enabled, lower-priority alerts (watches, advisories, routine updates)
+                                        are held for a configurable timer before broadcasting instead of airing
+                                        immediately, giving an operator a window to review them first.
+                                    </p>
+                                    <ul>
+                                        <li>
+                                            <strong>Immediate urgency or Extreme severity alerts always bypass the
+                                            gate</strong> and broadcast right away, exactly as they do today &mdash;
+                                            gating never delays a Tornado Warning or similarly urgent product.
+                                        </li>
+                                        <li>Held alerts appear on <strong>Broadcast &rarr; Pending Alerts</strong> with a live countdown.</li>
+                                        <li><strong>Approve</strong> broadcasts a pending alert immediately, skipping the rest of the wait.</li>
+                                        <li><strong>Cancel</strong> permanently blocks a pending alert &mdash; it will never air, even after its timer expires.</li>
+                                        <li>If nobody acts, the alert auto-releases and broadcasts normally once the hold-off timer reaches zero.</li>
+                                    </ul>
+                                    <p class="text-muted small mb-0">
+                                        <i class="fas fa-cog me-1"></i>
+                                        Configure whether gating is enabled and the hold-off duration under
+                                        <strong>Settings &rarr; Alert Gating</strong>. Disabled by default &mdash;
+                                        turning it off restores today's immediate-broadcast behavior for every alert.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Reviewing Compliance -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="complianceHeading">

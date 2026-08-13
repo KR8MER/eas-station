@@ -736,6 +736,18 @@ sequenceDiagram
 
     Poller->>AutoFwd: auto_forward_cap_alert(alert, data)
 
+    opt Gated-alerts hold-off timer enabled (optional, v2.158.0+)
+        AutoFwd->>AutoFwd: Immediate urgency or Extreme severity?
+        alt Bypasses gate
+            Note right of AutoFwd: Falls through unchanged, no delay
+        else Held
+            AutoFwd->>DB: INSERT INTO gated_alerts (status=pending)
+            AutoFwd->>DB: UPDATE cap_alerts SET eas_forwarded=false, reason='Pending...'
+            AutoFwd-->>Poller: Pending (held for operator review / timer)
+            Note over AutoFwd,DB: Later: operator Approve/Cancel, or scheduler<br>releases on hold_until -- release re-invokes<br>auto_forward_cap_alert() and the gate steps aside
+        end
+    end
+
     AutoFwd->>Dedup: is_duplicate_broadcast(event_code, fips)
     Dedup->>DB: Query EASMessage (15-min window)
     Dedup->>DB: Query ManualEASActivation (15-min window)
@@ -789,6 +801,15 @@ sequenceDiagram
             AutoFwd-->>Monitor: Skipped (cross-source duplicate)
         else No duplicate
             AutoFwd->>AutoFwd: Build CAPAlert-like object from OTA data
+
+            opt Gated-alerts hold-off timer enabled (optional, v2.158.0+)
+                AutoFwd->>AutoFwd: Immediate urgency or Extreme severity?
+                alt Held
+                    AutoFwd->>DB: INSERT INTO gated_alerts (status=pending, ota_payload, ota_audio_wav)
+                    AutoFwd-->>Monitor: Pending (held for operator review / timer)
+                end
+            end
+
             AutoFwd->>Broadcaster: EASBroadcaster.handle_alert(alert_obj, payload)
 
             Note right of Broadcaster: Same broadcast pipeline as CAP path

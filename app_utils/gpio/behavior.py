@@ -216,6 +216,39 @@ class GPIOBehaviorManager:
 
         self._stop_flash(alert_id, event_code)
 
+    def set_gate_pending(self, active: bool, *, reason: Optional[str] = None) -> bool:
+        """Hold or release pins assigned the GATE_PENDING behavior.
+
+        Unlike the alert-playout holds above, this reflects gated-alerts
+        queue depth rather than a single alert's lifecycle: callers pass
+        ``True`` when at least one alert is sitting in the Pending Alerts
+        queue awaiting operator review or timer release, and ``False`` once
+        the queue is empty again. Reuses the same hold bookkeeping as the
+        playout behaviors so a shared pin releases correctly regardless of
+        which behavior asked for the hold.
+
+        Returns ``True`` if any pin is assigned this behavior (whether or
+        not this particular call changed its state), ``False`` if nothing
+        is configured for it -- lets the caller know whether the physical
+        indicator exists at all.
+        """
+        if not self.controller:
+            return False
+
+        pins = self._pins_for_behavior(GPIOBehavior.GATE_PENDING)
+        if not pins:
+            return False
+
+        reason = reason or (
+            "Alert(s) awaiting operator review" if active else "Pending-alert queue empty"
+        )
+        for pin in pins:
+            if active:
+                self._add_hold(pin, GPIOBehavior.GATE_PENDING, None, None, reason)
+            else:
+                self._release_hold(pin, GPIOBehavior.GATE_PENDING, None, None, reason)
+        return True
+
     def validate_configuration(self) -> List[str]:
         """Return human-readable warnings about the behavior configuration.
 

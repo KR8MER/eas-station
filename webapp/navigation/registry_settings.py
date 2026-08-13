@@ -99,6 +99,13 @@ SETTINGS_SECTION = NavSection(
                     permissions=(SYSTEM_CONFIGURE,),
                 ),
                 NavItem(
+                    label="Alert Gating",
+                    icon="fas fa-hourglass-half",
+                    href="/admin/alert-gating/",
+                    description="Hold-off timer and manual-override settings for gated alerts.",
+                    permissions=(SYSTEM_CONFIGURE,),
+                ),
+                NavItem(
                     label="Notifications",
                     icon="fas fa-bell",
                     href="/admin/notifications/",

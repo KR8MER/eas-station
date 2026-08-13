@@ -658,6 +658,7 @@ def register(app: Flask, logger) -> None:
                 GPIOBehavior.FIVE_SECONDS,
                 GPIOBehavior.INCOMING_ALERT,
                 GPIOBehavior.FORWARDING_ALERT,
+                GPIOBehavior.GATE_PENDING,
             ]
             behavior_descriptions = {
                 GPIOBehavior.TRANSMITTER_PTT.value: "Key the transmitter (PTT) for the full broadcast. Assign this to the transmit relay pin.",
@@ -668,6 +669,7 @@ def register(app: Flask, logger) -> None:
                 GPIOBehavior.FIVE_SECONDS.value: "Pulse the pin for five seconds when playout begins.",
                 GPIOBehavior.INCOMING_ALERT.value: "Pulse when a new alert is ingested or queued.",
                 GPIOBehavior.FORWARDING_ALERT.value: "Activate for the full duration of any forwarded broadcast (relay from monitoring inputs).",
+                GPIOBehavior.GATE_PENDING.value: "Hold active while one or more alerts are waiting in the Pending Alerts queue (gated-alerts hold-off timer). Assign this to a lamp or buzzer that tells an operator something needs review.",
             }
             behavior_options = [
                 {

@@ -191,6 +191,36 @@ def _make_active_alert_counter(flask_app):
     return _count
 
 
+def _make_pending_gate_counter(flask_app):
+    """Return a callable counting alerts in the gated-alerts Pending queue.
+
+    Mirrors :func:`_make_active_alert_counter` exactly -- same TTL cache,
+    same app-context wrapping, same fail-safe-to-last-known-value behavior.
+    Drives the GATE_PENDING relay behavior (see app_utils/gpio/behavior.py)
+    so a lamp/buzzer can tell an operator something is waiting for review.
+    """
+
+    cache = {"value": 0, "ts": 0.0}
+
+    def _count() -> int:
+        now = time.monotonic()
+        if now - cache["ts"] < ACTIVE_ALERT_COUNT_TTL_S:
+            return cache["value"]
+        try:
+            from app_core.models import GatedAlert
+
+            with flask_app.app_context():
+                cache["value"] = int(
+                    GatedAlert.query.filter_by(status="pending").count()
+                )
+        except Exception as exc:  # pragma: no cover - defensive
+            logging.getLogger(__name__).debug("pending gate count failed: %s", exc)
+        cache["ts"] = now
+        return cache["value"]
+
+    return _count
+
+
 def _run_indicator_listener(monitor: "AlertIndicatorMonitor") -> None:
     """Subscribe to indicator events and refresh the moment state changes.
 
@@ -361,6 +391,7 @@ def main() -> None:
             neopixel_controller=_neopixel_controller,
             active_alert_count_fn=_make_active_alert_counter(flask_app),
             gpio_controller=_gpio_controller,
+            pending_gate_count_fn=_make_pending_gate_counter(flask_app),
         )
         # The monitor now also keys the relay off the broadcast-state marker, so
         # it must run whenever a relay controller exists — not only when a tower

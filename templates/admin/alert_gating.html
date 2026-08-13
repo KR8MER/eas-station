@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Alert Gating Settings - EAS Station™{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set header_icon = 'fas fa-hourglass-half' %}
+{% set header_title = 'Alert Gating Settings' %}
+{% set header_subtitle = 'Hold-off timer and manual override for lower-priority alerts' %}
+{% include 'components/page_header.html' %}
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-cog"></i> Gating Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        Alerts with <strong>Immediate</strong> urgency or <strong>Extreme</strong> severity
+                        always broadcast immediately and are never held, regardless of this setting.
+                        Gating only applies to lower-priority alerts (watches, advisories, routine updates)
+                        on both the CAP poller and OTA relay paths.
+                    </div>
+
+                    <form id="alertGatingSettingsForm">
+                        <div class="mb-3">
+                            <label for="enabled" class="form-label">
+                                <i class="fas fa-power-off"></i> Alert Gating
+                            </label>
+                            <select class="form-select" id="enabled" name="enabled" required>
+                                <option value="true" {% if settings.enabled %}selected{% endif %}>Enabled</option>
+                                <option value="false" {% if not settings.enabled %}selected{% endif %}>Disabled</option>
+                            </select>
+                            <div class="form-text">
+                                When disabled, all qualifying alerts broadcast immediately as they do today.
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="hold_off_seconds" class="form-label">
+                                <i class="fas fa-stopwatch"></i> Hold-Off Duration (seconds)
+                            </label>
+                            <input type="number" class="form-control" id="hold_off_seconds"
+                                   name="hold_off_seconds" min="10" max="3600"
+                                   value="{{ settings.hold_off_seconds }}" required>
+                            <div class="form-text">
+                                How long a gated alert waits in the Pending Alerts queue before it
+                                auto-releases and broadcasts (10&ndash;3600 seconds).
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save Settings
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-hourglass-half"></i> Pending Alerts</h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2">
+                        Alerts currently held for review, waiting to be approved, cancelled, or
+                        auto-released, are managed on a separate page.
+                    </p>
+                    <a href="{{ url_for('pending_alerts.pending_alerts_list') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-list"></i> View Pending Alerts Queue
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-info-circle"></i> Current Settings</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2">
+                            <strong>Status:</strong>
+                            <span class="badge bg-{{ 'success' if settings.enabled else 'secondary' }}" id="statusBadge">
+                                {{ 'Enabled' if settings.enabled else 'Disabled' }}
+                            </span>
+                        </li>
+                        <li class="mb-2">
+                            <strong>Hold-Off Duration:</strong>
+                            <span id="holdOffDisplay">{{ settings.hold_off_seconds }}</span> s
+                        </li>
+                        <li class="mb-0">
+                            <strong>Last Updated:</strong>
+                            <small class="text-muted" id="lastUpdated">
+                                {{ settings.updated_at | localtime('%Y-%m-%d %H:%M:%S %Z', 'Never') }}
+                            </small>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-question-circle"></i> How It Works</h5>
+                </div>
+                <div class="card-body">
+                    <ol class="small mb-0">
+                        <li>A qualifying alert arrives and is held instead of broadcasting immediately.</li>
+                        <li>It appears on the Pending Alerts queue with a live countdown.</li>
+                        <li>An operator can <strong>Approve</strong> it early or <strong>Cancel</strong> it.</li>
+                        <li>If nobody acts, it auto-releases and broadcasts when the timer expires.</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('alertGatingSettingsForm');
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const formData = new FormData(form);
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const originalBtnText = submitBtn.innerHTML;
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+        try {
+            const response = await fetch('/admin/alert-gating/update', {
+                method: 'POST',
+                body: formData,
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showToast('Alert gating settings saved successfully', 'success');
+
+                const s = data.settings;
+                document.getElementById('statusBadge').textContent = s.enabled ? 'Enabled' : 'Disabled';
+                document.getElementById('statusBadge').className = 'badge bg-' + (s.enabled ? 'success' : 'secondary');
+                document.getElementById('holdOffDisplay').textContent = s.hold_off_seconds;
+                if (s.updated_at) {
+                    document.getElementById('lastUpdated').textContent = new Date(s.updated_at).toLocaleString();
+                }
+            } else {
+                showToast(data.error || 'Failed to save settings', 'danger');
+            }
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            showToast('Error saving settings', 'danger');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalBtnText;
+        }
+    });
+});
+</script>
+{% endblock %}

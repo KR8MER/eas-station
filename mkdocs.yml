@@ -133,6 +133,7 @@ nav:
       - One-Button Upgrade: guides/one_button_upgrade.md
       - IPAWS Feed Integration: guides/ipaws_feed_integration.md
       - Manual EAS Events & Broadcast Builder: guides/MANUAL_EAS_EVENTS.md
+      - Gated Alerts (Hold-Off Timer): guides/GATED_ALERTS.md
       - Local Authority EAS Access: guides/LOCAL_AUTHORITIES.md
       - eas-config Tool: guides/EAS_CONFIG_TOOL.md
       - Pre/Post-Alert Signaling: guides/ALERT_SIGNALS.md

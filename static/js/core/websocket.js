@@ -49,6 +49,7 @@
         // Alert events
         'alert_verification_update': 10000,   // 10s - alert verification
         'alerts_update': 5000,                // 5s - active CAP alert list
+        'pending_alerts_update': 2000,        // 2s - gated-alerts pending queue
 
         // Log events
         'logs_update': 10000,                 // 10s - log viewer
@@ -74,6 +75,7 @@
         'analytics_update': '/api/analytics/dashboard',
         'alert_verification_update': '/api/alerts/verification/status',
         'alerts_update': '/api/alerts',
+        'pending_alerts_update': '/admin/pending-alerts/api/list',
         'logs_update': '/api/logs/recent',
         'broadcast_state_update': '/api/broadcast/state',
     };
