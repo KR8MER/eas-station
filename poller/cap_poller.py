@@ -48,6 +48,7 @@ import sys
 print("[CAP_POLLER_INIT] os and sys imported", flush=True)
 import time
 import re
+import threading
 import uuid
 print("[CAP_POLLER_INIT] time, re, uuid imported", flush=True)
 import requests
@@ -557,6 +558,132 @@ except Exception as e:
 
 
 # =======================================================================================
+# Gated-alerts release scheduler (CAP path)
+# =======================================================================================
+
+class _CapPollerGatedAlertScheduler:
+    """Releases CAP-sourced gated alerts once their hold-off timer expires.
+
+    This process has no Flask app -- CAPPoller owns its own raw SQLAlchemy
+    engine/session, so unlike app_core.gating_scheduler.GatedAlertScheduler
+    (used by eas_monitoring_service.py, which does have a Flask app), each
+    sweep here opens its own plain Session from a sessionmaker bound to the
+    poller's engine, and always queries via that session explicitly
+    (session.query(GatedAlert), never GatedAlert.query -- the latter is a
+    Flask-SQLAlchemy shortcut that requires an app context this process
+    does not have).
+    """
+
+    SWEEP_INTERVAL_SECONDS = 20
+    STARTUP_DELAY_SECONDS = 15
+
+    def __init__(self, poller: 'CAPPoller') -> None:
+        self._poller = poller
+        self._session_factory = sessionmaker(bind=poller.engine)
+        self._stop_event = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+    @property
+    def is_running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def start(self) -> None:
+        if self.is_running:
+            return
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._run, name='cap-gated-alert-scheduler', daemon=True,
+        )
+        self._thread.start()
+        self._poller.logger.info(
+            "Gated-alert release scheduler started (interval=%ss)",
+            self.SWEEP_INTERVAL_SECONDS,
+        )
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=2)
+
+    def _run(self) -> None:
+        if self._stop_event.wait(self.STARTUP_DELAY_SECONDS):
+            return
+        while not self._stop_event.is_set():
+            try:
+                self.run_sweep_now()
+            except Exception as exc:
+                self._poller.logger.error(
+                    "Gated-alert release sweep failed: %s", exc, exc_info=True,
+                )
+            self._stop_event.wait(self.SWEEP_INTERVAL_SECONDS)
+
+    def run_sweep_now(self) -> None:
+        session = self._session_factory()
+        try:
+            now = datetime.now(timezone.utc)
+            due = (
+                session.query(GatedAlert)
+                .filter(
+                    GatedAlert.source == 'cap',
+                    GatedAlert.status == 'pending',
+                    GatedAlert.hold_until <= now,
+                )
+                .all()
+            )
+            for gate_row in due:
+                try:
+                    self._release(session, gate_row)
+                except Exception as exc:
+                    session.rollback()
+                    self._poller.logger.error(
+                        "Failed to release gated CAP alert id=%s: %s",
+                        gate_row.id, exc, exc_info=True,
+                    )
+        finally:
+            session.close()
+
+    def _release(self, session, gate_row: 'GatedAlert') -> None:
+        gate_row.status = 'released'
+        gate_row.resolved_at = datetime.now(timezone.utc)
+        gate_row.resolution_reason = 'Hold-off timer expired'
+        session.add(gate_row)
+        session.commit()
+
+        if not gate_row.cap_alert_id:
+            self._poller.logger.warning(
+                "Gated CAP alert id=%s has no cap_alert_id; cannot release",
+                gate_row.id,
+            )
+            return
+
+        cap_alert = session.get(CAPAlert, gate_row.cap_alert_id)
+        if cap_alert is None:
+            self._poller.logger.warning(
+                "Gated CAP alert id=%s references missing cap_alerts row (id=%s)",
+                gate_row.id, gate_row.cap_alert_id,
+            )
+            return
+
+        try:
+            eas_config = load_eas_config(db_session=session)
+        except Exception:
+            eas_config = self._poller.eas_config
+
+        result = auto_forward_cap_alert(
+            cap_alert=cap_alert,
+            alert_data={'raw_json': cap_alert.raw_json or {}},
+            db_session=session,
+            eas_message_cls=EASMessage,
+            eas_config=eas_config,
+            location_settings=self._poller.location_settings,
+            logger_instance=self._poller.logger,
+        )
+        gate_row.broadcast_result = result
+        session.add(gate_row)
+        session.commit()
+
+
+# =======================================================================================
 # Poller
 # =======================================================================================
 
@@ -648,6 +775,18 @@ class CAPPoller:
         except Exception as exc:
             self.logger.warning("Failed to load EAS config for auto-forwarding: %s", exc)
             self.eas_config = {'enabled': False}
+
+        # Gated-alerts hold-off timer: release CAP-sourced pending alerts
+        # once their timer expires. Runs only in this process, never inside
+        # the Gunicorn web app (Approve/Cancel release synchronously there
+        # instead) -- see _CapPollerGatedAlertScheduler for why this can't
+        # just reuse the Flask-app-context-based scheduler.
+        try:
+            self.gated_alert_scheduler = _CapPollerGatedAlertScheduler(self)
+            self.gated_alert_scheduler.start()
+        except Exception as exc:
+            self.logger.warning("Gated-alert release scheduler could not be started: %s", exc)
+            self.gated_alert_scheduler = None
 
         # HTTP Session with compliance headers for both NOAA and IPAWS
         # NOAA Weather API: https://www.weather.gov/documentation/services-web-api
