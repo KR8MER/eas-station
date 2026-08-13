@@ -751,6 +751,23 @@ def upload_boundaries():
             "display_label": boundary_label,
         }
 
+        # New boundaries have no intersections against alerts that already
+        # existed -- recalculate active alerts now instead of leaving that to
+        # a manually-triggered "Fix Intersections" click.
+        if boundaries_added:
+            try:
+                from .intersections import recalculate_active_alert_intersections
+                recalc_stats = recalculate_active_alert_intersections()
+                response_data["intersections_recalculated"] = recalc_stats
+                response_data["success"] += (
+                    f"; recalculated intersections for "
+                    f"{recalc_stats['alerts_processed']} active alert(s)"
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                current_app.logger.error(
+                    "Post-upload intersection recalculation failed: %s", exc,
+                )
+
         if errors:
             response_data["warning"] = f"{len(errors)} features had errors"
 
@@ -958,6 +975,23 @@ def upload_shapefile():
             "normalized_type": boundary_type,
             "display_label": boundary_label,
         }
+
+        # New boundaries have no intersections against alerts that already
+        # existed -- recalculate active alerts now instead of leaving that to
+        # a manually-triggered "Fix Intersections" click.
+        if boundaries_added:
+            try:
+                from .intersections import recalculate_active_alert_intersections
+                recalc_stats = recalculate_active_alert_intersections()
+                response_data["intersections_recalculated"] = recalc_stats
+                response_data["success"] += (
+                    f"; recalculated intersections for "
+                    f"{recalc_stats['alerts_processed']} active alert(s)"
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                current_app.logger.error(
+                    "Post-upload intersection recalculation failed: %s", exc,
+                )
 
         if errors:
             response_data["warning"] = f"{len(errors)} features had errors"
