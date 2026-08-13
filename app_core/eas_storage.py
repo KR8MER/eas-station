@@ -1177,7 +1177,8 @@ def collect_alert_delivery_records(
 
     try:
         message_query = (
-            EASMessage.query.filter(EASMessage.created_at >= window_start)
+            EASMessage.without_audio()
+            .filter(EASMessage.created_at >= window_start)
             .order_by(EASMessage.created_at.asc())
         )
         messages = message_query.all()
