@@ -8,6 +8,27 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.154.4] - 2026-08-13 - Superseded-alert badges now link to the alert that replaced them
+
+### Fixed
+- **The "Superseded" badge told you an alert was replaced but never said by
+  what.** `alert.superseded_by_id` was read only to decide whether to render
+  the badge on the alerts list (`templates/alerts.html`) and on the alert
+  detail page's status area (`templates/alert_detail.html`) — the ID itself
+  was discarded. Both badges are now links to `/alerts/{{
+  alert.superseded_by_id }}`. (The detail page's separate "Event Lifecycle"
+  panel already linked correctly across the full VTEC chain; this only
+  affected the two standalone status badges.)
+- **Same-poll-cycle duplicate resolution reasoning was logged at `DEBUG`,
+  invisible at this station's `LOG_LEVEL=INFO`.** When multiple feed
+  responses return the same CAP identifier with different content,
+  `fetch_cap_alerts()` decides which payload to keep — newer wins, `CANCEL`
+  always wins — but that reasoning (`"Skipping older duplicate for %s"` /
+  `"Replacing alert %s with newer payload"`) only ever reached the log at
+  `DEBUG`. In production this meant the log showed a bare count
+  (`"Filtered N duplicate identifiers during fetch"`) with no way to tell
+  which alert won or why. Bumped both lines to `INFO`.
+
 ## [2.154.3] - 2026-08-13 - Poller stopped silently dropping VTEC-bearing alerts
 
 ### Fixed

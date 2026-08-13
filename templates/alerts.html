@@ -302,9 +302,9 @@ tr.alert-superseded:hover {
                                             </span>
                                             {% endif %}
                                             {% if is_superseded %}
-                                            <span class="badge bg-secondary text-decoration-line-through" title="A newer update for this VTEC event has been received">
+                                            <a href="/alerts/{{ alert.superseded_by_id }}" class="badge bg-secondary text-decoration-line-through" title="A newer update for this VTEC event has been received — click to view it">
                                                 <i class="fas fa-history"></i> Superseded
-                                            </span>
+                                            </a>
                                             {% endif %}
                                         </div>
                                     </td>

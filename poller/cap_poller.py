@@ -1781,14 +1781,14 @@ class CAPPoller:
                             if self._should_replace_alert(existing_alert, alert):
                                 alerts_by_identifier[identifier] = alert
                                 duplicates_replaced += 1
-                                self.logger.debug(
+                                self.logger.info(
                                     "Replacing alert %s with newer payload (sent=%s, type=%s)",
                                     identifier,
                                     props.get('sent'),
                                     props.get('messageType'),
                                 )
                             else:
-                                self.logger.debug(
+                                self.logger.info(
                                     "Skipping older duplicate for %s (sent=%s, type=%s)",
                                     identifier,
                                     props.get('sent'),
