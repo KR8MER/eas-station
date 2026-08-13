@@ -8,6 +8,20 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.155.0] - 2026-08-13 - Old-school DOS-style installer UI
+
+### Added
+- **Restyled `install.sh`/`update.sh`'s terminal chrome to an old-school DOS-installer look** — entirely contained to `scripts/lib/ui.sh` (confirmed nothing outside it references the color internals directly, so neither script needed a single line changed):
+  - Flat 16-color EGA/VGA palette in place of the previous 256-color cyan-blue gradient.
+  - Banner and completion card are now fully-closed double-line CP437 boxes (`╔═╗║╚═╝`) on a blue background — the two moments the script fully owns the screen (right after a clear, and at the very end); everywhere else keeps the terminal's natural background since real subprocess output (apt-get, pip, git, alembic) is interleaved there and can emit its own color resets.
+  - Classic 4-frame ASCII spinner (`| / - \`) in place of the Unicode braille spinner.
+  - Single-glyph status gutter (`i` info, `*` ok, `!` warn, `X` error) in place of `[INFO]`/`[ OK ]`/`[WARN]`/`[ERR!]` bracket tags.
+  - `█`/`░` block-fill progress bars were already period-correct CP437 and are unchanged, just recolored.
+- Two real bugs turned up by actually testing this instead of just reading the diff:
+  1. The progress bar's filled and empty portions were built as one concatenated string, so despite two different color codes in the `printf`, the entire bar would have rendered a single color. Split into separate `bar_filled`/`bar_empty` variables.
+  2. The first pass at the fully-closed boxes used `printf '%*s' N '' | tr ' ' '═'` to build the horizontal rule — `tr` silently mangles multi-byte UTF-8 fill characters even in a UTF-8 locale (a known GNU `tr` limitation, not a locale misconfiguration; reproduced in isolation). Replaced with the same bash-loop character-concatenation the block/shade progress bar already used safely. Verified by stripping ANSI codes from a real captured run and measuring every box line at exactly 72 characters.
+- Verified via a real `script`-captured pty run (not just visual inspection of the source): `bash -n` on all three files, `shellcheck` shows zero new warnings beyond what the original file already had, the spinner was tested against a real backgrounded job with correct exit-code passthrough, and the `NO_COLOR=1` plain-text fallback path (unchanged) still renders correctly.
+
 ## [2.154.3] - 2026-08-13 - Poller stopped silently dropping VTEC-bearing alerts
 
 ### Fixed
