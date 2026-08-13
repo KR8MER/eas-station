@@ -128,11 +128,6 @@ def test_intersection_failure_does_not_block_forwarding(monkeypatch):
     poller = _make_poller()
     call_order = []
 
-    # The fallback (non-Flask) CAPAlert model predates the VTEC columns;
-    # give it a benign class-level default so the VTEC supersede check works.
-    if not hasattr(cp.CAPAlert, "vtec_action"):
-        cp.CAPAlert.vtec_action = None
-
     monkeypatch.setattr(
         poller, "_try_build_geometry_from_same_codes", lambda alert: True
     )
@@ -171,9 +166,6 @@ def test_insert_succeeds_when_intersections_raise(monkeypatch):
     """The insert must complete (no exception to the caller) even when the
     intersection step fails after forwarding."""
     poller = _make_poller()
-
-    if not hasattr(cp.CAPAlert, "vtec_action"):
-        cp.CAPAlert.vtec_action = None
 
     monkeypatch.setattr(
         poller, "_try_build_geometry_from_same_codes", lambda alert: True
