@@ -8,6 +8,30 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.158.1] - 2026-08-13 - Fix missing CAP-side gated-alerts release scheduler
+
+### Fixed
+- **CAP-sourced gated alerts (2.158.0) could be held and manually approved,
+  but never auto-released once their hold-off timer expired.** The CAP
+  poller (`poller/cap_poller.py`) got the `GatedAlert`/`AlertGatingSettings`
+  model mirrors needed to read gate state, but the background sweep that
+  actually releases expired holds was only wired up for the OTA path
+  (`app_core/gating_scheduler.py`, running in the EAS-monitor service) — the
+  CAP-side scheduler was never implemented.
+  - Added `_CapPollerGatedAlertScheduler` to `poller/cap_poller.py`,
+    started from `CAPPoller.__init__`. Since this process has no Flask app
+    (unlike the OTA scheduler), each sweep opens its own plain SQLAlchemy
+    session from a `sessionmaker` bound to the poller's own engine, and
+    always queries explicitly via that session (`session.query(GatedAlert)`)
+    rather than the Flask-SQLAlchemy `Model.query` shortcut, which requires
+    an app context this process doesn't have.
+  - Releases expired CAP-sourced holds by re-invoking
+    `auto_forward_cap_alert()` — the same function used at ingest time —
+    so the broadcast tail is never duplicated.
+  - Added regression tests in `tests/test_alert_gating.py` covering the
+    sweep's release path and its resilience to a single row's release
+    failing without aborting the rest of the sweep.
+
 ## [2.158.0] - 2026-08-13 - Gated alerts: hold-off timer with manual operator override
 
 ### Added

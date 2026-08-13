@@ -405,5 +405,131 @@ class TestOtaAlertGateIntegration(unittest.TestCase):
         mock_instance.handle_alert.assert_called_once()
 
 
+# ---------------------------------------------------------------------------
+# CAP-side release scheduler (poller/cap_poller.py)
+#
+# Regression coverage for a real gap: the initial implementation added the
+# GatedAlert/AlertGatingSettings model mirrors to cap_poller.py but never
+# actually wired up a scheduler to sweep and release them, so CAP-sourced
+# gated alerts could be held and manually approved but never auto-released
+# on timer expiry.
+# ---------------------------------------------------------------------------
+
+import pytest  # noqa: E402
+
+cp = pytest.importorskip(
+    "poller.cap_poller",
+    reason="poller.cap_poller dependencies not installed",
+)
+from poller.cap_poller import _CapPollerGatedAlertScheduler  # noqa: E402
+
+
+class _FakeSchedulerSession:
+    """Minimal stand-in for the raw SQLAlchemy session the scheduler opens
+    per sweep -- tracks query/get/add/commit/rollback/close calls."""
+
+    def __init__(self, due_rows=None, cap_alert=None):
+        self._due_rows = due_rows or []
+        self._cap_alert = cap_alert
+        self.added = []
+        self.commits = 0
+        self.rollbacks = 0
+        self.closed = False
+
+    def query(self, model_cls):
+        return self
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def all(self):
+        return self._due_rows
+
+    def get(self, model_cls, pk):
+        return self._cap_alert
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    def commit(self):
+        self.commits += 1
+
+    def rollback(self):
+        self.rollbacks += 1
+
+    def close(self):
+        self.closed = True
+
+
+def _make_cap_scheduler(session: _FakeSchedulerSession) -> _CapPollerGatedAlertScheduler:
+    scheduler = object.__new__(_CapPollerGatedAlertScheduler)
+    poller = SimpleNamespace(
+        logger=MagicMock(),
+        eas_config={"enabled": True},
+        location_settings={"fips_codes": ["039137"]},
+    )
+    scheduler._poller = poller
+    scheduler._session_factory = lambda: session
+    scheduler._stop_event = MagicMock()
+    scheduler._thread = None
+    return scheduler
+
+
+class TestCapPollerGatedAlertScheduler(unittest.TestCase):
+    """run_sweep_now() must query via the session (never GatedAlert.query),
+    release due rows by re-invoking auto_forward_cap_alert(), and never
+    crash the sweep loop if one row's release fails."""
+
+    def test_no_due_rows_is_a_noop(self):
+        session = _FakeSchedulerSession(due_rows=[])
+        scheduler = _make_cap_scheduler(session)
+        scheduler.run_sweep_now()
+        self.assertEqual(session.commits, 0)
+        self.assertTrue(session.closed)
+
+    def test_due_row_with_no_cap_alert_id_is_skipped_safely(self):
+        gate_row = SimpleNamespace(id=5, cap_alert_id=None, status='pending')
+        session = _FakeSchedulerSession(due_rows=[gate_row])
+        scheduler = _make_cap_scheduler(session)
+        scheduler.run_sweep_now()
+        # Status flip + commit still happens (marks it released) even though
+        # there's nothing to broadcast.
+        self.assertEqual(gate_row.status, 'released')
+        self.assertGreaterEqual(session.commits, 1)
+
+    def test_due_row_releases_via_auto_forward_cap_alert(self):
+        cap_alert = SimpleNamespace(id=7, raw_json={'properties': {}})
+        gate_row = SimpleNamespace(id=5, cap_alert_id=7, status='pending')
+        session = _FakeSchedulerSession(due_rows=[gate_row], cap_alert=cap_alert)
+        scheduler = _make_cap_scheduler(session)
+
+        fake_result = {'forwarded': True, 'same_header': 'ZCZC-TEST'}
+        with patch('poller.cap_poller.auto_forward_cap_alert', return_value=fake_result) as mock_forward, \
+             patch('poller.cap_poller.load_eas_config', return_value={'enabled': True}):
+            scheduler.run_sweep_now()
+
+        mock_forward.assert_called_once()
+        call_kwargs = mock_forward.call_args.kwargs
+        self.assertIs(call_kwargs['cap_alert'], cap_alert)
+        self.assertIs(call_kwargs['db_session'], session)
+        self.assertEqual(gate_row.status, 'released')
+        self.assertEqual(gate_row.resolution_reason, 'Hold-off timer expired')
+        self.assertEqual(gate_row.broadcast_result, fake_result)
+
+    def test_one_row_failing_does_not_abort_the_sweep(self):
+        cap_alert = SimpleNamespace(id=7, raw_json={})
+        gate_row_bad = SimpleNamespace(id=1, cap_alert_id=7, status='pending')
+        gate_row_good = SimpleNamespace(id=2, cap_alert_id=7, status='pending')
+        session = _FakeSchedulerSession(due_rows=[gate_row_bad, gate_row_good], cap_alert=cap_alert)
+        scheduler = _make_cap_scheduler(session)
+
+        with patch('poller.cap_poller.auto_forward_cap_alert', side_effect=[RuntimeError("boom"), {'forwarded': True}]), \
+             patch('poller.cap_poller.load_eas_config', return_value={'enabled': True}):
+            scheduler.run_sweep_now()  # must not raise
+
+        # The second row still got released despite the first one failing.
+        self.assertEqual(gate_row_good.status, 'released')
+
+
 if __name__ == '__main__':
     unittest.main()
