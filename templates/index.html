@@ -1034,16 +1034,46 @@ function displayAlerts(alerts) {
         return;
     }
 
-    alerts.forEach(alert => {
+    // Draw broad/context alerts first, specific/severe ones last, so the
+    // layers that get added later (and therefore paint on top in Leaflet's
+    // SVG renderer) are the ones an operator actually needs to see when
+    // several overlap -- e.g. a county-wide Winter Storm Watch and a small
+    // Tornado Warning polygon inside it, which is a completely ordinary
+    // NWS overlap, not an edge case. Previously this rendered in whatever
+    // order the API happened to return rows, so which alert ended up on
+    // top (or completely hidden under a bigger, less urgent one) was
+    // arbitrary. County-wide-ness is the primary key: a specific polygon
+    // is always more useful on top than a broad one regardless of
+    // severity, since the broad shape is usually just "the whole county"
+    // and adds no information once you already know that.
+    const sorted = alerts.slice().sort((a, b) => {
+        const aCountyWide = a.properties.is_county_wide ? 0 : 1;
+        const bCountyWide = b.properties.is_county_wide ? 0 : 1;
+        if (aCountyWide !== bCountyWide) {
+            return aCountyWide - bCountyWide;
+        }
+        const aRank = EASMap.severityRank(a.properties.severity);
+        const bRank = EASMap.severityRank(b.properties.severity);
+        return aRank - bRank;
+    });
+
+    sorted.forEach(alert => {
         if (alert.geometry) {
             const severity = alert.properties.severity || 'Unknown';
             const isActive = !isAlertExpired(alert.properties.expires);
+            const countyWide = !!alert.properties.is_county_wide;
 
             const alertFeature = EASMap.hazardLayer(alert, {
                 severity: severity,
-                weight: alert.properties.is_county_wide ? 4 : 3,
-                fillOpacity: alert.properties.is_county_wide ? 0.3 : 0.4,
-                dashArray: alert.properties.is_county_wide ? '10,5' : null,
+                // Broad/county-wide alerts read as context, not a second
+                // subject: thinner line, lighter fill, and no white casing
+                // halo -- with several of these overlapping, stacked white
+                // halos are what actually produces the "blob" look. Specific
+                // polygons get the full treatment so they visibly pop on top.
+                weight: countyWide ? 2 : 3,
+                fillOpacity: countyWide ? 0.15 : 0.4,
+                dashArray: countyWide ? '10,5' : null,
+                casing: !countyWide,
                 className: isActive ? 'alert-active' : 'alert-expired',
                 onEachFeature: function(feature, layer) {
                     const props = feature.properties;

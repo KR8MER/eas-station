@@ -8,6 +8,43 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.157.1] - 2026-08-13 - Overlapping alerts on the dashboard map no longer blob together
+
+### Fixed
+- **The dashboard map drew every active alert in raw API-return order with
+  identical styling, so overlapping alerts stacked into an undifferentiated
+  blob.** This is an everyday NWS pattern, not an edge case — e.g. a
+  county-wide Winter Storm Watch with a small, more urgent Tornado Warning
+  polygon inside it. With no z-ordering, which alert ended up on top (or
+  completely hidden under a bigger, less urgent one) was arbitrary, and
+  every alert additionally got its own white "casing" halo stroke —
+  several of those overlapping is what actually produced the blob look,
+  more than the fill colors themselves.
+  - `displayAlerts()` in `templates/index.html` now sorts alerts before
+    drawing: county-wide/broad alerts first (bottom), specific polygon
+    alerts last (top); within each group, ascending by severity, so the
+    single most specific + most severe alert on the map is always the one
+    guaranteed visible on top.
+  - Broad/county-wide alerts are restyled as context rather than a second
+    subject: thinner outline (was actually *thicker* than specific alerts
+    before this fix — backwards), lighter fill (0.3 → 0.15), and no white
+    casing halo. Specific polygon alerts are unchanged (full casing, normal
+    weight, 0.4 fill) so they clearly read as the primary subject.
+  - Added `EASMap.severityRank()` to `static/js/core/map_theme.js`,
+    exposing the same severity-ordering table `refreshGlow()` already used
+    internally, so the dashboard's sort uses one source of truth instead of
+    a second copy of that table that could drift from it.
+  - Added an optional `casing` flag to `EASMap.hazardLayer()` (default
+    `true`, unchanged for the single-alert pages — alert detail, VTEC
+    trail — that already called it) so the dashboard can turn the halo off
+    per-alert without a second code path.
+- Verified the sort/styling logic against a realistic four-alert overlap
+  scenario (county-wide Watch + county-wide Advisory + two specific
+  polygons of different severities): confirmed the most specific + most
+  severe alert always sorts last (drawn on top), county-wide alerts always
+  sort first (drawn on the bottom), and each group still orders correctly
+  by severity internally.
+
 ## [2.157.0] - 2026-08-13 - Installer runs in a real full-screen dialog
 
 ### Added
