@@ -2407,9 +2407,16 @@ class CAPPoller:
             return True
 
         try:
+            # str(): see the comment on process_intersections()'s ST_IsValid
+            # call -- psycopg2 has no adapter for the WKBElement the ORM
+            # hands back for an already-persisted geometry column, so passing
+            # old_geom/new_geom directly always raised here, making every
+            # update "assume changed" and silently defeating the point of
+            # this comparison (harmless, but it meant ST_Equals never
+            # actually ran).
             result = self.db_session.execute(
                 text("SELECT ST_Equals(:old, :new)"),
-                {"old": old_geom, "new": new_geom}
+                {"old": str(old_geom), "new": str(new_geom)}
             ).scalar()
             return not result
         except Exception as exc:
@@ -2567,10 +2574,21 @@ class CAPPoller:
                 return
 
             # Validate geometry before processing intersections
+            #
+            # str(alert.geom) -- not the raw WKBElement -- because psycopg2 has
+            # no adapter registered for geoalchemy2's WKBElement type; passed
+            # directly it raises "can't adapt type 'WKBElement'" on every call,
+            # every time, since the ORM materializes alert.geom as a WKBElement
+            # for any already-persisted alert. str() gives the EWKB hex string
+            # (WKBElement.desc), which PostGIS parses natively in this raw-SQL
+            # context. The SQLAlchemy-expression-language call sites elsewhere
+            # in this codebase (func.ST_Intersects(alert.geom, ...) inside a
+            # db.session.query(...)) do not hit this — SQLAlchemy applies the
+            # Geometry column's bind processor for those automatically.
             try:
                 is_valid = self.db_session.execute(
                     text("SELECT ST_IsValid(:geom)"),
-                    {"geom": alert.geom}
+                    {"geom": str(alert.geom)}
                 ).scalar()
                 
                 if not is_valid:
@@ -2617,9 +2635,11 @@ class CAPPoller:
             """)
             
             try:
+                # str(alert.geom): see the comment on the ST_IsValid call
+                # above -- psycopg2 cannot adapt a raw WKBElement.
                 results = self.db_session.execute(
                     intersection_query,
-                    {'alert_geom': alert.geom}
+                    {'alert_geom': str(alert.geom)}
                 ).fetchall()
             except Exception as query_err:
                 self.logger.error(
@@ -3292,6 +3312,64 @@ class CAPPoller:
                     pass
         return evaluated
 
+    # Catch-up window for retry_missing_intersections(). Bounded so a large
+    # historical backlog (e.g. right after a bulk import) doesn't turn every
+    # poll cycle into a full-table scan; older gaps are still reachable via
+    # the manual "Fix Intersections" admin tools.
+    INTERSECTION_RETRY_WINDOW_HOURS = 24
+
+    def retry_missing_intersections(self) -> int:
+        """Recalculate intersections for recent alerts that never got any.
+
+        process_intersections() failures at ingest are deliberately non-fatal
+        (the alert save/forwarding decision must not be blocked by a PostGIS
+        hiccup or invalid geometry) — but that means a failure is otherwise
+        silent and nothing retries it. This sweep is that retry, run once per
+        poll cycle alongside retry_unevaluated_forwards().
+
+        Returns the number of alerts re-processed.
+        """
+        now = utc_now()
+        cutoff = now - timedelta(hours=self.INTERSECTION_RETRY_WINDOW_HOURS)
+        try:
+            candidates = (
+                self.db_session.query(CAPAlert)
+                .filter(CAPAlert.geom.isnot(None))
+                .filter(CAPAlert.created_at >= cutoff)
+                .all()
+            )
+        except Exception as exc:
+            self.logger.warning("Intersection catch-up query failed: %s", exc)
+            try:
+                self.db_session.rollback()
+            except Exception:
+                pass
+            return 0
+
+        missing = [a for a in candidates if self._needs_intersection_calculation(a)]
+        if not missing:
+            return 0
+
+        self.logger.warning(
+            "Intersection catch-up: %s alert(s) with geometry have no "
+            "boundary intersections yet — retrying",
+            len(missing),
+        )
+        processed = 0
+        for alert in missing:
+            try:
+                self.process_intersections(alert)
+                processed += 1
+            except Exception as exc:
+                self.logger.error(
+                    "Intersection catch-up failed for %s: %s", alert.identifier, exc,
+                )
+                try:
+                    self.db_session.rollback()
+                except Exception:
+                    pass
+        return processed
+
     # ---------- Maintenance ----------
     def fix_existing_geometry(self) -> Dict:
         stats = {'total_alerts': 0, 'alerts_with_raw_json': 0, 'geometry_extracted': 0,
@@ -3944,6 +4022,13 @@ class CAPPoller:
                 self.retry_unevaluated_forwards()
             except Exception as exc:
                 self.logger.error(f"Forwarding catch-up sweep failed: {exc}")
+
+            # Catch-up: retry boundary-intersection calculation for any
+            # recent alert whose attempt at ingest silently failed.
+            try:
+                self.retry_missing_intersections()
+            except Exception as exc:
+                self.logger.error(f"Intersection catch-up sweep failed: {exc}")
 
             # Ensure every polled source type has an entry (even if 0 alerts came back)
             for src_type, src_endpoints in self.last_endpoints_by_type.items():

@@ -291,9 +291,24 @@ def ensure_multipolygon(geometry: Dict[str, object]) -> Dict[str, object]:
 def calculate_alert_intersections(alert: CAPAlert) -> int:
     """Calculate intersections between an alert polygon and loaded boundaries."""
 
-    alert_geom = alert.geom
-    if not alert_geom:
+    if not alert.geom:
         return 0
+
+    # str(), not the raw WKBElement the ORM hands back for an already-
+    # persisted geometry column: psycopg2 has no adapter registered for
+    # geoalchemy2.elements.WKBElement, so passing it directly into a text()
+    # bind parameter always raises "can't adapt type 'WKBElement'" -- both
+    # _fetch_bulk_intersections and its per-boundary fallback use raw text()
+    # queries, so both need this. str(WKBElement) gives the EWKB hex string
+    # (its .desc), which PostGIS parses natively. This is why intersections
+    # silently stopped being (re)calculated: every call into either fetch
+    # path below raised on the very first query. Contrast with the
+    # SQLAlchemy-expression-language call sites elsewhere (e.g.
+    # webapp/admin/intersections.py's func.ST_Intersects(alert.geom, ...)
+    # inside a db.session.query(...)) -- those aren't affected, because
+    # SQLAlchemy applies the Geometry column's bind processor for them
+    # automatically.
+    alert_geom = str(alert.geom)
 
     try:
         intersecting_boundaries = _fetch_bulk_intersections(alert_geom)

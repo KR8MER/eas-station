@@ -331,6 +331,232 @@ def test_retry_survives_auto_forward_exception(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# retry_missing_intersections() — catch-up sweep for intersection calc
+#
+# process_intersections() failures at ingest are deliberately non-fatal (see
+# the tests above pinning that a bad intersection calc must not block
+# forwarding), which means a failure is otherwise silent and nothing retries
+# it. This sweep, run once per poll cycle alongside retry_unevaluated_forwards,
+# is that retry.
+# ---------------------------------------------------------------------------
+
+class _FakeIntersectionSweepSession(_FakeSession):
+    """retry_missing_intersections issues one query: geometry-bearing
+    alerts created since the cutoff window."""
+
+    def __init__(self, candidates):
+        super().__init__()
+        self._candidates = list(candidates)
+
+    def query(self, model):
+        return _FakeQuery(self._candidates)
+
+
+def _intersection_alert(identifier: str) -> SimpleNamespace:
+    return SimpleNamespace(id=abs(hash(identifier)) % 100000, identifier=identifier,
+                            geom="POLYGON((0 0,0 1,1 1,1 0,0 0))", created_at=_aware(-10))
+
+
+def test_retry_missing_intersections_processes_alerts_with_no_rows():
+    alert = _intersection_alert("CAP-INT-1")
+    poller = object.__new__(CAPPoller)
+    poller.logger = logging.getLogger("test_forwarding_pipeline_guard")
+    poller.db_session = _FakeIntersectionSweepSession([alert])
+    poller._needs_intersection_calculation = lambda a: True
+
+    processed = []
+    poller.process_intersections = lambda a: processed.append(a)
+
+    count = poller.retry_missing_intersections()
+
+    assert count == 1
+    assert processed == [alert]
+
+
+def test_retry_missing_intersections_skips_alerts_that_already_have_rows():
+    alert = _intersection_alert("CAP-INT-2")
+    poller = object.__new__(CAPPoller)
+    poller.logger = logging.getLogger("test_forwarding_pipeline_guard")
+    poller.db_session = _FakeIntersectionSweepSession([alert])
+    poller._needs_intersection_calculation = lambda a: False
+
+    def _must_not_run(a):
+        raise AssertionError("process_intersections must not be called")
+
+    poller.process_intersections = _must_not_run
+
+    assert poller.retry_missing_intersections() == 0
+
+
+def test_retry_missing_intersections_noop_on_query_failure():
+    class _BoomSession(_FakeSession):
+        def query(self, model):
+            raise RuntimeError("db gone")
+
+    poller = object.__new__(CAPPoller)
+    poller.logger = logging.getLogger("test_forwarding_pipeline_guard")
+    poller.db_session = _BoomSession()
+
+    assert poller.retry_missing_intersections() == 0
+    assert poller.db_session.rollbacks == 1
+
+
+def test_retry_missing_intersections_one_failure_does_not_abort_sweep():
+    """One alert's recalculation blowing up must not stop the rest."""
+    a1 = _intersection_alert("CAP-INT-3")
+    a2 = _intersection_alert("CAP-INT-4")
+    poller = object.__new__(CAPPoller)
+    poller.logger = logging.getLogger("test_forwarding_pipeline_guard")
+    poller.db_session = _FakeIntersectionSweepSession([a1, a2])
+    poller._needs_intersection_calculation = lambda a: True
+
+    processed = []
+
+    def _process(a):
+        if a is a1:
+            raise RuntimeError("simulated PostGIS failure")
+        processed.append(a)
+
+    poller.process_intersections = _process
+
+    count = poller.retry_missing_intersections()
+
+    assert count == 1
+    assert processed == [a2]
+    # The failed alert's half-done work must be rolled back so it doesn't
+    # poison the session for the next alert or the next poll cycle.
+    assert poller.db_session.rollbacks == 1
+
+
+# ---------------------------------------------------------------------------
+# Regression: geometry bind parameters must be stringified
+#
+# process_intersections() and _has_geometry_changed() pass alert/boundary
+# geometry into raw text() SQL as bind parameters. psycopg2 has no adapter
+# registered for geoalchemy2.elements.WKBElement -- the type the ORM hands
+# back for any already-persisted geometry column -- so passing it directly
+# always raised "can't adapt type 'WKBElement'" in production, on every
+# single call, silently defeating both automatic intersection calculation at
+# ingest and the retry sweep above (confirmed against a real PostGIS
+# database: identical failure with the pre-fix code, resolved by stringifying
+# the geometry before binding). str(WKBElement) gives its EWKB hex encoding
+# (.desc), which PostGIS parses natively as raw SQL text.
+# ---------------------------------------------------------------------------
+
+class _GeomLike:
+    """Stand-in for geoalchemy2.elements.WKBElement: stringifies to its EWKB
+    hex representation and nothing else. In particular it does NOT support
+    being passed directly as a psycopg2 bind parameter -- if the code under
+    test ever regresses to passing this object instead of str(this), the
+    fake session below will record the raw object instead of a string and
+    the assertions will catch it."""
+
+    def __init__(self, hex_str: str):
+        self._hex = hex_str
+
+    def __str__(self) -> str:
+        return self._hex
+
+    def __bool__(self) -> bool:
+        return True
+
+
+class _IntersectionQueryStub:
+    def filter_by(self, **kwargs):
+        return self
+
+    def delete(self):
+        return 0
+
+    def count(self):
+        return 0
+
+
+class _CapturingGeometrySession(_FakeSession):
+    """Records every execute() call's bind parameters so tests can assert
+    geometry values were stringified before being bound, and stubs out the
+    query()/bulk_save_objects() calls process_intersections() also makes."""
+
+    def __init__(self):
+        super().__init__()
+        self.executed_params = []
+
+    def query(self, model):
+        return _IntersectionQueryStub()
+
+    def execute(self, statement, params=None):
+        self.executed_params.append(dict(params or {}))
+
+        class _Result:
+            def scalar(self_inner):
+                return True  # ST_IsValid -> geometry is valid, proceed
+
+            def fetchall(self_inner):
+                return []  # no intersecting boundaries -- irrelevant to this test
+
+        return _Result()
+
+    def bulk_save_objects(self, objs):  # pragma: no cover - not reached (fetchall() is empty)
+        pass
+
+
+def test_process_intersections_stringifies_geometry_before_binding():
+    geom = _GeomLike("0103000020E6100000DEADBEEF")
+    alert = SimpleNamespace(id=1, identifier="CAP-GEOM-1", geom=geom)
+
+    poller = object.__new__(CAPPoller)
+    poller.logger = logging.getLogger("test_forwarding_pipeline_guard")
+    session = _CapturingGeometrySession()
+    poller.db_session = session
+
+    poller.process_intersections(alert)
+
+    geom_params = [
+        (key, value)
+        for params in session.executed_params
+        for key, value in params.items()
+        if "geom" in key
+    ]
+    assert geom_params, "expected at least one geometry bind parameter"
+    for key, value in geom_params:
+        assert isinstance(value, str), (
+            f"bind param {key!r} must be str(geom) -- psycopg2 cannot adapt "
+            f"a raw WKBElement -- got {type(value).__name__}"
+        )
+        assert value == str(geom)
+
+
+def test_has_geometry_changed_stringifies_both_geometries():
+    old = _GeomLike("OLD_HEX_GEOM")
+    new = _GeomLike("NEW_HEX_GEOM")
+
+    poller = object.__new__(CAPPoller)
+    poller.logger = logging.getLogger("test_forwarding_pipeline_guard")
+    session = _CapturingGeometrySession()
+    poller.db_session = session
+
+    poller._has_geometry_changed(old, new)
+
+    assert session.executed_params, "expected an ST_Equals execute() call"
+    params = session.executed_params[0]
+    assert params["old"] == "OLD_HEX_GEOM"
+    assert params["new"] == "NEW_HEX_GEOM"
+    assert isinstance(params["old"], str) and isinstance(params["new"], str)
+
+
+def test_has_geometry_changed_none_handling_unaffected():
+    poller = object.__new__(CAPPoller)
+    poller.logger = logging.getLogger("test_forwarding_pipeline_guard")
+    poller.db_session = _CapturingGeometrySession()
+
+    assert poller._has_geometry_changed(None, None) is False
+    assert poller._has_geometry_changed(None, _GeomLike("X")) is True
+    assert poller._has_geometry_changed(_GeomLike("X"), None) is True
+    # Neither None/None nor either-None path should have touched the DB.
+    assert poller.db_session.executed_params == []
+
+
+# ---------------------------------------------------------------------------
 # Alert-trail rendering of the forwarding outcome
 # ---------------------------------------------------------------------------
 

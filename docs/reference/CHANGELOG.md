@@ -8,6 +8,46 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.160.0] - 2026-08-13 - Fix silently-broken automatic boundary/intersection calculation
+
+### Fixed
+- **Root cause found for "boundaries aren't calculated automatically, I have to run a command":**
+  every raw-SQL intersection query bound `alert.geom` directly as a
+  parameter. `psycopg2` has no adapter registered for
+  `geoalchemy2.elements.WKBElement` — the type the ORM returns for any
+  already-persisted geometry column — so this raised
+  `psycopg2.ProgrammingError: can't adapt type 'WKBElement'` on **every**
+  call, silently caught and logged as a non-fatal error (by design, so a
+  PostGIS hiccup can never block saving or forwarding an alert). This
+  affected:
+  - `poller/cap_poller.py::process_intersections()` — the automatic,
+    ingest-time calculation for every new/updated CAP alert.
+  - `poller/cap_poller.py::_has_geometry_changed()` — silently defeated an
+    optimization (every update was treated as "geometry changed").
+  - `app_core/alerts.py::calculate_alert_intersections()` — used by the
+    **Fix Intersections** / **Recalculate All Intersections** admin
+    buttons (`webapp/admin/intersections.py`).
+  - Confirmed against a real PostGIS database: identical failure with the
+    pre-fix code, resolved by stringifying the geometry (`str(alert.geom)`
+    — its EWKB hex encoding, which PostGIS parses natively as raw SQL
+    text) before binding. The admin routes built on SQLAlchemy's
+    expression language (`func.ST_Intersects(alert.geom, ...)` inside a
+    `db.session.query(...)`) were never affected — SQLAlchemy applies the
+    `Geometry` column's bind processor for those automatically, which is
+    presumably the "command" that was working.
+
+### Added
+- **Boundaries now auto-recalculate on upload.** Uploading a GeoJSON or
+  shapefile boundary (`webapp/admin/boundaries.py`) now automatically
+  recalculates intersections for active (unexpired) alerts, instead of
+  requiring a manual "Fix Intersections" click afterward.
+- **Background retry sweep for intersection calculation**, mirroring the
+  existing forwarding-decision catch-up sweep: `poller/cap_poller.py`'s
+  poll loop now also retries intersection calculation (within a 24-hour
+  window) for any recent alert that has geometry but no intersection rows
+  yet — closing the "a transient failure was silently swallowed and never
+  retried" gap now that the underlying calculation itself is fixed.
+
 ## [2.159.0] - 2026-08-13 - Statistics page: remove fabricated metrics, add gated-alert stats
 
 ### Added

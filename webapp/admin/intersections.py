@@ -49,6 +49,45 @@ def register_intersection_routes(app: Flask, logger) -> None:
 
 # Route definitions
 
+def recalculate_active_alert_intersections() -> Dict[str, int]:
+    """Recalculate intersections for every currently-active (unexpired) alert.
+
+    Called automatically after a boundary is uploaded, edited, or replaced
+    (see webapp/admin/boundaries.py) so alerts that already existed pick up
+    the new/changed boundary immediately, instead of requiring an operator
+    to notice and click one of the manual "Fix Intersections" buttons.
+    Scoped to active alerts rather than the full history so it stays fast
+    enough to run inline in the upload request.
+    """
+    now = utc_now()
+    active_alerts = (
+        CAPAlert.query
+        .filter(CAPAlert.geom.isnot(None))
+        .filter(CAPAlert.expires.isnot(None))
+        .filter(CAPAlert.expires > now)
+        .all()
+    )
+
+    intersections_created = 0
+    errors = 0
+    for alert in active_alerts:
+        try:
+            intersections_created += calculate_alert_intersections(alert)
+        except Exception as exc:  # pragma: no cover - defensive
+            errors += 1
+            current_app.logger.error(
+                "Error recalculating intersections for alert %s after boundary change: %s",
+                alert.identifier, exc,
+            )
+
+    db.session.commit()
+    return {
+        "alerts_processed": len(active_alerts),
+        "intersections_created": intersections_created,
+        "errors": errors,
+    }
+
+
 @intersections_bp.route("/admin/fix_county_intersections", methods=["POST"])
 @require_permission('system.configure')
 def fix_county_intersections():
@@ -397,4 +436,4 @@ def calculate_single_alert(alert_id: int):
         return jsonify({"error": f"Failed to calculate intersections: {exc}"}), 500
 
 
-__all__ = ["register_intersection_routes"]
+__all__ = ["register_intersection_routes", "recalculate_active_alert_intersections"]
