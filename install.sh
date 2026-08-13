@@ -1618,6 +1618,11 @@ sudo -u postgres psql -d alerts -c "CREATE EXTENSION IF NOT EXISTS postgis_topol
 
 echo_success "PostgreSQL configured"
 
+# Apply cluster-wide PostgreSQL safety tuning (e.g. idle_in_transaction_session_timeout)
+if [ -f "$INSTALL_DIR/scripts/database/apply_postgres_tuning.sh" ]; then
+    bash "$INSTALL_DIR/scripts/database/apply_postgres_tuning.sh" || echo_warning "PostgreSQL tuning step failed (non-critical)"
+fi
+
 # Command-line database access
 echo ""
 echo_info "Database access available via: ${BOLD}sudo -u postgres psql -d alerts${NC}"

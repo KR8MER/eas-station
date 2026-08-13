@@ -8,10 +8,25 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.153.4] - 2026-08-12 - Alert Verification stops loading audio it never shows
+## [2.153.5] - 2026-08-12 - Alert Verification stops loading audio it never shows
 
 ### Fixed
 - **The Alert Verification page loaded every audio blob in the display window just to show delivery status.** `collect_alert_delivery_records()` queried whole `EASMessage` ORM rows, which drags along all six `LargeBinary` audio columns even though the page only reads `same_header`, `created_at` and `metadata_payload`. Measured on production: 235 messages averaging ~6.4 MB of audio each meant the default 30-day window pulled roughly **180 MB from Postgres on every page load** — for bytes that were never rendered. Switched to `EASMessage.without_audio()`, which defers all six blob columns in SQL. Added `tests/test_alert_verification_queries.py`, which inspects the emitted SQL to pin this query shape and catch a regression back to `EASMessage.query`.
+
+## [2.153.4] - 2026-08-12 - Idle-in-transaction sessions get a timeout
+
+### Fixed
+- **`idle_in_transaction_session_timeout` was unlimited (0) in production.**
+  A live audit found several `eas-station` app sessions sitting idle in an
+  open transaction for 20+ minutes on dashboard-style count queries. A
+  long-held open transaction pins Postgres's vacuum cleanup horizon, which
+  lines up with autovacuum never having completed a single run on the
+  largest tables despite heavy dead-tuple accumulation. Added
+  `scripts/database/apply_postgres_tuning.sh`, an idempotent script that
+  applies a 5-minute timeout via `ALTER SYSTEM` + reload (no restart
+  required), wired into both `install.sh` (fresh installs) and `update.sh`
+  (existing deployments) so the fix persists instead of only living in a
+  one-off manual `ALTER SYSTEM` call.
 
 ## [2.153.3] - 2026-08-11 - Page-chrome clocks tell the truth
 
