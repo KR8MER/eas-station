@@ -8,6 +8,41 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.154.2] - 2026-08-13 - Alert narration no longer sits ~15 dB below the tones
+
+### Fixed
+- **TTS/embedded/relay narration was mixed into broadcasts at whatever raw
+  level the source happened to produce, with no leveling against the SAME
+  header, attention tone and EOM tones — which are always generated at a
+  fixed, controlled amplitude.** `EASAudioGenerator.build_files()` (the
+  automatic path used for real NOAA/IPAWS alerts) appended `voice_samples`
+  straight into the composite. Measured against production audio: the
+  attention tone sits at -9.1 dB mean/RMS; Azure OpenAI TTS narration
+  measured -24.7 to -24.8 dB across four separate alerts, and IPAWS-embedded
+  audio -21.9 dB — a consistent ~13-16 dB gap, easily described as "wildly
+  different" volume between the tone and the voice message. Every source
+  that can populate `voice_samples` (TTS synthesis, IPAWS-embedded audio, OTA
+  relay capture) funnels through the same code path, so a single fix point
+  covers all three.
+- `build_manual_components()` (the manual/uploaded-narration broadcast path)
+  already normalized narration to the tone's RMS via
+  `_normalize_audio_amplitude()`; `build_files()` never called it. Added the
+  same call to `build_files()`'s narration handling.
+- **Also hardened `_normalize_audio_amplitude()` itself**: pure RMS matching
+  against real TTS audio caused ~2.5% of samples to hard-clip, because
+  speech has a much higher peak-to-RMS ratio (crest factor) than the
+  sine-wave tones the function was modeled on. Added a peak-safety cap so
+  the resulting gain never pushes the loudest sample in a clip past full
+  scale; loudness falls a little short of the RMS target only for unusually
+  peaky source audio, in exchange for zero clipping. This also improves the
+  existing manual-narration path, which had the same latent risk.
+- Added `tests/test_narration_loudness_normalization.py`: unit coverage for
+  the peak-safety cap (verifies no clipping on high-crest-factor input, and
+  that low-crest-factor input still reaches the target RMS), plus an
+  integration test that stubs a quiet TTS engine and asserts the tone/
+  narration RMS gap in the generated composite stays under 6 dB instead of
+  regressing to the ~15-16 dB gap this fix addresses.
+
 ## [2.154.1] - 2026-08-13 - Static asset URLs stop double-appending the cache-bust param
 
 ### Fixed
