@@ -500,7 +500,7 @@
                                     {% endif %}
                                     {% elif alert.superseded_by_id %}
                                     <span class="badge bg-secondary">{{ alert.status }}</span>
-                                    <span class="badge bg-info text-dark">SUPERSEDED</span>
+                                    <a href="/alerts/{{ alert.superseded_by_id }}" class="badge bg-info text-dark" title="Click to view the alert that superseded this one">SUPERSEDED</a>
                                     {% else %}
                                     <span class="badge bg-{% if alert.status == 'Actual' %}success{% else %}secondary{% endif %}">
                                         {{ alert.status }}
