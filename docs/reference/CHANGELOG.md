@@ -8,6 +8,43 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.159.0] - 2026-08-13 - Statistics page: remove fabricated metrics, add gated-alert stats
+
+### Added
+- New **Gated Alerts** section on `/stats`: a headline "Alerts Gated" count,
+  plus a Pending / Auto-Released / Approved Early / Cancelled breakdown,
+  backed by a new `webapp/public/stats_sections/gating.py` section querying
+  the `gated_alerts` table added in 2.158.0.
+
+### Removed
+- **"Days Online"** stat card — it was never backed by real data. The number
+  came from a per-browser `localStorage` value the user had to type in
+  manually (defaulting to a hardcoded `2024-01-01` on first visit), not any
+  server-side install or first-alert date. Removed the card, its JS, and the
+  now-orphaned "System Start Date" settings panel that existed only to let
+  someone manually correct the fake number.
+- Dead `lifecycle_timeline` placeholder — computed on every page load and
+  threaded all the way into the client-side `statsData` object, but never
+  read by any chart or table ("a chart that is not wired up yet," per the
+  original comment). Removed from both the Python aggregator and the
+  template's JS payload.
+
+### Fixed
+- **"Reliability" card silently showed a fabricated 99%** when there was no
+  poller history to compute a real success rate from, rather than indicating
+  the number wasn't real. Now shows an em dash with "No poll history yet"
+  instead of a made-up figure.
+- **"Avg Broadcast Latency" showed a literal `N/A` card** when there were no
+  EAS broadcasts yet. The card is now hidden entirely in that case, matching
+  how every other data-dependent card/section on the page already behaves.
+- **"System Performance" section header could float over an empty grid** —
+  its guard checked for the presence of the `polling` dict (always
+  non-empty, even with zero poll history) rather than whether either chart
+  inside it actually had anything to show. Guard now matches the inner
+  per-chart conditions.
+- Fixed the "EAS Received" card using an undefined `yellow` stat-card color
+  class (silently falling back to unstyled default rendering).
+
 ## [2.158.1] - 2026-08-13 - Fix missing CAP-side gated-alerts release scheduler
 
 ### Fixed

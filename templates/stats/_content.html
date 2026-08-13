@@ -127,19 +127,30 @@
             </div>
         </div>
         <div class="col-lg-2 col-md-4 col-sm-6">
-            <div class="stat-card red">
-                <i class="fas fa-server stat-icon"></i>
-                <div class="stat-number" id="uptime-days">-</div>
-                <div class="stat-label">Days Online</div>
-                <div class="stat-subtitle">System uptime</div>
-            </div>
-        </div>
-        <div class="col-lg-2 col-md-4 col-sm-6">
+            {% if polling and polling.success_rate %}
             <div class="stat-card teal">
                 <i class="fas fa-check-circle stat-icon"></i>
-                <div class="stat-number">{{ (polling.success_rate * 100) | round(0) if polling and polling.success_rate else 99 }}%</div>
+                <div class="stat-number">{{ (polling.success_rate * 100) | round(0) }}%</div>
                 <div class="stat-label">Reliability</div>
-                <div class="stat-subtitle">Data accuracy</div>
+                <div class="stat-subtitle">Poller success rate</div>
+            </div>
+            {% else %}
+            <div class="stat-card teal">
+                <i class="fas fa-check-circle stat-icon"></i>
+                <div class="stat-number">&mdash;</div>
+                <div class="stat-label">Reliability</div>
+                <div class="stat-subtitle">No poll history yet</div>
+            </div>
+            {% endif %}
+        </div>
+        <div class="col-lg-2 col-md-4 col-sm-6">
+            <div class="stat-card red">
+                <i class="fas fa-hourglass-half stat-icon"></i>
+                <div class="stat-number">{{ gated_alert_stats.total or 0 }}</div>
+                <div class="stat-label">Alerts Gated</div>
+                <div class="stat-subtitle">
+                    {% if gated_alert_stats.enabled %}Hold-off: {{ gated_alert_stats.hold_off_seconds or 0 }}s{% else %}Gating disabled{% endif %}
+                </div>
             </div>
         </div>
     </div>
@@ -147,7 +158,7 @@
     <!-- EAS Activity Cards -->
     <div class="row mt-2">
         <div class="col-lg-3 col-md-6 col-sm-6">
-            <div class="stat-card yellow">
+            <div class="stat-card purple">
                 <i class="fas fa-satellite-dish stat-icon"></i>
                 <div class="stat-number">{{ received_eas_stats.total or 0 }}</div>
                 <div class="stat-label">EAS Received</div>
@@ -179,6 +190,47 @@
             </div>
         </div>
     </div>
+
+    {% if gated_alert_stats.total %}
+    <!-- Gated Alerts Breakdown -->
+    <h2 class="section-header">
+        <i class="fas fa-hourglass-half"></i> Gated Alerts
+    </h2>
+    <div class="row mt-2">
+        <div class="col-lg-3 col-md-6 col-sm-6">
+            <div class="stat-card orange">
+                <i class="fas fa-clock stat-icon"></i>
+                <div class="stat-number">{{ gated_alert_stats.pending or 0 }}</div>
+                <div class="stat-label">Pending Now</div>
+                <div class="stat-subtitle">Awaiting review or release</div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 col-sm-6">
+            <div class="stat-card blue">
+                <i class="fas fa-hourglass-end stat-icon"></i>
+                <div class="stat-number">{{ gated_alert_stats.released or 0 }}</div>
+                <div class="stat-label">Auto-Released</div>
+                <div class="stat-subtitle">Timer expired, broadcast</div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 col-sm-6">
+            <div class="stat-card green">
+                <i class="fas fa-check stat-icon"></i>
+                <div class="stat-number">{{ gated_alert_stats.approved or 0 }}</div>
+                <div class="stat-label">Approved Early</div>
+                <div class="stat-subtitle">Operator released</div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 col-sm-6">
+            <div class="stat-card red">
+                <i class="fas fa-ban stat-icon"></i>
+                <div class="stat-number">{{ gated_alert_stats.cancelled or 0 }}</div>
+                <div class="stat-label">Cancelled</div>
+                <div class="stat-subtitle">Operator blocked</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- EAS Forwarding Funnel -->
     <div class="chart-grid-large" id="forwardingFunnelWrapper">
@@ -213,20 +265,16 @@
                 <div class="stat-subtitle">{{ update_rate or 0 }}% updates</div>
             </div>
         </div>
+        {% if broadcast_latency %}
         <div class="col-lg-3 col-md-6 col-sm-6">
             <div class="stat-card purple">
                 <i class="fas fa-stopwatch stat-icon"></i>
-                {% if broadcast_latency %}
                 <div class="stat-number">{{ (broadcast_latency.avg_seconds / 60) | round(1) }}m</div>
                 <div class="stat-label">Avg Broadcast Latency</div>
                 <div class="stat-subtitle">Alert → EAS audio</div>
-                {% else %}
-                <div class="stat-number">N/A</div>
-                <div class="stat-label">Avg Broadcast Latency</div>
-                <div class="stat-subtitle">No EAS broadcasts yet</div>
-                {% endif %}
             </div>
         </div>
+        {% endif %}
         <div class="col-lg-3 col-md-6 col-sm-6">
             <div class="stat-card green">
                 <i class="fas fa-plug stat-icon"></i>
@@ -234,18 +282,6 @@
                 <div class="stat-label">Relay Activations</div>
                 <div class="stat-subtitle">{{ relay_stats.success_rate or 0 }}% success rate</div>
             </div>
-        </div>
-    </div>
-
-    <!-- System Start Date Setting -->
-    <div class="settings-panel">
-        <h4><i class="fas fa-cog"></i> System Start Date</h4>
-        <p class="text-muted mb-3" style="font-size: 0.9rem;">Set the date when your system started tracking alerts. This affects the "Days Online" calculation.</p>
-        <div class="settings-row">
-            <label for="systemStartDate">Start Date:</label>
-            <input type="date" id="systemStartDate">
-            <button class="btn btn-sm apply" id="updateStartDateBtn"><i class="fas fa-save"></i> Save</button>
-            <button class="btn btn-sm reset" id="resetStartDateBtn"><i class="fas fa-undo"></i> Reset</button>
         </div>
     </div>
 
@@ -601,7 +637,7 @@
     {% endif %}
 
     <!-- System Performance -->
-    {% if polling or avg_durations %}
+    {% if (polling and polling.success_rate) or (avg_durations and avg_durations|length > 0) %}
     <h2 class="section-header">
         <i class="fas fa-tachometer-alt"></i> System Performance
     </h2>
