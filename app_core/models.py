@@ -81,6 +81,7 @@ from ._models_alerts import (
     USCountyBoundary,
 )
 from ._models_admin import AdminSession, AdminUser, SystemLog
+from ._models_gating import AlertGatingSettings, GatedAlert
 from ._models_polling import PollDebugRecord, PollHistory, PollerSettings
 from ._models_settings import (
     AlertFilterSettings,
@@ -143,6 +144,7 @@ __all__ = [
     "db",
     "AlertDeliveryReport",
     "AlertFilterSettings",
+    "AlertGatingSettings",
     "ApplicationSettings",
     "AudioAlert",
     "AudioHealthStatus",
@@ -157,6 +159,7 @@ __all__ = [
     "EASDecodedAudio",
     "EASMessage",
     "Fail2banSettings",
+    "GatedAlert",
     "GPIOActivationLog",
     "IcecastSettings",
     "Intersection",

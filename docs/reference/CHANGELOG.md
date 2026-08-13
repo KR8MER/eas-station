@@ -8,6 +8,38 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.158.0] - 2026-08-13 - Gated alerts: hold-off timer with manual operator override
+
+### Added
+- **New optional feature: lower-priority CAP/OTA alerts can now be held for
+  a configurable hold-off timer before broadcasting, instead of airing
+  immediately.** An operator watching the new Pending Alerts queue can
+  approve a held alert early or cancel it outright; if nobody acts, it
+  auto-releases and broadcasts normally once the timer expires. Disabled by
+  default — enabling it changes nothing about *which* alerts broadcast,
+  only *when* the lower-priority ones do.
+  - **Immediate urgency or Extreme severity alerts always bypass the gate**
+    and broadcast immediately, unchanged from today — gating never delays
+    a Tornado Warning or similarly urgent product.
+  - Applies to both ingest paths: the CAP poller (NOAA/IPAWS feed alerts)
+    and the OTA relay (alerts decoded off the air).
+  - New `gated_alerts` / `alert_gating_settings` tables and a `GatedAlert`
+    state machine (`pending → approved | cancelled | released`) inserted
+    into the existing `auto_forward_cap_alert()` / `auto_forward_ota_alert()`
+    check chains in `app_core/audio/auto_forward.py` — release simply
+    re-invokes the same function, so the broadcast tail (dedup, audio
+    generation, GPIO, notifications) is never duplicated.
+  - Background release schedulers run in the poller and EAS-monitor
+    services (never the web app), sweeping for expired holds roughly every
+    15–30 seconds.
+  - New admin pages: **Settings → Alert Gating** (enable/disable, hold-off
+    duration) and **Broadcast → Pending Alerts** (live countdown, Approve/
+    Cancel, real-time via WebSocket push with automatic polling fallback).
+  - New optional GPIO behavior, **Gated Alert Pending**, for a lamp or
+    buzzer that stays active while the queue is non-empty — useful for an
+    unattended studio. Assignable from the existing GPIO pin map.
+  - See `docs/guides/GATED_ALERTS.md` for the full operator guide.
+
 ## [2.157.1] - 2026-08-13 - Overlapping alerts on the dashboard map no longer blob together
 
 ### Fixed

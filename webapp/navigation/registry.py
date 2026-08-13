@@ -212,6 +212,13 @@ _BROADCAST = NavSection(
                     description="Every message this station has transmitted.",
                     permissions=(EAS_VIEW,),
                 ),
+                NavItem(
+                    label="Pending Alerts",
+                    icon="fas fa-hourglass-half",
+                    endpoint="pending_alerts.pending_alerts_list",
+                    description="Alerts held during the gating window, awaiting broadcast or cancellation.",
+                    permissions=(EAS_VIEW,),
+                ),
             ),
         ),
         NavGroup(

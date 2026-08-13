@@ -452,6 +452,93 @@ def _publish_endec_feed(
         pass
 
 
+# Gated-alerts hold-off timer.  ``GatedAlert.status`` is the single source of
+# truth this gate re-checks on every invocation, which is what makes holding
+# an alert idempotent against the CAP poller's forwarding retry sweep and
+# duplicate OTA callbacks -- see _resolve_gate() below.
+GATE_STATUS_PENDING = "pending"
+GATE_STATUS_APPROVED = "approved"
+GATE_STATUS_CANCELLED = "cancelled"
+GATE_STATUS_RELEASED = "released"
+
+
+def _bypasses_gate(severity: Optional[str], urgency: Optional[str]) -> bool:
+    """Immediate urgency or Extreme severity alerts always broadcast
+    immediately -- the hold-off gate never applies to them."""
+    return (
+        str(severity or '').strip().lower() == 'extreme'
+        or str(urgency or '').strip().lower() == 'immediate'
+    )
+
+
+def _json_safe_ota_payload(alert_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """Strip audio bytes and coerce non-JSON values so an OTA alert_dict can
+    round-trip through a JSON column for later replay by the gate release
+    path (timer expiry or operator approve)."""
+    import json
+
+    def _default(value):
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return str(value)
+
+    safe = {k: v for k, v in alert_dict.items() if k != 'relay_audio_wav'}
+    return json.loads(json.dumps(safe, default=_default))
+
+
+def _resolve_gate(db_session, *, source: str, lookup_kwargs: Dict[str, Any], defaults: Dict[str, Any]):
+    """Idempotent lookup-or-create against GatedAlert.
+
+    Returns ``(action, gate_row)`` where ``action`` is:
+      'proceed' -- gating disabled, or an existing row is approved/released;
+                   caller should fall through to the normal broadcast tail.
+      'hold'    -- a pending row exists (new or pre-existing); caller should
+                   return early without broadcasting.
+      'blocked' -- the row was cancelled by an operator; caller should
+                   return early without broadcasting, permanently.
+    """
+    try:
+        from app_core.models import AlertGatingSettings, GatedAlert
+    except Exception as exc:
+        logger.debug("Gated-alerts models unavailable (%s); gating disabled", exc)
+        return 'proceed', None
+
+    # Use the explicit db_session (not GatedAlert.query) -- this function is
+    # called from both the CAP poller (a plain SQLAlchemy Session, no Flask
+    # app context) and Flask-context callers (OTA monitor, web routes).
+    # GatedAlert.query is a Flask-SQLAlchemy convenience bound to the current
+    # app context and would raise outside one.
+    existing = db_session.query(GatedAlert).filter_by(**lookup_kwargs).first()
+    if existing is not None:
+        if existing.status == GATE_STATUS_PENDING:
+            return 'hold', existing
+        if existing.status == GATE_STATUS_CANCELLED:
+            return 'blocked', existing
+        # approved / released -- already cleared to broadcast.
+        return 'proceed', existing
+
+    try:
+        settings = db_session.get(AlertGatingSettings, 1)
+    except Exception as exc:
+        logger.debug("Could not load AlertGatingSettings (%s); gating disabled", exc)
+        settings = None
+
+    if not settings or not settings.enabled:
+        return 'proceed', None
+
+    hold_off_seconds = max(int(settings.hold_off_seconds or 0), 0)
+    hold_until = datetime.now(timezone.utc) + timedelta(seconds=hold_off_seconds)
+    gate_row = GatedAlert(
+        source=source,
+        status=GATE_STATUS_PENDING,
+        hold_until=hold_until,
+        **defaults,
+    )
+    db_session.add(gate_row)
+    db_session.commit()
+    return 'hold', gate_row
+
+
 def auto_forward_cap_alert(
     cap_alert,
     alert_data: Dict[str, Any],
@@ -663,6 +750,47 @@ def auto_forward_cap_alert(
                 fips_codes_for_dedup = fips_codes
         else:
             fips_codes_for_dedup = fips_codes
+
+        # ── Gated-alerts hold-off timer ────────────────────────────────────
+        # Immediate urgency / Extreme severity always bypass the gate.
+        # Everything else, if gating is enabled, is held for operator review
+        # (approve/cancel) or an auto-release timer before broadcasting.
+        cap_severity = getattr(cap_alert, 'severity', None)
+        cap_urgency = getattr(cap_alert, 'urgency', None)
+        cap_alert_id = getattr(cap_alert, 'id', None)
+        if not _bypasses_gate(cap_severity, cap_urgency):
+            gate_action, gate_row = _resolve_gate(
+                db_session,
+                source='cap',
+                lookup_kwargs={'source': 'cap', 'cap_alert_id': cap_alert_id},
+                defaults={
+                    'cap_alert_id': cap_alert_id,
+                    'identifier': result['identifier'],
+                    'event_code': event_code,
+                    'event': getattr(cap_alert, 'event', None),
+                    'severity': cap_severity,
+                    'urgency': cap_urgency,
+                    'headline': getattr(cap_alert, 'headline', None),
+                },
+            )
+            if gate_action == 'hold':
+                reason = (
+                    f"Pending — held for gated-alert timer, releases "
+                    f"{gate_row.hold_until.isoformat()} unless approved or cancelled"
+                )
+                log.info("Auto-forward held for gating: %s: %s", result['identifier'], reason)
+                result['reason'] = reason
+                result['pending_alert_id'] = gate_row.id
+                _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
+                return result
+            if gate_action == 'blocked':
+                reason = "Cancelled by operator via gated-alert queue"
+                log.info("Auto-forward blocked for %s: %s", result['identifier'], reason)
+                result['reason'] = reason
+                _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
+                return result
+            # 'proceed' -- gating disabled, or an approved/released row -- falls
+            # through unchanged to the dedup + broadcast tail below.
 
         # Cross-source deduplication (skipped for UPG).  Take a per-alert
         # advisory lock so concurrent CAP/OTA arrivals for the same alert
@@ -962,6 +1090,41 @@ def auto_forward_ota_alert(
             certainty='Observed',
             raw_json=None,
         )
+
+        # ── Gated-alerts hold-off timer ────────────────────────────────────
+        # Same gate as the CAP path, keyed by the stable OTA correlation ID
+        # instead of a CAPAlert row (none exists for an off-air decode).
+        if not _bypasses_gate(alert_object.severity, alert_object.urgency):
+            gate_action, gate_row = _resolve_gate(
+                db_session,
+                source='ota',
+                lookup_kwargs={'source': 'ota', 'identifier': _ota_id},
+                defaults={
+                    'identifier': _ota_id,
+                    'event_code': event_code,
+                    'event': event_name,
+                    'severity': alert_object.severity,
+                    'urgency': alert_object.urgency,
+                    'headline': alert_object.headline,
+                    'ota_payload': _json_safe_ota_payload(alert_dict),
+                    'ota_audio_wav': relay_audio_wav,
+                },
+            )
+            if gate_action == 'hold':
+                reason = (
+                    f"Pending — held for gated-alert timer, releases "
+                    f"{gate_row.hold_until.isoformat()} unless approved or cancelled"
+                )
+                log.info("OTA auto-forward held for gating: %s", reason)
+                result['reason'] = reason
+                result['pending_alert_id'] = gate_row.id
+                return result
+            if gate_action == 'blocked':
+                result['reason'] = "Cancelled by operator via gated-alert queue"
+                log.info("OTA auto-forward blocked: %s", result['reason'])
+                return result
+            # 'proceed' -- gating disabled, or an approved/released row -- falls
+            # through unchanged to the dedup + broadcast tail below.
 
         # Build human-readable area description from FIPS codes for TTS narration
         try:

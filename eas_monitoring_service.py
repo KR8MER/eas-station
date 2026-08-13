@@ -1341,6 +1341,18 @@ def main():
             logger.error("initialize_eas_monitor raised an exception: %s", eas_exc, exc_info=True)
             eas_monitor = None
 
+        # Start the gated-alerts release scheduler (OTA path).  Releases
+        # pending gated alerts once their hold-off timer expires; a no-op
+        # sweep when the gated-alerts feature is disabled or no alerts are
+        # pending.  Must run in this process (has a Flask app + owns the
+        # OTA auto-forward path) -- never in the Gunicorn web app.
+        try:
+            from app_core.gating_scheduler import start_scheduler as start_gating_scheduler
+            start_gating_scheduler(app)
+            logger.info("✅ Gated-alerts release scheduler started")
+        except Exception as gating_sched_exc:
+            logger.warning("Gated-alerts release scheduler could not be started: %s", gating_sched_exc)
+
         if not eas_monitor:
             logger.error("Failed to initialize EAS monitor")
             return 1
@@ -2218,6 +2230,13 @@ def main():
                 command_subscriber.stop()
             except Exception as e:
                 logger.warning(f"Error stopping command subscriber: {e}")
+
+        # Stop the gated-alerts release scheduler
+        try:
+            from app_core.gating_scheduler import stop_scheduler as stop_gating_scheduler
+            stop_gating_scheduler()
+        except Exception as e:
+            logger.warning(f"Error stopping gated-alerts release scheduler: {e}")
 
         # Stop EAS monitor(s) - works for both single and multi-monitor
         if _eas_monitor:

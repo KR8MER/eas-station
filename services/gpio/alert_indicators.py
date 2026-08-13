@@ -310,7 +310,9 @@ def update_alert_indicators(
     active_alert_count_fn: Optional[Callable[[], int]] = None,
     gpio_controller=None,
     relay_state: Optional[dict] = None,
-) -> Tuple[bool, bool, Optional[TowerState]]:
+    gate_pending_was_active: bool = False,
+    pending_gate_count_fn: Optional[Callable[[], int]] = None,
+) -> Tuple[bool, bool, Optional[TowerState], bool]:
     """Resolve and apply the indicator state for this refresh.
 
     The NeoPixel keeps its original edge-triggered behaviour (alert
@@ -331,8 +333,15 @@ def update_alert_indicators(
     Any failure is swallowed and treated as zero so a database hiccup can never
     crash the indicator loop.
 
-    Returns ``(broadcast_active, incoming_active, tower_state)`` so the
-    caller can carry state across iterations.
+    *pending_gate_count_fn*, when supplied, returns the number of alerts
+    currently sitting in the gated-alerts Pending Alerts queue. Drives the
+    GATE_PENDING relay behavior (a lamp/buzzer telling an operator something
+    needs review) -- edge-triggered against *gate_pending_was_active* like
+    the broadcast/incoming markers, since this is queue-depth level state,
+    not a single alert's lifecycle.
+
+    Returns ``(broadcast_active, incoming_active, tower_state,
+    gate_pending_active)`` so the caller can carry state across iterations.
     """
     redis_ok = _redis_ok()
     try:
@@ -358,6 +367,15 @@ def update_alert_indicators(
             logger.debug("active alert count lookup failed: %s", exc)
             active_alert_count = 0
 
+    pending_gate_count = 0
+    if pending_gate_count_fn is not None:
+        try:
+            pending_gate_count = int(pending_gate_count_fn())
+        except Exception as exc:
+            logger.debug("pending gate count lookup failed: %s", exc)
+            pending_gate_count = 0
+    gate_pending_active = pending_gate_count > 0
+
     # Relay (transmitter PTT / audio mute / duration / flash): keyed here in the
     # single pin-owning subprocess, off the broadcast-state edges.
     _key_relay_on_edges(
@@ -370,6 +388,16 @@ def update_alert_indicators(
         incoming_was_active,
         relay_state=relay_state,
     )
+
+    # GATE_PENDING relay: edge-triggered on queue depth crossing zero, not on
+    # a single alert's lifecycle -- mirrors the incoming/broadcast edges above.
+    if gate_pending_active != gate_pending_was_active:
+        behavior_manager = getattr(gpio_controller, "behavior_manager", None)
+        if behavior_manager is not None:
+            try:
+                behavior_manager.set_gate_pending(gate_pending_active)
+            except Exception as exc:
+                logger.warning("GPIO gate-pending indicator update failed: %s", exc)
 
     # NeoPixel: original two-state edge behaviour.
     if neopixel_controller:
@@ -417,7 +445,7 @@ def update_alert_indicators(
                 # Keep the old state so the next refresh retries the write.
                 logger.warning("Tower light state change failed: %s", exc)
 
-    return broadcast_active, incoming_active, tower_state
+    return broadcast_active, incoming_active, tower_state, gate_pending_active
 
 
 class AlertIndicatorMonitor:
@@ -443,14 +471,17 @@ class AlertIndicatorMonitor:
         neopixel_controller=None,
         active_alert_count_fn: Optional[Callable[[], int]] = None,
         gpio_controller=None,
+        pending_gate_count_fn: Optional[Callable[[], int]] = None,
     ) -> None:
         self.tower_light_controller = tower_light_controller
         self.neopixel_controller = neopixel_controller
         self.active_alert_count_fn = active_alert_count_fn
         self.gpio_controller = gpio_controller
+        self.pending_gate_count_fn = pending_gate_count_fn
         self._broadcast_was_active = False
         self._incoming_was_active = False
         self._tower_state: Optional[TowerState] = None
+        self._gate_pending_was_active = False
         #: Relay bookkeeping carried between broadcast edges (which keying path
         #: the rising edge used).  Guarded by the same lock as the edge flags.
         self._relay_state: dict = {}
@@ -467,6 +498,7 @@ class AlertIndicatorMonitor:
                 self._broadcast_was_active,
                 self._incoming_was_active,
                 self._tower_state,
+                self._gate_pending_was_active,
             ) = update_alert_indicators(
                 self._broadcast_was_active,
                 self._incoming_was_active,
@@ -476,5 +508,7 @@ class AlertIndicatorMonitor:
                 active_alert_count_fn=self.active_alert_count_fn,
                 gpio_controller=self.gpio_controller,
                 relay_state=self._relay_state,
+                gate_pending_was_active=self._gate_pending_was_active,
+                pending_gate_count_fn=self.pending_gate_count_fn,
             )
             return self._broadcast_was_active, self._incoming_was_active

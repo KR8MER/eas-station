@@ -160,6 +160,8 @@ LOGS_UPDATE_INTERVAL = 10.0        # Log viewer updates
 BROADCAST_STATE_INTERVAL = 1.0     # Airchain broadcast state (1Hz during broadcast)
 ALERTS_UPDATE_INTERVAL = 5.0       # Active CAP alert list (changes infrequently;
                                    # 5 s gives near-real-time feel without DB load)
+PENDING_ALERTS_UPDATE_INTERVAL = 2.0  # Gated-alerts pending queue (small table;
+                                   # short interval needed for a live countdown)
 
 
 def start_websocket_push(app: 'Flask', socketio: 'SocketIO') -> None:
@@ -335,6 +337,8 @@ def _push_worker_slow(app: 'Flask', socketio: 'SocketIO') -> None:
     last_logs_emit = 0.0
     last_alerts_emit = 0.0
     last_alerts_signature: Optional[str] = None
+    last_pending_alerts_emit = 0.0
+    last_pending_alerts_signature: Optional[str] = None
     last_config_cache_refresh = 0.0
 
     with app.app_context():
@@ -426,6 +430,16 @@ def _push_worker_slow(app: 'Flask', socketio: 'SocketIO') -> None:
                     last_alerts_emit = now
                 except Exception as e:
                     logger.debug(f"Error emitting alerts_update: {e}")
+                    _recover_db_session()
+
+            if now - last_pending_alerts_emit >= PENDING_ALERTS_UPDATE_INTERVAL:
+                try:
+                    new_sig = _emit_pending_alerts_update(app, socketio, last_pending_alerts_signature)
+                    if new_sig is not None:
+                        last_pending_alerts_signature = new_sig
+                    last_pending_alerts_emit = now
+                except Exception as e:
+                    logger.debug(f"Error emitting pending_alerts_update: {e}")
                     _recover_db_session()
 
             # 1 s base tick — slow emits don't need sub-second timing
@@ -942,6 +956,57 @@ def _emit_alerts_update(
         'timestamp': time.time(),
     }
     _safe_emit(socketio, 'alerts_update', payload)
+    return signature
+
+
+def _emit_pending_alerts_update(
+    app: 'Flask',
+    socketio: 'SocketIO',
+    last_signature: Optional[str],
+) -> Optional[str]:
+    """Emit the gated-alerts hold-off timer's Pending Alerts queue.
+
+    Pushes a compact list (id, event, severity, urgency, headline, source,
+    hold_until) so the Pending Alerts page can render a live countdown
+    without its own polling loop. The table is always small (a handful of
+    rows at most), so this query is cheap even at a short interval.
+
+    Returns the new signature so the caller can cache it. Returning None
+    means "no change, leave the previous signature in place".
+    """
+    import hashlib
+
+    try:
+        from app_core.models import GatedAlert
+    except Exception as e:
+        logger.debug(f"pending_alerts_update unavailable: {e}")
+        return None
+
+    try:
+        rows = (
+            GatedAlert.without_audio()
+            .filter_by(status='pending')
+            .order_by(GatedAlert.hold_until.asc())
+            .limit(50)
+            .all()
+        )
+    except Exception as e:
+        logger.debug(f"pending_alerts_update DB query failed: {e}")
+        return None
+
+    alerts = [row.to_dict() for row in rows]
+
+    # Cheap signature: (id, status) pairs -- catches new/resolved rows.
+    sig_input = '|'.join(f"{a['id']}:{a['status']}" for a in alerts)
+    signature = hashlib.sha256(sig_input.encode('utf-8')).hexdigest()
+
+    payload = {
+        'alerts': alerts,
+        'count': len(alerts),
+        'changed': signature != last_signature,
+        'timestamp': time.time(),
+    }
+    _safe_emit(socketio, 'pending_alerts_update', payload)
     return signature
 
 

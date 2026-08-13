@@ -223,8 +223,12 @@ flowchart TD
     subgraph AutoPath["Automatic Path (v2.52.0+)"]
         CAP_IN[New CAP Alert<br/>IPAWS / NOAA] --> DEDUP{Cross-Source<br/>Duplicate?}
         OTA_IN[OTA Alert Received<br/>FIPS Match] --> DEDUP
-        DEDUP -->|No| AUTO_FWD[auto_forward.py<br/>EASBroadcaster.handle_alert]
+        DEDUP -->|No| GATE{Gating Enabled? &<br/>Not Immediate/Extreme?}
         DEDUP -->|Yes| SKIP[Skip<br/>Already broadcast]
+        GATE -->|No| AUTO_FWD[auto_forward.py<br/>EASBroadcaster.handle_alert]
+        GATE -->|Yes| PENDING[(Pending Alerts Queue<br/>gated_alerts)]
+        PENDING -->|Approve / Timer Expires| AUTO_FWD
+        PENDING -->|Cancel| BLOCKED[Blocked<br/>Never broadcasts]
     end
 
     subgraph ManualPath["Manual Path"]
@@ -269,6 +273,7 @@ flowchart TD
 **Automatic Forwarding (v2.52.0+):**
 - **CAP alerts** (`poller/cap_poller.py`) — after saving a new alert, calls `auto_forward_cap_alert()` which triggers `EASBroadcaster.handle_alert()` for full SAME + audio + GPIO broadcast
 - **OTA alerts** (`app_core/audio/alert_forwarding.py`) — when a FIPS-matched OTA alert is received, calls `auto_forward_ota_alert()` through the same broadcast pipeline
+- **Gated-alerts hold-off timer (v2.158.0+, optional)** — when enabled, alerts that are not Immediate urgency / Extreme severity are held in a `gated_alerts` queue instead of broadcasting immediately; an operator can approve them early or cancel them, or a background scheduler auto-releases them once the configured hold-off timer expires. See `docs/guides/GATED_ALERTS.md`.
 - **Cross-source deduplication** (`app_core/audio/auto_forward.py`) — checks `eas_messages` and `manual_eas_activations` tables within a 15-minute window for same event code + overlapping FIPS codes to prevent duplicate broadcasts when the same alert arrives via IPAWS + NOAA + OTA
 - **Originator substitution** — the original alert's originator is replaced with the station's configured originator in `build_same_header()` (`app_utils/eas.py:647`)
 
@@ -283,7 +288,8 @@ flowchart TD
 | 5 | §3.4.1.7 | If `EAS-Must-Carry=True`, the event-code allowlist and default RWT suppression are bypassed for this alert (steps 6-7 are skipped). Location filter and dedupe still apply. |
 | 6 | — | Operator's `forwarded_event_codes` allowlist (RWT also requires explicit opt-in) |
 | 7 | VTEC | `VTEC_SKIP_ACTIONS` (CON/ROU/COR) and `VTEC_TERMINAL_ACTIONS` (CAN/EXP) suppressed; UPG bypasses dedupe |
-| 8 | — | Cross-source dedupe (event code + FIPS within 15 min) |
+| 8 | — | Gated-alerts hold-off timer (optional; skipped for Immediate urgency / Extreme severity) — see above |
+| 9 | — | Cross-source dedupe (event code + FIPS within 15 min) |
 
 Audio / text rendering also follows the guide: `_fetch_embedded_audio` enforces ECIG §3.5.1 fetch timeouts (120 s downloadable, 30 s streaming) and `_normalize_text_for_tts` converts the §3.5.2 / §3.5.4 `***` text-deletion marker into an audible sentence pause for every TTS backend.
 
