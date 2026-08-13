@@ -229,9 +229,9 @@
 {# Leaflet map for the alert polygon — only loaded when geometry exists #}
 {% if payload.alert and payload.alert.geom is not none %}
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}?v={{ static_asset_version }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}" />
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.min.js') }}"></script>
-<script src="{{ url_for('static', filename='js/core/map_theme.js') }}?v={{ static_asset_version }}"></script>
+<script src="{{ url_for('static', filename='js/core/map_theme.js') }}"></script>
 <script>
 (function () {
     var map = EASMap.create('trail-map', { scrollWheelZoom: false })

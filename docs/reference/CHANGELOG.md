@@ -43,6 +43,23 @@ tracks releases under the 2.x series.
   narration RMS gap in the generated composite stays under 6 dB instead of
   regressing to the ~15-16 dB gap this fix addresses.
 
+## [2.154.1] - 2026-08-13 - Static asset URLs stop double-appending the cache-bust param
+
+### Fixed
+- **Every `url_for('static', ...)` link double-appended `?v=`.** The
+  `@app.url_defaults` hook in `app_core/flask/url_defaults.py` already adds
+  `?v={{ static_asset_version }}` to every static URL automatically, but 35
+  template references across 11 files (favicons, the new PWA manifest link,
+  `map.css`, admin JS bundles, etc.) also manually appended the same suffix
+  as a literal string, producing URLs like
+  `/static/manifest.json?v=2.154.0?v=2.154.0`. Harmless in practice — Flask's
+  static route ignores the malformed trailing query string and serves the
+  file regardless — but wasteful and confusing in the rendered markup. Left
+  `templates/repo_stats/_content.html` alone: it deliberately strips
+  `url_for`'s auto-appended `?v=` (`.split('?')[0]`) and re-adds it manually
+  because it builds a dynamic per-language logo path `url_for` can't express
+  directly, so its manual suffix is the *only* one and is correct as-is.
+
 ## [2.154.0] - 2026-08-13 - Installable as a home-screen app
 
 ### Added

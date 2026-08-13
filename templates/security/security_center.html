@@ -438,5 +438,5 @@
 {% include 'security/_traffic_scripts.html' %}
 {# Security Center tab controller — namespaced under window.SC to avoid any
    collision with the traffic dashboard's globals above. #}
-<script src="{{ url_for('static', filename='js/pages/security_center.js') }}?v={{ static_asset_version }}"></script>
+<script src="{{ url_for('static', filename='js/pages/security_center.js') }}"></script>
 {% endblock %}

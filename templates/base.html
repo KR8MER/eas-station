@@ -29,15 +29,15 @@
     {% block meta %}{% endblock %}
 
     <!-- Favicon — canonical EAS Station™ wordmark -->
-    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}?v={{ static_asset_version }}">
-    <link rel="alternate icon" type="image/png" href="{{ url_for('static', filename='img/eas-system-wordmark.png') }}?v={{ static_asset_version }}">
-    <link rel="shortcut icon" href="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}?v={{ static_asset_version }}">
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}?v={{ static_asset_version }}">
-    <link rel="mask-icon" href="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}?v={{ static_asset_version }}" color="#204885">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}">
+    <link rel="alternate icon" type="image/png" href="{{ url_for('static', filename='img/eas-system-wordmark.png') }}">
+    <link rel="shortcut icon" href="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}">
+    <link rel="mask-icon" href="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}" color="#204885">
     <meta name="theme-color" content="#204885">
 
     <!-- PWA manifest — enables "Add to Home Screen" with a standalone (no browser chrome) launch -->
-    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}?v={{ static_asset_version }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="EAS Station">
@@ -50,7 +50,7 @@
     <link href="{{ url_for('static', filename='vendor/fontawesome/css/all.min.css') }}" rel="stylesheet">
 
     <!-- EAS Station™ Styles (Consolidated) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v={{ static_asset_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 
     <script>
         window.CSRF_TOKEN = {{ csrf_token | tojson }};
@@ -168,7 +168,7 @@
                     <div class="col-12 col-lg-4">
                         <div class="footer-brand-section">
                             <div class="footer-logo-mark">
-                                <img src="{{ url_for('static', filename='img/eas-app-icon.svg') }}?v={{ static_asset_version }}"
+                                <img src="{{ url_for('static', filename='img/eas-app-icon.svg') }}"
                                      alt="EAS Station app icon"
                                      class="footer-logo-mark-img">
                             </div>
@@ -295,18 +295,18 @@
     <script defer src="{{ url_for('static', filename='js/core/lightning.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/core/notifications.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/core/api.js') }}"></script>
-    <script defer src="{{ url_for('static', filename='js/core/traffic-beacon.js') }}?v={{ static_asset_version }}"></script>
+    <script defer src="{{ url_for('static', filename='js/core/traffic-beacon.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/core/health.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/core/utils.js') }}"></script>
-    <script defer src="{{ url_for('static', filename='js/core/units.js') }}?v={{ static_asset_version }}"></script>
+    <script defer src="{{ url_for('static', filename='js/core/units.js') }}"></script>
     <!-- Command palette (Ctrl/Cmd+K) + breadcrumb trail, both derived from
          the rendered navbar so they respect permission-based visibility -->
-    <script defer src="{{ url_for('static', filename='js/core/nav-enhance.js') }}?v={{ static_asset_version }}"></script>
+    <script defer src="{{ url_for('static', filename='js/core/nav-enhance.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/loading-error-utils.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/accessibility-utils.js') }}"></script>
     <!-- Tab-title alert-count badge + new-alert toasts (depends on websocket + showToast above) -->
     <script defer src="{{ url_for('static', filename='js/core/alert-watch.js') }}"></script>
-    <script defer src="{{ url_for('static', filename='js/rbds_visualization.js') }}?v={{ static_asset_version }}"></script>
+    <script defer src="{{ url_for('static', filename='js/rbds_visualization.js') }}"></script>
 
     <!-- Visual Effects Enhancement -->
     <script defer src="{{ url_for('static', filename='js/visual-effects.js') }}"></script>
