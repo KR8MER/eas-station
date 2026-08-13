@@ -45,6 +45,8 @@ EAS_SERVICES = [
     f'{SERVICE_PREFIX}-gps.service',
     f'{SERVICE_PREFIX}-displays.service',
     f'{SERVICE_PREFIX}-gpio.service',
+    f'{SERVICE_PREFIX}-endec-feeds.service',
+    f'{SERVICE_PREFIX}-hwsetup.service',
 ]
 
 # Poller services (Unified poller for NOAA + IPAWS)
