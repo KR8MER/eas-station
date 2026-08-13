@@ -79,6 +79,20 @@
     }
 
     /**
+     * Resolve a CAP severity to its rank (higher = more severe), the same
+     * table refreshGlow() uses to pick which alert's colour the shared pane
+     * glow follows. Exposed so pages drawing several hazards at once (the
+     * dashboard map) can sort by the same ordering instead of keeping a
+     * second copy of this table that could drift from it.
+     * @param {string} severity e.g. 'Severe'. Anything unrecognised → 0.
+     * @returns {number}
+     */
+    function severityRank(severity) {
+        var key = String(severity || 'unknown').toLowerCase();
+        return SEVERITY_RANK[key] === undefined ? 0 : SEVERITY_RANK[key];
+    }
+
+    /**
      * Convert a CSS colour to `rgba(r, g, b, alpha)`.
      *
      * Themes express severity colours as hex, but the glow needs the same
@@ -212,6 +226,12 @@
      * @param {number} [options.fillOpacity=0.28]
      * @param {string} [options.dashArray]
      * @param {string} [options.className] Extra class on the drawn paths.
+     * @param {boolean} [options.casing=true] Draw the white halo stroke under
+     *        the core. A page overlaying several hazards at once (the
+     *        dashboard map) turns this off for broad/context alerts —
+     *        several overlapping white halos are what actually reads as a
+     *        "blob"; the single-alert pages (alert detail, VTEC trail) want
+     *        it on so the shape pops against the basemap.
      * @param {Function} [options.onEachFeature] Applied to the core layer.
      * @returns {L.FeatureGroup} supports getBounds()/bindPopup()/addTo().
      */
@@ -219,19 +239,22 @@
         var opts = options || {};
         var color = opts.color || severityColor(opts.severity);
         var weight = opts.weight || 3;
+        var layers = [];
 
-        var casing = L.geoJSON(geojson, {
-            pane: PANE_HAZARD,
-            interactive: false,
-            style: {
-                color: '#ffffff',
-                weight: weight + 2.5,
-                opacity: 0.9,
-                fill: false,
-                dashArray: opts.dashArray || null,
-                className: opts.className || undefined
-            }
-        });
+        if (opts.casing !== false) {
+            layers.push(L.geoJSON(geojson, {
+                pane: PANE_HAZARD,
+                interactive: false,
+                style: {
+                    color: '#ffffff',
+                    weight: weight + 2.5,
+                    opacity: 0.9,
+                    fill: false,
+                    dashArray: opts.dashArray || null,
+                    className: opts.className || undefined
+                }
+            }));
+        }
 
         var core = L.geoJSON(geojson, {
             pane: PANE_HAZARD,
@@ -246,8 +269,9 @@
             },
             onEachFeature: opts.onEachFeature
         });
+        layers.push(core);
 
-        var group = L.featureGroup([casing, core]);
+        var group = L.featureGroup(layers);
         // Remembered so a theme switch can re-resolve the severity colour and
         // repaint the glow without the page having to reload the geometry.
         group._easHazard = { severity: opts.severity, fixedColor: opts.color, core: core };
@@ -378,6 +402,7 @@
         cssVar: cssVar,
         withAlpha: withAlpha,
         severityColor: severityColor,
+        severityRank: severityRank,
         tileLayer: tileLayer,
         init: init,
         create: create,
