@@ -66,6 +66,7 @@ def _convert_led_enum(enum_class, value_str: str, default):
 DISPLAY_DIMENSIONS = {
     "oled": {"width": 128, "height": 64},
     "vfd": {"width": 140, "height": 32},
+    "led": {"width": 160, "height": 16},  # Picture File (Dots/graphics mode) canvas
 }
 
 
@@ -330,6 +331,70 @@ def register(app: Flask, logger) -> None:
 
         except Exception as e:
             route_logger.error(f"Error previewing screen {screen_id}: {e}")
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/screens/preview", methods=["POST"])
+    @require_auth
+    @require_role("Admin", "Operator")
+    def preview_draft_screen():
+        """Render arbitrary (possibly unsaved) template_data to a real
+        preview PNG using the actual device-rendering pipeline.
+
+        The screen editor's canvas draws its own client-side approximation
+        of each element (see static/js/screen-editor.js's ICON_DRAW/TYPES
+        draw() functions) -- close enough to design with, but not the same
+        code that renders to real hardware, so gauges/compasses/icons and
+        anything font-metric-dependent can look subtly different in the
+        editor than on the device. This renders through the same Pillow
+        pipeline app_core.oled / scripts.vfd_controller /
+        scripts.led_sign_controller use, so what the editor shows here is
+        pixel-accurate. Takes template_data directly (no screen_id) so it
+        works for a draft that hasn't been saved yet.
+        """
+        try:
+            data = request.get_json(silent=True) or {}
+            display_type = data.get("display_type")
+            template_data = data.get("template_data")
+            if display_type not in ("oled", "vfd", "led"):
+                return jsonify({"error": "display_type must be 'oled', 'vfd', or 'led'"}), 400
+            if not isinstance(template_data, dict):
+                return jsonify({"error": "template_data must be an object"}), 400
+
+            screen_dict = {
+                "display_type": display_type,
+                "template_data": template_data,
+                "data_sources": data.get("data_sources") or [],
+                "conditions": None,
+            }
+
+            renderer = ScreenRenderer(allow_preview_samples=True)
+            rendered = renderer.render_screen(screen_dict)
+            if not rendered:
+                return jsonify({"error": "Failed to render screen"}), 500
+
+            from services.displays.preview_render import (
+                render_led_elements_preview,
+                render_led_preview,
+                render_oled_elements_preview,
+                render_vfd_elements_preview,
+            )
+
+            image = None
+            if display_type == "oled":
+                image = render_oled_elements_preview(rendered.get("elements"))
+            elif display_type == "vfd":
+                image = render_vfd_elements_preview(rendered.get("elements"))
+            elif display_type == "led":
+                if "elements" in rendered:
+                    image = render_led_elements_preview(rendered.get("elements"), rendered.get("color", "AMBER"))
+                else:
+                    lines = rendered.get("lines") or []
+                    image = render_led_preview(lines, rendered.get("color", "AMBER"))
+
+            return jsonify({"rendered": rendered, "image": image})
+
+        except Exception as e:
+            route_logger.error(f"Error rendering draft screen preview: {e}")
             return jsonify({"error": str(e)}), 500
 
     @app.route("/api/screens/<int:screen_id>/display", methods=["POST"])

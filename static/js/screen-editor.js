@@ -42,15 +42,36 @@ const ScreenEditor = (function() {
         activeDynamicInput: null,
         showGrid: false,
         snapOn: false,
-        dirty: false
+        dirty: false,
+        // LED only: false = legacy 4-line scrolling text (send_message()),
+        // true = single-frame Dots/graphics mode (render_frame(), see
+        // scripts/led_sign_controller.py's render_led_elements()).
+        ledGraphicsMode: false
     };
 
-    // Display dimensions by type
+    // Display dimensions by type. LED has two unrelated canvases: legacy
+    // text mode has no real per-pixel addressing at all (it's 4 lines of
+    // character-cell text; x/y here is purely an authoring convenience --
+    // only line order round-trips, see buildTemplateData()), so it keeps
+    // a virtual 80x32 grid. Graphics mode is the sign's real 160x16
+    // Picture File (Dots) canvas -- pixel-accurate, matches
+    // Alpha9120CController.MAX_DOTS_COLS/MAX_DOTS_ROWS.
     const DISPLAY_DIMS = {
         oled: { width: 128, height: 64 },
         vfd: { width: 140, height: 32 },
-        led: { width: 80, height: 32 }  // Virtual dimensions for LED (4 lines x 20 chars)
+        led: { width: 80, height: 32 },
+        'led-graphics': { width: 160, height: 16 }
     };
+
+    // Which DISPLAY_DIMS/palette key applies right now.
+    function paletteKey() {
+        if (state.displayType === 'led') return state.ledGraphicsMode ? 'led-graphics' : 'led';
+        return state.displayType;
+    }
+
+    function currentDisplayDims() {
+        return DISPLAY_DIMS[paletteKey()];
+    }
 
     // Phosphor colours so the preview looks like the real hardware
     const DISPLAY_THEMES = {
@@ -89,10 +110,13 @@ const ScreenEditor = (function() {
     const LED_FONTS = ['FONT_5x7', 'FONT_6x7', 'FONT_7x9', 'FONT_8x7', 'FONT_7x11',
         'FONT_15x7', 'FONT_19x7', 'FONT_7x13', 'FONT_16x9', 'FONT_32x16'];
 
-    // Built-in vector icons available on the OLED (mirrors app_core/oled.py)
+    // Built-in vector icons shared by all three display engines (mirrors
+    // app_core/oled.py's _ICON_RENDERERS -- the single glyph set OLED, VFD
+    // and LED graphics mode all draw from).
     const ICON_NAMES = [
         'antenna', 'speaker', 'warning', 'check', 'cross',
-        'network', 'shield', 'wave', 'clock', 'heartbeat'
+        'network', 'shield', 'wave', 'clock', 'heartbeat',
+        'satellite', 'gps_pin', 'bolt'
     ];
 
     // Suggested {variable} names per endpoint for the data-source modal
@@ -189,6 +213,33 @@ const ScreenEditor = (function() {
             c.moveTo(x, my); c.lineTo(x + s * 0.3, my);
             c.lineTo(x + s * 0.45, y + s * 0.2); c.lineTo(x + s * 0.6, y + s * 0.85);
             c.lineTo(x + s * 0.72, my); c.lineTo(x + s, my); c.stroke();
+        },
+        satellite(c, x, y, s) {
+            const cx = x + s / 2, cy = y + s / 2;
+            const spoke = Math.max(2, s / 2);
+            c.beginPath();
+            c.moveTo(cx - spoke, cy - spoke); c.lineTo(cx + spoke, cy + spoke);
+            c.moveTo(cx - spoke, cy + spoke); c.lineTo(cx + spoke, cy - spoke);
+            c.stroke();
+            c.beginPath(); c.arc(cx, cy, Math.max(1, s / 4), 0, 2 * Math.PI); c.fill();
+        },
+        gps_pin(c, x, y, s) {
+            const cx = x + s / 2, r = Math.max(1, s / 2 - 1), topCy = y + r;
+            c.beginPath(); c.arc(cx, topCy, r, 0, 2 * Math.PI); c.stroke();
+            c.beginPath();
+            c.moveTo(cx - r / 2, topCy + r - 1); c.lineTo(cx + r / 2, topCy + r - 1);
+            c.lineTo(cx, y + s - 1); c.closePath(); c.fill();
+        },
+        bolt(c, x, y, s) {
+            c.beginPath();
+            c.moveTo(x + s * 0.6, y);
+            c.lineTo(x + s * 0.2, y + s * 0.6);
+            c.lineTo(x + s * 0.5, y + s * 0.6);
+            c.lineTo(x + s * 0.4, y + s - 1);
+            c.lineTo(x + s * 0.8, y + s * 0.4);
+            c.lineTo(x + s * 0.5, y + s * 0.4);
+            c.closePath();
+            c.fill();
         }
     };
 
@@ -224,6 +275,19 @@ const ScreenEditor = (function() {
         return { key: 'font', label: 'Font Size', kind: 'select', options: FONT_OPTIONS };
     }
 
+    // VFD/LED-graphics text only recognises a literal font value of
+    // "large" (their 14pt/15pt bold hero size) -- anything else, including
+    // OLED's small/medium/xlarge/huge names, falls through to the same
+    // flat default size on those two engines (scripts/vfd_controller.py's
+    // and scripts/led_sign_controller.py's render_*_elements()). Offering
+    // OLED's 5-size list there would let an operator "pick" a size that
+    // has no effect on the real device.
+    const VFD_LED_FONT_OPTIONS = [['', 'Normal'], ['large', 'Large (Hero)']];
+
+    function fontOptionsForDisplay() {
+        return state.displayType === 'oled' ? FONT_OPTIONS : VFD_LED_FONT_OPTIONS;
+    }
+
     // ------------------------------------------------------------------
     // Element type registry
     //   create()        -> default props (id added by caller)
@@ -238,7 +302,7 @@ const ScreenEditor = (function() {
     // ------------------------------------------------------------------
     const TYPES = {
         text: {
-            label: 'Text', icon: 'fa-font', displays: ['oled', 'vfd', 'led'],
+            label: 'Text', icon: 'fa-font', displays: ['oled', 'vfd', 'led', 'led-graphics'],
             create: () => ({ type: 'text', text: 'New Text', x: 4, y: 4, font: 'small',
                 align: 'left', maxWidth: null, wrap: true, invert: false, allowEmpty: false }),
             fields: [
@@ -289,7 +353,7 @@ const ScreenEditor = (function() {
         },
 
         bar: {
-            label: 'Bar', icon: 'fa-chart-bar', displays: ['oled', 'vfd'],
+            label: 'Bar', icon: 'fa-chart-bar', displays: ['oled', 'vfd', 'led-graphics'],
             create: () => ({ type: 'bar', x: 4, y: 10, width: 80, height: 9,
                 value: '50', border: true, preview: 60 }),
             fields: [
@@ -330,7 +394,7 @@ const ScreenEditor = (function() {
         },
 
         rectangle: {
-            label: 'Rect', icon: 'fa-square', displays: ['oled', 'vfd'],
+            label: 'Rect', icon: 'fa-square', displays: ['oled', 'vfd', 'led-graphics'],
             create: () => ({ type: 'rectangle', x: 4, y: 4, width: 30, height: 20, filled: false }),
             fields: [
                 ...posFields(),
@@ -388,7 +452,7 @@ const ScreenEditor = (function() {
         },
 
         hline: {
-            label: 'H-Divider', icon: 'fa-grip-lines', displays: ['oled', 'vfd'],
+            label: 'H-Divider', icon: 'fa-grip-lines', displays: ['oled', 'vfd', 'led-graphics'],
             create: () => ({ type: 'hline', x: 0, y: 16, width: 64, dotted: false }),
             fields: [
                 ...posFields(),
@@ -416,7 +480,7 @@ const ScreenEditor = (function() {
         },
 
         vline: {
-            label: 'V-Divider', icon: 'fa-grip-lines-vertical', displays: ['oled', 'vfd'],
+            label: 'V-Divider', icon: 'fa-grip-lines-vertical', displays: ['oled', 'vfd', 'led-graphics'],
             create: () => ({ type: 'vline', x: 16, y: 0, height: 32 }),
             fields: [
                 ...posFields(),
@@ -438,7 +502,7 @@ const ScreenEditor = (function() {
         },
 
         circle: {
-            label: 'Circle', icon: 'fa-circle', displays: ['oled'],
+            label: 'Circle', icon: 'fa-circle', displays: ['oled', 'vfd'],
             create: () => ({ type: 'circle', x: 32, y: 32, radius: 12, filled: false }),
             fields: [
                 { key: 'x', label: 'Center X', kind: 'number', col: 6 },
@@ -490,7 +554,7 @@ const ScreenEditor = (function() {
         },
 
         icon: {
-            label: 'Icon', icon: 'fa-icons', displays: ['oled'],
+            label: 'Icon', icon: 'fa-icons', displays: ['oled', 'vfd', 'led-graphics'],
             create: () => ({ type: 'icon', name: 'antenna', x: 4, y: 4, size: 16 }),
             fields: [
                 { key: 'name', label: 'Icon', kind: 'select', options: ICON_NAMES.map(n => [n, n]) },
@@ -514,7 +578,7 @@ const ScreenEditor = (function() {
         },
 
         gauge: {
-            label: 'Gauge', icon: 'fa-gauge-high', displays: ['oled'],
+            label: 'Gauge', icon: 'fa-gauge-high', displays: ['oled', 'vfd'],
             create: () => ({ type: 'gauge', x: 64, y: 48, radius: 24, value: '50', preview: 60 }),
             fields: [
                 { key: 'value', label: 'Value (0–100 or {variable})', kind: 'text', dynamic: true,
@@ -545,6 +609,99 @@ const ScreenEditor = (function() {
             fromTemplate: t => ({ type: 'gauge', x: t.x || 64, y: t.y || 48, radius: t.radius || 24,
                 value: t.value != null ? String(t.value) : '50', preview: 60 }),
             layerLabel: el => `Gauge r${el.radius}`
+        },
+
+        compass: {
+            label: 'Compass', icon: 'fa-compass', displays: ['oled', 'vfd'],
+            create: () => ({ type: 'compass', x: 30, y: 30, radius: 20, heading: '{gps.track_angle}', preview: 45 }),
+            fields: [
+                { key: 'heading', label: 'Heading ° (0–360 or {variable})', kind: 'text', dynamic: true,
+                    placeholder: '{gps.track_angle}', help: 'Leave empty for a bare dial (no fix yet)' },
+                { key: 'x', label: 'Center X', kind: 'number', col: 6 },
+                { key: 'y', label: 'Center Y', kind: 'number', col: 6 },
+                { key: 'radius', label: 'Radius (px)', kind: 'number', min: 8 },
+                { key: 'preview', label: 'Preview Heading', kind: 'range', min: 0, max: 360,
+                    help: 'Canvas preview only — live data used on device' }
+            ],
+            draw(el) {
+                ctx.strokeStyle = theme().pix; ctx.fillStyle = theme().pix; ctx.lineWidth = 1;
+                const r = Math.max(8, el.radius), cx = el.x, cy = el.y;
+                ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.stroke();
+                // Cardinal ticks and labels sit OUTSIDE the ring so they
+                // never collide with the needle (mirrors the device-side
+                // fix for this in app_core/oled.py's render_frame()).
+                const fontSize = Math.max(6, Math.round(r * 0.28));
+                ctx.font = `${fontSize}px monospace`;
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                [[0, 'N'], [90, 'E'], [180, 'S'], [270, 'W']].forEach(([deg, label]) => {
+                    const a = (deg - 90) * Math.PI / 180;
+                    const tx1 = cx + Math.cos(a) * (r - 3), ty1 = cy + Math.sin(a) * (r - 3);
+                    const tx2 = cx + Math.cos(a) * (r - 1), ty2 = cy + Math.sin(a) * (r - 1);
+                    ctx.beginPath(); ctx.moveTo(tx1, ty1); ctx.lineTo(tx2, ty2); ctx.stroke();
+                    ctx.fillText(label, cx + Math.cos(a) * (r + 7), cy + Math.sin(a) * (r + 7));
+                });
+                ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+                const heading = el.preview != null ? el.preview : 45;
+                const a = (heading - 90) * Math.PI / 180;
+                const len = r * 0.68;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(cx + Math.cos(a) * len, cy + Math.sin(a) * len);
+                ctx.stroke();
+                ctx.beginPath(); ctx.arc(cx, cy, 1.5, 0, 2 * Math.PI); ctx.fill();
+            },
+            bounds: el => ({ x: el.x - el.radius - 10, y: el.y - el.radius - 10,
+                w: (el.radius + 10) * 2, h: (el.radius + 10) * 2 }),
+            resize(el, start, dx, dy, snap) {
+                el.radius = Math.max(8, snap(start.radius + Math.round((dx + dy) / 2)));
+            },
+            toTemplate: el => ({ type: 'compass', x: el.x, y: el.y, radius: el.radius, heading: el.heading || null }),
+            fromTemplate: t => ({ type: 'compass', x: t.x || 30, y: t.y || 30, radius: t.radius || 20,
+                heading: t.heading != null ? String(t.heading) : '', preview: 45 }),
+            layerLabel: el => `Compass r${el.radius}`
+        },
+
+        segments: {
+            label: 'Segments', icon: 'fa-grip-lines', displays: ['vfd'],
+            create: () => ({ type: 'segments', x: 4, y: 10, width: 100, height: 8,
+                value: '50', count: 14, gap: 2, preview: 60 }),
+            fields: [
+                { key: 'value', label: 'Value (0–100 or {variable})', kind: 'text', dynamic: true,
+                    placeholder: '{audio.peak_level_percent}' },
+                ...posFields(),
+                { key: 'width', label: 'Width (px)', kind: 'number', col: 6, min: 4 },
+                { key: 'height', label: 'Height (px)', kind: 'number', col: 6, min: 3 },
+                { key: 'count', label: 'Segment Count', kind: 'number', col: 6, min: 2 },
+                { key: 'gap', label: 'Gap (px)', kind: 'number', col: 6, min: 0 },
+                { key: 'preview', label: 'Preview Fill', kind: 'range', min: 0, max: 100, unit: '%',
+                    help: 'Canvas preview only — live data used on device' }
+            ],
+            draw(el) {
+                const w = Math.max(4, el.width), h = Math.max(3, el.height);
+                const count = Math.max(2, el.count || 14);
+                const gap = Math.max(0, el.gap != null ? el.gap : 2);
+                const segW = Math.max(1, (w - gap * (count - 1)) / count);
+                const pct = clamp(el.preview != null ? el.preview : 60, 0, 100);
+                const lit = Math.round((pct / 100) * count);
+                ctx.strokeStyle = theme().pix; ctx.fillStyle = theme().pix; ctx.lineWidth = 1;
+                let cx = el.x;
+                for (let i = 0; i < count; i++) {
+                    if (i < lit) ctx.fillRect(cx, el.y, segW, h);
+                    else ctx.strokeRect(cx + 0.5, el.y + 0.5, segW - 1, h - 1);
+                    cx += segW + gap;
+                }
+            },
+            bounds: el => ({ x: el.x, y: el.y, w: Math.max(4, el.width), h: Math.max(3, el.height) }),
+            resize(el, start, dx, dy, snap) {
+                el.width = Math.max(4, snap(start.width + dx));
+                el.height = Math.max(3, snap(start.height + dy));
+            },
+            toTemplate: el => ({ type: 'segments', x: el.x, y: el.y, width: el.width, height: el.height,
+                value: el.value || '0', count: el.count || 14, gap: el.gap != null ? el.gap : 2 }),
+            fromTemplate: t => ({ type: 'segments', x: t.x || 0, y: t.y || 0, width: t.width || 100,
+                height: t.height || 8, value: t.value != null ? String(t.value) : '50',
+                count: t.count || 14, gap: t.gap != null ? t.gap : 2, preview: 60 }),
+            layerLabel: el => `Segments ${el.count || 14}`
         },
 
         clock: {
@@ -727,6 +884,7 @@ const ScreenEditor = (function() {
     function setupEventListeners() {
         document.getElementById('display-type').addEventListener('change', function() {
             state.displayType = this.value;
+            if (state.displayType !== 'led') state.ledGraphicsMode = false;
             updateCanvasDimensions();
             updateDisplayPanels();
             rebuildPalette();
@@ -810,6 +968,28 @@ const ScreenEditor = (function() {
             document.getElementById(id)?.addEventListener('change', markDirty);
         });
 
+        document.getElementById('led-message-type')?.addEventListener('change', function() {
+            const wantsGraphics = this.value === 'graphics';
+            if (wantsGraphics === state.ledGraphicsMode) return;
+            if (state.elements.length && !confirm(
+                'Switching message type clears the current elements (text-mode lines and ' +
+                'graphics-mode elements aren\'t interchangeable). Continue?'
+            )) {
+                this.value = state.ledGraphicsMode ? 'graphics' : 'text';
+                return;
+            }
+            state.ledGraphicsMode = wantsGraphics;
+            state.elements = [];
+            state.selectedElement = null;
+            hideElementProps();
+            updateCanvasDimensions();
+            updateDisplayPanels();
+            rebuildPalette();
+            updateLayers();
+            render();
+            commit();
+        });
+
         // Canvas mouse events
         const canvasContainer = document.getElementById('canvas-container');
         canvasContainer.addEventListener('mousedown', handleCanvasMouseDown);
@@ -881,7 +1061,8 @@ const ScreenEditor = (function() {
     function rebuildPalette() {
         const palette = document.getElementById('element-palette');
         if (!palette) return;
-        const available = Object.keys(TYPES).filter(k => TYPES[k].displays.includes(state.displayType));
+        const key = paletteKey();
+        const available = Object.keys(TYPES).filter(k => TYPES[k].displays.includes(key));
         palette.innerHTML = available.map(k => `
             <button type="button" class="palette-btn" data-type="${k}" title="Add ${TYPES[k].label}">
                 <i class="fas ${TYPES[k].icon}"></i><span>${TYPES[k].label}</span>
@@ -889,7 +1070,7 @@ const ScreenEditor = (function() {
     }
 
     function updateCanvasDimensions() {
-        const dims = DISPLAY_DIMS[state.displayType];
+        const dims = currentDisplayDims();
         state.canvasWidth = dims.width;
         state.canvasHeight = dims.height;
         canvas.width = dims.width;
@@ -909,6 +1090,13 @@ const ScreenEditor = (function() {
         document.getElementById('effects-panel').style.display = isLed ? 'none' : 'block';
         const ledPanel = document.getElementById('led-options-panel');
         if (ledPanel) ledPanel.style.display = isLed ? 'block' : 'none';
+
+        const ledTextOptions = document.getElementById('led-text-options');
+        const ledGraphicsHelp = document.getElementById('led-graphics-help');
+        if (ledTextOptions) ledTextOptions.style.display = state.ledGraphicsMode ? 'none' : 'block';
+        if (ledGraphicsHelp) ledGraphicsHelp.style.display = state.ledGraphicsMode ? 'block' : 'none';
+        const messageTypeSelect = document.getElementById('led-message-type');
+        if (messageTypeSelect) messageTypeSelect.value = state.ledGraphicsMode ? 'graphics' : 'text';
     }
 
     // ------------------------------------------------------------------
@@ -1001,9 +1189,10 @@ const ScreenEditor = (function() {
             if (f.kind === 'checkbox') {
                 html += `<label><input type="checkbox" data-key="${f.key}" data-kind="checkbox" ${val ? 'checked' : ''}> ${f.label}</label>`;
             } else if (f.kind === 'select') {
+                const options = f.key === 'font' ? fontOptionsForDisplay() : f.options;
                 html += `<label>${f.label}</label><select class="form-control" data-key="${f.key}" data-kind="select">`;
-                f.options.forEach(([v, lbl]) => {
-                    html += `<option value="${v}" ${String(val) === String(v) ? 'selected' : ''}>${escapeHtml(lbl)}</option>`;
+                options.forEach(([v, lbl]) => {
+                    html += `<option value="${v}" ${String(val || '') === String(v) ? 'selected' : ''}>${escapeHtml(lbl)}</option>`;
                 });
                 html += `</select>`;
             } else if (f.kind === 'range') {
@@ -1449,16 +1638,60 @@ const ScreenEditor = (function() {
     // ------------------------------------------------------------------
     // Preview
     // ------------------------------------------------------------------
-    function showPreview() {
+    // Fallback: copy the editor's own client-side approximation onto the
+    // preview canvas. Only used when the real server-side render (below)
+    // is unavailable, so a preview is still better than none.
+    function drawApproximatePreview() {
         const previewCanvas = document.getElementById('preview-canvas');
         const previewCtx = previewCanvas.getContext('2d');
         previewCanvas.width = canvas.width;
         previewCanvas.height = canvas.height;
+        previewCtx.imageSmoothingEnabled = false;
         previewCtx.drawImage(canvas, 0, 0);
         previewCanvas.style.width = `${canvas.width * 4}px`;
         previewCanvas.style.height = `${canvas.height * 4}px`;
+    }
+
+    function showPreview() {
         const previewModal = document.getElementById('previewModal');
         if (previewModal) new bootstrap.Modal(previewModal).show();
+
+        // Show the approximation immediately so the modal never looks
+        // empty while the real render is in flight.
+        drawApproximatePreview();
+
+        fetch('/api/screens/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN },
+            body: JSON.stringify({
+                display_type: state.displayType,
+                template_data: buildTemplateData(),
+                data_sources: state.dataSources
+            })
+        })
+        .then(r => r.json().then(data => ({ ok: r.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok || !data.image) {
+                if (!ok) toast('Live preview unavailable — showing editor approximation', 'error');
+                return;
+            }
+            // Pixel-accurate render from the same Pillow pipeline that
+            // drives the real hardware (app_core.oled / scripts.vfd_
+            // controller / scripts.led_sign_controller) -- replaces the
+            // client-side approximation drawn above.
+            const img = new Image();
+            img.onload = () => {
+                const previewCanvas = document.getElementById('preview-canvas');
+                const previewCtx = previewCanvas.getContext('2d');
+                previewCanvas.width = img.width;
+                previewCanvas.height = img.height;
+                previewCtx.drawImage(img, 0, 0);
+                previewCanvas.style.width = `${canvas.width * 4}px`;
+                previewCanvas.style.height = `${canvas.height * 4}px`;
+            };
+            img.src = data.image;
+        })
+        .catch(() => toast('Live preview unavailable — showing editor approximation', 'error'));
     }
 
     function sendToDisplay() {
@@ -1524,16 +1757,29 @@ const ScreenEditor = (function() {
     }
 
     function buildTemplateData() {
-        // LED is character-based: emit a `lines` array consumed by render_led_screen,
-        // plus screen-level sign options (colour, display mode, speed, font).
         if (state.displayType === 'led') {
+            const color = document.getElementById('led-color')?.value || 'AMBER';
+
+            if (state.ledGraphicsMode) {
+                // Single-frame Dots/graphics mode -- render_led_elements()'s
+                // {elements, color} contract (ScreenEditor._render_led_elements()
+                // in scripts/screen_renderer.py). No mode/speed/font: those
+                // are scrolling-text-only concepts.
+                return {
+                    elements: state.elements.map(e => typeDef(e).toTemplate(e)),
+                    color
+                };
+            }
+
+            // Legacy: character-based, emit a `lines` array consumed by
+            // render_led_screen(), plus screen-level sign options.
             const lines = state.elements
                 .filter(e => e.type === 'text')
                 .map(e => ({ text: e.text }));
             return {
                 lines,
                 clear: true,
-                color: document.getElementById('led-color')?.value || 'AMBER',
+                color,
                 mode: document.getElementById('led-mode')?.value || 'HOLD',
                 speed: document.getElementById('led-speed')?.value || 'SPEED_3',
                 font: document.getElementById('led-font')?.value || 'FONT_7x9'
@@ -1570,11 +1816,12 @@ const ScreenEditor = (function() {
         document.getElementById('screen-duration').value = screenData.duration || 10;
 
         state.displayType = screenData.display_type || 'oled';
+        const td = screenData.template_data || {};
+        state.ledGraphicsMode = state.displayType === 'led' && Array.isArray(td.elements);
         updateCanvasDimensions();
         updateDisplayPanels();
         rebuildPalette();
 
-        const td = screenData.template_data || {};
         if (Array.isArray(td.elements) && td.elements.length) {
             state.elements = td.elements.map(elementFromTemplate);
         } else if (Array.isArray(td.lines) && td.lines.length) {

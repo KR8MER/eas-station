@@ -125,3 +125,32 @@ def test_vfd_idle_returns_png():
 def test_vfd_empty_commands_returns_blank_png():
     # No commands -> blank panel image, not an exception or None.
     _assert_png(pr.render_vfd_preview([]))
+
+
+# ---------------------------------------------------------------------------
+# render_oled_elements_preview() -- the screen editor's live preview calls
+# this (via POST /api/screens/preview) so what an operator designs matches
+# the real ArgonOLEDController.render_frame() output pixel-for-pixel,
+# instead of the editor canvas's own client-side approximation.
+# ---------------------------------------------------------------------------
+
+def test_oled_elements_preview_returns_png_data_uri():
+    uri = pr.render_oled_elements_preview([
+        {"type": "text", "text": "HELLO", "x": 4, "y": 4},
+        {"type": "icon", "name": "warning", "x": 4, "y": 20, "size": 12},
+    ])
+    _assert_png(uri)
+
+
+def test_oled_elements_preview_empty_input_returns_none():
+    assert pr.render_oled_elements_preview([]) is None
+    assert pr.render_oled_elements_preview(None) is None
+
+
+def test_oled_elements_preview_compass_does_not_raise():
+    # Real device hardware (i2c/ssd1306) is mocked internally -- this must
+    # never touch actual hardware even outside a request context.
+    uri = pr.render_oled_elements_preview([
+        {"type": "compass", "x": 30, "y": 30, "radius": 20, "heading": 90},
+    ])
+    _assert_png(uri, expected_w=128 * 4, expected_h=64 * 4)

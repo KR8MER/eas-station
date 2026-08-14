@@ -302,6 +302,53 @@ def render_led_elements_preview(
         return None
 
 
+# Cool blue-white OLED phosphor, matching the gallery renders in
+# docs/screenshots/oled-displays.png.
+_OLED_ON = (220, 230, 255)
+_OLED_BG = (10, 12, 16)
+
+
+def render_oled_elements_preview(
+    elements: Optional[Sequence[Dict[str, Any]]],
+    scale: int = 4,
+) -> Optional[str]:
+    """Render a resolved OLED element list to a glowing blue-white PNG.
+
+    ArgonOLEDController (app_core/oled.py) couples rendering to real I2C
+    hardware in its constructor (``i2c(...)`` / ``ssd1306(...)`` run
+    unconditionally in ``__init__``), unlike scripts.vfd_controller's and
+    scripts.led_sign_controller's pure module-level render functions --
+    so unlike render_vfd_elements_preview()/render_led_elements_preview(),
+    this has to build a throwaway controller with the I2C/SSD1306 driver
+    calls mocked out, the same technique the screenshot-gallery scripts
+    use, rather than calling a hardware-independent function directly.
+    """
+    if not _PIL_AVAILABLE or not elements:
+        return None
+    try:
+        from unittest.mock import MagicMock, patch
+
+        with patch("app_core.oled.i2c", return_value=MagicMock()), \
+                patch("app_core.oled.ssd1306", return_value=MagicMock()):
+            from app_core.oled import ArgonOLEDController
+
+            controller = ArgonOLEDController(width=128, height=64, i2c_bus=1, i2c_address=0x3C)
+            controller.render_frame(list(elements))
+            mono = controller._last_image
+
+        if mono is None:
+            return None
+
+        rgb = mono.convert("L").resize((128 * scale, 64 * scale), Image.NEAREST)
+        base = ImageOps.colorize(rgb, black=_OLED_BG, white=_OLED_ON)
+        glow = base.filter(ImageFilter.GaussianBlur(scale * 0.5))
+        glow = Image.eval(glow, lambda v: int(v * 0.6))
+        return _encode_png(ImageChops.screen(base, glow))
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("OLED elements preview render failed: %s", exc)
+        return None
+
+
 def _vfd_grid_from_commands(commands: Sequence[Dict[str, Any]], width: int, height: int) -> List[List[int]]:
     """Execute the VFD draw-command list onto a 0/1 pixel grid."""
     grid = [[0] * width for _ in range(height)]
