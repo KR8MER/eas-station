@@ -167,6 +167,9 @@ class HardwareSettings(db.Model):
     tower_light_test_color = db.Column(db.String(20), nullable=False, default='cyan')
     tower_light_fault_enabled = db.Column(db.Boolean, nullable=False, default=True)
     tower_light_fault_color = db.Column(db.String(20), nullable=False, default='magenta')
+    # Pending Alerts: alerts held in the gated-alerts review queue
+    tower_light_gate_pending_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    tower_light_gate_pending_color = db.Column(db.String(20), nullable=False, default='blue')
     # Severity-based alert colours (replace the single alert colour when enabled)
     tower_light_severity_colors = db.Column(db.Boolean, nullable=False, default=False)
     tower_light_warning_color = db.Column(db.String(20), nullable=False, default='red')
@@ -305,6 +308,8 @@ class HardwareSettings(db.Model):
             "tower_light_test_color": self.tower_light_test_color,
             "tower_light_fault_enabled": self.tower_light_fault_enabled,
             "tower_light_fault_color": self.tower_light_fault_color,
+            "tower_light_gate_pending_enabled": self.tower_light_gate_pending_enabled,
+            "tower_light_gate_pending_color": self.tower_light_gate_pending_color,
             "tower_light_severity_colors": self.tower_light_severity_colors,
             "tower_light_warning_color": self.tower_light_warning_color,
             "tower_light_watch_color": self.tower_light_watch_color,

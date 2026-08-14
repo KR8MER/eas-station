@@ -227,6 +227,8 @@ def get_tower_light_settings() -> Dict[str, Any]:
         'test_color': getattr(settings, 'tower_light_test_color', 'cyan') or 'cyan',
         'fault_enabled': bool(getattr(settings, 'tower_light_fault_enabled', True)),
         'fault_color': getattr(settings, 'tower_light_fault_color', 'magenta') or 'magenta',
+        'gate_pending_enabled': bool(getattr(settings, 'tower_light_gate_pending_enabled', True)),
+        'gate_pending_color': getattr(settings, 'tower_light_gate_pending_color', 'blue') or 'blue',
         'severity_colors_enabled': bool(getattr(settings, 'tower_light_severity_colors', False)),
         'warning_color': getattr(settings, 'tower_light_warning_color', 'red') or 'red',
         'watch_color': getattr(settings, 'tower_light_watch_color', 'yellow') or 'yellow',

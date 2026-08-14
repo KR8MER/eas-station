@@ -1014,6 +1014,39 @@ def test_load_tower_light_config_enabled(monkeypatch):
     assert result.baudrate == 9600
     assert result.alert_buzzer is True
     assert result.blink_on_alert is False
+    # Pending Alerts fields default even when absent from the settings dict
+    # (e.g. an older cached row read before the column existed).
+    assert result.gate_pending_enabled is True
+    assert result.gate_pending_color == "blue"
+
+
+def test_load_tower_light_config_gate_pending_overrides(monkeypatch):
+    """gate_pending_enabled/gate_pending_color load from the settings dict
+    and an invalid colour falls back to the default, like the other colours."""
+    monkeypatch.setattr(gpio.config_loaders, "_GPIO_SETTINGS_AVAILABLE", True)
+
+    fake_settings = {
+        "enabled": True,
+        "serial_port": "/dev/ttyUSB1",
+        "baudrate": 9600,
+        "gate_pending_enabled": False,
+        "gate_pending_color": "white",
+    }
+
+    import types
+    fake_module = types.ModuleType("app_core.hardware_settings")
+    fake_module.get_tower_light_settings = lambda: fake_settings
+    monkeypatch.setitem(
+        __import__("sys").modules, "app_core.hardware_settings", fake_module
+    )
+
+    result = load_tower_light_config_from_db()
+    assert result.gate_pending_enabled is False
+    assert result.gate_pending_color == "white"
+
+    fake_settings["gate_pending_color"] = "not-a-color"
+    result = load_tower_light_config_from_db()
+    assert result.gate_pending_color == "blue"
 
 
 # ---------------------------------------------------------------------------

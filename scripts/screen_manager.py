@@ -44,6 +44,10 @@ from app_utils import ALERT_SOURCE_IPAWS, ALERT_SOURCE_MANUAL
 
 logger = logging.getLogger(__name__)
 
+# How often the "Pending Review" gated-alerts scene redraws itself while it
+# has priority over normal rotation (see _display_gated_pending_oled/led/vfd).
+GATED_PENDING_REFRESH_SECONDS = 8
+
 
 SNAPSHOT_SCREEN_TEMPLATE = {
     "name": "oled_snapshot_preview",
@@ -170,6 +174,16 @@ class ScreenManager:
         self._oled_button_retry_after = 0.0  # monotonic time; throttle init retries
         self._oled_alert_paused = False  # Track if alert scrolling is paused
         self._pending_alert: Optional[Dict[str, Any]] = None  # Higher priority alert waiting to display
+        # Gated-alerts hold-off queue ("Pending Review" scene) -- unrelated to
+        # _pending_alert above (that's the next *active* CAPAlert waiting to
+        # interrupt the OLED scroll). This tracks GatedAlert rows with
+        # status='pending' from the /admin/pending-alerts queue. Refreshed
+        # alongside the rotation configs in _update_rotations (1s throttle).
+        self._gated_pending_count: int = 0
+        self._gated_pending_alerts: List[Dict[str, Any]] = []
+        self._last_oled_gated_update = datetime.min
+        self._last_led_gated_update = datetime.min
+        self._last_vfd_gated_update = datetime.min
         # Pixel-by-pixel scrolling configuration
         self._oled_scroll_offset = 0
         self._oled_scroll_effect = None
@@ -311,6 +325,15 @@ class ScreenManager:
         except Exception as e:
             logger.error(f"Error loading rotations: {e}")
 
+        try:
+            from scripts.screen_manager_gated import query_gated_pending_summary
+
+            self._gated_pending_count, self._gated_pending_alerts = query_gated_pending_summary()
+        except Exception as e:
+            logger.error(f"Error loading gated-alerts pending queue for displays: {e}")
+            self._gated_pending_count = 0
+            self._gated_pending_alerts = []
+
     def _check_led_rotation(self):
         """Check if LED screen should rotate."""
         if not self._led_rotation:
@@ -318,6 +341,14 @@ class ScreenManager:
 
         # Check if we should skip rotation due to active alerts
         if self._led_rotation.get('skip_on_alert') and self._has_active_alerts():
+            return
+
+        # Gated-alerts "Pending Review" scene ranks below an active/incoming
+        # alert (handled above) but above routine rotation content: while
+        # there is anything pending, it takes over the sign instead of
+        # cycling through the configured screens.
+        if self._gated_pending_count > 0:
+            self._display_gated_pending_led(datetime.utcnow())
             return
 
         # Get screen sequence
@@ -366,6 +397,13 @@ class ScreenManager:
         if self._vfd_rotation.get('skip_on_alert') and self._has_active_alerts():
             return
 
+        # Gated-alerts "Pending Review" scene ranks below an active/incoming
+        # alert (handled above) but above routine rotation content -- see the
+        # matching comment in _check_led_rotation.
+        if self._gated_pending_count > 0:
+            self._display_gated_pending_vfd(datetime.utcnow())
+            return
+
         # Get screen sequence
         screens = self._vfd_rotation.get('screens', [])
         if not screens:
@@ -411,6 +449,14 @@ class ScreenManager:
 
         now = datetime.utcnow()
         if self._oled_rotation.get('skip_on_alert') and self._handle_oled_alert_preemption(now):
+            self._clear_oled_screen_scroll_state()
+            return
+
+        # Gated-alerts "Pending Review" scene ranks below an active/incoming
+        # alert (handled above) but above routine rotation content -- see the
+        # matching comment in _check_led_rotation.
+        if self._gated_pending_count > 0:
+            self._display_gated_pending_oled(now)
             self._clear_oled_screen_scroll_state()
             return
 
@@ -1593,6 +1639,98 @@ class ScreenManager:
         except Exception as e:
             logger.error(f"Error checking active alerts: {e}")
             return False
+
+    def _display_gated_pending_oled(self, now: datetime) -> None:
+        """Render the gated-alerts "Pending Review" scene on the OLED.
+
+        Bypasses the normal DisplayScreen/ScreenRenderer path (there is no
+        DB-backed screen for this) and renders a dynamically built elements
+        list, the same way _display_oled_snapshot does for the
+        button-triggered system snapshot. Scene building and the hardware
+        call live in scripts/screen_manager_gated.py; this method just owns
+        the timing/throttle and the controller lookup.
+        """
+        if now - self._last_oled_gated_update < timedelta(seconds=GATED_PENDING_REFRESH_SECONDS):
+            return
+
+        try:
+            from app_core.oled import initialise_oled_display
+            import app_core.oled as oled_module
+            from scripts.screen_manager_gated import push_oled_pending_scene
+        except Exception as exc:  # pragma: no cover - optional hardware dependency
+            logger.debug("OLED module unavailable for gated-pending scene: %s", exc)
+            return
+
+        controller = oled_module.oled_controller or initialise_oled_display(logger)
+        if controller is None:
+            return
+
+        if not push_oled_pending_scene(controller, self._gated_pending_count, self._gated_pending_alerts):
+            return
+
+        self._last_oled_gated_update = now
+        self._last_oled_update = now
+        logger.debug(
+            "Displayed gated-alerts Pending Review OLED scene (%d pending)",
+            self._gated_pending_count,
+        )
+
+    def _display_gated_pending_led(self, now: datetime) -> None:
+        """Send the gated-alerts "Pending Review" message to the LED sign."""
+        if now - self._last_led_gated_update < timedelta(seconds=GATED_PENDING_REFRESH_SECONDS):
+            return
+
+        try:
+            import app_core.led as led_module
+            from scripts.screen_manager_gated import push_led_pending_scene
+        except Exception as exc:  # pragma: no cover - optional hardware dependency
+            logger.debug("LED module unavailable for gated-pending scene: %s", exc)
+            return
+
+        rendered = push_led_pending_scene(led_module, self._gated_pending_count, self._gated_pending_alerts)
+        if not rendered:
+            return
+
+        # Retain for the live preview, same convention as _display_led_screen.
+        self._last_led_render = {
+            'lines': [{'text': text} for text in rendered['lines']],
+            'color': rendered['color'],
+            'mode': rendered['mode'],
+            'speed': rendered['speed'],
+        }
+
+        self._last_led_gated_update = now
+        self._last_led_update = now
+        logger.debug(
+            "Displayed gated-alerts Pending Review LED message (%d pending)",
+            self._gated_pending_count,
+        )
+
+    def _display_gated_pending_vfd(self, now: datetime) -> None:
+        """Send the gated-alerts "Pending Review" message to the VFD display."""
+        if now - self._last_vfd_gated_update < timedelta(seconds=GATED_PENDING_REFRESH_SECONDS):
+            return
+
+        try:
+            import app_core.vfd as vfd_module
+            from scripts.screen_manager_gated import push_vfd_pending_scene
+        except Exception as exc:  # pragma: no cover - optional hardware dependency
+            logger.debug("VFD module unavailable for gated-pending scene: %s", exc)
+            return
+
+        commands = push_vfd_pending_scene(vfd_module, self._gated_pending_count, self._gated_pending_alerts)
+        if not commands:
+            return
+
+        # Retain for the live preview, same convention as _display_vfd_screen.
+        self._last_vfd_commands = commands
+
+        self._last_vfd_gated_update = now
+        self._last_vfd_update = now
+        logger.debug(
+            "Displayed gated-alerts Pending Review VFD message (%d pending)",
+            self._gated_pending_count,
+        )
 
     def _update_rotation_state(self, display_type: str, current_index: int, timestamp: datetime):
         """Update rotation state in database.

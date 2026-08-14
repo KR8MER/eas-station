@@ -136,6 +136,32 @@ def test_monitor_incoming_expires_without_broadcast(monkeypatch):
     assert tower.states[-1] == ("green", False, False)
 
 
+def test_monitor_gate_pending_lights_blue_and_yields_to_alert(monkeypatch):
+    """AlertIndicatorMonitor threads pending_gate_count_fn into the tower colour,
+    not just the GATE_PENDING relay -- and a live alert still takes priority."""
+    tower = _FakeTower()
+    pending_count = {"n": 2}
+    monitor = AlertIndicatorMonitor(
+        tower_light_controller=tower,
+        pending_gate_count_fn=lambda: pending_count["n"],
+    )
+
+    _patch_state(monkeypatch, broadcast=False, incoming=False)
+    monitor.refresh()
+    assert tower.states[-1] == ("blue", True, False)
+
+    # A live broadcast still wins over a non-empty Pending Alerts queue.
+    _patch_state(monkeypatch, broadcast=True, incoming=False, event_code="TOR")
+    monitor.refresh()
+    assert tower.states[-1] == ("red", True, False)
+
+    # Broadcast ends, queue is now empty -> standby, not blue.
+    pending_count["n"] = 0
+    _patch_state(monkeypatch, broadcast=False, incoming=False)
+    monitor.refresh()
+    assert tower.states[-1] == ("green", False, False)
+
+
 def test_monitor_shows_fault_when_redis_down(monkeypatch):
     """Redis loss drives the fault state instead of silently sitting stale."""
     tower = _FakeTower()
@@ -275,6 +301,57 @@ def test_resolver_active_alert_overrides_quiet_hours():
         cfg, {"active": False}, False, True, now=night, active_alert_count=1
     )
     assert (state.name, state.color) == ("active", "yellow")
+
+
+def test_resolver_gate_pending_shows_blue_when_queue_nonempty():
+    """A non-empty Pending Alerts queue shows blue, flashing, no buzzer."""
+    cfg = TowerLightConfig()
+    state = resolve_tower_state(
+        cfg, {"active": False}, False, True, pending_gate_count=3
+    )
+    assert (state.name, state.color, state.flash, state.buzzer) == (
+        "gate_pending", "blue", True, False,
+    )
+
+
+def test_resolver_gate_pending_disabled_falls_through_to_standby():
+    cfg = TowerLightConfig(gate_pending_enabled=False)
+    state = resolve_tower_state(
+        cfg, {"active": False}, False, True, pending_gate_count=3
+    )
+    assert state.name == "standby"
+
+
+def test_resolver_active_alert_beats_gate_pending():
+    """An active/incoming alert must never be buried by a pending-review indication."""
+    cfg = TowerLightConfig()
+    state = resolve_tower_state(
+        cfg, {"active": False}, True, True, pending_gate_count=5
+    )
+    assert state.name == "incoming"
+
+    state_active_count = resolve_tower_state(
+        cfg, {"active": False}, False, True, active_alert_count=1, pending_gate_count=5
+    )
+    assert state_active_count.name == "active"
+
+
+def test_resolver_broadcast_beats_gate_pending():
+    cfg = TowerLightConfig()
+    state = resolve_tower_state(
+        cfg, {"active": True, "event_code": "TOR"}, False, True, pending_gate_count=5
+    )
+    assert (state.name, state.color) == ("alert", "red")
+
+
+def test_resolver_gate_pending_overrides_quiet_hours():
+    """Pending Alerts must never be silenced by a dark quiet-hours schedule."""
+    cfg = TowerLightConfig(quiet_enabled=True, quiet_start="22:00", quiet_end="07:00")
+    night = datetime(2026, 6, 12, 23, 30)
+    state = resolve_tower_state(
+        cfg, {"active": False}, False, True, now=night, pending_gate_count=2
+    )
+    assert (state.name, state.color) == ("gate_pending", "blue")
 
 
 def test_monitor_holds_yellow_after_broadcast_with_active_alert(monkeypatch):

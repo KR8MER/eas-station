@@ -123,6 +123,9 @@ class TowerLightConfig:
     test_color: str = "cyan"           # Test broadcasts (RWT/RMT/NPT/DMO)
     fault_enabled: bool = True         # Indicate Redis / alert-pipeline loss
     fault_color: str = "magenta"       # System fault
+    # Pending Alerts: alerts held in the gated-alerts review queue
+    gate_pending_enabled: bool = True  # Indicate alerts awaiting operator review
+    gate_pending_color: str = "blue"   # Pending Alerts queue non-empty
     # Severity-based alert colours (replace alert_color when enabled)
     severity_colors_enabled: bool = False
     warning_color: str = "red"         # WRN product class
@@ -405,6 +408,8 @@ class TowerLightController:
             "test_color": self.config.test_color,
             "fault_enabled": self.config.fault_enabled,
             "fault_color": self.config.fault_color,
+            "gate_pending_enabled": self.config.gate_pending_enabled,
+            "gate_pending_color": self.config.gate_pending_color,
             "severity_colors_enabled": self.config.severity_colors_enabled,
             "quiet_enabled": self.config.quiet_enabled,
         }

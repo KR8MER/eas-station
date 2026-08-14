@@ -667,6 +667,7 @@ def register(app: Flask, logger) -> None:
             # Hardware service is unavailable: return an empty-but-valid state so
             # the UI degrades gracefully instead of showing a JS error.
             return jsonify({
+                "pending_gate_count": 0,
                 "oled": {"enabled": False, "width": 128, "height": 64,
                          "current_screen": None, "scroll_offset": 0, "alert_active": False},
                 "vfd":  {"enabled": False, "width": 140, "height": 32, "current_screen": None},
