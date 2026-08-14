@@ -48,10 +48,10 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - exercised wherever Pillow is installed
-    from PIL import Image, ImageChops, ImageDraw, ImageFilter
+    from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
     _PIL_AVAILABLE = True
 except Exception:  # pragma: no cover - optional dependency
-    Image = ImageChops = ImageDraw = ImageFilter = None  # type: ignore[assignment]
+    Image = ImageChops = ImageDraw = ImageFilter = ImageOps = None  # type: ignore[assignment]
     _PIL_AVAILABLE = False
 
 
@@ -330,7 +330,13 @@ def render_vfd_preview(
     height: int = 32,
     scale: int = 9,
 ) -> Optional[str]:
-    """Render VFD draw-commands to a blue-green VFD PNG (data URI), or None."""
+    """Render VFD draw-commands to a blue-green VFD PNG (data URI), or None.
+
+    Legacy path for the old per-primitive command shape. Screens rendered
+    through scripts.vfd_controller.render_vfd_elements() (icons, gauges,
+    compass, multi-value bar charts) use render_vfd_elements_preview()
+    instead, below.
+    """
     if not _PIL_AVAILABLE:
         return None
     try:
@@ -338,6 +344,36 @@ def render_vfd_preview(
         return _render_vfd_grid(grid, width, height, scale)
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("VFD preview render failed: %s", exc)
+        return None
+
+
+def render_vfd_elements_preview(
+    elements: Optional[Sequence[Dict[str, Any]]],
+    width: int = 140,
+    height: int = 32,
+    scale: int = 9,
+) -> Optional[str]:
+    """Render a resolved VFD element list to a blue-green VFD PNG.
+
+    Calls scripts.vfd_controller.render_vfd_elements() -- the exact same
+    pure function NoritakeVFDController.render_frame() uses to build the
+    real hardware bitmap -- so the preview can never drift from what the
+    physical panel is actually showing (the old command-grid path
+    reimplemented drawing logic a second time; this one doesn't).
+    """
+    if not _PIL_AVAILABLE or not elements:
+        return None
+    try:
+        from scripts.vfd_controller import render_vfd_elements
+
+        mono = render_vfd_elements(list(elements), width, height)
+        rgb = mono.convert("L").resize((width * scale, height * scale), Image.NEAREST)
+        base = ImageOps.colorize(rgb, black=_VFD_BG, white=_VFD_ON)
+        glow = base.filter(ImageFilter.GaussianBlur(scale * 0.55))
+        glow = Image.eval(glow, lambda v: int(v * 0.8))
+        return _encode_png(ImageChops.screen(base, glow))
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("VFD elements preview render failed: %s", exc)
         return None
 
 

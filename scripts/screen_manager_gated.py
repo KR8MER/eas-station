@@ -205,16 +205,15 @@ def build_led_pending_message(
     }
 
 
-def build_vfd_pending_commands(
+def build_vfd_pending_elements(
     count: int,
     items: List[Dict[str, str]],
     width: int = 140,
     height: int = 32,
 ) -> Optional[List[Dict[str, Any]]]:
-    """VFD draw-command list for the Pending Review scene.
-
-    Matches the ``{'type': 'clear'|'text', ...}`` command shape
-    ``_display_vfd_screen`` already sends to the panel. Returns ``None``
+    """VFD element list for the Pending Review scene, in
+    scripts.vfd_controller.render_vfd_elements()'s native shape (the same
+    contract render_frame() and the OLED engine both use). Returns ``None``
     when nothing is pending.
     """
     if count <= 0:
@@ -228,14 +227,15 @@ def build_vfd_pending_commands(
     detail = f"{label} {headline}".strip() if label else headline
     detail_line = _truncate(detail, VFD_LINE_MAX_CHARS) if detail else ""
 
-    commands: List[Dict[str, Any]] = [
-        {"type": "clear"},
-        {"type": "text", "x": 2, "y": 2, "text": header},
+    elements: List[Dict[str, Any]] = [
+        {"type": "rectangle", "x": 0, "y": 0, "width": width, "height": 11, "filled": True},
+        {"type": "icon", "name": "warning", "x": 2, "y": 1, "size": 9, "invert": True},
+        {"type": "text", "x": 14, "y": 1, "text": header, "invert": True},
     ]
     if detail_line:
-        commands.append({"type": "text", "x": 2, "y": 18, "text": detail_line})
+        elements.append({"type": "text", "x": 2, "y": 16, "text": detail_line})
 
-    return commands
+    return elements
 
 
 def push_oled_pending_scene(controller, count: int, items: List[Dict[str, str]]) -> bool:
@@ -292,30 +292,20 @@ def push_led_pending_scene(led_module, count: int, items: List[Dict[str, str]]) 
 
 
 def push_vfd_pending_scene(vfd_module, count: int, items: List[Dict[str, str]]) -> Optional[List[Dict[str, Any]]]:
-    """Build and send the Pending Review commands to the VFD controller.
+    """Build and send the Pending Review scene to the VFD controller.
 
-    Returns the rendered command list (for the caller to cache for the live
-    preview, mirroring ``_last_vfd_commands`` in screen_manager.py) or None
+    Returns the rendered element list (for the caller to cache for the live
+    preview, mirroring ``_last_vfd_elements`` in screen_manager.py) or None
     if nothing was sent.
     """
-    commands = build_vfd_pending_commands(count, items)
-    if not commands or not vfd_module.vfd_controller:
+    elements = build_vfd_pending_elements(count, items)
+    if not elements or not vfd_module.vfd_controller:
         return None
 
     try:
-        for command in commands:
-            cmd_type = command.get("type")
-            if cmd_type == "clear":
-                vfd_module.vfd_controller.clear_display()
-            elif cmd_type == "text":
-                # NoritakeVFDController.draw_text() takes (x, y, text).
-                vfd_module.vfd_controller.draw_text(
-                    command.get("x", 0),
-                    command.get("y", 0),
-                    command.get("text", ""),
-                )
+        vfd_module.vfd_controller.render_frame(elements)
     except Exception as exc:
-        logger.error("Error sending gated-pending VFD commands: %s", exc)
+        logger.error("Error sending gated-pending VFD frame: %s", exc)
         return None
 
-    return commands
+    return elements

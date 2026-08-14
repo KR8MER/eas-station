@@ -99,3 +99,87 @@ def test_oled_elements_bars_missing_source_is_empty_list():
     rendered = renderer._render_oled_elements(template, {})
 
     assert rendered["elements"][0]["values"] == []
+
+
+# ---------------------------------------------------------------------------
+# render_vfd_screen -- resolved-elements shape (matches render_oled_screen's
+# {'elements': [...]} contract so both engines push one bitmap per frame)
+# ---------------------------------------------------------------------------
+
+def test_render_vfd_screen_returns_elements_dict_not_command_list():
+    renderer = screen_renderer.ScreenRenderer()
+    screen_data = {
+        "template_data": {
+            "elements": [
+                {"type": "text", "text": "{status.hostname}", "x": 0, "y": 0},
+            ],
+        },
+    }
+    rendered = renderer.render_vfd_screen(screen_data, {"status": {"hostname": "eas-demo"}})
+
+    assert isinstance(rendered, dict)
+    assert rendered["elements"][0] == {
+        "type": "text", "x": 0, "y": 0, "text": "eas-demo", "invert": None,
+    }
+    assert rendered["clear"] is True
+
+
+def test_render_vfd_screen_segments_resolves_value_and_clamps():
+    renderer = screen_renderer.ScreenRenderer()
+    screen_data = {
+        "template_data": {
+            "elements": [
+                {"type": "segments", "x": 0, "y": 0, "width": 100, "height": 8,
+                 "value": "{audio.level}", "count": 14, "gap": 2},
+            ],
+        },
+    }
+    rendered = renderer.render_vfd_screen(screen_data, {"audio": {"level": 150}})
+
+    seg = rendered["elements"][0]
+    assert seg["type"] == "segments"
+    assert seg["value"] == 100.0  # clamped
+    assert seg["count"] == 14
+
+
+def test_render_vfd_screen_bar_resolves_value_and_clamps():
+    renderer = screen_renderer.ScreenRenderer()
+    screen_data = {
+        "template_data": {
+            "elements": [
+                {"type": "bar", "x": 0, "y": 0, "width": 100, "height": 8, "value": "{audio.level}"},
+            ],
+        },
+    }
+    rendered = renderer.render_vfd_screen(screen_data, {"audio": {"level": 150}})
+
+    bar = next(el for el in rendered["elements"] if el["type"] == "bar")
+    assert bar["value"] == 100.0  # clamped
+
+
+def test_render_vfd_screen_supports_new_icon_and_gauge_elements():
+    """The old VFD path only understood text/rectangle/line/bar; confirms
+    the richer OLED-style vocabulary (icon, gauge, compass, bars) now
+    survives render_vfd_screen() too."""
+    renderer = screen_renderer.ScreenRenderer()
+    screen_data = {
+        "template_data": {
+            "elements": [
+                {"type": "icon", "name": "heartbeat", "x": 2, "y": 2, "size": 8},
+                {"type": "gauge", "x": 40, "y": 28, "radius": 12, "value": "{status.score}"},
+                {"type": "compass", "x": 100, "y": 16, "radius": 10, "heading": "{gps.track_angle}"},
+                {"type": "bars", "x": 0, "y": 0, "width": 40, "height": 16, "values_source": "gps.snrs"},
+            ],
+        },
+    }
+    api_data = {"status": {"score": 80}, "gps": {"track_angle": 45, "snrs": [10, 20]}}
+    rendered = renderer.render_vfd_screen(screen_data, api_data)
+
+    types = {el["type"] for el in rendered["elements"]}
+    assert types == {"icon", "gauge", "compass", "bars"}
+    gauge = next(el for el in rendered["elements"] if el["type"] == "gauge")
+    assert gauge["value"] == 80.0
+    compass = next(el for el in rendered["elements"] if el["type"] == "compass")
+    assert compass["heading"] == 45.0
+    bars = next(el for el in rendered["elements"] if el["type"] == "bars")
+    assert bars["values"] == [10.0, 20.0]

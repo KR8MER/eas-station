@@ -162,10 +162,10 @@ class ScreenManager:
         # Most recently rendered LED/VFD content, retained so the displays
         # service can publish a faithful preview image of what each panel is
         # currently showing (see services/displays/state.py).  LED keeps the
-        # ScreenRenderer output (lines + colour); VFD keeps the draw-command
-        # list that was sent to the panel.
+        # ScreenRenderer output (lines + colour); VFD keeps the resolved
+        # element list that was rendered to a bitmap and sent to the panel.
         self._last_led_render: Optional[Dict[str, Any]] = None
-        self._last_vfd_commands: Optional[List[Dict[str, Any]]] = None
+        self._last_vfd_elements: Optional[List[Dict[str, Any]]] = None
         self._oled_button = None
         self._oled_button_actions: Deque[str] = deque()
         self._oled_button_lock = threading.Lock()
@@ -820,47 +820,22 @@ class ScreenManager:
             if not screen or not screen.enabled:
                 return
 
-            # Render screen
+            # Render screen: a resolved {'elements': [...], 'clear': bool}
+            # (see ScreenRenderer.render_vfd_screen()), pushed as a single
+            # bitmap frame rather than one GU-7000 command per primitive.
             renderer = ScreenRenderer(allow_preview_samples=False)
-            commands = renderer.render_screen(screen.to_dict())
+            rendered = renderer.render_screen(screen.to_dict())
 
-            if not commands:
+            if not rendered or not rendered.get('elements'):
                 return
 
             # Retain for the live preview (see services/displays/state.py).
-            self._last_vfd_commands = commands
+            self._last_vfd_elements = rendered['elements']
 
-            # Send to VFD display
             if vfd_module.vfd_controller:
-                for command in commands:
-                    cmd_type = command.get('type')
-
-                    if cmd_type == 'clear':
-                        vfd_module.vfd_controller.clear_display()
-
-                    elif cmd_type == 'text':
-                        vfd_module.vfd_controller.draw_text(
-                            command.get('text', ''),
-                            command.get('x', 0),
-                            command.get('y', 0),
-                        )
-
-                    elif cmd_type == 'rectangle':
-                        vfd_module.vfd_controller.draw_rectangle(
-                            command.get('x1', 0),
-                            command.get('y1', 0),
-                            command.get('x2', 10),
-                            command.get('y2', 10),
-                            filled=command.get('filled', False),
-                        )
-
-                    elif cmd_type == 'line':
-                        vfd_module.vfd_controller.draw_line(
-                            command.get('x1', 0),
-                            command.get('y1', 0),
-                            command.get('x2', 10),
-                            command.get('y2', 10),
-                        )
+                vfd_module.vfd_controller.render_frame(
+                    rendered['elements'], clear=rendered.get('clear', True)
+                )
 
                 # Update screen statistics
                 screen.display_count += 1
@@ -1718,12 +1693,12 @@ class ScreenManager:
             logger.debug("VFD module unavailable for gated-pending scene: %s", exc)
             return
 
-        commands = push_vfd_pending_scene(vfd_module, self._gated_pending_count, self._gated_pending_alerts)
-        if not commands:
+        elements = push_vfd_pending_scene(vfd_module, self._gated_pending_count, self._gated_pending_alerts)
+        if not elements:
             return
 
         # Retain for the live preview, same convention as _display_vfd_screen.
-        self._last_vfd_commands = commands
+        self._last_vfd_elements = elements
 
         self._last_vfd_gated_update = now
         self._last_vfd_update = now

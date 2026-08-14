@@ -8,6 +8,61 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.163.0] - 2026-08-14 - Fix OLED element collisions; give the VFD the same graphics engine as the OLED
+
+### Fixed
+- **OLED element collisions and clipping**, found by rendering every default
+  screen at real size (128x64) instead of eyeballing the template JSON:
+  - The `compass` primitive's cardinal labels sat on top of its own tick
+    marks and needle. Labels now render outside the ring, and the needle is
+    shortened so it can never reach them; the GPS Status screen's compass
+    and text columns were repositioned to fit.
+  - `AUDIO HEALTH` and `IPAWS POLLER`'s header banners overlapped their
+    own right-aligned stat text at small font — the audio one duplicated
+    the Score row already shown below (dropped), the poller's title was
+    shortened (`IPAWS POLLER` → `POLLER`).
+  - The GPIO Status header's `"{count} active"` overlapped its title;
+    shortened to a bare count, matching every other screen's convention.
+  - The Clock Face's IP address was squeezed into a ~60px column next to
+    the date and truncated to `"192.168."` or worse; moved to a full-width
+    footer row (the analog clock face shrank slightly to make room).
+  - The `satellite` icon (rectangles + ellipse + diagonal line) was
+    illegible below ~16px; redrawn as a bolder body-dot-with-spokes glyph
+    that reads clearly at 9px.
+- **VFD custom screens were completely non-functional.** Both render paths
+  called `vfd_controller.clear_display()` — a method that does not exist on
+  `NoritakeVFDController` (the real method is `clear_screen()`) — raising
+  `AttributeError` on the very first command of every render. Underneath
+  that, every text element also called `draw_text()` with its arguments in
+  the wrong order (`(text, x, y)` instead of the real `(x, y, text)`
+  signature), which would have silently garbled positioning even once the
+  first bug was fixed. Both are pinned by regression tests that fail
+  against the original code and pass against the fix.
+
+### Added
+- **The VFD display now has the same icon/gauge/compass/bar-chart engine as
+  the OLED**, plus a VFD-only **`segments`** primitive (a classic segmented
+  LED VU-meter look — discrete lit/unlit blocks instead of one continuous
+  fill). The Noritake GU140x32F-7000B already supported full bitmap pushes
+  via `draw_bitmap()`, but the template system only ever drove it through
+  discrete GU-7000 primitive commands (text/rectangle/line). `scripts.
+  vfd_controller.render_vfd_elements()` is a new hardware-independent PIL
+  renderer — the same pure function `NoritakeVFDController.render_frame()`
+  uses to build the real bitmap and the web preview uses to render an
+  accurate PNG — reusing the OLED's icon glyph library directly rather than
+  a second copy of the drawing code. Switched the default font from 10px to
+  7px (matching the panel's native 5x7/7x10 sizes) since 10px only left
+  room for ~2 text rows on the 32px canvas.
+- **The 3 default VFD screens were reflowed onto the new engine**, and a
+  4th — **GPS Status**, with a heading compass — was added for parity with
+  the OLED's flagship screen: System Meters (bar meters), Audio VU Meter
+  (segmented meters), GPS Status (compass), Network Status (icon+banner).
+  All 4 are seeded if missing rather than only updated if already present
+  — some installs never had them (no VFD hardware attached at setup time).
+- **README screenshot gallery**: pixel-accurate renders of all 11 OLED
+  screens and all 3 VFD screens (authentic blue-green phosphor glow),
+  generated directly from the driver code rather than mocked up.
+
 ## [2.162.0] - 2026-08-14 - Add a GPS OLED screen and richer display graphics
 
 ### Added

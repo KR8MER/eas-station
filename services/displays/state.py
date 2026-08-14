@@ -128,10 +128,10 @@ def publish_display_state(redis_client, screen_manager) -> None:
                 # screen when nothing has been displayed yet).
                 try:
                     from services.displays.preview_render import (
-                        render_vfd_preview, render_vfd_idle,
+                        render_vfd_elements_preview, render_vfd_idle,
                     )
-                    commands = getattr(screen_manager, "_last_vfd_commands", None) if screen_manager else None
-                    preview = render_vfd_preview(commands) if commands else render_vfd_idle()
+                    elements = getattr(screen_manager, "_last_vfd_elements", None) if screen_manager else None
+                    preview = render_vfd_elements_preview(elements) if elements else render_vfd_idle()
                     if preview:
                         state["vfd"]["preview_image"] = preview
                 except Exception as e:
