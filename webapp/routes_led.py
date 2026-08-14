@@ -1346,10 +1346,11 @@ def register(app: Flask, logger) -> None:
             if not hasattr(led_module.led_controller, "send_dots_graphic"):
                 return jsonify({"success": False, "error": "send_dots_graphic not supported by this controller version"})
 
+            default_label = getattr(led_module.led_controller, "GRAPHICS_FILE_LABEL", "A")
             success = led_module.led_controller.send_dots_graphic(
                 dots=dots,
                 color=color,
-                file_label=str(data.get("file_label", "A")),
+                file_label=str(data.get("file_label", default_label)),
             )
 
             if success:
@@ -1368,6 +1369,54 @@ def register(app: Flask, logger) -> None:
             db.session.rollback()
             route_logger.error("Error sending dots graphic: %s", exc)
             return jsonify({"success": False, "error": str(exc)})
+
+    @app.route("/api/led/configure_graphics_memory", methods=["POST"])
+    @require_auth
+    @require_role("Admin")
+    def api_led_configure_graphics_memory():
+        """Allocate a dedicated DOTS-type file on the sign for graphics
+        screens (see Alpha9120CController.configure_graphics_memory()).
+
+        **Destructive** -- erases every message currently stored on the
+        sign. Requires an explicit confirm flag from the client on top of
+        the Admin-only role gate; there is no automatic/implicit call path
+        anywhere else in the codebase."""
+        try:
+            data = request.get_json(silent=True) or {}
+            if not data.get("confirm"):
+                return jsonify({
+                    "success": False,
+                    "error": "confirm must be true -- this erases all stored sign messages",
+                })
+
+            if not led_module.led_controller:
+                return jsonify({"success": False, "error": "LED controller not available"})
+
+            if not hasattr(led_module.led_controller, "configure_graphics_memory"):
+                return jsonify({
+                    "success": False,
+                    "error": "configure_graphics_memory not supported by this controller version",
+                })
+
+            text_size = data.get("text_size")
+            try:
+                text_size = int(text_size) if text_size is not None else 4000
+            except (TypeError, ValueError):
+                return jsonify({"success": False, "error": "text_size must be an integer"})
+
+            success = led_module.led_controller.configure_graphics_memory(
+                confirm=True,
+                text_size=text_size,
+            )
+
+            if success:
+                route_logger.warning("LED sign Memory Configuration reset via admin action (graphics file allocated)")
+
+            return jsonify({"success": success})
+        except Exception as exc:
+            route_logger.error("Error configuring LED graphics memory: %s", exc)
+            return jsonify({"success": False, "error": str(exc)})
+
     def _enum_label(value):
         if hasattr(value, "name"):
             return value.name

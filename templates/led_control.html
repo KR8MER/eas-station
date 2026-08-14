@@ -1597,6 +1597,25 @@ details.debug-details > .debug-details-body {
                             <button class="btn btn-outline-primary" onclick="dotsFromText()"><i class="fas fa-magic"></i> Generate</button>
                         </div>
                     </div>
+
+                    <div class="feature-group">
+                        <h6><i class="fas fa-memory"></i> Sign Memory</h6>
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>Destructive:</strong> the sign has no dedicated graphics file allocated out of the box (dots/pixel-art screens share nothing with the scrolling-text file). Run this once before using rotating LED graphics screens — it <strong>erases every message currently stored on the sign</strong> and reallocates its Memory Configuration table with a text file and a graphics file.
+                        </div>
+                        <div class="row g-2 align-items-end">
+                            <div class="col-sm-6">
+                                <label class="form-label">Text file size (bytes)</label>
+                                <input type="number" class="form-control" id="graphics-memory-text-size" min="100" max="60000" value="4000">
+                            </div>
+                            <div class="col-sm-6">
+                                <button class="btn btn-outline-danger" onclick="configureGraphicsMemory()">
+                                    <i class="fas fa-database"></i> Allocate Graphics File
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="col-lg-4">
@@ -4133,6 +4152,26 @@ function sendDotsGraphic() {
         else showToast('Failed: ' + res.error, 'error');
     })
     .catch(() => showToast('Error sending dots graphic', 'error'));
+}
+
+function configureGraphicsMemory() {
+    if (!confirm('WARNING: Reset the LED sign\'s Memory Configuration?\n\nThis PERMANENTLY ERASES every message currently stored on the sign and reallocates it with a text file and a dedicated graphics file. Only run this once, before using rotating LED graphics screens.\n\nThis cannot be undone from here.')) {
+        return;
+    }
+
+    const textSize = parseInt(document.getElementById('graphics-memory-text-size')?.value, 10) || 4000;
+
+    fetch('/api/led/configure_graphics_memory', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ confirm: true, text_size: textSize }),
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) showToast('Sign memory reconfigured — graphics file allocated', 'success');
+        else showToast('Failed: ' + (res.error || 'unknown error'), 'error');
+    })
+    .catch(() => showToast('Error configuring sign memory', 'error'));
 }
 
 // ── RSS Feed Management ─────────────────────────────────────────────────────

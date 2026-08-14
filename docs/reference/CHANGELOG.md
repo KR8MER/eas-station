@@ -8,6 +8,58 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.165.0] - 2026-08-14 - Give the LED sign a graphics engine; seed its default screens for the first time
+
+### Added
+- **LED graphics/Dots mode.** `render_led_elements()`
+  (`scripts/led_sign_controller.py`) composes a 160×16 bitmap from
+  text/icon/rectangle/hline/vline/bar elements — reusing the same
+  `_ICON_RENDERERS` glyph set and `max_width`/`overflow` truncation the
+  OLED/VFD engines use — and `Alpha9120CController.render_frame()` pushes
+  it as one M-Protocol Picture File frame via `send_dots_graphic()`. The
+  sign's real graphics capability existed at the protocol layer and was
+  only reachable manually from the Dots tab; it's now wired into the
+  screen-template/rotation system the way OLED and VFD's icon/gauge/bar
+  vocabulary already was.
+- **3 new LED graphics screens** — `led_status_graphic` (clock, large
+  time, small active-alert count; leads the rotation),
+  `led_alert_graphic` (large active-alert count in red), and
+  `led_system_graphic` (large CPU percentage plus MEM/DSK) — each a
+  single hero row, since the 160×16 canvas is half the VFD's 32 rows and
+  a quarter of the OLED's 64.
+- **LED sign Memory Configuration allocation.** A file's type
+  (TEXT/STRING/DOTS) is fixed when it's allocated in the sign's Memory
+  Configuration table, and nothing in this codebase had ever allocated
+  one — `send_message()`'s text file relied entirely on whatever the
+  sign shipped with from the factory, almost certainly no DOTS file at
+  all. Added `Alpha9120CController.configure_graphics_memory()`
+  (confirm-gated, **destructive** — erases every message stored on the
+  sign) and an Admin-only `/api/led/configure_graphics_memory` route plus
+  a "Sign Memory" panel on the LED control page's Dots tab, so this is a
+  deliberate one-time action against a specific physical sign, never
+  something run automatically.
+- **LED elements preview** — `render_led_elements_preview()`
+  (`services/displays/preview_render.py`) renders graphics-mode screens
+  as an authentic glowing amber/red/green dot-matrix PNG at the sign's
+  native 160×16 resolution, reusing `render_led_elements()` so the
+  preview can never drift from the real hardware output.
+
+### Fixed
+- **The LED sign's default screens were never actually seeded.**
+  `scripts/create_example_screens.py` defines 6 default LED screens and
+  a `led_default_rotation`, but no Alembic migration had ever inserted
+  them — production had zero rows at `display_type='led'`. This release
+  seeds them for real, for the first time, the same way
+  `20260814_upgrade_vfd_screens.py` did for the VFD.
+- **LED rotation froze solid during an active alert** — the same bug
+  fixed on the VFD earlier today. `led_default_rotation.skip_on_alert`
+  made `_check_led_rotation()` return before ever reaching the rotation
+  loop whenever a CAP alert was active, freezing the sign on whatever was
+  last drawn; the LED has no OLED-style alert-preemption path, so
+  `led_alert_summary` (existing scrolling-text screen, unmodified here)
+  had never actually been shown during a real alert. Seeded with
+  `skip_on_alert=false` from the start.
+
 ## [2.164.0] - 2026-08-14 - Show active alerts on the VFD; bring it to screen parity with the OLED
 
 ### Added

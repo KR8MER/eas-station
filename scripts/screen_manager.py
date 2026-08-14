@@ -761,7 +761,10 @@ class ScreenManager:
             if not screen or not screen.enabled:
                 return
 
-            # Render screen
+            # Render screen: either a graphics-mode {'elements': [...]}
+            # (see ScreenRenderer._render_led_elements()), pushed as one
+            # Picture File bitmap, or the legacy {'lines': [...]} shape
+            # sent through the sign's own scrolling-text renderer.
             renderer = ScreenRenderer(allow_preview_samples=False)
             rendered = renderer.render_screen(screen.to_dict())
 
@@ -771,8 +774,17 @@ class ScreenManager:
             # Retain for the live preview (see services/displays/state.py).
             self._last_led_render = rendered
 
-            # Send to LED display
-            if led_module.led_controller:
+            if not led_module.led_controller:
+                return
+
+            if 'elements' in rendered:
+                color_str = rendered.get('color', 'AMBER')
+                color = self._convert_led_enum(
+                    led_module.Color, color_str,
+                    led_module.Color.AMBER if led_module.Color else color_str,
+                )
+                led_module.led_controller.render_frame(rendered['elements'], color=color)
+            else:
                 lines = rendered.get('lines', [])
                 color_str = rendered.get('color', 'AMBER')
                 mode_str = rendered.get('mode', 'HOLD')
@@ -790,12 +802,12 @@ class ScreenManager:
                     speed=speed,
                 )
 
-                # Update screen statistics
-                screen.display_count += 1
-                screen.last_displayed_at = datetime.utcnow()
-                db.session.commit()
+            # Update screen statistics
+            screen.display_count += 1
+            screen.last_displayed_at = datetime.utcnow()
+            db.session.commit()
 
-                logger.info(f"Displayed LED screen: {screen.name}")
+            logger.info(f"Displayed LED screen: {screen.name}")
 
         except Exception as e:
             logger.error(f"Error displaying LED screen: {e}")

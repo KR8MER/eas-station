@@ -251,6 +251,57 @@ def render_led_preview(
         return None
 
 
+def render_led_elements_preview(
+    elements: Optional[Sequence[Dict[str, Any]]],
+    color: str = 'AMBER',
+    scale: int = 8,
+) -> Optional[str]:
+    """Render a resolved graphics-mode LED element list to a glowing
+    dot-matrix PNG.
+
+    Calls scripts.led_sign_controller.render_led_elements() -- the exact
+    same pure function Alpha9120CController.render_frame() uses to build
+    the real hardware bitmap -- then applies the same round-dot-plus-glow
+    look render_led_preview() uses for scrolling text, but at the sign's
+    native 160x16 resolution (one drawn dot per physical LED) instead of
+    the coarser per-character cell grid text messages use.
+    """
+    if not _PIL_AVAILABLE or not elements:
+        return None
+    try:
+        from scripts.led_sign_controller import render_led_elements
+
+        on_rgb = _LED_COLORS.get(str(color or 'AMBER').upper(), _LED_COLORS['AMBER'])
+        mono = render_led_elements(list(elements))
+        gw, gh = mono.size
+        pixels = mono.load()
+
+        W, H = gw * scale, gh * scale
+        radius = scale * 0.40
+        base = Image.new('RGB', (W, H), _LED_BG)
+        draw = ImageDraw.Draw(base)
+        glow = Image.new('RGB', (W, H), (0, 0, 0))
+        gdraw = ImageDraw.Draw(glow)
+        dim_glow = tuple(int(v * 0.55) for v in on_rgb)
+        for y in range(gh):
+            for x in range(gw):
+                cx = x * scale + scale / 2
+                cy = y * scale + scale / 2
+                if pixels[x, y]:
+                    gdraw.ellipse(
+                        [cx - radius * 2, cy - radius * 2, cx + radius * 2, cy + radius * 2],
+                        fill=dim_glow,
+                    )
+                    draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=on_rgb)
+                else:
+                    draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=_LED_OFF)
+        glow = glow.filter(ImageFilter.GaussianBlur(scale * 0.45))
+        return _encode_png(ImageChops.screen(base, glow))
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("LED elements preview render failed: %s", exc)
+        return None
+
+
 def _vfd_grid_from_commands(commands: Sequence[Dict[str, Any]], width: int, height: int) -> List[List[int]]:
     """Execute the VFD draw-command list onto a 0/1 pixel grid."""
     grid = [[0] * width for _ in range(height)]

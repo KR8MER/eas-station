@@ -2,7 +2,7 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-2.164.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.165.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -83,7 +83,7 @@ A few of the web dashboards, captured from a running instance with sample alert 
 
 ### Physical Displays
 
-Every panel below is a pixel-accurate render from the actual driver code (`app_core/oled.py`, `scripts/vfd_controller.py`), not a mockup — icons, gauges, the compass dial and bar charts are all real primitives an operator standing at the hardware sees, driven by the same [`/screens`](#-what-the-platform-actually-does) template engine that powers custom screens.
+Every panel below is a pixel-accurate render from the actual driver code (`app_core/oled.py`, `scripts/vfd_controller.py`, `scripts/led_sign_controller.py`), not a mockup — icons, gauges, the compass dial and bar charts are all real primitives an operator standing at the hardware sees, driven by the same [`/screens`](#-what-the-platform-actually-does) template engine that powers custom screens.
 
 **OLED (SSD1306, 128×64)** — clock face, GPS fix with a heading compass and per-satellite signal bars, system/audio/EAS health, receivers, and GPIO relay status:
 
@@ -93,7 +93,11 @@ Every panel below is a pixel-accurate render from the actual driver code (`app_c
 
 [![Eleven VFD display screens with authentic blue-green phosphor glow: status with time/date/alert count, a dedicated alert screen with event and area, system meters, a segmented-LED audio VU meter, GPS status with a heading compass, network status, GPIO relay status, an EAS decoder health gauge, audio source health, IPAWS poller status, and receiver signal strength](docs/screenshots/vfd-displays.png)](docs/screenshots/vfd-displays.png)
 
-> Screenshots are captured from the bundled dashboards; map basemap tiles and live SDR/GPS telemetry depend on network access and attached hardware. The OLED/VFD panels use representative sample data, not a live station's actual telemetry.
+**LED sign (Alpha 9120C, amber/red/green dot-matrix)** — 6 scrolling/held text screens plus 3 new single-row graphics screens (Status, Alert, System) using the sign's real Picture File protocol command instead of text, each leading with one large hero value — a clock, an alert count, a CPU percentage — the same way the VFD's screens do:
+
+[![Three LED sign graphics screens with authentic amber and red dot-matrix glow: a Status screen with a large clock and active-alert count, an Alert screen with a large alert count in red, and a System screen with a large CPU percentage plus memory and disk usage](docs/screenshots/led-displays.png)](docs/screenshots/led-displays.png)
+
+> Screenshots are captured from the bundled dashboards; map basemap tiles and live SDR/GPS telemetry depend on network access and attached hardware. The OLED/VFD/LED panels use representative sample data, not a live station's actual telemetry.
 
 ---
 

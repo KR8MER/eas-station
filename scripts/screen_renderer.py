@@ -437,6 +437,20 @@ class ScreenRenderer:
     def render_led_screen(self, screen_data: Dict[str, Any], api_data: Dict[str, Any]) -> Dict[str, Any]:
         """Render a LED screen template.
 
+        Two template shapes:
+
+        * Graphics mode -- template_data has an 'elements' list. Resolved
+          the same way render_vfd_screen() resolves text/icon/rectangle/
+          hline/vline/bar, returned as {'elements': [...], 'color': ...}
+          for scripts.led_sign_controller.Alpha9120CController.render_
+          frame() to push as a single Picture File bitmap. Only a subset
+          of the OLED/VFD vocabulary -- render_led_elements()'s 160x16
+          canvas is a single hero row, not an instrument panel; no gauge/
+          compass/segments/bars support.
+        * Legacy mode (default) -- template_data has a 'lines' list,
+          resolved to up to 4 lines of scrolling/held text via the sign's
+          own text renderer (send_message()).
+
         Args:
             screen_data: Screen template data
             api_data: Fetched API data for variable substitution
@@ -445,6 +459,9 @@ class ScreenRenderer:
             Dictionary with LED display parameters
         """
         template = screen_data.get('template_data', {})
+
+        if 'elements' in template:
+            return self._render_led_elements(template, api_data)
 
         # Extract LED configuration
         lines = template.get('lines', [])
@@ -481,6 +498,78 @@ class ScreenRenderer:
             'mode': mode,
             'speed': speed,
             'font': font,
+        }
+
+    def _render_led_elements(self, template: Dict[str, Any], api_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Resolve a graphics-mode LED template's 'elements' list.
+
+        Deliberately a small subset of render_vfd_screen()'s element
+        vocabulary -- render_led_elements()'s 160x16 canvas only fits a
+        single row (icon + text, or a thin bar), so gauge/compass/
+        segments/bars (all designed for the VFD's roomier 32px) aren't
+        offered here.
+        """
+        rendered_elements: List[Dict[str, Any]] = []
+
+        for element in template.get('elements', []):
+            elem_type = element.get('type')
+
+            if elem_type == 'text':
+                text = self.substitute_variables(element.get('text', ''), api_data)
+                rendered_elements.append({
+                    'type': 'text',
+                    'x': element.get('x', 0),
+                    'y': element.get('y', 0),
+                    'text': text,
+                    'invert': element.get('invert'),
+                    'max_width': element.get('max_width'),
+                    'overflow': element.get('overflow'),
+                    'font': element.get('font'),
+                })
+
+            elif elem_type == 'icon':
+                rendered_elements.append({
+                    'type': 'icon',
+                    'name': element.get('name', ''),
+                    'x': element.get('x', 0), 'y': element.get('y', 0),
+                    'size': element.get('size', 14),
+                    'invert': element.get('invert'),
+                })
+
+            elif elem_type in ('bar', 'progress_bar'):
+                value_template = str(element.get('value') or '0')
+                value_str = self.substitute_variables(value_template, api_data)
+                try:
+                    value = float(value_str)
+                except (ValueError, TypeError):
+                    value = 0.0
+                value = max(0.0, min(100.0, value))
+                rendered_elements.append({
+                    'type': 'bar',
+                    'x': element.get('x', 0), 'y': element.get('y', 0),
+                    'width': element.get('width', 40), 'height': element.get('height', 8),
+                    'value': value,
+                })
+
+            elif elem_type == 'rectangle':
+                rendered_elements.append({
+                    'type': 'rectangle',
+                    'x': element.get('x', 0), 'y': element.get('y', 0),
+                    'width': element.get('width', 10), 'height': element.get('height', 10),
+                    'filled': element.get('filled', False),
+                })
+
+            elif elem_type in ('hline', 'vline'):
+                rendered_elements.append({
+                    'type': elem_type,
+                    'x': element.get('x', 0), 'y': element.get('y', 0),
+                    'width': element.get('width', 160),
+                    'height': element.get('height', 16),
+                })
+
+        return {
+            'elements': rendered_elements,
+            'color': template.get('color', 'AMBER'),
         }
 
     def render_vfd_screen(self, screen_data: Dict[str, Any], api_data: Dict[str, Any]) -> Dict[str, Any]:
