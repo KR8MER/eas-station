@@ -269,6 +269,98 @@ def api_system_status():
         api_bp.logger.error('Error getting system status: %s', exc, exc_info=True)
         return jsonify({'error': 'Failed to get system status'}), 500
 
+
+def build_gps_status_payload(redis_client) -> dict:
+    """Flatten the `gps:status` Redis hash into the handful of fields a
+    display template needs, plus a satellite-SNR array pre-sorted for a
+    bar-chart style display.
+
+    Pulled out of the route as a plain function (takes an already-resolved
+    Redis client rather than looking one up itself) so it's testable
+    without a Flask request/app context -- no DB touches a full
+    `app.test_client()` call would otherwise trigger.
+    """
+    result = {
+        'enabled': False,
+        'has_fix': False,
+        'fix_mode': None,
+        'fix_quality': None,
+        'latitude': None,
+        'longitude': None,
+        'altitude_m': None,
+        'speed_knots': None,
+        'track_angle': None,
+        'satellites': 0,
+        'satellites_in_view_count': 0,
+        'hdop': None,
+        'satellite_snrs': [],
+        'fix_label': 'NO FIX',
+        'fix_summary': 'NO FIX 0/0',
+    }
+    try:
+        if redis_client:
+            raw = redis_client.get('gps:status')
+            if raw:
+                import json
+                data = json.loads(raw)
+                result['enabled'] = True
+                result['has_fix'] = bool(data.get('has_fix'))
+                result['fix_mode'] = data.get('fix_mode')
+                result['fix_quality'] = data.get('fix_quality')
+                result['latitude'] = data.get('latitude')
+                result['longitude'] = data.get('longitude')
+                result['altitude_m'] = data.get('altitude_m')
+                result['speed_knots'] = data.get('speed_knots')
+                result['track_angle'] = data.get('track_angle')
+                result['satellites'] = data.get('satellites', 0) or 0
+                result['hdop'] = data.get('hdop')
+
+                sats_in_view = data.get('satellites_in_view') or []
+                result['satellites_in_view_count'] = len(sats_in_view)
+                snrs = sorted(
+                    (
+                        s.get('snr') for s in sats_in_view
+                        if isinstance(s, dict) and isinstance(s.get('snr'), (int, float))
+                    ),
+                    reverse=True,
+                )
+                result['satellite_snrs'] = [round(v) for v in snrs[:8]]
+
+                # Pre-formatted labels for display templates -- the OLED/LED/VFD
+                # template engine only does variable substitution, not
+                # conditionals, so the fix-mode -> label mapping happens here
+                # (same idiom as api_system_status's status_summary field).
+                fix_mode = result['fix_mode']
+                if fix_mode == 3:
+                    result['fix_label'] = '3D FIX'
+                elif fix_mode == 2:
+                    result['fix_label'] = '2D FIX'
+                else:
+                    result['fix_label'] = 'NO FIX'
+                result['fix_summary'] = (
+                    f"{result['fix_label']} {result['satellites']}/{result['satellites_in_view_count']}"
+                )
+    except Exception as exc:
+        api_bp.logger.debug('gps_status: failed to read gps:status from Redis: %s', exc)
+
+    return result
+
+
+@api_bp.route('/api/gps_status')
+@cache.cached(timeout=3, key_prefix='gps_status')
+def api_gps_status():
+    """GPS fix status for hardware displays (the GPS OLED screen) and dashboards.
+
+    Reads the `gps:status` Redis key published by GPSManager -- the same
+    source the GPS admin dashboard uses. Unauthenticated like
+    /api/system_status, since DisplayScreen data_sources are fetched with
+    a plain requests.get() and carry no session.
+    """
+    from app_core.redis_client import get_redis_client
+    redis_client = get_redis_client(max_retries=1)
+    return jsonify(build_gps_status_payload(redis_client))
+
+
 @api_bp.route('/api/system_health')
 @cache.cached(timeout=10, key_prefix='system_health')
 def api_system_health():

@@ -495,6 +495,9 @@ LOCAL_API_GET_PATHS = {
     '/api/audio/sources',
     '/api/eas-monitor/status',
     '/api/monitoring/radio',
+    # GPS fix status (lat/lon/altitude/satellites) for the GPS OLED screen —
+    # physical location, definitely not internet-public.
+    '/api/gps_status',
 }
 
 

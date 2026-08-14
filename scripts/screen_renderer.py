@@ -885,6 +885,56 @@ class ScreenRenderer:
                     'data': element.get('data', ''),
                 })
 
+            elif elem_type == 'compass':
+                # Compass/heading dial. `heading` is a template string
+                # (e.g. "{gps.track_angle}") resolved to a float degree
+                # value, same pattern as 'gauge' above; an unresolvable or
+                # absent heading draws the bare dial with no needle.
+                heading_template = element.get('heading')
+                heading_value = None
+                if heading_template is not None:
+                    heading_str = self.substitute_variables(str(heading_template), api_data)
+                    try:
+                        heading_value = float(heading_str)
+                    except (ValueError, TypeError):
+                        heading_value = None
+
+                rendered_elements.append({
+                    'type': 'compass',
+                    'x': element.get('x', 32),
+                    'y': element.get('y', 32),
+                    'radius': element.get('radius', 20),
+                    'heading': heading_value,
+                    'show_labels': element.get('show_labels', True),
+                })
+
+            elif elem_type == 'bars':
+                # Multi-value bar chart. `values_source` is a dot-path
+                # resolved directly against api_data (not string
+                # substitution, since the value is a live array rather
+                # than a single scalar) -- e.g. "gps.satellite_snrs".
+                values_source = element.get('values_source')
+                values: List[float] = []
+                if values_source:
+                    raw_values = self.get_nested_value(api_data, values_source, [])
+                    if isinstance(raw_values, list):
+                        for raw_value in raw_values:
+                            try:
+                                values.append(float(raw_value))
+                            except (TypeError, ValueError):
+                                continue
+
+                rendered_elements.append({
+                    'type': 'bars',
+                    'x': element.get('x', 0),
+                    'y': element.get('y', 0),
+                    'width': element.get('width', 40),
+                    'height': element.get('height', 16),
+                    'values': values,
+                    'max_value': element.get('max_value', 50),
+                    'gap': element.get('gap', 1),
+                })
+
         return {
             'elements': rendered_elements,
             'invert': template.get('invert'),

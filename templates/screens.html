@@ -1205,6 +1205,7 @@ const OLED_ICON_GLYPHS = {
     shield: '\u2736', check: '\u2713', clock: '\u25F7', network: '\u25C9',
     antenna: '\u25CE', wifi: '\u229A', info: '\u2139', cross: '\u2717',
     battery: '\u2394', bolt: '\u26A1', bell: '\u237E',
+    satellite: '\u25C7', gps_pin: '\u2691',
 };
 
 function renderOledElement(ctx, el) {
@@ -1390,6 +1391,86 @@ function renderOledElement(ctx, el) {
             ctx.beginPath();
             ctx.arc(acx, acy, ar, (el.start || 0) * Math.PI / 180, (el.end || 0) * Math.PI / 180);
             ctx.stroke();
+            break;
+        }
+        case 'compass': {
+            // N/E/S/W dial with an optional needle (heading in degrees, 0=N).
+            const dcx = el.x !== undefined ? el.x : 32;
+            const dcy = el.y !== undefined ? el.y : 32;
+            const dr = el.radius || 20;
+            ctx.strokeStyle = white;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(dcx, dcy, dr, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.font = '7px monospace';
+            ctx.fillStyle = white;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            [[0, 'N'], [90, 'E'], [180, 'S'], [270, 'W']].forEach(([deg, label]) => {
+                const angle = (deg - 90) * Math.PI / 180;
+                const tx1 = dcx + Math.cos(angle) * (dr - 4);
+                const ty1 = dcy + Math.sin(angle) * (dr - 4);
+                const tx2 = dcx + Math.cos(angle) * (dr - 1);
+                const ty2 = dcy + Math.sin(angle) * (dr - 1);
+                ctx.beginPath();
+                ctx.moveTo(tx1, ty1);
+                ctx.lineTo(tx2, ty2);
+                ctx.stroke();
+                if (el.show_labels !== false) {
+                    const lx = dcx + Math.cos(angle) * (dr - 9);
+                    const ly = dcy + Math.sin(angle) * (dr - 9);
+                    ctx.fillText(label, lx, ly);
+                }
+            });
+            ctx.textAlign = 'start';
+            ctx.textBaseline = 'alphabetic';
+            const rawHeading = String(el.heading !== undefined && el.heading !== null ? el.heading : '');
+            const heading = rawHeading.includes('{') ? 45 : parseFloat(rawHeading);
+            if (!isNaN(heading)) {
+                const needleAngle = (heading - 90) * Math.PI / 180;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(dcx, dcy);
+                ctx.lineTo(dcx + Math.cos(needleAngle) * (dr - 3), dcy + Math.sin(needleAngle) * (dr - 3));
+                ctx.stroke();
+                ctx.lineWidth = 1;
+            }
+            ctx.fillStyle = white;
+            ctx.beginPath();
+            ctx.arc(dcx, dcy, 1, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+        }
+        case 'bars': {
+            // Multi-value vertical bar chart (e.g. per-satellite SNR).
+            const bx = el.x || 0;
+            const by = el.y || 0;
+            const bw = el.width || 40;
+            const bh = el.height || 16;
+            const gap = el.gap !== undefined ? el.gap : 1;
+            const maxVal = el.max_value || 50;
+            // In the JSON editor `values` is a literal array in preview mode
+            // (values_source is only resolved server-side against live
+            // data); fall back to a representative sample so the preview
+            // isn't blank while authoring the screen.
+            const values = Array.isArray(el.values) && el.values.length
+                ? el.values
+                : [42, 35, 28, 20, 15, 8];
+            const count = values.length;
+            if (count > 0 && bw > 0 && bh > 0) {
+                const barW = Math.max(1, Math.floor((bw - gap * (count - 1)) / count));
+                let cursorX = bx;
+                ctx.fillStyle = white;
+                values.forEach((v) => {
+                    const val = Math.max(0, Math.min(maxVal, parseFloat(v) || 0));
+                    const barH = maxVal > 0 ? Math.round((val / maxVal) * bh) : 0;
+                    if (barH > 0) {
+                        ctx.fillRect(cursorX, by + bh - barH, barW, barH);
+                    }
+                    cursorX += barW + gap;
+                });
+            }
             break;
         }
         default:
