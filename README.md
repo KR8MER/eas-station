@@ -2,7 +2,7 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-2.162.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.164.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -81,7 +81,19 @@ A few of the web dashboards, captured from a running instance with sample alert 
 | [![Broadcast Builder console for composing manual SAME activations](docs/screenshots/broadcast-builder.jpg)](docs/screenshots/broadcast-builder.jpg) | |
 | **Broadcast Builder** — compose manual SAME activations, generate the audio package and review recent transmissions, with the station's originator / station ID / attention-tone settings shown inline. | |
 
-> Screenshots are captured from the bundled dashboards; map basemap tiles and live SDR/GPS telemetry depend on network access and attached hardware.
+### Physical Displays
+
+Every panel below is a pixel-accurate render from the actual driver code (`app_core/oled.py`, `scripts/vfd_controller.py`), not a mockup — icons, gauges, the compass dial and bar charts are all real primitives an operator standing at the hardware sees, driven by the same [`/screens`](#-what-the-platform-actually-does) template engine that powers custom screens.
+
+**OLED (SSD1306, 128×64)** — clock face, GPS fix with a heading compass and per-satellite signal bars, system/audio/EAS health, receivers, and GPIO relay status:
+
+[![Eleven OLED display screens: clock face, GPS status with compass and satellite bars, system overview, alert summary, EAS decoder, receivers, audio levels, audio health, network, IPAWS poller, and GPIO status](docs/screenshots/oled-displays.png)](docs/screenshots/oled-displays.png)
+
+**VFD (Noritake GU140x32F-7000B, 140×32, blue-green vacuum-fluorescent glow)** — eleven screens, matching the OLED's breadth: a time/date/alert-count status screen, a dedicated active-alert screen, system meters, a segmented-LED audio VU meter, GPS status with a heading compass, network status, GPIO relay status, an EAS decoder health gauge, audio source health, the IPAWS poller, and receiver signal strength. A second, larger 14pt bold font gives each screen's single most important value (a clock, a percentage, a count) real typographic weight instead of a flat wall of 7px text. The rotation keeps cycling through an active alert instead of freezing, so the alert screen actually gets its turn:
+
+[![Eleven VFD display screens with authentic blue-green phosphor glow: status with time/date/alert count, a dedicated alert screen with event and area, system meters, a segmented-LED audio VU meter, GPS status with a heading compass, network status, GPIO relay status, an EAS decoder health gauge, audio source health, IPAWS poller status, and receiver signal strength](docs/screenshots/vfd-displays.png)](docs/screenshots/vfd-displays.png)
+
+> Screenshots are captured from the bundled dashboards; map basemap tiles and live SDR/GPS telemetry depend on network access and attached hardware. The OLED/VFD panels use representative sample data, not a live station's actual telemetry.
 
 ---
 

@@ -483,163 +483,188 @@ class ScreenRenderer:
             'font': font,
         }
 
-    def render_vfd_screen(self, screen_data: Dict[str, Any], api_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def render_vfd_screen(self, screen_data: Dict[str, Any], api_data: Dict[str, Any]) -> Dict[str, Any]:
         """Render a VFD screen template.
+
+        Resolves each element's template variables/values and returns them
+        in scripts.vfd_controller.render_vfd_elements()'s native shape --
+        the same {'elements': [...]} contract render_oled_screen() uses --
+        so the VFD engine can push the whole frame as one bitmap (icons,
+        gauges, compass, multi-value bar charts) instead of being limited
+        to the handful of discrete GU-7000 draw commands (text/rectangle/
+        line) the old per-primitive dispatch supported.
 
         Args:
             screen_data: Screen template data
             api_data: Fetched API data for variable substitution
 
         Returns:
-            List of VFD drawing commands
+            {'elements': [...], 'clear': bool}
         """
         template = screen_data.get('template_data', {})
-        commands = []
-
-        # Clear screen first
-        commands.append({'type': 'clear'})
-
-        # Process elements
         elements = template.get('elements', [])
+        rendered_elements: List[Dict[str, Any]] = []
 
         for element in elements:
             elem_type = element.get('type')
 
             if elem_type == 'text':
-                # Text element
                 text = self.substitute_variables(element.get('text', ''), api_data)
-                commands.append({
+                rendered_elements.append({
                     'type': 'text',
                     'x': element.get('x', 0),
                     'y': element.get('y', 0),
                     'text': text,
+                    'invert': element.get('invert'),
+                    'max_width': element.get('max_width'),
+                    'overflow': element.get('overflow'),
+                    'font': element.get('font'),
                 })
 
             elif elem_type in ('bar', 'progress_bar'):
-                # Progress bar / VU meter. Accepts the visual-editor 'bar' format
-                # (x, y, width, height, value, border) as well as 'progress_bar'.
                 value_template = str(element.get('value') or '0')
                 value_str = self.substitute_variables(value_template, api_data)
-
                 try:
                     value = float(value_str)
                 except (ValueError, TypeError):
                     value = 0.0
-
-                # Clamp to 0-100
-                value = max(0, min(100, value))
+                value = max(0.0, min(100.0, value))
 
                 x = element.get('x', 0)
                 y = element.get('y', 0)
                 width = element.get('width', 100)
                 height = element.get('height', 8)
-                border = element.get('border', True)
 
-                # Draw label if provided
                 label = element.get('label', '')
                 if label:
-                    commands.append({
+                    rendered_elements.append({
                         'type': 'text',
                         'x': x,
                         'y': max(0, y - 10),
                         'text': f"{label}: {value:.0f}%",
                     })
 
-                if border:
-                    # Outline plus inset fill
-                    commands.append({
-                        'type': 'rectangle',
-                        'x1': x,
-                        'y1': y,
-                        'x2': x + width - 1,
-                        'y2': y + height - 1,
-                        'filled': False,
-                    })
-                    interior = max(0, width - 2)
-                    filled_width = int((value / 100) * interior)
-                    if filled_width > 0:
-                        commands.append({
-                            'type': 'rectangle',
-                            'x1': x + 1,
-                            'y1': y + 1,
-                            'x2': x + 1 + filled_width,
-                            'y2': y + height - 2,
-                            'filled': True,
-                        })
-                else:
-                    # Borderless: fill proportion of the full width
-                    filled_width = int((value / 100) * width)
-                    if filled_width > 0:
-                        commands.append({
-                            'type': 'rectangle',
-                            'x1': x,
-                            'y1': y,
-                            'x2': x + filled_width - 1,
-                            'y2': y + height - 1,
-                            'filled': True,
-                        })
+                rendered_elements.append({
+                    'type': 'bar',
+                    'x': x, 'y': y, 'width': width, 'height': height, 'value': value,
+                })
+
+            elif elem_type == 'segments':
+                # Segmented LED VU-meter look (VFD-only primitive -- see
+                # scripts.vfd_controller.render_vfd_elements()).
+                value_str = self.substitute_variables(str(element.get('value') or '0'), api_data)
+                try:
+                    value = max(0.0, min(100.0, float(value_str)))
+                except (ValueError, TypeError):
+                    value = 0.0
+                rendered_elements.append({
+                    'type': 'segments',
+                    'x': element.get('x', 0), 'y': element.get('y', 0),
+                    'width': element.get('width', 100), 'height': element.get('height', 8),
+                    'value': value, 'count': element.get('count', 10), 'gap': element.get('gap', 2),
+                })
 
             elif elem_type == 'rectangle':
-                # Rectangle element. Accepts the editor's (x, y, width, height)
-                # format and the legacy (x1, y1, x2, y2) format.
+                # Accepts the editor's (x, y, width, height) format and the
+                # legacy (x1, y1, x2, y2) format.
                 if 'width' in element or 'height' in element:
-                    x = element.get('x', 0)
-                    y = element.get('y', 0)
-                    x1, y1 = x, y
-                    x2 = x + element.get('width', 10) - 1
-                    y2 = y + element.get('height', 10) - 1
+                    x, y = element.get('x', 0), element.get('y', 0)
+                    width = element.get('width', 10)
+                    height = element.get('height', 10)
                 else:
-                    x1 = element.get('x1', 0)
-                    y1 = element.get('y1', 0)
-                    x2 = element.get('x2', 10)
-                    y2 = element.get('y2', 10)
-                commands.append({
+                    x, y = element.get('x1', 0), element.get('y1', 0)
+                    width = element.get('x2', 10) - x + 1
+                    height = element.get('y2', 10) - y + 1
+                rendered_elements.append({
                     'type': 'rectangle',
-                    'x1': x1,
-                    'y1': y1,
-                    'x2': x2,
-                    'y2': y2,
+                    'x': x, 'y': y, 'width': width, 'height': height,
                     'filled': element.get('filled', False),
                 })
 
             elif elem_type == 'line':
-                # Arbitrary line between two points
-                commands.append({
+                rendered_elements.append({
                     'type': 'line',
-                    'x1': element.get('x1', 0),
-                    'y1': element.get('y1', 0),
-                    'x2': element.get('x2', 10),
-                    'y2': element.get('y2', 10),
+                    'x1': element.get('x1', 0), 'y1': element.get('y1', 0),
+                    'x2': element.get('x2', 10), 'y2': element.get('y2', 10),
                 })
 
             elif elem_type in ('hline', 'dotted_hline'):
-                # Horizontal divider -> line. The VFD has no dotted primitive,
-                # so dotted falls back to a solid line.
-                x = element.get('x', 0)
-                y = element.get('y', 0)
-                width = element.get('width', 140)
-                commands.append({
-                    'type': 'line',
-                    'x1': x,
-                    'y1': y,
-                    'x2': x + max(1, width) - 1,
-                    'y2': y,
+                rendered_elements.append({
+                    'type': 'hline',
+                    'x': element.get('x', 0), 'y': element.get('y', 0),
+                    'width': element.get('width', 140),
                 })
 
             elif elem_type == 'vline':
-                # Vertical divider -> line
-                x = element.get('x', 0)
-                y = element.get('y', 0)
-                height = element.get('height', 32)
-                commands.append({
-                    'type': 'line',
-                    'x1': x,
-                    'y1': y,
-                    'x2': x,
-                    'y2': y + max(1, height) - 1,
+                rendered_elements.append({
+                    'type': 'vline',
+                    'x': element.get('x', 0), 'y': element.get('y', 0),
+                    'height': element.get('height', 32),
                 })
 
-        return commands
+            elif elem_type == 'circle':
+                rendered_elements.append({
+                    'type': 'circle',
+                    'x': element.get('x', 16), 'y': element.get('y', 16),
+                    'radius': element.get('radius', 8),
+                    'filled': element.get('filled', False),
+                })
+
+            elif elem_type == 'icon':
+                rendered_elements.append({
+                    'type': 'icon',
+                    'name': element.get('name', ''),
+                    'x': element.get('x', 0), 'y': element.get('y', 0),
+                    'size': element.get('size', 9),
+                    'invert': element.get('invert'),
+                })
+
+            elif elem_type == 'bars':
+                values_source = element.get('values_source')
+                values: List[float] = []
+                if values_source:
+                    raw_values = self.get_nested_value(api_data, values_source, [])
+                    if isinstance(raw_values, list):
+                        for raw_value in raw_values:
+                            try:
+                                values.append(float(raw_value))
+                            except (TypeError, ValueError):
+                                continue
+                rendered_elements.append({
+                    'type': 'bars',
+                    'x': element.get('x', 0), 'y': element.get('y', 0),
+                    'width': element.get('width', 40), 'height': element.get('height', 16),
+                    'values': values, 'max_value': element.get('max_value', 50), 'gap': element.get('gap', 1),
+                })
+
+            elif elem_type == 'gauge':
+                value_str = self.substitute_variables(str(element.get('value') or '0'), api_data)
+                try:
+                    value = max(0.0, min(100.0, float(value_str)))
+                except (ValueError, TypeError):
+                    value = 0.0
+                rendered_elements.append({
+                    'type': 'gauge',
+                    'x': element.get('x', 32), 'y': element.get('y', 28),
+                    'radius': element.get('radius', 16), 'value': value,
+                })
+
+            elif elem_type == 'compass':
+                heading_template = element.get('heading')
+                heading_value = None
+                if heading_template is not None:
+                    heading_str = self.substitute_variables(str(heading_template), api_data)
+                    try:
+                        heading_value = float(heading_str)
+                    except (ValueError, TypeError):
+                        heading_value = None
+                rendered_elements.append({
+                    'type': 'compass',
+                    'x': element.get('x', 20), 'y': element.get('y', 16),
+                    'radius': element.get('radius', 12), 'heading': heading_value,
+                })
+
+        return {'elements': rendered_elements, 'clear': template.get('clear', True)}
 
     def render_oled_screen(self, screen_data: Dict[str, Any], api_data: Dict[str, Any]) -> Dict[str, Any]:
         """Render an OLED screen template.

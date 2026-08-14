@@ -8,6 +8,107 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.164.0] - 2026-08-14 - Show active alerts on the VFD; bring it to screen parity with the OLED
+
+### Added
+- **`vfd_status`** — a new default VFD screen showing the time, date and
+  active-alert count together; leads the rotation as the at-a-glance home
+  screen.
+- **`vfd_alert_status`** — a new default VFD screen showing the active
+  CAP alert's event type and area, mirroring `oled_alert_summary`'s fields
+  (same `/api/alerts` data source).
+- **`vfd_gpio_status`, `vfd_eas_decoder`, `vfd_audio_health`,
+  `vfd_ipaws_poll_watch`, `vfd_receivers`** — VFD counterparts of the 5
+  OLED screens that had no VFD equivalent, bringing the VFD's default
+  screen count to 11, matching the OLED. `vfd_eas_decoder` uses the
+  `gauge` primitive for its health score — part of the shared graphics
+  vocabulary since the last release, but not used on any VFD screen
+  until now.
+- **Text truncation on the VFD** (`max_width`/`overflow`, "trim" or
+  "ellipsis") — ported from the OLED engine's `_fit_text_to_width()`. The
+  VFD's `render_vfd_elements()` had no text clipping at all before this;
+  a long alert event name or county list just drew straight past the
+  140px edge.
+- **A second, larger VFD font** (`"font": "large"`, 14pt bold, vs. the
+  flat 7px base) — the OLED has a small/medium/large/xlarge size
+  hierarchy that gives its screens real visual weight; the VFD had one
+  size for every row on every screen. `vfd_status` (the clock),
+  `vfd_gpio_status` (active relay count), `vfd_eas_decoder` and
+  `vfd_audio_health` (health percentages), and `vfd_ipaws_poll_watch`
+  (new-alert count) now each lead with one large hero value instead of a
+  wall of same-sized text.
+
+### Fixed
+- **VFD rotation froze solid during an active alert.** None of the VFD's
+  default screens showed whether a CAP alert was active — not because no
+  screen tried, but because `vfd_default_rotation.skip_on_alert` made
+  `_check_vfd_rotation()` return before ever reaching the rotation loop
+  whenever `_has_active_alerts()` was true, leaving the panel frozen on
+  whatever was last drawn for the alert's whole duration. The OLED has its
+  own dedicated scroll-text alert-preemption path for this; the VFD had no
+  equivalent. `skip_on_alert` is now `false` for the VFD rotation, so it
+  keeps cycling — including through the new `vfd_alert_status` screen —
+  while gated *pending* alerts (a separate, still-preempting concept)
+  are unaffected.
+- **`vfd_system_meters`' DSK row clipped 1px off the bottom of the
+  140×32 canvas** (text drawn at y=26 with a 7px font bottoms out at
+  y=33). Retimed the three meter rows to y=9/17/25.
+
+## [2.163.0] - 2026-08-14 - Fix OLED element collisions; give the VFD the same graphics engine as the OLED
+
+### Fixed
+- **OLED element collisions and clipping**, found by rendering every default
+  screen at real size (128x64) instead of eyeballing the template JSON:
+  - The `compass` primitive's cardinal labels sat on top of its own tick
+    marks and needle. Labels now render outside the ring, and the needle is
+    shortened so it can never reach them; the GPS Status screen's compass
+    and text columns were repositioned to fit.
+  - `AUDIO HEALTH` and `IPAWS POLLER`'s header banners overlapped their
+    own right-aligned stat text at small font — the audio one duplicated
+    the Score row already shown below (dropped), the poller's title was
+    shortened (`IPAWS POLLER` → `POLLER`).
+  - The GPIO Status header's `"{count} active"` overlapped its title;
+    shortened to a bare count, matching every other screen's convention.
+  - The Clock Face's IP address was squeezed into a ~60px column next to
+    the date and truncated to `"192.168."` or worse; moved to a full-width
+    footer row (the analog clock face shrank slightly to make room).
+  - The `satellite` icon (rectangles + ellipse + diagonal line) was
+    illegible below ~16px; redrawn as a bolder body-dot-with-spokes glyph
+    that reads clearly at 9px.
+- **VFD custom screens were completely non-functional.** Both render paths
+  called `vfd_controller.clear_display()` — a method that does not exist on
+  `NoritakeVFDController` (the real method is `clear_screen()`) — raising
+  `AttributeError` on the very first command of every render. Underneath
+  that, every text element also called `draw_text()` with its arguments in
+  the wrong order (`(text, x, y)` instead of the real `(x, y, text)`
+  signature), which would have silently garbled positioning even once the
+  first bug was fixed. Both are pinned by regression tests that fail
+  against the original code and pass against the fix.
+
+### Added
+- **The VFD display now has the same icon/gauge/compass/bar-chart engine as
+  the OLED**, plus a VFD-only **`segments`** primitive (a classic segmented
+  LED VU-meter look — discrete lit/unlit blocks instead of one continuous
+  fill). The Noritake GU140x32F-7000B already supported full bitmap pushes
+  via `draw_bitmap()`, but the template system only ever drove it through
+  discrete GU-7000 primitive commands (text/rectangle/line). `scripts.
+  vfd_controller.render_vfd_elements()` is a new hardware-independent PIL
+  renderer — the same pure function `NoritakeVFDController.render_frame()`
+  uses to build the real bitmap and the web preview uses to render an
+  accurate PNG — reusing the OLED's icon glyph library directly rather than
+  a second copy of the drawing code. Switched the default font from 10px to
+  7px (matching the panel's native 5x7/7x10 sizes) since 10px only left
+  room for ~2 text rows on the 32px canvas.
+- **The 3 default VFD screens were reflowed onto the new engine**, and a
+  4th — **GPS Status**, with a heading compass — was added for parity with
+  the OLED's flagship screen: System Meters (bar meters), Audio VU Meter
+  (segmented meters), GPS Status (compass), Network Status (icon+banner).
+  All 4 are seeded if missing rather than only updated if already present
+  — some installs never had them (no VFD hardware attached at setup time).
+- **README screenshot gallery**: pixel-accurate renders of all 11 OLED
+  screens and all 3 VFD screens (authentic blue-green phosphor glow),
+  generated directly from the driver code rather than mocked up.
+
 ## [2.162.0] - 2026-08-14 - Add a GPS OLED screen and richer display graphics
 
 ### Added

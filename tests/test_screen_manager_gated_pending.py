@@ -34,7 +34,7 @@ import pytest
 from scripts.screen_manager_gated import (
     build_led_pending_message,
     build_oled_pending_elements,
-    build_vfd_pending_commands,
+    build_vfd_pending_elements,
     push_led_pending_scene,
     push_oled_pending_scene,
     push_vfd_pending_scene,
@@ -156,29 +156,30 @@ def test_build_led_pending_message_truncates_long_text():
 
 
 # ---------------------------------------------------------------------------
-# build_vfd_pending_commands
+# build_vfd_pending_elements
 # ---------------------------------------------------------------------------
 
-def test_build_vfd_pending_commands_returns_none_when_zero():
-    assert build_vfd_pending_commands(0, []) is None
+def test_build_vfd_pending_elements_returns_none_when_zero():
+    assert build_vfd_pending_elements(0, []) is None
 
 
-def test_build_vfd_pending_commands_shape():
+def test_build_vfd_pending_elements_shape():
     items = [{"event_code": "TOR", "headline": "Tornado Warning"}]
-    commands = build_vfd_pending_commands(2, items)
-    assert commands[0] == {"type": "clear"}
-    assert commands[1]["type"] == "text"
-    assert "2" in commands[1]["text"]
-    assert commands[2]["type"] == "text"
-    assert "TOR" in commands[2]["text"]
+    elements = build_vfd_pending_elements(2, items)
+    types = [el["type"] for el in elements]
+    assert "rectangle" in types
+    assert "icon" in types
+    text_values = " ".join(el["text"] for el in elements if el["type"] == "text")
+    assert "2" in text_values
+    assert "TOR" in text_values
 
 
-def test_build_vfd_pending_commands_truncates_lines():
+def test_build_vfd_pending_elements_truncates_lines():
     items = [{"event_code": "TOR", "headline": "x" * 100}]
-    commands = build_vfd_pending_commands(1, items)
-    for command in commands:
-        if command.get("type") == "text":
-            assert len(command["text"]) <= 20
+    elements = build_vfd_pending_elements(1, items)
+    for element in elements:
+        if element.get("type") == "text":
+            assert len(element["text"]) <= 20
 
 
 # ---------------------------------------------------------------------------
@@ -233,19 +234,16 @@ def test_push_led_pending_scene_noop_when_no_controller():
     assert result is None
 
 
-def test_push_vfd_pending_scene_calls_draw_text_with_correct_arg_order():
+def test_push_vfd_pending_scene_calls_render_frame():
     vfd_module = MagicMock()
     vfd_module.vfd_controller = MagicMock()
 
-    commands = push_vfd_pending_scene(vfd_module, 1, [{"event_code": "TOR", "headline": "Tornado Warning"}])
+    elements = push_vfd_pending_scene(vfd_module, 1, [{"event_code": "TOR", "headline": "Tornado Warning"}])
 
-    assert commands is not None
-    vfd_module.vfd_controller.clear_display.assert_called_once()
-    # NoritakeVFDController.draw_text signature is (x, y, text) -- regression
-    # guard against the (text, x, y) ordering bug in _display_vfd_screen.
-    for call in vfd_module.vfd_controller.draw_text.call_args_list:
-        x, y, text = call.args
-        assert isinstance(x, int) and isinstance(y, int) and isinstance(text, str)
+    assert elements is not None
+    vfd_module.vfd_controller.render_frame.assert_called_once()
+    elements_arg = vfd_module.vfd_controller.render_frame.call_args[0][0]
+    assert isinstance(elements_arg, list) and len(elements_arg) > 0
 
 
 def test_push_vfd_pending_scene_noop_when_no_controller():
@@ -315,6 +313,47 @@ def test_vfd_rotation_shows_gated_scene_instead_of_normal_screens():
 
     manager._display_gated_pending_vfd.assert_called_once()
     manager._display_vfd_screen.assert_not_called()
+
+
+def test_vfd_rotation_freezes_when_skip_on_alert_true_and_alert_active():
+    """The historical bug this guards against re-appearing: with
+    skip_on_alert True (the old seeded default), _check_vfd_rotation()
+    returns before reaching either the gated-pending scene or the normal
+    rotation loop -- unlike OLED, the VFD has no dedicated alert-preemption
+    display, so this path drew nothing at all, freezing the panel on
+    whatever was last shown for the alert's whole duration."""
+    from scripts.screen_manager import ScreenManager
+
+    manager = ScreenManager()
+    manager._vfd_rotation = {"screens": [{"screen_id": 1, "duration": 5}], "skip_on_alert": True}
+    manager._gated_pending_count = 0
+    manager._has_active_alerts = MagicMock(return_value=True)
+    manager._display_gated_pending_vfd = MagicMock()
+    manager._display_vfd_screen = MagicMock()
+
+    manager._check_vfd_rotation()
+
+    manager._display_gated_pending_vfd.assert_not_called()
+    manager._display_vfd_screen.assert_not_called()
+
+
+def test_vfd_rotation_continues_when_skip_on_alert_false_and_alert_active():
+    """20260814_add_vfd_status_screens.py flips the seeded default to
+    False specifically so the rotation (which now includes vfd_alert_status)
+    keeps cycling during an active CAP alert instead of freezing."""
+    from scripts.screen_manager import ScreenManager
+
+    manager = ScreenManager()
+    manager._vfd_rotation = {"screens": [{"screen_id": 1, "duration": 5}], "skip_on_alert": False}
+    manager._gated_pending_count = 0
+    manager._has_active_alerts = MagicMock(return_value=True)
+    manager._display_gated_pending_vfd = MagicMock()
+    manager._display_vfd_screen = MagicMock()
+
+    manager._check_vfd_rotation()
+
+    manager._display_gated_pending_vfd.assert_not_called()
+    manager._display_vfd_screen.assert_called_once()
 
 
 def test_oled_rotation_shows_gated_scene_instead_of_normal_screens():

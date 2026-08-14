@@ -422,6 +422,58 @@ class NoritakeVFDController:
 
         logger.debug(f"Drew bitmap at ({x}, {y}): {width}x{height}")
 
+    def render_frame(self, elements: List[dict], *, clear: bool = True) -> None:
+        """Render a composite frame (text/shapes/icons/gauges) and push it
+        as a single bitmap, instead of one GU-7000 draw command per element.
+
+        Mirrors app_core.oled.ArgonOLEDController.render_frame()'s element
+        vocabulary and reuses its icon glyph library directly (they're pure
+        PIL functions, not OLED-specific) so the same screen-authoring
+        mental model works on both display types. Built because the VFD
+        previously only had per-primitive GU-7000 commands (text/line/
+        rectangle) wired through the template system -- despite the
+        hardware itself already supporting full bitmap pushes via
+        draw_bitmap(), it never got the icon/gauge/circle/bar-chart
+        vocabulary the OLED engine has.
+
+        Element types: text, rectangle, line, hline, vline, circle, icon,
+        bar (single meter), bars (multi-value chart), gauge, compass.
+        See ArgonOLEDController.render_frame()'s docstring for per-type
+        parameters -- identical here except the canvas is 140x32.
+
+        The actual drawing lives in the module-level render_vfd_elements()
+        so the web preview (services/displays/preview_render.py) can build
+        the exact same image without a hardware connection, instead of
+        maintaining a second, drifting reimplementation of this logic.
+        """
+        if not self.connected:
+            logger.warning("VFD not connected, cannot render frame")
+            return
+
+        image = render_vfd_elements(elements, self.WIDTH, self.HEIGHT, font=self._vfd_font())
+
+        if clear:
+            self.clear_screen()
+        bitmap_data = self._image_to_bitmap(image)
+        self.draw_bitmap(0, 0, self.WIDTH, self.HEIGHT, bitmap_data)
+
+    def _vfd_font(self) -> "ImageFont.ImageFont":
+        """Small TrueType font used by render_frame(); falls back to PIL's
+        tiny built-in bitmap font if DejaVuSans isn't available (same
+        fallback chain as ArgonOLEDController._load_fonts()). 7px roughly
+        matches the panel's native 5x7/7x10 font sizes -- enough vertical
+        room for 3-4 text rows on the 32px-tall canvas."""
+        if getattr(self, "_cached_vfd_font", None) is not None:
+            return self._cached_vfd_font
+        for path in ("DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"):
+            try:
+                self._cached_vfd_font = ImageFont.truetype(path, 7)
+                return self._cached_vfd_font
+            except OSError:
+                continue
+        self._cached_vfd_font = ImageFont.load_default()
+        return self._cached_vfd_font
+
     def display_image(self, image_path: str, x: int = 0, y: int = 0) -> None:
         """
         Load and display an image file on the VFD.
@@ -678,3 +730,278 @@ def init_vfd_controller(port: str, baudrate: int = 38400) -> Optional[NoritakeVF
         logger.error(f"Failed to initialize VFD controller: {e}")
         vfd_controller = None
         return None
+
+
+def _measure_text(draw: "ImageDraw.ImageDraw", font: "ImageFont.ImageFont", text: str) -> int:
+    if not text:
+        return 0
+    try:
+        return int(draw.textlength(text, font=font))
+    except AttributeError:
+        return font.getsize(text)[0]
+
+
+def _fit_text_to_width(
+    draw: "ImageDraw.ImageDraw",
+    font: "ImageFont.ImageFont",
+    text: str,
+    max_width: Optional[int],
+    overflow_mode: str,
+) -> str:
+    """Trim or ellipsize text to max_width -- same convention as
+    ArgonOLEDController._fit_text_to_width(). Without this, a long alert
+    event name or area description just draws past the 140px edge with no
+    clipping at all (Pillow doesn't clip drawing ops to the canvas)."""
+    if not text or not max_width or max_width <= 0:
+        return text
+
+    width = _measure_text(draw, font, text)
+    if width <= max_width:
+        return text
+
+    if overflow_mode == "trim":
+        truncated = text
+        while truncated and _measure_text(draw, font, truncated) > max_width:
+            truncated = truncated[:-1]
+        return truncated
+
+    ellipsis = "…"
+    ellipsis_width = _measure_text(draw, font, ellipsis)
+    if ellipsis_width >= max_width:
+        return ellipsis
+
+    available = max_width - ellipsis_width
+    truncated = text
+    while truncated and _measure_text(draw, font, truncated) > available:
+        truncated = truncated[:-1]
+    return f"{truncated}{ellipsis}" if truncated else ellipsis
+
+
+_vfd_large_font: Optional["ImageFont.ImageFont"] = None
+
+
+def _load_vfd_large_font() -> "ImageFont.ImageFont":
+    """14pt bold -- a second, larger size so a screen's single most
+    important value (a clock, a percentage) can visually lead the way
+    OLED's font-size hierarchy (small/medium/large/xlarge) does, instead
+    of every row on the VFD reading at the same flat 7px weight."""
+    global _vfd_large_font
+    if _vfd_large_font is None:
+        try:
+            _vfd_large_font = ImageFont.truetype(
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14
+            )
+        except OSError:
+            _vfd_large_font = ImageFont.load_default()
+    return _vfd_large_font
+
+
+def render_vfd_elements(
+    elements: List[dict],
+    width: int = 140,
+    height: int = 32,
+    *,
+    font: Optional["ImageFont.ImageFont"] = None,
+) -> "Image.Image":
+    """Pure function: draw a VFD element list to a 1-bit PIL Image.
+
+    No hardware/serial dependency -- NoritakeVFDController.render_frame()
+    calls this and pushes the result as a bitmap; the web preview
+    (services/displays/preview_render.py) calls it directly to render an
+    accurate PNG without a live device, instead of maintaining a second,
+    drifting reimplementation of the same drawing logic.
+
+    Element types: text, rectangle, line, hline, vline, circle, icon,
+    bar (single meter), bars (multi-value chart), gauge, compass -- see
+    app_core.oled.ArgonOLEDController.render_frame()'s docstring for
+    per-type parameters (identical here except the canvas is 140x32). A
+    text element may set "font": "large" for the 14pt bold hero size;
+    default (unset, or any other value) is the base 7px font.
+    """
+    import math
+
+    from app_core.oled import _ICON_RENDERERS
+
+    if font is None:
+        try:
+            # 7px roughly matches the panel's native 5x7/7x10 font sizes
+            # (VFDFont.FONT_5x7/FONT_7x10) -- 10px left only enough vertical
+            # room for ~2 text rows on a 32px-tall canvas.
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 7)
+        except OSError:
+            font = ImageFont.load_default()
+
+    image = Image.new("1", (width, height), color=0)
+    draw = ImageDraw.Draw(image)
+    colour = 1
+
+    for element in elements:
+        elem_type = element.get("type", "")
+
+        if elem_type == "text":
+            text = str(element.get("text", ""))
+            if not text:
+                continue
+            text_font = _load_vfd_large_font() if element.get("font") == "large" else font
+            x = max(0, min(width - 1, int(element.get("x", 0))))
+            y = max(0, min(height - 1, int(element.get("y", 0))))
+            max_width = element.get("max_width")
+            if isinstance(max_width, (int, float)):
+                overflow_mode = str(element.get("overflow", "ellipsis") or "ellipsis").lower()
+                text = _fit_text_to_width(draw, text_font, text, int(max_width), overflow_mode)
+            # invert=True is how a header banner's title stays readable
+            # against its own filled rectangle (fill=colour on both would
+            # draw white-on-white and vanish) -- same convention as
+            # ArgonOLEDController.render_frame()'s text element.
+            text_colour = 0 if element.get("invert") else colour
+            draw.text((x, y), text, font=text_font, fill=text_colour)
+
+        elif elem_type == "rectangle":
+            x = max(0, element.get("x", 0))
+            y = max(0, element.get("y", 0))
+            w = max(1, element.get("width", 10))
+            h = max(1, element.get("height", 10))
+            x2 = min(width - 1, x + w - 1)
+            y2 = min(height - 1, y + h - 1)
+            if element.get("filled", False):
+                draw.rectangle([(x, y), (x2, y2)], fill=colour)
+            else:
+                draw.rectangle([(x, y), (x2, y2)], outline=colour)
+
+        elif elem_type == "line":
+            draw.line(
+                [
+                    (element.get("x1", 0), element.get("y1", 0)),
+                    (element.get("x2", 0), element.get("y2", 0)),
+                ],
+                fill=colour,
+            )
+
+        elif elem_type == "hline":
+            x = max(0, element.get("x", 0))
+            y = max(0, min(height - 1, element.get("y", 0)))
+            w = max(1, min(element.get("width", width - x), width - x))
+            draw.line([(x, y), (x + w - 1, y)], fill=colour)
+
+        elif elem_type == "vline":
+            x = max(0, min(width - 1, element.get("x", 0)))
+            y = max(0, element.get("y", 0))
+            h = max(1, min(element.get("height", height - y), height - y))
+            draw.line([(x, y), (x, y + h - 1)], fill=colour)
+
+        elif elem_type == "circle":
+            cx = element.get("x", 16)
+            cy = element.get("y", 16)
+            r = max(1, element.get("radius", 8))
+            bbox = [(cx - r, cy - r), (cx + r, cy + r)]
+            if element.get("filled", False):
+                draw.ellipse(bbox, fill=colour)
+            else:
+                draw.ellipse(bbox, outline=colour)
+
+        elif elem_type == "icon":
+            renderer_fn = _ICON_RENDERERS.get(str(element.get("name", "")).lower())
+            if renderer_fn:
+                icon_colour = 0 if element.get("invert") else colour
+                renderer_fn(
+                    draw,
+                    max(0, element.get("x", 0)),
+                    max(0, element.get("y", 0)),
+                    max(6, element.get("size", 9)),
+                    icon_colour,
+                )
+
+        elif elem_type == "bar":
+            x = max(0, element.get("x", 0))
+            y = max(0, element.get("y", 0))
+            w = max(1, element.get("width", 50))
+            h = max(1, element.get("height", 8))
+            value = max(0.0, min(100.0, element.get("value", 0.0)))
+            x2 = min(width - 1, x + w - 1)
+            y2 = min(height - 1, y + h - 1)
+            draw.rectangle([(x, y), (x2, y2)], outline=colour)
+            fill_w = int((value / 100.0) * max(0, (x2 - x) - 1))
+            if fill_w > 0:
+                draw.rectangle([(x + 1, y + 1), (x + fill_w, y2 - 1)], fill=colour)
+
+        elif elem_type == "segments":
+            # Classic segmented LED VU-meter look: N discrete blocks in a
+            # row, each outlined, lit solid up to `value`'s proportion of
+            # `count`. Distinct from 'bar' (one continuous fill) -- built
+            # because a single solid bar reads as a generic "progress bar"
+            # rather than audio-gear-style metering.
+            x = max(0, element.get("x", 0))
+            y = max(0, element.get("y", 0))
+            w = max(1, element.get("width", 100))
+            h = max(1, element.get("height", 8))
+            value = max(0.0, min(100.0, element.get("value", 0.0)))
+            count = max(1, element.get("count", 10))
+            gap = max(0, element.get("gap", 2))
+            seg_w = max(1, (w - gap * (count - 1)) // count)
+            lit = round((value / 100.0) * count)
+            cursor_x = x
+            for i in range(count):
+                seg_x2 = min(width - 1, cursor_x + seg_w - 1)
+                seg_y2 = min(height - 1, y + h - 1)
+                if i < lit:
+                    draw.rectangle([(cursor_x, y), (seg_x2, seg_y2)], fill=colour)
+                else:
+                    draw.rectangle([(cursor_x, y), (seg_x2, seg_y2)], outline=colour)
+                cursor_x += seg_w + gap
+
+        elif elem_type == "bars":
+            x = max(0, element.get("x", 0))
+            y = max(0, element.get("y", 0))
+            w = max(1, element.get("width", 40))
+            h = max(1, element.get("height", 16))
+            values = element.get("values") or []
+            max_value = element.get("max_value", 50.0) or 50.0
+            gap = max(0, element.get("gap", 1))
+            count = len(values)
+            if count > 0:
+                bar_w = max(1, (w - gap * (count - 1)) // count)
+                cursor_x = x
+                for raw_value in values:
+                    try:
+                        value = max(0.0, min(float(max_value), float(raw_value)))
+                    except (TypeError, ValueError):
+                        value = 0.0
+                    bar_h = int((value / max_value) * h) if max_value > 0 else 0
+                    if bar_h > 0:
+                        draw.rectangle(
+                            [(cursor_x, y + h - bar_h), (cursor_x + bar_w - 1, y + h - 1)],
+                            fill=colour,
+                        )
+                    cursor_x += bar_w + gap
+
+        elif elem_type == "gauge":
+            cx = element.get("x", 32)
+            cy = element.get("y", 28)
+            r = max(6, element.get("radius", 16))
+            value = max(0.0, min(100.0, element.get("value", 0.0)))
+            draw.arc([(cx - r, cy - r), (cx + r, cy + r)], start=180, end=360, fill=colour)
+            needle_angle = math.radians(180 + (value / 100.0) * 180)
+            nx = cx + int((r * 0.8) * math.cos(needle_angle))
+            ny = cy + int((r * 0.8) * math.sin(needle_angle))
+            draw.line([(cx, cy), (nx, ny)], fill=colour)
+
+        elif elem_type == "compass":
+            cx = element.get("x", 20)
+            cy = element.get("y", 16)
+            r = max(6, element.get("radius", 12))
+            heading = element.get("heading")
+            draw.ellipse([(cx - r, cy - r), (cx + r, cy + r)], outline=colour)
+            for deg, label in ((0, "N"), (90, "E"), (180, "S"), (270, "W")):
+                angle = math.radians(deg - 90)
+                tx1 = cx + int((r - 3) * math.cos(angle))
+                ty1 = cy + int((r - 3) * math.sin(angle))
+                tx2 = cx + int((r - 1) * math.cos(angle))
+                ty2 = cy + int((r - 1) * math.sin(angle))
+                draw.line([(tx1, ty1), (tx2, ty2)], fill=colour)
+            if isinstance(heading, (int, float)):
+                needle_angle = math.radians(heading - 90)
+                nx = cx + int((r * 0.7) * math.cos(needle_angle))
+                ny = cy + int((r * 0.7) * math.sin(needle_angle))
+                draw.line([(cx, cy), (nx, ny)], fill=colour, width=1)
+
+    return image

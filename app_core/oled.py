@@ -247,24 +247,15 @@ def _draw_icon_heartbeat(draw: Any, x: int, y: int, size: int, colour: int) -> N
 
 
 def _draw_icon_satellite(draw: Any, x: int, y: int, size: int, colour: int) -> None:
-    """Draw a small satellite icon (body + two solar panels + downlink line)."""
+    """Draw a small satellite icon: a body dot with four diagonal panel
+    spokes. The earlier rectangles+ellipse+diagonal design was illegible
+    below ~16px -- this reads clearly down to 8-9px."""
     cx, cy = x + size // 2, y + size // 2
-    body_r = max(1, size // 5)
-    panel_w = max(2, size // 3)
-    panel_h = max(1, size // 4)
-    draw.rectangle(
-        [(x, cy - panel_h // 2), (x + panel_w - 1, cy + panel_h // 2)], outline=colour
-    )
-    draw.rectangle(
-        [(x + size - panel_w, cy - panel_h // 2), (x + size - 1, cy + panel_h // 2)],
-        outline=colour,
-    )
-    draw.line([(x + panel_w, cy), (x + size - panel_w, cy)], fill=colour)
-    draw.ellipse(
-        [(cx - body_r, cy - body_r), (cx + body_r, cy + body_r)], fill=colour
-    )
-    # Downlink signal line toward the bottom-right corner
-    draw.line([(cx, cy + body_r), (x + size - 1, y + size - 1)], fill=colour)
+    body_r = max(1, size // 4)
+    spoke = max(2, size // 2)
+    draw.line([(cx - spoke, cy - spoke), (cx + spoke, cy + spoke)], fill=colour)
+    draw.line([(cx - spoke, cy + spoke), (cx + spoke, cy - spoke)], fill=colour)
+    draw.ellipse([(cx - body_r, cy - body_r), (cx + body_r, cy + body_r)], fill=colour)
 
 
 def _draw_icon_gps_pin(draw: Any, x: int, y: int, size: int, colour: int) -> None:
@@ -835,7 +826,13 @@ class ArgonOLEDController:
                 y2 = min(self.height - 1, cy + radius)
                 draw.ellipse([(x1, y1), (x2, y2)], outline=draw_colour)
 
+                # Cardinal ticks sit just inside the ring; the needle is kept
+                # noticeably shorter than the radius so it can never reach
+                # them, and labels are placed OUTSIDE the ring entirely.
+                # (Both used to collide: labels at radius-9 landed on top of
+                # the tick marks, and a full-length needle ran through them.)
                 label_font = self._fonts.get("small", self._fonts["small"])
+                label_height = self._line_height(label_font)
                 for deg, label in ((0, 'N'), (90, 'E'), (180, 'S'), (270, 'W')):
                     angle = math.radians(deg - 90)
                     inner_r = radius - 4
@@ -846,19 +843,21 @@ class ArgonOLEDController:
                     ty2 = cy + int(outer_r * math.sin(angle))
                     draw.line([(tx1, ty1), (tx2, ty2)], fill=draw_colour)
                     if show_labels:
-                        label_r = radius - 9
-                        lx = cx + int(label_r * math.cos(angle))
-                        ly = cy + int(label_r * math.sin(angle))
-                        draw.text((lx - 3, ly - 5), label, font=label_font, fill=draw_colour)
+                        label_r = radius + 7
+                        label_w = self._measure_text(draw, label_font, label)
+                        lx = cx + int(label_r * math.cos(angle)) - label_w // 2
+                        ly = cy + int(label_r * math.sin(angle)) - label_height // 2
+                        draw.text((lx, ly), label, font=label_font, fill=draw_colour)
 
                 if isinstance(heading, (int, float)):
+                    needle_len = radius * 0.68
                     needle_angle = math.radians(heading - 90)
-                    nx = cx + int((radius - 3) * math.cos(needle_angle))
-                    ny = cy + int((radius - 3) * math.sin(needle_angle))
+                    nx = cx + int(needle_len * math.cos(needle_angle))
+                    ny = cy + int(needle_len * math.sin(needle_angle))
                     draw.line([(cx, cy), (nx, ny)], fill=draw_colour, width=2)
                     tail_angle = needle_angle + math.pi
-                    tx = cx + int((radius * 0.35) * math.cos(tail_angle))
-                    ty = cy + int((radius * 0.35) * math.sin(tail_angle))
+                    tx = cx + int((radius * 0.28) * math.cos(tail_angle))
+                    ty = cy + int((radius * 0.28) * math.sin(tail_angle))
                     draw.line([(cx, cy), (tx, ty)], fill=draw_colour, width=1)
 
                 draw.ellipse([(cx - 1, cy - 1), (cx + 1, cy + 1)], fill=draw_colour)
