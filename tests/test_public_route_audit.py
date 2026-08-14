@@ -64,6 +64,7 @@ MACHINE_DETAIL_APIS = {
     '/api/audio/sources',
     '/api/eas-monitor/status',
     '/api/monitoring/radio',
+    '/api/gps_status',
 }
 
 
@@ -147,6 +148,7 @@ def test_screen_renderer_endpoints_are_all_reachable_without_a_session():
         '/api/audio/metrics',
         '/api/monitoring/radio',
         '/api/eas-monitor/status',
+        '/api/gps_status',
     ):
         assert endpoint in allowed, f"display screens fetch {endpoint}"
 

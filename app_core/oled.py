@@ -246,6 +246,55 @@ def _draw_icon_heartbeat(draw: Any, x: int, y: int, size: int, colour: int) -> N
     draw.line([(x + size * 5 // 8, mid_y), (x + size - 1, mid_y)], fill=colour)
 
 
+def _draw_icon_satellite(draw: Any, x: int, y: int, size: int, colour: int) -> None:
+    """Draw a small satellite icon (body + two solar panels + downlink line)."""
+    cx, cy = x + size // 2, y + size // 2
+    body_r = max(1, size // 5)
+    panel_w = max(2, size // 3)
+    panel_h = max(1, size // 4)
+    draw.rectangle(
+        [(x, cy - panel_h // 2), (x + panel_w - 1, cy + panel_h // 2)], outline=colour
+    )
+    draw.rectangle(
+        [(x + size - panel_w, cy - panel_h // 2), (x + size - 1, cy + panel_h // 2)],
+        outline=colour,
+    )
+    draw.line([(x + panel_w, cy), (x + size - panel_w, cy)], fill=colour)
+    draw.ellipse(
+        [(cx - body_r, cy - body_r), (cx + body_r, cy + body_r)], fill=colour
+    )
+    # Downlink signal line toward the bottom-right corner
+    draw.line([(cx, cy + body_r), (x + size - 1, y + size - 1)], fill=colour)
+
+
+def _draw_icon_gps_pin(draw: Any, x: int, y: int, size: int, colour: int) -> None:
+    """Draw a location-pin (teardrop) icon."""
+    cx = x + size // 2
+    r = max(1, size // 2 - 1)
+    top_cy = y + r
+    draw.ellipse([(cx - r, top_cy - r), (cx + r, top_cy + r)], outline=colour)
+    draw.polygon(
+        [(cx - r // 2, top_cy + r - 1), (cx + r // 2, top_cy + r - 1), (cx, y + size - 1)],
+        fill=colour,
+    )
+    draw.point((cx, top_cy), fill=colour)
+
+
+def _draw_icon_bolt(draw: Any, x: int, y: int, size: int, colour: int) -> None:
+    """Draw a lightning-bolt icon (GPIO/relay activation)."""
+    draw.polygon(
+        [
+            (x + size * 3 // 5, y),
+            (x + size // 5, y + size * 3 // 5),
+            (x + size // 2, y + size * 3 // 5),
+            (x + size * 2 // 5, y + size - 1),
+            (x + size * 4 // 5, y + size * 2 // 5),
+            (x + size // 2, y + size * 2 // 5),
+        ],
+        fill=colour,
+    )
+
+
 _ICON_RENDERERS = {
     "antenna": _draw_icon_antenna,
     "speaker": _draw_icon_speaker,
@@ -257,6 +306,9 @@ _ICON_RENDERERS = {
     "wave": _draw_icon_wave,
     "clock": _draw_icon_clock,
     "heartbeat": _draw_icon_heartbeat,
+    "satellite": _draw_icon_satellite,
+    "gps_pin": _draw_icon_gps_pin,
+    "bolt": _draw_icon_bolt,
 }
 
 
@@ -456,6 +508,12 @@ class ArgonOLEDController:
                'value': float, 'border': bool}
             - {'type': 'rectangle', 'x': int, 'y': int, 'width': int, 'height': int,
                'filled': bool}
+            - {'type': 'compass', 'x': int, 'y': int, 'radius': int,
+               'heading': Optional[float], 'show_labels': bool} -- N/E/S/W
+              dial with an optional needle; heading=None draws a bare dial.
+            - {'type': 'bars', 'x': int, 'y': int, 'width': int, 'height': int,
+               'values': List[float], 'max_value': float, 'gap': int} --
+              multi-value vertical bar chart (e.g. per-satellite SNR).
         """
         if clear:
             active_invert = self.default_invert if invert is None else invert
@@ -760,6 +818,90 @@ class ArgonOLEDController:
                     [(cx - 1, cy - 1), (cx + 1, cy + 1)],
                     fill=draw_colour,
                 )
+
+            elif elem_type == 'compass':
+                # Compass/heading dial: circle with N/E/S/W ticks and an
+                # optional needle. Omitting/nulling `heading` (e.g. no GPS
+                # fix yet) draws the bare dial with no needle.
+                cx = element.get('x', 32)
+                cy = element.get('y', 32)
+                radius = max(8, element.get('radius', 20))
+                heading = element.get('heading')
+                show_labels = element.get('show_labels', True)
+
+                x1 = max(0, cx - radius)
+                y1 = max(0, cy - radius)
+                x2 = min(self.width - 1, cx + radius)
+                y2 = min(self.height - 1, cy + radius)
+                draw.ellipse([(x1, y1), (x2, y2)], outline=draw_colour)
+
+                label_font = self._fonts.get("small", self._fonts["small"])
+                for deg, label in ((0, 'N'), (90, 'E'), (180, 'S'), (270, 'W')):
+                    angle = math.radians(deg - 90)
+                    inner_r = radius - 4
+                    outer_r = radius - 1
+                    tx1 = cx + int(inner_r * math.cos(angle))
+                    ty1 = cy + int(inner_r * math.sin(angle))
+                    tx2 = cx + int(outer_r * math.cos(angle))
+                    ty2 = cy + int(outer_r * math.sin(angle))
+                    draw.line([(tx1, ty1), (tx2, ty2)], fill=draw_colour)
+                    if show_labels:
+                        label_r = radius - 9
+                        lx = cx + int(label_r * math.cos(angle))
+                        ly = cy + int(label_r * math.sin(angle))
+                        draw.text((lx - 3, ly - 5), label, font=label_font, fill=draw_colour)
+
+                if isinstance(heading, (int, float)):
+                    needle_angle = math.radians(heading - 90)
+                    nx = cx + int((radius - 3) * math.cos(needle_angle))
+                    ny = cy + int((radius - 3) * math.sin(needle_angle))
+                    draw.line([(cx, cy), (nx, ny)], fill=draw_colour, width=2)
+                    tail_angle = needle_angle + math.pi
+                    tx = cx + int((radius * 0.35) * math.cos(tail_angle))
+                    ty = cy + int((radius * 0.35) * math.sin(tail_angle))
+                    draw.line([(cx, cy), (tx, ty)], fill=draw_colour, width=1)
+
+                draw.ellipse([(cx - 1, cy - 1), (cx + 1, cy + 1)], fill=draw_colour)
+
+            elif elem_type == 'bars':
+                # Multi-value vertical bar chart from an array (e.g. one bar
+                # per visible satellite's SNR) -- distinct from 'bar', which
+                # is a single horizontal meter.
+                x = max(0, element.get('x', 0))
+                y = max(0, element.get('y', 0))
+                width = max(1, element.get('width', 40))
+                height = max(1, element.get('height', 16))
+                values = element.get('values') or []
+                max_value = element.get('max_value', 50.0) or 50.0
+                gap = max(0, element.get('gap', 1))
+
+                if x >= self.width or y >= self.height:
+                    continue
+                width = min(width, self.width - x)
+                height = min(height, self.height - y)
+
+                count = len(values)
+                if count > 0 and width > 0 and height > 0:
+                    bar_width = max(1, (width - gap * (count - 1)) // count)
+                    cursor_x = x
+                    for raw_value in values:
+                        try:
+                            value = max(0.0, min(float(max_value), float(raw_value)))
+                        except (TypeError, ValueError):
+                            value = 0.0
+                        if cursor_x >= self.width:
+                            break
+                        bar_height = int((value / max_value) * height) if max_value > 0 else 0
+                        if bar_height > 0:
+                            bar_x2 = min(self.width - 1, cursor_x + bar_width - 1)
+                            bar_y1 = max(0, y + height - bar_height)
+                            bar_y2 = min(self.height - 1, y + height - 1)
+                            draw.rectangle(
+                                [(cursor_x, bar_y1), (bar_x2, bar_y2)],
+                                fill=draw_colour,
+                                outline=None,
+                            )
+                        cursor_x += bar_width + gap
 
             elif elem_type == 'dotted_hline':
                 # Dotted horizontal line (every other pixel)

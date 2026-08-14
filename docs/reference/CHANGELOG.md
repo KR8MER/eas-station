@@ -8,7 +8,48 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.161.0] - 2026-08-14 - Show Pending Alerts on the USB stack light and hardware displays; fix audio-service deadlock
+## [2.162.0] - 2026-08-14 - Add a GPS OLED screen and richer display graphics
+
+### Added
+- **New OLED render primitives**: `compass` (an N/E/S/W heading dial with an
+  optional needle — omit/null `heading` for a bare dial when there's no fix
+  yet) and `bars` (a multi-value vertical bar chart, e.g. one bar per
+  visible satellite's SNR — distinct from the existing single-meter `bar`).
+  Both are implemented in `app_core/oled.py`'s `render_frame()`, mirrored in
+  `scripts/screen_renderer.py` for `DisplayScreen` template support (with
+  live-data binding: `heading` resolves a `{var.path}` template to a float,
+  `values_source` resolves a dot-path directly to a live array rather than a
+  single scalar), and previewed in the `/screens` admin builder's canvas.
+- **Three new OLED icon glyphs**: `satellite`, `gps_pin`, and `bolt`
+  (lightning bolt, for GPIO/relay activity), added to the existing
+  hand-drawn vector icon library alongside antenna/shield/warning/etc.
+  `bolt` closes a gap where the `/screens` admin builder's preview already
+  had a glyph mapped for it but no backend renderer existed.
+- **New GPS status OLED screen** ("GPS Status") added to the default OLED
+  rotation: a heading compass, fix-quality badge (NO FIX / 2D FIX / 3D FIX),
+  lat/lon/altitude/speed readout, and a per-satellite signal-strength bar
+  chart. Sourced from a new public-but-local-only `/api/gps_status` endpoint
+  (`webapp/admin/api/routes_system.py`), which flattens the `gps:status`
+  Redis key `GPSManager` already publishes — same tier as `/api/system_status`
+  in the deny-by-default gate (`app.py`'s `LOCAL_API_GET_PATHS`), since GPS
+  coordinates describe the machine's physical location and must not be
+  internet-public.
+- **Restyled the GPIO Status OLED screen** to match every other default
+  screen's icon+banner+divider design language. It was the one screen
+  still on the legacy plain-text `lines` format, and its header used
+  `invert: true` with no filled rectangle behind it — which renders as
+  black-on-black, i.e. invisible.
+
+### Fixed
+- A migration seeding a new screen into an existing `screen_rotations` row
+  used a raw `sa.text()` `UPDATE` to write the JSONB `screens` column from a
+  plain Python list of dicts — `psycopg2.errors` `can't adapt type 'dict'`,
+  since a `text()` bind parameter carries no column type information.
+  Switched to the table's typed `update()` construct, which serialises JSONB
+  correctly. Caught by running the migration against a real clone of the
+  production database rather than relying on `py_compile` and the
+  single-head check alone — this exact append-to-existing-rotation code path
+  had never actually been exercised by a passing CI run before.
 
 ### Added
 - **Pending Alerts now show on the USB tower/stack light.** A non-empty
