@@ -163,6 +163,13 @@ def test_satellite_and_gps_pin_icons_render(real_pil_controller):
     assert _lit_pixel_count(real_pil_controller) > 0
 
 
+def test_bolt_icon_renders(real_pil_controller):
+    real_pil_controller.render_frame([
+        {'type': 'icon', 'name': 'bolt', 'x': 10, 'y': 10, 'size': 12},
+    ])
+    assert _lit_pixel_count(real_pil_controller) > 0
+
+
 def test_unknown_icon_name_is_silently_skipped(real_pil_controller):
     """An icon name with no registered renderer must not raise."""
     real_pil_controller.render_frame([

@@ -20,8 +20,11 @@ tracks releases under the 2.x series.
   live-data binding: `heading` resolves a `{var.path}` template to a float,
   `values_source` resolves a dot-path directly to a live array rather than a
   single scalar), and previewed in the `/screens` admin builder's canvas.
-- **Two new OLED icon glyphs**: `satellite` and `gps_pin`, added to the
-  existing hand-drawn vector icon library alongside antenna/shield/warning/etc.
+- **Three new OLED icon glyphs**: `satellite`, `gps_pin`, and `bolt`
+  (lightning bolt, for GPIO/relay activity), added to the existing
+  hand-drawn vector icon library alongside antenna/shield/warning/etc.
+  `bolt` closes a gap where the `/screens` admin builder's preview already
+  had a glyph mapped for it but no backend renderer existed.
 - **New GPS status OLED screen** ("GPS Status") added to the default OLED
   rotation: a heading compass, fix-quality badge (NO FIX / 2D FIX / 3D FIX),
   lat/lon/altitude/speed readout, and a per-satellite signal-strength bar
@@ -31,6 +34,11 @@ tracks releases under the 2.x series.
   in the deny-by-default gate (`app.py`'s `LOCAL_API_GET_PATHS`), since GPS
   coordinates describe the machine's physical location and must not be
   internet-public.
+- **Restyled the GPIO Status OLED screen** to match every other default
+  screen's icon+banner+divider design language. It was the one screen
+  still on the legacy plain-text `lines` format, and its header used
+  `invert: true` with no filled rectangle behind it — which renders as
+  black-on-black, i.e. invisible.
 
 ### Fixed
 - A migration seeding a new screen into an existing `screen_rotations` row

@@ -280,6 +280,21 @@ def _draw_icon_gps_pin(draw: Any, x: int, y: int, size: int, colour: int) -> Non
     draw.point((cx, top_cy), fill=colour)
 
 
+def _draw_icon_bolt(draw: Any, x: int, y: int, size: int, colour: int) -> None:
+    """Draw a lightning-bolt icon (GPIO/relay activation)."""
+    draw.polygon(
+        [
+            (x + size * 3 // 5, y),
+            (x + size // 5, y + size * 3 // 5),
+            (x + size // 2, y + size * 3 // 5),
+            (x + size * 2 // 5, y + size - 1),
+            (x + size * 4 // 5, y + size * 2 // 5),
+            (x + size // 2, y + size * 2 // 5),
+        ],
+        fill=colour,
+    )
+
+
 _ICON_RENDERERS = {
     "antenna": _draw_icon_antenna,
     "speaker": _draw_icon_speaker,
@@ -293,6 +308,7 @@ _ICON_RENDERERS = {
     "heartbeat": _draw_icon_heartbeat,
     "satellite": _draw_icon_satellite,
     "gps_pin": _draw_icon_gps_pin,
+    "bolt": _draw_icon_bolt,
 }
 
 
