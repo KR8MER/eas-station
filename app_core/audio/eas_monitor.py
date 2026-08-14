@@ -206,6 +206,31 @@ def _store_received_alert(
         raw_same_header = alert.get('raw_header') or alert.get('raw_text')
         source_name = alert.get('source_name', 'unknown')
 
+        # Low-confidence, no-header detections are the genuinely noise-
+        # shaped bucket (a partial/garbled SAME burst the decoder never
+        # resolved to an event code) -- distinct from a real decoded alert
+        # that just doesn't match local FIPS coverage, which is always
+        # kept regardless of confidence since it's a true decode, not noise.
+        # Configurable via EASSettings.min_log_confidence_percent (default
+        # 0 = log everything, matching prior behaviour).
+        if event_code in (None, '', 'UNKNOWN'):
+            try:
+                from app_core.models import EASSettings
+                _eas_settings = EASSettings.query.get(1)
+                min_confidence_percent = float(
+                    getattr(_eas_settings, 'min_log_confidence_percent', 0.0) or 0.0
+                ) if _eas_settings else 0.0
+            except Exception:
+                min_confidence_percent = 0.0
+            confidence_percent = float(alert.get('confidence', 0.0) or 0.0) * 100.0
+            if min_confidence_percent > 0.0 and confidence_percent < min_confidence_percent:
+                logger.debug(
+                    "Skipping low-confidence no-header detection from %s: "
+                    "%.1f%% < min_log_confidence_percent=%.1f%%",
+                    source_name, confidence_percent, min_confidence_percent,
+                )
+                return
+
         # Determine canonical ingest path (EAS-RF vs EAS-STREAM) by looking up
         # the audio source configuration.  This is a rare code path (only on
         # actual EAS detections) so a single DB lookup is acceptable.

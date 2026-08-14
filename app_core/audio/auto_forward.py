@@ -44,7 +44,12 @@ from app_utils.vtec import VTEC_BROADCAST_ACTIONS, VTEC_SKIP_ACTIONS, VTEC_TERMI
 
 logger = logging.getLogger(__name__)
 
-# Deduplication windows.
+# Deduplication windows -- DEFAULT/FALLBACK values only.  The live values
+# are configurable (EASSettings.cross_source_dedup_minutes / .header_key_
+# dedup_minutes, surfaced in load_eas_config()'s returned dict); these
+# constants are what's used when eas_config lacks the key (e.g. a
+# migration hasn't run yet) or when a caller invokes is_duplicate_
+# broadcast() directly without going through eas_config at all.
 #
 # CROSS_SOURCE_DEDUP_WINDOW_MINUTES is the window used when we only have
 # event code + FIPS to compare with (CAP path; no raw SAME header).  15
@@ -243,6 +248,7 @@ def is_duplicate_broadcast(
     db_session,
     window_minutes: int = CROSS_SOURCE_DEDUP_WINDOW_MINUTES,
     raw_same_header: Optional[str] = None,
+    header_window_minutes: int = HEADER_KEY_DEDUP_WINDOW_MINUTES,
 ) -> bool:
     """Check whether *this specific alert* has already been broadcast
     within the deduplication window.
@@ -285,9 +291,9 @@ def is_duplicate_broadcast(
 
     now = datetime.now(timezone.utc)
     fips_cutoff = now - timedelta(minutes=window_minutes)
-    # Header-key matches use a 24h window because the key includes the
-    # unique issue time and so cannot produce false positives.
-    header_cutoff = now - timedelta(minutes=HEADER_KEY_DEDUP_WINDOW_MINUTES)
+    # Header-key matches use a long window (default 24h) because the key
+    # includes the unique issue time and so cannot produce false positives.
+    header_cutoff = now - timedelta(minutes=header_window_minutes)
     cutoff = header_cutoff if header_key else fips_cutoff
 
     # Parse the incoming raw header once if available.  This gives us the
@@ -800,10 +806,16 @@ def auto_forward_cap_alert(
                 db_session,
                 _alert_dedupe_lock_key(event_code, fips_codes_for_dedup),
             )
-            if is_duplicate_broadcast(event_code, fips_codes_for_dedup, db_session):
+            _cross_source_window = eas_config.get('cross_source_dedup_minutes', CROSS_SOURCE_DEDUP_WINDOW_MINUTES)
+            _header_key_window = eas_config.get('header_key_dedup_minutes', HEADER_KEY_DEDUP_WINDOW_MINUTES)
+            if is_duplicate_broadcast(
+                event_code, fips_codes_for_dedup, db_session,
+                window_minutes=_cross_source_window,
+                header_window_minutes=_header_key_window,
+            ):
                 reason = (
                     f"Cross-source duplicate: {event_code} already broadcast "
-                    f"for the same FIPS set within {CROSS_SOURCE_DEDUP_WINDOW_MINUTES}min"
+                    f"for the same FIPS set within {_cross_source_window}min"
                 )
                 log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
                 result['reason'] = reason
@@ -1042,15 +1054,19 @@ def auto_forward_ota_alert(
                 db_session,
                 _alert_dedupe_lock_key(event_code, fips_codes),
             )
+            _cross_source_window = eas_config.get('cross_source_dedup_minutes', CROSS_SOURCE_DEDUP_WINDOW_MINUTES)
+            _header_key_window = eas_config.get('header_key_dedup_minutes', HEADER_KEY_DEDUP_WINDOW_MINUTES)
             if is_duplicate_broadcast(
                 event_code,
                 fips_codes,
                 db_session,
+                window_minutes=_cross_source_window,
                 raw_same_header=raw_same_header,
+                header_window_minutes=_header_key_window,
             ):
                 result['reason'] = (
                     f"Cross-source duplicate: {event_code} already broadcast "
-                    f"for the same alert within {HEADER_KEY_DEDUP_WINDOW_MINUTES}min"
+                    f"for the same alert within {_header_key_window}min"
                 )
                 log.info("OTA auto-forward skipped: %s", result['reason'])
                 _publish_endec_feed(

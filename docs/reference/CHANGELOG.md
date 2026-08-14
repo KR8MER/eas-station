@@ -8,6 +8,35 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.167.0] - 2026-08-14 - Make alert-dedup windows configurable, add an audio-ingest confidence floor
+
+### Added
+- **Configurable cross-source deduplication windows.** The two suppression
+  windows in `is_duplicate_broadcast()` — 15 minutes for the FIPS-set-only
+  match, and 24 hours (1440 minutes, previously a hardcoded
+  `HEADER_KEY_DEDUP_WINDOW_MINUTES` constant) for the callsign-independent
+  SAME-header-key match — are now `EASSettings.cross_source_dedup_minutes`
+  and `EASSettings.header_key_dedup_minutes`, editable from Admin → EAS
+  Settings under a new "Deduplication & Audio Detection" card. The old
+  module constants remain as fallback defaults only.
+- **Minimum confidence floor for headerless audio detections.**
+  `EASSettings.min_log_confidence_percent` (0–100, default 0 = disabled)
+  lets an operator stop low-confidence, no-decoded-header audio detections
+  from being logged on the Received Audio Alerts page at all. The gate
+  only applies when there is no decoded event code — a real decode (e.g.
+  from a nationwide EAS relay network correctly reporting an alert outside
+  this station's coverage area) is always stored regardless of confidence.
+- New idempotent migration `20260814_eas_dedup_settings` adds the three
+  columns to `eas_settings`.
+
+### Fixed
+- Reviewing a user-reported spike of "false decodes" on the Received Audio
+  Alerts page traced most of the volume to a correctly-configured
+  nationwide EAS relay stream legitimately decoding out-of-area alerts —
+  not a bug. The remaining genuine noise (headerless, low-confidence
+  detections) is now suppressible via `min_log_confidence_percent` instead
+  of requiring a code change.
+
 ## [2.166.0] - 2026-08-14 - Bring the screen editor UI up to date with the OLED/VFD/LED graphics engines
 
 ### Added
