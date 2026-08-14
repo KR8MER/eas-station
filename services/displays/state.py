@@ -37,8 +37,16 @@ def publish_display_state(redis_client, screen_manager) -> None:
         # Import hardware settings helpers
         from app_core.hardware_settings import get_oled_settings, get_led_settings, get_vfd_settings
 
+        # Gated-alerts hold-off queue ("Pending Review" scene) -- how many
+        # GatedAlert rows are currently status='pending'. Read straight off
+        # the screen_manager's own cache (refreshed every ~1s in
+        # _update_rotations) rather than re-querying the DB here, since this
+        # function already runs on a tight publish interval.
+        pending_gate_count = getattr(screen_manager, "_gated_pending_count", 0) if screen_manager else 0
+
         state = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            "pending_gate_count": pending_gate_count,
             "oled": {
                 "enabled": False,
                 "width": 128,

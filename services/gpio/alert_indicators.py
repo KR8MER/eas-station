@@ -105,6 +105,7 @@ def resolve_tower_state(
     redis_ok: bool,
     now: Optional[datetime] = None,
     active_alert_count: int = 0,
+    pending_gate_count: int = 0,
 ) -> TowerState:
     """Pure resolver — decide what the tower light should show right now.
 
@@ -117,6 +118,12 @@ def resolve_tower_state(
     the incoming (yellow, flashing) indication instead of returning to green
     standby — matching the website stack light, which stays lit while alerts
     are active rather than dropping to green the moment audio playout ends.
+
+    *pending_gate_count* is the number of alerts sitting in the gated-alerts
+    Pending Alerts queue (held for operator review before broadcast). It
+    ranks below an active/incoming alert -- a live alert must never be
+    visually buried by a "needs review" indication -- but above quiet hours,
+    since an operator action item shouldn't be silenced by a dark schedule.
     """
     if not redis_ok and getattr(config, "fault_enabled", True):
         return TowerState("fault", config.fault_color, "red", True, False)
@@ -153,6 +160,11 @@ def resolve_tower_state(
         name = "incoming" if incoming_active else "active"
         return TowerState(
             name, config.incoming_color, "yellow", config.blink_on_alert, False
+        )
+
+    if pending_gate_count > 0 and getattr(config, "gate_pending_enabled", True):
+        return TowerState(
+            "gate_pending", config.gate_pending_color, "yellow", config.blink_on_alert, False
         )
 
     if getattr(config, "quiet_enabled", False) and in_quiet_hours(
@@ -334,11 +346,12 @@ def update_alert_indicators(
     crash the indicator loop.
 
     *pending_gate_count_fn*, when supplied, returns the number of alerts
-    currently sitting in the gated-alerts Pending Alerts queue. Drives the
-    GATE_PENDING relay behavior (a lamp/buzzer telling an operator something
-    needs review) -- edge-triggered against *gate_pending_was_active* like
-    the broadcast/incoming markers, since this is queue-depth level state,
-    not a single alert's lifecycle.
+    currently sitting in the gated-alerts Pending Alerts queue. Drives both
+    the GATE_PENDING relay behavior (a lamp/buzzer telling an operator
+    something needs review) -- edge-triggered against *gate_pending_was_active*
+    like the broadcast/incoming markers, since this is queue-depth level
+    state, not a single alert's lifecycle -- and the tower light's
+    ``gate_pending`` color state via :func:`resolve_tower_state`.
 
     Returns ``(broadcast_active, incoming_active, tower_state,
     gate_pending_active)`` so the caller can carry state across iterations.
@@ -423,6 +436,7 @@ def update_alert_indicators(
             incoming_active,
             redis_ok,
             active_alert_count=active_alert_count,
+            pending_gate_count=pending_gate_count,
         )
         if desired != tower_state_was:
             try:

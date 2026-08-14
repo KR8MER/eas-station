@@ -998,6 +998,18 @@
                                             <label class="form-check-label small" for="tower_light_fault_enabled">Flash when the alert pipeline is unreachable</label>
                                         </div>
                                     </div>
+                                    <div class="col-12 col-md-4">
+                                        <label for="tower_light_gate_pending_color" class="form-label">Pending Alerts (needs review)</label>
+                                        <select class="form-select tower-color-select" id="tower_light_gate_pending_color" name="tower_light_gate_pending_color">
+                                            {% for value, label in tower_color_options %}
+                                            <option value="{{ value }}" {% if (settings.tower_light_gate_pending_color or 'blue') == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <div class="form-check mt-1">
+                                            <input class="form-check-input" type="checkbox" id="tower_light_gate_pending_enabled" name="tower_light_gate_pending_enabled" value="true" {% if settings.tower_light_gate_pending_enabled %}checked{% endif %}>
+                                            <label class="form-check-label small" for="tower_light_gate_pending_enabled">Flash while alerts wait in the Pending Alerts review queue</label>
+                                        </div>
+                                    </div>
                                 </div>
                                 <small class="form-text text-muted">
                                     The Adafruit #5125 only has red, yellow, and green segments — other colors fall back to that

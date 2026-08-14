@@ -182,6 +182,14 @@
     {% endset %}
     {% include 'components/page_header.html' %}
 
+    <div id="pending-gate-banner" class="alert alert-warning d-none" role="status">
+        <i class="fas fa-hourglass-half"></i>
+        <strong><span id="pending-gate-count">0</span> alert(s) pending review</strong>
+        — held by the gated-alerts hold-off timer. Displays are showing a "Pending Review" scene
+        until they are approved or cancelled at
+        <a href="{{ url_for('pending_alerts.pending_alerts_list') }}">Pending Alerts</a>.
+    </div>
+
     <div class="row">
         <!-- OLED Display (128x64 Monochrome) -->
         <div class="col-12 col-md-6 col-lg-4">
@@ -476,6 +484,16 @@ async function updateDisplayStates() {
 
         const newState = await response.json();
         displayState = newState;
+
+        // Gated-alerts "Pending Review" banner -- mirrors the scene shown on
+        // the physical OLED/LED/VFD outputs while alerts are held for
+        // operator review (see scripts/screen_manager_gated.py).
+        const pendingGateCount = newState.pending_gate_count || 0;
+        const pendingBanner = document.getElementById('pending-gate-banner');
+        if (pendingBanner) {
+            document.getElementById('pending-gate-count').textContent = pendingGateCount;
+            pendingBanner.classList.toggle('d-none', pendingGateCount <= 0);
+        }
 
         // Update status indicators
         updateStatusIndicator('oled', newState.oled.enabled);

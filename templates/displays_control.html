@@ -130,6 +130,15 @@
                         <div class="col-md-4">
                             <strong>Active Rotations:</strong> {{ rotations_count if rotations_count else 0 }}
                         </div>
+                        <div class="col-md-4">
+                            <strong>Pending Review:</strong>
+                            <span class="badge {% if pending_gate_count %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                                {{ pending_gate_count if pending_gate_count else 0 }}
+                            </span>
+                            {% if pending_gate_count %}
+                            <a href="{{ url_for('pending_alerts.pending_alerts_list') }}" class="ms-1">view</a>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </div>

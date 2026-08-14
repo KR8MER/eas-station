@@ -28,7 +28,7 @@ from app_core.auth.decorators import require_auth, require_role
 from app_core.extensions import db
 import app_core.led as led_module
 from app_core.vfd import VFD_AVAILABLE, vfd_controller
-from app_core.models import LEDMessage, VFDDisplay, DisplayScreen, ScreenRotation
+from app_core.models import LEDMessage, VFDDisplay, DisplayScreen, ScreenRotation, GatedAlert
 
 
 def register(app: Flask, logger) -> None:
@@ -83,6 +83,14 @@ def register(app: Flask, logger) -> None:
             except OperationalError as exc:
                 route_logger.debug("Could not get screen counts: %s", exc)
 
+            # Gated-alerts hold-off queue ("Pending Review" scene on the
+            # physical displays -- see scripts/screen_manager_gated.py).
+            pending_gate_count = 0
+            try:
+                pending_gate_count = GatedAlert.query.filter_by(status="pending").count()
+            except OperationalError as exc:
+                route_logger.debug("Could not get pending gated-alerts count: %s", exc)
+
             return render_template(
                 "displays_control.html",
                 led_status=led_status,
@@ -92,6 +100,7 @@ def register(app: Flask, logger) -> None:
                 recent_vfd_displays=recent_vfd_displays,
                 screens_count=screens_count,
                 rotations_count=rotations_count,
+                pending_gate_count=pending_gate_count,
             )
 
         except Exception as exc:

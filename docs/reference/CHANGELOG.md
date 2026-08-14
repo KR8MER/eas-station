@@ -8,6 +8,44 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.161.0] - 2026-08-14 - Show Pending Alerts on the USB stack light and hardware displays; fix audio-service deadlock
+
+### Added
+- **Pending Alerts now show on the USB tower/stack light.** A non-empty
+  gated-alerts review queue (`GatedAlert` rows with `status="pending"`) now
+  drives a new `gate_pending` tower-light state — configurable color
+  (default blue, flashing) — ranked below an active/incoming alert (a live
+  alert can never be visually buried) but above quiet hours (an operator
+  action item is never silenced by a dark schedule). New settings:
+  `tower_light_gate_pending_enabled` / `tower_light_gate_pending_color` in
+  Admin → Hardware Settings.
+- **Website navbar stack light mirrors the same state**, subscribing to the
+  existing `pending_alerts_update` WebSocket push (with a polling fallback)
+  so the on-page indicator and the physical tower light never drift apart.
+- **Pending Alerts now show on the OLED, LED sign, and VFD displays.** A new
+  "Pending Review" scene rotates in — showing the queue depth and the
+  top few headlines/event codes — whenever the queue is non-empty, and
+  disappears entirely at zero. Ranked below an active/incoming alert
+  (which always preempts it) but above the normal screen rotation. The web
+  preview/control pages (`/displays`) now also surface the pending count.
+
+### Fixed
+- **Audio service could silently stop reporting itself as healthy for
+  hours, showing "Audio service metrics are unavailable" / "source failed
+  to start" on the Live Audio page even though audio was still streaming.**
+  Root cause: `AutoStreamingService._monitor_loop()`
+  (`app_core/audio/auto_streaming.py`) called `remove_source()` for a
+  stopped source while still holding `self._lock` from an outer `with`
+  block; `remove_source()` re-acquires that same non-reentrant
+  `threading.Lock()`, so the monitor thread deadlocked against itself.
+  Every other caller of `get_status()` — including the main loop that
+  publishes the Redis heartbeat the web UI's health status is read from —
+  then blocked forever on the same lock. Fixed by collecting the names to
+  remove while holding the lock and calling `remove_source()` after
+  releasing it, matching the pattern already used a few lines above for the
+  EAS-ingest-stream cleanup step. Regression test:
+  `tests/test_auto_streaming_lock.py`.
+
 ## [2.160.0] - 2026-08-13 - Fix silently-broken automatic boundary/intersection calculation
 
 ### Fixed

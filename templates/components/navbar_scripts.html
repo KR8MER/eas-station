@@ -158,7 +158,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // ANDONT 7-color USB stack light is a single lamp showing ONE colour at a time,
 // chosen by priority: fault > on-air/alert > test > incoming/degraded > standby.
 // Default state colours match the GPIO guide's tower-light state table:
-//   fault=magenta, test=cyan, alert=red, incoming=yellow, standby=green.
+//   fault=magenta, test=cyan, alert=red, incoming=yellow, pending=blue, standby=green.
 (function () {
     'use strict';
 
@@ -173,6 +173,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var _broadcastActive = false;
     var _eventCode       = '';
     var _activeAlerts    = 0;          // count of unexpired alerts in system
+    var _pendingGate     = 0;          // count of alerts in the Pending Alerts review queue
 
     // Resolve the single active state → {color, flash, buzzer, label}.
     function _resolve() {
@@ -200,6 +201,14 @@ document.addEventListener('DOMContentLoaded', function() {
         if (_activeAlerts > 0) {
             return { color: 'yellow', flash: true, buzzer: false,
                      label: _activeAlerts + ' active alert' + (_activeAlerts !== 1 ? 's' : '') };
+        }
+        // 3b. Pending Alerts queue non-empty → blue, flashing. Ranked below an
+        // active/incoming alert (never buries a live alert) but above the
+        // degraded/standby states, mirroring resolve_tower_state()'s
+        // gate_pending branch on the physical tower light.
+        if (_pendingGate > 0) {
+            return { color: 'blue', flash: true, buzzer: false,
+                     label: _pendingGate + ' pending alert' + (_pendingGate !== 1 ? 's' : '') + ' awaiting review' };
         }
         // Degraded health → steady yellow (soft warning)
         if (degraded) {
@@ -242,6 +251,13 @@ document.addEventListener('DOMContentLoaded', function() {
         _render();
     }
 
+    function _applyPendingGate(data) {
+        if (data && typeof data.count === 'number') {
+            _pendingGate = data.count;
+        }
+        _render();
+    }
+
     // Fetch broadcast state immediately so the red light reflects an
     // in-progress broadcast on the very first paint, instead of waiting
     // up to one second for the next WebSocket push.  This also covers the
@@ -253,6 +269,16 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(function () { /* non-fatal */ });
     }
 
+    // Fetch the Pending Alerts queue depth once at load. A 403 (viewer lacks
+    // eas.view) resolves to null and is silently ignored — the blue state
+    // just never lights for that user, same graceful-degrade as broadcast state.
+    function _fetchPendingGateOnce() {
+        fetch('/admin/pending-alerts/api/list', { cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) { if (data) _applyPendingGate(data); })
+            .catch(function () { /* non-fatal */ });
+    }
+
     // Subscribe to WebSocket events.  websocket.js loads after navbar.html is
     // parsed, so window.EASWebSocket is not yet defined when this IIFE runs.
     // Defer until DOMContentLoaded, by which point all <script> tags in
@@ -260,6 +286,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('DOMContentLoaded', function () {
         // Always fire one HTTP fetch at load — independent of WebSocket state.
         _fetchBroadcastStateOnce();
+        _fetchPendingGateOnce();
 
         if (window.EASWebSocket && window.EASWebSocket.subscribe) {
             // Pass a fallbackFn so the red light keeps tracking the airchain
@@ -280,6 +307,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 _healthStatus = (data && data.status) ? data.status : 'unknown';
                 _render();
             });
+
+            // Subscribe to the Pending Alerts queue (already pushed for the
+            // /admin/pending-alerts live page) so the blue state tracks it
+            // without a dedicated broadcast-state field.
+            window.EASWebSocket.subscribe(
+                'pending_alerts_update',
+                _applyPendingGate,
+                {
+                    fallbackFn: window.EASWebSocket.createPollingFallback(
+                        '/admin/pending-alerts/api/list', _applyPendingGate
+                    ),
+                    fallbackInterval: 5000,
+                }
+            );
         }
     });
 

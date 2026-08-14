@@ -576,6 +576,13 @@ class AutoStreamingService:
                                 self._streamers.pop(sn, None)
 
                         # ── 5. Remove native-rate streamers for stopped sources ──
+                        # Only collect names here; remove_source() re-acquires
+                        # self._lock, which is non-reentrant — calling it while
+                        # still inside this `with` block self-deadlocks this
+                        # thread (and every other caller of get_status(), which
+                        # includes the metrics loop that publishes the Redis
+                        # heartbeat the whole web UI's health status depends on).
+                        stale_sources = []
                         if self.audio_controller:
                             for source_name in list(self._streamers.keys()):
                                 if source_name.startswith(_EAS_INGEST_KEY_PREFIX):
@@ -585,12 +592,16 @@ class AutoStreamingService:
                                     not source_adapter
                                     or source_adapter.status != AudioSourceStatus.RUNNING
                                 ):
-                                    logger.info(
-                                        "Removing Icecast stream for '%s' "
-                                        "(source stopped or removed)",
-                                        source_name,
-                                    )
-                                    self.remove_source(source_name)
+                                    stale_sources.append(source_name)
+
+                    # Remove outside the lock — see comment above.
+                    for source_name in stale_sources:
+                        logger.info(
+                            "Removing Icecast stream for '%s' "
+                            "(source stopped or removed)",
+                            source_name,
+                        )
+                        self.remove_source(source_name)
 
                 time.sleep(10.0)
 

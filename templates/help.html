@@ -373,6 +373,12 @@
                                         <li><strong>Approve</strong> broadcasts a pending alert immediately, skipping the rest of the wait.</li>
                                         <li><strong>Cancel</strong> permanently blocks a pending alert &mdash; it will never air, even after its timer expires.</li>
                                         <li>If nobody acts, the alert auto-releases and broadcasts normally once the hold-off timer reaches zero.</li>
+                                        <li>A non-empty queue also shows on the hardware: the USB tower/stack light
+                                            (and the navbar's stack-light widget) shows a distinct color &mdash; blue by
+                                            default, configurable under <strong>Admin &rarr; Hardware Settings</strong>
+                                            &mdash; and a "Pending Review" scene rotates onto any connected OLED, LED
+                                            sign, or VFD display, so an operator away from the browser still sees that
+                                            something needs review.</li>
                                     </ul>
                                     <p class="text-muted small mb-0">
                                         <i class="fas fa-cog me-1"></i>
