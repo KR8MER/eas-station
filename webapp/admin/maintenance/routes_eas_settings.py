@@ -231,6 +231,32 @@ def admin_eas_settings():
                     code.strip().upper() for code in events.split(",") if code.strip()
                 ]
 
+        # Update cross-source dedup windows (minutes)
+        if "cross_source_dedup_minutes" in payload:
+            try:
+                _cs_window = int(payload["cross_source_dedup_minutes"])
+                if 1 <= _cs_window <= 1440:
+                    settings.cross_source_dedup_minutes = _cs_window
+            except (TypeError, ValueError):
+                pass
+        if "header_key_dedup_minutes" in payload:
+            try:
+                _hk_window = int(payload["header_key_dedup_minutes"])
+                if 1 <= _hk_window <= 10080:  # up to 7 days
+                    settings.header_key_dedup_minutes = _hk_window
+            except (TypeError, ValueError):
+                pass
+
+        # Update the audio-ingest minimum-confidence-to-log floor (0-100;
+        # 0 = disabled, log every detection regardless of confidence)
+        if "min_log_confidence_percent" in payload:
+            try:
+                _min_conf = float(payload["min_log_confidence_percent"])
+                if 0.0 <= _min_conf <= 100.0:
+                    settings.min_log_confidence_percent = _min_conf
+            except (TypeError, ValueError):
+                pass
+
         # Update auto-forwarding event allowlist
         if "forwarded_event_codes" in payload:
             events = payload["forwarded_event_codes"]

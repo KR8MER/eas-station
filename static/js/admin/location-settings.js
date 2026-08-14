@@ -1221,6 +1221,21 @@ function populateEasForm(settings) {
     if (authorizedEventsTextarea) {
         authorizedEventsTextarea.value = (settings.authorized_event_codes || []).join('\n');
     }
+    const crossSourceDedupInput = document.getElementById('easCrossSourceDedupMinutes');
+    if (crossSourceDedupInput) {
+        const _v = settings.cross_source_dedup_minutes;
+        crossSourceDedupInput.value = (_v === null || _v === undefined) ? '15' : String(_v);
+    }
+    const headerKeyDedupInput = document.getElementById('easHeaderKeyDedupMinutes');
+    if (headerKeyDedupInput) {
+        const _v = settings.header_key_dedup_minutes;
+        headerKeyDedupInput.value = (_v === null || _v === undefined) ? '1440' : String(_v);
+    }
+    const minLogConfidenceInput = document.getElementById('easMinLogConfidencePercent');
+    if (minLogConfidenceInput) {
+        const _v = settings.min_log_confidence_percent;
+        minLogConfidenceInput.value = (_v === null || _v === undefined) ? '0' : String(_v);
+    }
 
     // Set event filter checkboxes
     const forwarded = new Set((settings.forwarded_event_codes || []).map(c => c.toUpperCase()));
@@ -1378,6 +1393,9 @@ async function handleEasSettingsSubmit(e) {
         authorized_event_codes: parseNewlineValues(document.getElementById('easAuthorizedEvents')?.value || ''),
         forwarded_event_codes: (document.getElementById('easForwardedEventCodes')?.value || '')
             .split(',').map(s => s.trim().toUpperCase()).filter(Boolean),
+        cross_source_dedup_minutes: parseInt(document.getElementById('easCrossSourceDedupMinutes')?.value, 10) || 15,
+        header_key_dedup_minutes: parseInt(document.getElementById('easHeaderKeyDedupMinutes')?.value, 10) || 1440,
+        min_log_confidence_percent: parseFloat(document.getElementById('easMinLogConfidencePercent')?.value) || 0,
     };
 
     try {

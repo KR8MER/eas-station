@@ -799,6 +799,36 @@ class EASSettings(db.Model):
     # Degradation detection: app_utils/audio_quality.assess_narration_quality.
 
     # ========================================================================
+    # Cross-Source Deduplication Windows
+    # ========================================================================
+    cross_source_dedup_minutes = db.Column(db.Integer, nullable=False, default=15)
+    # Suppression window (minutes) for alerts matched by event code + full
+    # FIPS set only (no usable SAME header — the CAP-only path). Was a
+    # hardcoded constant (CROSS_SOURCE_DEDUP_WINDOW_MINUTES) in
+    # app_core/audio/auto_forward.py; default 15 preserves prior behaviour.
+
+    header_key_dedup_minutes = db.Column(db.Integer, nullable=False, default=1440)
+    # Suppression window (minutes) for alerts matched by the callsign-
+    # independent SAME-header key, which already encodes the issuer's
+    # release time — an identical key is the same alert issuance
+    # regardless of how far apart the copies arrive, so this can safely be
+    # much longer than cross_source_dedup_minutes. Was a hardcoded
+    # constant (HEADER_KEY_DEDUP_WINDOW_MINUTES); default 1440 (24h)
+    # preserves prior behaviour.
+
+    # ========================================================================
+    # Audio Ingest Detection
+    # ========================================================================
+    min_log_confidence_percent = db.Column(db.Float, nullable=False, default=0.0)
+    # Minimum decode confidence (0-100) required to store a received-audio
+    # detection that has NO decoded event code (a partial/noise-triggered
+    # SAME burst with an unresolved header). Detections that DO resolve to
+    # a real event code are always stored regardless of confidence, since
+    # those are genuine alerts -- this only trims log noise from
+    # low-confidence non-decodes. 0 (default) stores everything, matching
+    # prior behaviour.
+
+    # ========================================================================
     # ENDEC Device Feeds (Sage-ENDEC-compatible serial/TCP output)
     # ========================================================================
     endec_feeds_enabled = db.Column(db.Boolean, nullable=False, default=False)
@@ -858,6 +888,9 @@ class EASSettings(db.Model):
             "authorized_event_codes": list(self.authorized_event_codes or []),
             "forwarded_event_codes": list(self.forwarded_event_codes or []),
             "relay_narration_source": self.relay_narration_source or 'auto',
+            "cross_source_dedup_minutes": int(self.cross_source_dedup_minutes or 15),
+            "header_key_dedup_minutes": int(self.header_key_dedup_minutes or 1440),
+            "min_log_confidence_percent": float(self.min_log_confidence_percent or 0.0),
             "endec_feeds_enabled": bool(self.endec_feeds_enabled),
             "endec_feeds": list(self.endec_feeds or []),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,

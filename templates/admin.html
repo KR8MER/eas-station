@@ -1173,6 +1173,41 @@
                                     <input type="hidden" id="easForwardedEventCodes" name="forwarded_event_codes">
                                 </div>
 
+                                <!-- Deduplication & Audio Detection -->
+                                <div class="col-12">
+                                    <div class="card border-secondary-subtle">
+                                        <div class="card-header bg-secondary-subtle">
+                                            <h6 class="mb-0"><i class="fas fa-clone me-2"></i> Deduplication &amp; Audio Detection</h6>
+                                            <small class="text-muted">Controls how long a duplicate alert is suppressed, and whether low-confidence audio detections with no decoded header get logged at all.</small>
+                                        </div>
+                                        <div class="card-body row g-3">
+                                            <div class="col-md-4">
+                                                <label for="easCrossSourceDedupMinutes" class="form-label fw-bold">
+                                                    Cross-Source Dedup Window (min)
+                                                    <i class="fas fa-info-circle text-primary ms-1" data-bs-toggle="tooltip" title="Used when only event code + FIPS set are available to compare (no SAME header, e.g. the CAP-only path)."></i>
+                                                </label>
+                                                <input type="number" class="form-control" id="easCrossSourceDedupMinutes" name="cross_source_dedup_minutes" min="1" max="1440" value="15">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="easHeaderKeyDedupMinutes" class="form-label fw-bold">
+                                                    Header-Key Dedup Window (min)
+                                                    <i class="fas fa-info-circle text-primary ms-1" data-bs-toggle="tooltip" title="Used when a SAME header is available. The header key encodes the issuer's release time, so an identical key is the same alert issuance regardless of how far apart the copies arrive — safe to set much higher than the cross-source window."></i>
+                                                </label>
+                                                <input type="number" class="form-control" id="easHeaderKeyDedupMinutes" name="header_key_dedup_minutes" min="1" max="10080" value="1440">
+                                                <small class="text-muted">Default 1440 = 24 hours</small>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="easMinLogConfidencePercent" class="form-label fw-bold">
+                                                    Min Confidence to Log (%)
+                                                    <i class="fas fa-info-circle text-primary ms-1" data-bs-toggle="tooltip" title="Only applies to detections with NO decoded event code (a partial/garbled SAME burst). A real decoded alert is always logged regardless of confidence, even if it doesn't match local FIPS coverage. 0 = log every detection."></i>
+                                                </label>
+                                                <input type="number" class="form-control" id="easMinLogConfidencePercent" name="min_log_confidence_percent" min="0" max="100" step="1" value="0">
+                                                <small class="text-muted">0 disables filtering (logs everything)</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div class="col-md-6">
                                     <label for="easAuthorizedEvents" class="form-label fw-bold">
                                         Authorized Event Codes

@@ -440,6 +440,9 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
     db_mdc1200_arg_raw = None
     db_mdc1200_target_unit_id = None
     db_forwarded_event_codes: List[str] = []
+    db_cross_source_dedup_minutes = None
+    db_header_key_dedup_minutes = None
+    db_min_log_confidence_percent = None
     try:
         from app_core.models import EASSettings
         eas_settings = EASSettings.query.get(1)
@@ -467,6 +470,9 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
             db_mdc1200_arg_raw = getattr(eas_settings, 'mdc1200_arg_raw', None)
             db_mdc1200_target_unit_id = getattr(eas_settings, 'mdc1200_target_unit_id', None)
             db_forwarded_event_codes = list(eas_settings.forwarded_event_codes or [])
+            db_cross_source_dedup_minutes = getattr(eas_settings, 'cross_source_dedup_minutes', None)
+            db_header_key_dedup_minutes = getattr(eas_settings, 'header_key_dedup_minutes', None)
+            db_min_log_confidence_percent = getattr(eas_settings, 'min_log_confidence_percent', None)
             load_logger.info(
                 'EASSettings loaded from DB: originator=%s station_id=%s broadcast_enabled=%s',
                 db_originator, db_station_id, db_broadcast_enabled,
@@ -505,6 +511,9 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
                 db_mdc1200_arg_raw = getattr(eas_settings, 'mdc1200_arg_raw', None)
                 db_mdc1200_target_unit_id = getattr(eas_settings, 'mdc1200_target_unit_id', None)
                 db_forwarded_event_codes = list(eas_settings.forwarded_event_codes or [])
+                db_cross_source_dedup_minutes = getattr(eas_settings, 'cross_source_dedup_minutes', None)
+                db_header_key_dedup_minutes = getattr(eas_settings, 'header_key_dedup_minutes', None)
+                db_min_log_confidence_percent = getattr(eas_settings, 'min_log_confidence_percent', None)
                 load_logger.info(
                     'EASSettings loaded from DB (direct session): originator=%s station_id=%s broadcast_enabled=%s',
                     db_originator, db_station_id, db_broadcast_enabled,
@@ -639,6 +648,15 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
         'pyttsx3_rate': os.getenv('PYTTSX3_RATE'),
         'pyttsx3_volume': os.getenv('PYTTSX3_VOLUME'),
         'forwarded_event_codes': db_forwarded_event_codes,
+        'cross_source_dedup_minutes': (
+            int(db_cross_source_dedup_minutes) if db_cross_source_dedup_minutes is not None else 15
+        ),
+        'header_key_dedup_minutes': (
+            int(db_header_key_dedup_minutes) if db_header_key_dedup_minutes is not None else 24 * 60
+        ),
+        'min_log_confidence_percent': (
+            float(db_min_log_confidence_percent) if db_min_log_confidence_percent is not None else 0.0
+        ),
     }
 
     if config['audio_player_cmd']:

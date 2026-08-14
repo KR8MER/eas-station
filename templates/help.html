@@ -817,6 +817,49 @@
                             </div>
                         </div>
 
+                        <!-- Deduplication & Audio Ingest Confidence -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="dedupHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#dedupCollapse">
+                                    <i class="fas fa-clone me-2"></i>Deduplication &amp; Audio Detection Confidence
+                                </button>
+                            </h2>
+                            <div id="dedupCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p>
+                                        The same alert often arrives from more than one source — a CAP feed and an
+                                        OTA relay, or two relay streams — within minutes of each other. Auto-forwarding
+                                        suppresses these cross-source duplicates using two configurable windows
+                                        (Admin → EAS Encoder Settings → <strong>Deduplication &amp; Audio Detection</strong>):
+                                    </p>
+                                    <ul>
+                                        <li><strong>Cross-Source Dedup Window (default 15 min)</strong> — used when there is no
+                                            usable SAME header to compare, only a matching event code and FIPS set.</li>
+                                        <li><strong>Header-Key Dedup Window (default 1440 min / 24 hours)</strong> — used when a
+                                            SAME header is present, matched independently of which station/callsign sent it.
+                                            This is the longer window because the same NWS issuance can legitimately be
+                                            re-relayed by different stations hours apart.</li>
+                                    </ul>
+                                    <p>
+                                        <strong>Min Confidence to Log</strong> (default 0, disabled) filters the Received
+                                        Audio Alerts log itself, not forwarding. It only applies to detections with
+                                        <em>no decoded event code</em> — low-confidence noise from a marginal signal. A
+                                        real decode is always logged regardless of confidence, even one reporting an
+                                        alert outside this station's coverage area (e.g. from a nationwide relay
+                                        network) — that is a true decode being correctly filtered downstream, not noise.
+                                    </p>
+                                    <div class="alert alert-light">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        If the Received Audio Alerts page shows a lot of low-confidence, blank-header
+                                        entries from one source, raising Min Confidence to Log (e.g. to 70%) is usually
+                                        the fix — check the source's SNR/signal quality first, since a persistently
+                                        low-confidence source may indicate an antenna or squelch problem worth
+                                        addressing at the hardware level.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Text-to-Speech Normalization & Pronunciation -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="ttsNormHeading">
