@@ -315,6 +315,47 @@ def test_vfd_rotation_shows_gated_scene_instead_of_normal_screens():
     manager._display_vfd_screen.assert_not_called()
 
 
+def test_vfd_rotation_freezes_when_skip_on_alert_true_and_alert_active():
+    """The historical bug this guards against re-appearing: with
+    skip_on_alert True (the old seeded default), _check_vfd_rotation()
+    returns before reaching either the gated-pending scene or the normal
+    rotation loop -- unlike OLED, the VFD has no dedicated alert-preemption
+    display, so this path drew nothing at all, freezing the panel on
+    whatever was last shown for the alert's whole duration."""
+    from scripts.screen_manager import ScreenManager
+
+    manager = ScreenManager()
+    manager._vfd_rotation = {"screens": [{"screen_id": 1, "duration": 5}], "skip_on_alert": True}
+    manager._gated_pending_count = 0
+    manager._has_active_alerts = MagicMock(return_value=True)
+    manager._display_gated_pending_vfd = MagicMock()
+    manager._display_vfd_screen = MagicMock()
+
+    manager._check_vfd_rotation()
+
+    manager._display_gated_pending_vfd.assert_not_called()
+    manager._display_vfd_screen.assert_not_called()
+
+
+def test_vfd_rotation_continues_when_skip_on_alert_false_and_alert_active():
+    """20260814_add_vfd_status_screens.py flips the seeded default to
+    False specifically so the rotation (which now includes vfd_alert_status)
+    keeps cycling during an active CAP alert instead of freezing."""
+    from scripts.screen_manager import ScreenManager
+
+    manager = ScreenManager()
+    manager._vfd_rotation = {"screens": [{"screen_id": 1, "duration": 5}], "skip_on_alert": False}
+    manager._gated_pending_count = 0
+    manager._has_active_alerts = MagicMock(return_value=True)
+    manager._display_gated_pending_vfd = MagicMock()
+    manager._display_vfd_screen = MagicMock()
+
+    manager._check_vfd_rotation()
+
+    manager._display_gated_pending_vfd.assert_not_called()
+    manager._display_vfd_screen.assert_called_once()
+
+
 def test_oled_rotation_shows_gated_scene_instead_of_normal_screens():
     from scripts.screen_manager import ScreenManager
 

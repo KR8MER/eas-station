@@ -8,6 +8,52 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.164.0] - 2026-08-14 - Show active alerts on the VFD; bring it to screen parity with the OLED
+
+### Added
+- **`vfd_status`** — a new default VFD screen showing the time, date and
+  active-alert count together; leads the rotation as the at-a-glance home
+  screen.
+- **`vfd_alert_status`** — a new default VFD screen showing the active
+  CAP alert's event type and area, mirroring `oled_alert_summary`'s fields
+  (same `/api/alerts` data source).
+- **`vfd_gpio_status`, `vfd_eas_decoder`, `vfd_audio_health`,
+  `vfd_ipaws_poll_watch`, `vfd_receivers`** — VFD counterparts of the 5
+  OLED screens that had no VFD equivalent, bringing the VFD's default
+  screen count to 11, matching the OLED. `vfd_eas_decoder` uses the
+  `gauge` primitive for its health score — part of the shared graphics
+  vocabulary since the last release, but not used on any VFD screen
+  until now.
+- **Text truncation on the VFD** (`max_width`/`overflow`, "trim" or
+  "ellipsis") — ported from the OLED engine's `_fit_text_to_width()`. The
+  VFD's `render_vfd_elements()` had no text clipping at all before this;
+  a long alert event name or county list just drew straight past the
+  140px edge.
+- **A second, larger VFD font** (`"font": "large"`, 14pt bold, vs. the
+  flat 7px base) — the OLED has a small/medium/large/xlarge size
+  hierarchy that gives its screens real visual weight; the VFD had one
+  size for every row on every screen. `vfd_status` (the clock),
+  `vfd_gpio_status` (active relay count), `vfd_eas_decoder` and
+  `vfd_audio_health` (health percentages), and `vfd_ipaws_poll_watch`
+  (new-alert count) now each lead with one large hero value instead of a
+  wall of same-sized text.
+
+### Fixed
+- **VFD rotation froze solid during an active alert.** None of the VFD's
+  default screens showed whether a CAP alert was active — not because no
+  screen tried, but because `vfd_default_rotation.skip_on_alert` made
+  `_check_vfd_rotation()` return before ever reaching the rotation loop
+  whenever `_has_active_alerts()` was true, leaving the panel frozen on
+  whatever was last drawn for the alert's whole duration. The OLED has its
+  own dedicated scroll-text alert-preemption path for this; the VFD had no
+  equivalent. `skip_on_alert` is now `false` for the VFD rotation, so it
+  keeps cycling — including through the new `vfd_alert_status` screen —
+  while gated *pending* alerts (a separate, still-preempting concept)
+  are unaffected.
+- **`vfd_system_meters`' DSK row clipped 1px off the bottom of the
+  140×32 canvas** (text drawn at y=26 with a 7px font bottoms out at
+  y=33). Retimed the three meter rows to y=9/17/25.
+
 ## [2.163.0] - 2026-08-14 - Fix OLED element collisions; give the VFD the same graphics engine as the OLED
 
 ### Fixed

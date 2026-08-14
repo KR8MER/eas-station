@@ -516,6 +516,9 @@ class ScreenRenderer:
                     'y': element.get('y', 0),
                     'text': text,
                     'invert': element.get('invert'),
+                    'max_width': element.get('max_width'),
+                    'overflow': element.get('overflow'),
+                    'font': element.get('font'),
                 })
 
             elif elem_type in ('bar', 'progress_bar'):

@@ -732,6 +732,70 @@ def init_vfd_controller(port: str, baudrate: int = 38400) -> Optional[NoritakeVF
         return None
 
 
+def _measure_text(draw: "ImageDraw.ImageDraw", font: "ImageFont.ImageFont", text: str) -> int:
+    if not text:
+        return 0
+    try:
+        return int(draw.textlength(text, font=font))
+    except AttributeError:
+        return font.getsize(text)[0]
+
+
+def _fit_text_to_width(
+    draw: "ImageDraw.ImageDraw",
+    font: "ImageFont.ImageFont",
+    text: str,
+    max_width: Optional[int],
+    overflow_mode: str,
+) -> str:
+    """Trim or ellipsize text to max_width -- same convention as
+    ArgonOLEDController._fit_text_to_width(). Without this, a long alert
+    event name or area description just draws past the 140px edge with no
+    clipping at all (Pillow doesn't clip drawing ops to the canvas)."""
+    if not text or not max_width or max_width <= 0:
+        return text
+
+    width = _measure_text(draw, font, text)
+    if width <= max_width:
+        return text
+
+    if overflow_mode == "trim":
+        truncated = text
+        while truncated and _measure_text(draw, font, truncated) > max_width:
+            truncated = truncated[:-1]
+        return truncated
+
+    ellipsis = "…"
+    ellipsis_width = _measure_text(draw, font, ellipsis)
+    if ellipsis_width >= max_width:
+        return ellipsis
+
+    available = max_width - ellipsis_width
+    truncated = text
+    while truncated and _measure_text(draw, font, truncated) > available:
+        truncated = truncated[:-1]
+    return f"{truncated}{ellipsis}" if truncated else ellipsis
+
+
+_vfd_large_font: Optional["ImageFont.ImageFont"] = None
+
+
+def _load_vfd_large_font() -> "ImageFont.ImageFont":
+    """14pt bold -- a second, larger size so a screen's single most
+    important value (a clock, a percentage) can visually lead the way
+    OLED's font-size hierarchy (small/medium/large/xlarge) does, instead
+    of every row on the VFD reading at the same flat 7px weight."""
+    global _vfd_large_font
+    if _vfd_large_font is None:
+        try:
+            _vfd_large_font = ImageFont.truetype(
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14
+            )
+        except OSError:
+            _vfd_large_font = ImageFont.load_default()
+    return _vfd_large_font
+
+
 def render_vfd_elements(
     elements: List[dict],
     width: int = 140,
@@ -750,7 +814,9 @@ def render_vfd_elements(
     Element types: text, rectangle, line, hline, vline, circle, icon,
     bar (single meter), bars (multi-value chart), gauge, compass -- see
     app_core.oled.ArgonOLEDController.render_frame()'s docstring for
-    per-type parameters (identical here except the canvas is 140x32).
+    per-type parameters (identical here except the canvas is 140x32). A
+    text element may set "font": "large" for the 14pt bold hero size;
+    default (unset, or any other value) is the base 7px font.
     """
     import math
 
@@ -776,14 +842,19 @@ def render_vfd_elements(
             text = str(element.get("text", ""))
             if not text:
                 continue
+            text_font = _load_vfd_large_font() if element.get("font") == "large" else font
             x = max(0, min(width - 1, int(element.get("x", 0))))
             y = max(0, min(height - 1, int(element.get("y", 0))))
+            max_width = element.get("max_width")
+            if isinstance(max_width, (int, float)):
+                overflow_mode = str(element.get("overflow", "ellipsis") or "ellipsis").lower()
+                text = _fit_text_to_width(draw, text_font, text, int(max_width), overflow_mode)
             # invert=True is how a header banner's title stays readable
             # against its own filled rectangle (fill=colour on both would
             # draw white-on-white and vanish) -- same convention as
             # ArgonOLEDController.render_frame()'s text element.
             text_colour = 0 if element.get("invert") else colour
-            draw.text((x, y), text, font=font, fill=text_colour)
+            draw.text((x, y), text, font=text_font, fill=text_colour)
 
         elif elem_type == "rectangle":
             x = max(0, element.get("x", 0))

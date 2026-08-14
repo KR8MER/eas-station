@@ -54,6 +54,57 @@ def test_empty_text_draws_nothing():
     assert _lit_pixel_count(img) == 0
 
 
+def test_text_font_large_draws_more_pixels_than_default():
+    """The 14pt bold hero size (font: 'large') must be visibly bigger than
+    the default 7px -- guards the typographic hierarchy the VFD screens
+    now use for their single most important value (a clock, a percentage)."""
+    default_size = render_vfd_elements([{"type": "text", "text": "92%", "x": 0, "y": 0}])
+    large = render_vfd_elements([{"type": "text", "text": "92%", "x": 0, "y": 0, "font": "large"}])
+    assert _lit_pixel_count(large) > _lit_pixel_count(default_size)
+
+
+def test_text_font_large_respects_max_width_truncation():
+    long_text = "999"
+    bounded = render_vfd_elements([
+        {"type": "text", "text": long_text, "x": 0, "y": 0, "font": "large", "max_width": 5, "overflow": "trim"},
+    ])
+    assert _lit_pixel_count(bounded) == 0
+
+
+def test_text_max_width_ellipsis_truncates_long_text():
+    """Without max_width, Pillow draws text past the 140px edge with no
+    clipping at all -- guards the truncation this adds for long alert
+    event names / area descriptions."""
+    long_text = "Extreme Wind Warning for the entire county area"
+    unbounded = render_vfd_elements([{"type": "text", "text": long_text, "x": 0, "y": 0}])
+    bounded = render_vfd_elements([
+        {"type": "text", "text": long_text, "x": 0, "y": 0, "max_width": 60, "overflow": "ellipsis"},
+    ])
+    assert _lit_pixel_count(bounded) < _lit_pixel_count(unbounded)
+    assert _lit_pixel_count(bounded) > 0
+
+
+def test_text_max_width_trim_mode_drops_ellipsis_character():
+    long_text = "Extreme Wind Warning"
+    trimmed = render_vfd_elements([
+        {"type": "text", "text": long_text, "x": 0, "y": 0, "max_width": 40, "overflow": "trim"},
+    ])
+    ellipsized = render_vfd_elements([
+        {"type": "text", "text": long_text, "x": 0, "y": 0, "max_width": 40, "overflow": "ellipsis"},
+    ])
+    # Both fit within the same budget; trim mode never draws the "…" glyph
+    # ellipsis mode does, so their lit-pixel counts should differ.
+    assert _lit_pixel_count(trimmed) != _lit_pixel_count(ellipsized)
+
+
+def test_text_within_max_width_is_unchanged():
+    short = render_vfd_elements([{"type": "text", "text": "HI", "x": 0, "y": 0}])
+    with_room = render_vfd_elements([
+        {"type": "text", "text": "HI", "x": 0, "y": 0, "max_width": 100, "overflow": "ellipsis"},
+    ])
+    assert _lit_pixel_count(short) == _lit_pixel_count(with_room)
+
+
 def test_text_invert_draws_dark_on_light_banner():
     """A filled header rectangle + invert=True text must NOT cancel out to
     white-on-white (the bug this test guards: the first implementation drew
