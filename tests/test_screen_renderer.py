@@ -302,3 +302,65 @@ def test_render_vfd_screen_receivers_resolves_indexed_array_fields():
 
     texts = [el["text"] for el in rendered["elements"]]
     assert texts == ["NOAA WX Ch4 -62dBm", "VHF Marine -74dBm"]
+
+
+# ---------------------------------------------------------------------------
+# render_led_screen -- graphics mode ({'elements': [...]}, template_data has
+# an 'elements' key) vs. legacy 4-line scrolling-text mode ({'lines': [...]})
+# ---------------------------------------------------------------------------
+
+def test_render_led_screen_legacy_lines_mode_unaffected():
+    """The pre-existing 4-line scrolling-text path (6 default LED screens)
+    must keep working unchanged -- graphics mode is opt-in via an
+    'elements' key, not a replacement."""
+    renderer = screen_renderer.ScreenRenderer()
+    screen_data = {"template_data": {
+        "lines": ["{status.hostname}", "line2"],
+        "color": "GREEN", "mode": "HOLD", "speed": "SPEED_3",
+    }}
+    rendered = renderer.render_led_screen(screen_data, {"status": {"hostname": "eas-demo"}})
+
+    assert "elements" not in rendered
+    assert rendered["lines"][0] == "eas-demo"
+    assert rendered["color"] == "GREEN"
+
+
+def test_render_led_screen_graphics_mode_returns_elements_dict():
+    renderer = screen_renderer.ScreenRenderer()
+    screen_data = {"template_data": {
+        "elements": [
+            {"type": "text", "text": "{now.time_24}", "x": 18, "y": 1, "font": "large"},
+        ],
+        "color": "AMBER",
+    }}
+    rendered = renderer.render_led_screen(screen_data, {})
+
+    assert "lines" not in rendered
+    assert rendered["color"] == "AMBER"
+    assert rendered["elements"][0]["font"] == "large"
+
+
+def test_render_led_screen_graphics_mode_icon_and_bar_resolve():
+    renderer = screen_renderer.ScreenRenderer()
+    screen_data = {"template_data": {"elements": [
+        {"type": "icon", "name": "heartbeat", "x": 1, "y": 1, "size": 14},
+        {"type": "bar", "x": 0, "y": 0, "width": 40, "height": 8, "value": "{status.cpu}"},
+    ]}}
+    rendered = renderer.render_led_screen(screen_data, {"status": {"cpu": 150}})
+
+    icon = next(el for el in rendered["elements"] if el["type"] == "icon")
+    assert icon["name"] == "heartbeat"
+    bar = next(el for el in rendered["elements"] if el["type"] == "bar")
+    assert bar["value"] == 100.0  # clamped
+
+
+def test_render_led_screen_graphics_mode_unknown_element_type_dropped():
+    renderer = screen_renderer.ScreenRenderer()
+    screen_data = {"template_data": {"elements": [
+        {"type": "gauge", "x": 0, "y": 0, "radius": 10, "value": 50},
+        {"type": "text", "text": "OK", "x": 0, "y": 4},
+    ]}}
+    rendered = renderer.render_led_screen(screen_data, {})
+
+    types = {el["type"] for el in rendered["elements"]}
+    assert types == {"text"}

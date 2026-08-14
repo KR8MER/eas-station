@@ -37,6 +37,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, TypedDict, Type, 
 import json
 import re
 
+from PIL import Image, ImageDraw, ImageFont
+
 from app_utils.location_settings import DEFAULT_LOCATION_SETTINGS, ensure_list
 from app_utils.alert_sources import normalize_alert_source
 
@@ -310,6 +312,19 @@ class Alpha9120CController:
     """Complete Alpha 9120C LED Sign Controller with full M-Protocol support"""
 
     LINE_POSITION_MAP: Tuple[str, ...] = tuple(chr(code) for code in range(0x20, 0x28))
+
+    # Picture File (Type I) limits -- see send_dots_graphic()'s docstring.
+    MAX_DOTS_COLS = 160
+    MAX_DOTS_ROWS = 16
+
+    # render_frame() writes graphics screens to a DEDICATED file label,
+    # never the "A" label send_message()/_build_message() use for text --
+    # a file's type (TEXT/STRING/DOTS) is fixed at allocation time in the
+    # sign's Memory Configuration table (see set_memory_configuration()),
+    # so writing Picture File data to a label configured as TEXT would
+    # collide with the text-message path and likely NAK on real hardware.
+    # See configure_graphics_memory().
+    GRAPHICS_FILE_LABEL = "D"
 
     SOH = "\x01"
     STX = "\x02"
@@ -2298,6 +2313,70 @@ class Alpha9120CController:
             self.logger.error(f"Error clearing memory: {e}")
             return False
 
+    def configure_graphics_memory(
+        self,
+        confirm: bool = False,
+        text_label: str = "A",
+        text_size: int = 4000,
+        dots_label: Optional[str] = None,
+    ) -> bool:
+        """Allocate a dedicated DOTS-type file for render_frame()'s
+        graphics screens, alongside a TEXT file for the existing
+        send_message() path -- **destructive** (see set_memory_configuration()).
+
+        Signs ship from the factory with some default Memory Configuration
+        (never written by this codebase, so send_message()'s file "A" has
+        relied on whatever that factory default happens to be), and that
+        default almost certainly has no DOTS-type file allocated -- these
+        signs are marketed and used primarily for scrolling text. Without
+        an explicit DOTS file, render_frame()'s Picture File writes go to
+        a label with no matching type entry in the table, which is
+        undefined behaviour on real hardware (most likely a NAK).
+
+        This call **erases every currently stored message on the sign**
+        (memory config and text/dots content are the same reset). Only
+        call it deliberately -- e.g. from an explicit, confirmed admin
+        action -- never automatically on every service start or render.
+
+        Args:
+            confirm: Must be True to actually send; matches clear_memory()'s
+                guard convention.
+            text_label: File label for scrolling text messages (default "A",
+                matching send_message()'s default so existing behaviour
+                keeps working after this runs).
+            text_size: Byte size to allocate for the text file. This
+                codebase has never read the sign's actual factory default
+                size back, so 4000 bytes is a generous placeholder --
+                adjust to match your sign's manual/spec if messages need
+                more room.
+            dots_label: File label for graphics screens (default
+                GRAPHICS_FILE_LABEL, "D").
+
+        Returns:
+            True if the sign acknowledged the new Memory Configuration.
+        """
+        if not confirm:
+            self.logger.warning(
+                "configure_graphics_memory() not sent — pass confirm=True "
+                "(this erases every stored message on the sign)"
+            )
+            return False
+
+        dots_label = (dots_label or self.GRAPHICS_FILE_LABEL)[:1].upper()
+        dots_size = ((self.MAX_DOTS_COLS + 7) // 8) * self.MAX_DOTS_ROWS  # 20 * 16 = 320 bytes
+
+        files = [
+            {"label": text_label, "type": "A", "size": text_size, "qqqq": "FF00"},
+            {"label": dots_label, "type": "D", "size": dots_size, "qqqq": "0000"},
+        ]
+
+        self.logger.warning(
+            "Sending Memory Configuration — this ERASES all stored messages. "
+            "Allocating text file %r (%d bytes) and dots file %r (%d bytes).",
+            text_label, text_size, dots_label, dots_size,
+        )
+        return self.set_memory_configuration(files)
+
     def sync_time_with_system(self) -> bool:
         """
         Synchronize sign time with EAS Station system time.
@@ -2517,8 +2596,8 @@ class Alpha9120CController:
             self.logger.warning("send_dots_graphic: empty dot grid supplied")
             return False
 
-        MAX_COLS = 160
-        MAX_ROWS = 16
+        MAX_COLS = self.MAX_DOTS_COLS
+        MAX_ROWS = self.MAX_DOTS_ROWS
 
         # Normalise and cap the grid dimensions.
         height = min(len(dots), MAX_ROWS)
@@ -2580,6 +2659,29 @@ class Alpha9120CController:
             self.logger.error("Error sending dots graphic: %s", exc)
             return False
 
+    def render_frame(self, elements: List[dict], color: Optional["Color"] = None) -> bool:
+        """Render an element list (icons, text, bars) to a 160x16 bitmap and
+        push it as a single Picture File frame via send_dots_graphic().
+
+        This is the LED-sign counterpart of NoritakeVFDController.render_
+        frame() -- the whole frame is composed with Pillow, then packed to
+        the dots grid send_dots_graphic() expects, instead of relying on
+        the sign's own scrolling-text renderer. Only meaningful for
+        display_type='led' screens whose template_data has an 'elements'
+        list; legacy 4-line text screens still go through send_message().
+
+        Writes to GRAPHICS_FILE_LABEL, never send_dots_graphic()'s own
+        default "A" -- that label is send_message()'s TEXT file, and a
+        file's type is fixed at allocation time (see
+        configure_graphics_memory()). Requires that allocation to have
+        already been run once against the physical sign; if it hasn't,
+        this write targets a label with no matching DOTS entry in the
+        sign's Memory Configuration table.
+        """
+        image = render_led_elements(elements, self.MAX_DOTS_COLS, self.MAX_DOTS_ROWS)
+        dots = _image_to_dots_grid(image)
+        return self.send_dots_graphic(dots, color=color or Color.AMBER, file_label=self.GRAPHICS_FILE_LABEL)
+
     def get_status(self, check_health: bool = False) -> Dict:
         """
         Get current Alpha 9120C status with M-Protocol capabilities.
@@ -2625,6 +2727,142 @@ class Alpha9120CController:
 
 # Provide backwards-compatible alias used by the Flask app
 LEDSignController = Alpha9120CController
+
+
+def _image_to_dots_grid(image: "Image.Image") -> List[List[int]]:
+    """Convert a 1-bit PIL image to the row-major 0/1 grid send_dots_
+    graphic() expects."""
+    width, height = image.size
+    pixels = image.load()
+    return [[1 if pixels[x, y] else 0 for x in range(width)] for y in range(height)]
+
+
+_led_large_font: Optional["ImageFont.ImageFont"] = None
+
+
+def _load_led_large_font() -> "ImageFont.ImageFont":
+    """15pt bold -- sized to fill nearly the full 16-row height for a
+    single hero value (a clock, a count), the same way the VFD's "large"
+    font gives its own hero rows real weight."""
+    global _led_large_font
+    if _led_large_font is None:
+        try:
+            _led_large_font = ImageFont.truetype(
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 15
+            )
+        except OSError:
+            _led_large_font = ImageFont.load_default()
+    return _led_large_font
+
+
+def render_led_elements(
+    elements: List[dict],
+    width: int = 160,
+    height: int = 16,
+    *,
+    font: Optional["ImageFont.ImageFont"] = None,
+) -> "Image.Image":
+    """Pure function: draw a LED-sign element list to a 1-bit PIL image.
+
+    Alpha9120CController.render_frame() packs the result into send_dots_
+    graphic()'s row-grid format and pushes it as one Picture File frame,
+    instead of relying on the sign's own scrolling-text renderer -- the
+    same "compose the whole frame with Pillow, push it as one bitmap"
+    approach app_core.oled and scripts.vfd_controller use.
+
+    The 16-row canvas is half the VFD's 32 and a quarter of the OLED's
+    64, so this only supports a single row's worth of content: text
+    (optionally "font": "large", 15pt bold), icon (reusing the shared
+    _ICON_RENDERERS glyph set), rectangle, hline, vline, and bar. Multi-
+    row layouts (a banner header, a compass, a gauge) don't fit in 16px
+    and aren't offered here -- an LED graphics screen is a single hero
+    row, not an instrument panel.
+    """
+    from app_core.oled import _ICON_RENDERERS
+    from scripts.vfd_controller import _fit_text_to_width
+
+    if font is None:
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 7)
+        except OSError:
+            font = ImageFont.load_default()
+
+    image = Image.new("1", (width, height), color=0)
+    draw = ImageDraw.Draw(image)
+    colour = 1
+
+    for element in elements:
+        elem_type = element.get("type", "")
+
+        if elem_type == "text":
+            text = str(element.get("text", ""))
+            if not text:
+                continue
+            text_font = _load_led_large_font() if element.get("font") == "large" else font
+            x = max(0, min(width - 1, int(element.get("x", 0))))
+            y = max(0, min(height - 1, int(element.get("y", 0))))
+            max_width = element.get("max_width")
+            if isinstance(max_width, (int, float)):
+                overflow_mode = str(element.get("overflow", "ellipsis") or "ellipsis").lower()
+                text = _fit_text_to_width(draw, text_font, text, int(max_width), overflow_mode)
+            text_colour = 0 if element.get("invert") else colour
+            draw.text((x, y), text, font=text_font, fill=text_colour)
+
+        elif elem_type == "icon":
+            renderer_fn = _ICON_RENDERERS.get(str(element.get("name", "")).lower())
+            if renderer_fn:
+                icon_colour = 0 if element.get("invert") else colour
+                renderer_fn(
+                    draw,
+                    max(0, element.get("x", 0)),
+                    max(0, element.get("y", 0)),
+                    max(6, element.get("size", 14)),
+                    icon_colour,
+                )
+
+        elif elem_type == "rectangle":
+            x = max(0, element.get("x", 0))
+            y = max(0, element.get("y", 0))
+            w = max(1, element.get("width", 10))
+            h = max(1, element.get("height", 10))
+            x2 = min(width - 1, x + w - 1)
+            y2 = min(height - 1, y + h - 1)
+            if element.get("filled"):
+                draw.rectangle([(x, y), (x2, y2)], fill=colour)
+            else:
+                draw.rectangle([(x, y), (x2, y2)], outline=colour)
+
+        elif elem_type == "hline":
+            x = max(0, element.get("x", 0))
+            y = max(0, min(height - 1, element.get("y", 0)))
+            w = max(1, element.get("width", width))
+            draw.line([(x, y), (min(width - 1, x + w - 1), y)], fill=colour)
+
+        elif elem_type == "vline":
+            x = max(0, min(width - 1, element.get("x", 0)))
+            y = max(0, element.get("y", 0))
+            h = max(1, element.get("height", height))
+            draw.line([(x, y), (x, min(height - 1, y + h - 1))], fill=colour)
+
+        elif elem_type == "bar":
+            x = max(0, element.get("x", 0))
+            y = max(0, element.get("y", 0))
+            w = max(1, element.get("width", 40))
+            h = max(1, element.get("height", 8))
+            value = element.get("value", 0.0) or 0.0
+            try:
+                value = max(0.0, min(100.0, float(value)))
+            except (TypeError, ValueError):
+                value = 0.0
+            draw.rectangle([(x, y), (min(width - 1, x + w - 1), min(height - 1, y + h - 1))], outline=colour)
+            fill_w = int((w - 2) * (value / 100.0))
+            if fill_w > 0:
+                draw.rectangle(
+                    [(x + 1, y + 1), (min(width - 2, x + fill_w), min(height - 2, y + h - 2))],
+                    fill=colour,
+                )
+
+    return image
 
 
 # Example usage and testing

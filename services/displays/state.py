@@ -153,9 +153,16 @@ def publish_display_state(redis_client, screen_manager) -> None:
                 # Render a faithful dot-matrix preview from the LED content last
                 # rendered by the rotation engine (lines + M-Protocol colour).
                 try:
-                    from services.displays.preview_render import render_led_preview
+                    from services.displays.preview_render import render_led_preview, render_led_elements_preview
                     led_render = getattr(screen_manager, "_last_led_render", None) if screen_manager else None
-                    if led_render:
+                    if led_render and "elements" in led_render:
+                        # Graphics-mode screen (see ScreenRenderer._render_led_elements()) --
+                        # rendered as a single Picture File bitmap, not scrolling text.
+                        color = led_render.get("color", "AMBER")
+                        state["led"]["color"] = color
+                        state["led"]["current_message"] = {"lines": []}
+                        preview = render_led_elements_preview(led_render["elements"], color)
+                    elif led_render:
                         lines = led_render.get("lines") or []
                         color = led_render.get("color", "AMBER")
                         state["led"]["color"] = color
