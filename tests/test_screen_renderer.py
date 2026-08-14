@@ -364,3 +364,19 @@ def test_render_led_screen_graphics_mode_unknown_element_type_dropped():
 
     types = {el["type"] for el in rendered["elements"]}
     assert types == {"text"}
+
+
+def test_render_led_screen_graphics_mode_dotted_hline_folds_to_hline():
+    """The screen editor's shared 'H-Divider' element type emits
+    'dotted_hline' when its Dotted checkbox is on -- render_led_elements()
+    has no dotted rendering at all (same downgrade-to-solid convention
+    render_vfd_screen() already uses), so this must fold to plain 'hline'
+    rather than being silently dropped."""
+    renderer = screen_renderer.ScreenRenderer()
+    screen_data = {"template_data": {"elements": [
+        {"type": "dotted_hline", "x": 0, "y": 8, "width": 160},
+    ]}}
+    rendered = renderer.render_led_screen(screen_data, {})
+
+    assert len(rendered["elements"]) == 1
+    assert rendered["elements"][0]["type"] == "hline"

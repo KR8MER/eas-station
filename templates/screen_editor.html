@@ -98,23 +98,39 @@
                 </div>
                 <div class="panel-body">
                     <div class="form-group">
+                        <label>Message Type</label>
+                        <select id="led-message-type" class="form-control">
+                            <option value="text">Scrolling Text (4 lines)</option>
+                            <option value="graphics">Graphics (Dots)</option>
+                        </select>
+                        <small class="form-text text-muted">
+                            Graphics screens need a one-time "Allocate Graphics File" setup step on the
+                            LED control page's Dots tab before they'll display correctly on real hardware.
+                        </small>
+                    </div>
+                    <div class="form-group">
                         <label>Color</label>
                         <select id="led-color" class="form-control"></select>
                     </div>
-                    <div class="form-group">
-                        <label>Display Mode</label>
-                        <select id="led-mode" class="form-control"></select>
+                    <div id="led-text-options">
+                        <div class="form-group">
+                            <label>Display Mode</label>
+                            <select id="led-mode" class="form-control"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Speed</label>
+                            <select id="led-speed" class="form-control"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Font</label>
+                            <select id="led-font" class="form-control"></select>
+                        </div>
+                        <small class="form-text text-muted">
+                            Applied to the whole message. The sign shows up to 4 lines of 20 characters.
+                        </small>
                     </div>
-                    <div class="form-group">
-                        <label>Speed</label>
-                        <select id="led-speed" class="form-control"></select>
-                    </div>
-                    <div class="form-group">
-                        <label>Font</label>
-                        <select id="led-font" class="form-control"></select>
-                    </div>
-                    <small class="form-text text-muted">
-                        Applied to the whole message. The sign shows up to 4 lines of 20 characters.
+                    <small id="led-graphics-help" class="form-text text-muted" style="display: none;">
+                        A single 160×16 pixel frame — icons, text and bars, one hero row of content.
                     </small>
                 </div>
             </div>

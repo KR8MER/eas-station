@@ -8,6 +8,45 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.166.0] - 2026-08-14 - Bring the screen editor UI up to date with the OLED/VFD/LED graphics engines
+
+### Added
+- **LED graphics/Dots mode in the screen editor.** A "Message Type" toggle
+  (Scrolling Text / Graphics) on the LED options panel switches the canvas
+  to the sign's real 160×16 Picture File resolution and the element
+  palette to the icon/text/rectangle/hline/vline/bar vocabulary
+  `render_led_elements()` actually supports — previously the editor could
+  only ever emit the legacy 4-line `{lines, color, mode, speed, font}`
+  shape, so a custom LED graphics screen could not be built through the
+  UI at all; only the 3 migration-seeded ones existed.
+- **`compass` and `segments` element types**, and VFD added to
+  `icon`/`gauge`/`circle`'s available displays — the editor's element
+  palette had drifted behind the backend all session: VFD's `icon` and
+  `gauge` support, and both engines' `compass`, were invisible in the UI
+  even though `app_core/oled.py` and `scripts/vfd_controller.py` already
+  rendered them.
+- **Pixel-accurate live preview.** `POST /api/screens/preview` renders a
+  draft screen's *actual* `template_data` (unsaved edits included) through
+  the same Pillow pipeline that drives real hardware — `render_oled_
+  elements_preview()` (new), `render_vfd_elements_preview()`, `render_led_
+  elements_preview()` / `render_led_preview()` — instead of the editor's
+  own client-side canvas approximation, which the Preview button now only
+  falls back to if the server render is unavailable.
+- Icon picker now includes `satellite`, `gps_pin`, `bolt` (added to the
+  shared icon set earlier this session but never added to the editor's
+  `ICON_NAMES` list).
+- The text element's Font Size dropdown is now display-aware: VFD and LED
+  graphics mode only recognise a literal `"large"` value (their 14pt/15pt
+  bold hero size) — offering OLED's 5-size list there let an operator
+  "pick" a size with no effect on the real device.
+
+### Fixed
+- `_render_led_elements()` (`scripts/screen_renderer.py`) silently
+  dropped `dotted_hline` elements entirely (no matching case) instead of
+  folding them to a plain `hline` the way `render_vfd_screen()` already
+  does — hit as soon as the editor's shared H-Divider element (Dotted
+  checkbox on) became reachable in LED graphics mode.
+
 ## [2.165.0] - 2026-08-14 - Give the LED sign a graphics engine; seed its default screens for the first time
 
 ### Added

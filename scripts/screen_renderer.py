@@ -559,9 +559,13 @@ class ScreenRenderer:
                     'filled': element.get('filled', False),
                 })
 
-            elif elem_type in ('hline', 'vline'):
+            elif elem_type in ('hline', 'vline', 'dotted_hline'):
+                # render_led_elements() has no dotted rendering (same
+                # "silently downgrade to solid" convention render_vfd_
+                # screen() already uses for dotted_hline) -- fold both
+                # hline variants to the one type the LED engine knows.
                 rendered_elements.append({
-                    'type': elem_type,
+                    'type': 'vline' if elem_type == 'vline' else 'hline',
                     'x': element.get('x', 0), 'y': element.get('y', 0),
                     'width': element.get('width', 160),
                     'height': element.get('height', 16),
