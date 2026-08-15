@@ -62,7 +62,7 @@
     {
       "label": "Service: Restart Hardware",
       "type": "shell",
-      "command": "sudo systemctl restart eas-station-hardware.service && sudo systemctl status eas-station-hardware.service",
+      "command": "sudo systemctl restart eas-station-hardware.target && sudo systemctl status eas-station-hardware.target",
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",

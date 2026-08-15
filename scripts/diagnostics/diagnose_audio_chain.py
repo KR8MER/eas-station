@@ -283,8 +283,8 @@ To fix the audio chain for LP1, LP2, and SP1:
    - Audio sources should have matching `receiver_id` in device_params
 
 3. **Verify SDR Hardware Service is Publishing:**
-   - Check if SDR hardware service is running: `systemctl status eas-station-sdr-hardware.service`
-   - Check service logs: `journalctl -u eas-station-sdr-hardware.service -n 100`
+   - Check if SDR hardware service is running: `systemctl status eas-station-sdr.service`
+   - Check service logs: `journalctl -u eas-station-sdr.service -n 100`
    - Verify receivers are started in SDR hardware service
 
 4. **Verify Audio Service is Receiving:**

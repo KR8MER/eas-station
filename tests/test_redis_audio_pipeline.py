@@ -11,10 +11,13 @@ remains here tests the parts of that experiment still in active use:
 
 - app_core/audio/redis_sdr_adapter.py: IQ sample publishing (sdr-service ->
   eas_monitoring_service.py)
-- app_core/audio/redis_audio_publisher.py: audio sample publishing out of
-  eas_monitoring_service.py
 - the IQ/audio Redis message encoding itself
 - FIPS code loading used by the EAS monitor
+
+app_core/audio/redis_audio_publisher.py (audio sample publishing out of
+eas_monitoring_service.py, feeding eas-service.py) was removed along with
+the rest of that dead code path once eas-service.py itself was retired --
+nothing published to its Redis channel had any subscriber left.
 """
 
 import sys
@@ -90,18 +93,6 @@ class TestRedisSdrAdapter(unittest.TestCase):
 
         # Verify data integrity
         np.testing.assert_array_almost_equal(iq_samples, iq_back)
-
-
-class TestRedisAudioPublisher(unittest.TestCase):
-    """Test Redis audio publisher."""
-
-    def test_import(self):
-        """Test that RedisAudioPublisher can be imported."""
-        try:
-            from app_core.audio.redis_audio_publisher import RedisAudioPublisher
-            self.assertIsNotNone(RedisAudioPublisher)
-        except ImportError as e:
-            self.fail(f"Failed to import RedisAudioPublisher: {e}")
 
 
 class TestAudioService(unittest.TestCase):
@@ -203,7 +194,6 @@ def run_tests():
 
     # Add all test classes
     suite.addTests(loader.loadTestsFromTestCase(TestRedisSdrAdapter))
-    suite.addTests(loader.loadTestsFromTestCase(TestRedisAudioPublisher))
     suite.addTests(loader.loadTestsFromTestCase(TestAudioService))
     suite.addTests(loader.loadTestsFromTestCase(TestDataFlow))
     suite.addTests(loader.loadTestsFromTestCase(TestFIPSCodeLoading))

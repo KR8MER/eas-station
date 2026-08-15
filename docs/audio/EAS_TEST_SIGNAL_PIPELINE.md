@@ -87,14 +87,13 @@ flowchart TD
     style U fill:#1d3557,color:#fff
 ```
 
-> **Note:** `eas_monitoring_service.py` also runs a `_redis_publisher_monitor_loop()`
-> thread that republishes audio to Redis channel `audio:samples:<source_name>`. That
-> existed to feed a second, independent decoder in a standalone `eas_service.py`
-> process, which was retired as a redundant duplicate (see
-> `docs/reference/CHANGELOG.md`) — decoding now happens directly against
-> `AudioIngestController` in-process, as shown above. The republish loop currently has
-> no subscriber left; it's flagged here as a candidate for later cleanup, not addressed
-> in this pass.
+> **Note:** `eas_monitoring_service.py` used to also run a
+> `_redis_publisher_monitor_loop()` thread that republished audio to Redis channel
+> `audio:samples:<source_name>`, feeding a second, independent decoder in a standalone
+> `eas_service.py` process. Both the standalone decoder and this republish loop were
+> retired as redundant once `eas_service.py` was deleted (see
+> `docs/reference/CHANGELOG.md`) — decoding happens directly against
+> `AudioIngestController` in-process, as shown above, with no Redis hop.
 
 ---
 

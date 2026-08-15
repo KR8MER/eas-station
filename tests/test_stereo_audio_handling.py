@@ -148,55 +148,6 @@ class TestStereoAudioHandling:
         # Check that output is 1D (mono) and same length
         assert result.ndim == 1
         assert len(result) == len(stereo_audio)
-    
-    def test_redis_publisher_with_stereo_audio(self):
-        """Test that RedisAudioPublisher converts stereo to mono."""
-        from app_core.audio.redis_audio_publisher import RedisAudioPublisher
-        from app_core.audio.broadcast_queue import BroadcastQueue
-        import base64
-        import json
-        
-        # Create mock broadcast queue and adapter
-        broadcast_queue = BroadcastQueue("test_queue")
-        
-        # Create publisher (it will fail to connect to Redis, but that's OK for this test)
-        publisher = RedisAudioPublisher(
-            broadcast_queue=broadcast_queue,
-            source_name="test_source",
-            sample_rate=16000
-        )
-        
-        # Mock Redis client
-        publisher._redis_client = Mock()
-        publisher._redis_client.publish = Mock()
-        
-        # Mock audio adapter to return stereo audio
-        publisher._audio_adapter = Mock()
-        stereo_audio = np.random.randn(1600, 2).astype(np.float32) * 0.1
-        publisher._audio_adapter.read_audio = Mock(return_value=stereo_audio)
-        
-        # Start the publisher thread
-        publisher._running.set()
-        
-        # Manually call one iteration of the publisher loop
-        chunk_samples = 1600
-        audio_chunk = publisher._audio_adapter.read_audio(chunk_samples)
-        
-        # Simulate the processing in _publisher_loop
-        if audio_chunk is not None and len(audio_chunk) > 0:
-            # Apply stereo to mono conversion (this is what our fix does)
-            if audio_chunk.ndim == 2:
-                if audio_chunk.shape[1] == 2:
-                    audio_chunk = audio_chunk.mean(axis=1)
-            
-            # Verify audio is now mono
-            assert audio_chunk.ndim == 1
-            assert len(audio_chunk) == 1600
-            
-            # Encode and verify
-            sample_bytes = audio_chunk.astype(np.float32).tobytes()
-            # Byte length should be 1600 samples * FLOAT32_BYTES = 6400 bytes
-            assert len(sample_bytes) == 1600 * FLOAT32_BYTES
 
 
 class TestAudioShapeNormalization:

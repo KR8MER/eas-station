@@ -109,7 +109,7 @@ run_command() {
   echo ""
   run_command "Poller Service Status" systemctl status eas-station-poller.service --no-pager
   echo ""
-  run_command "SDR Hardware Service Status" systemctl status eas-station-sdr-hardware.service --no-pager
+  run_command "SDR Hardware Service Status" systemctl status eas-station-sdr.service --no-pager
   echo ""
   run_command "Audio Service Status" systemctl status eas-station-audio.service --no-pager
   echo ""
@@ -122,7 +122,7 @@ run_command() {
   echo ""
   
   echo "--- SDR Hardware Service ---"
-  run_command "SDR Hardware Service Logs" journalctl -u eas-station-sdr-hardware.service -n 50 --no-pager
+  run_command "SDR Hardware Service Logs" journalctl -u eas-station-sdr.service -n 50 --no-pager
   echo ""
   
   echo "--- Audio Service ---"

@@ -120,7 +120,7 @@ FLASK_ENV=development FLASK_DEBUG=true python app.py
 - `eas-station-web.service` - Flask web application (Gunicorn)
 - `eas-station-audio.service` - Audio processing and monitoring
 - `eas-station-poller.service` - Alert polling (NOAA + IPAWS)
-- `eas-station-hardware.service` - GPIO and hardware control
+- `eas-station-hardware.target` - GPIO and hardware control (bundles the network/zigbee/gps/displays/gpio subsystem units)
 - `eas-station-sdr.service` - SDR hardware interface
 - `eas-station.target` - All services together
 
@@ -414,7 +414,8 @@ When paused at a breakpoint:
 │   └── extensions.json   # Recommended extensions
 ├── app.py                # Main Flask application
 ├── eas_monitoring_service.py  # Audio processing + EAS/SAME monitoring
-├── hardware_service.py   # GPIO/hardware control
+├── sdr_hardware_service.py    # SDR hardware access
+├── services/              # network/zigbee/gps/displays/gpio subsystem processes
 ├── app_core/             # Core business logic
 ├── app_utils/            # Utility modules
 ├── webapp/               # Web routes and templates
@@ -639,8 +640,8 @@ git push
 
 **Working on Hardware/GPIO**:
 1. Task: `Service: Restart Hardware`
-2. Task: `Logs: Hardware Service (Live)`
-3. Edit `hardware_service.py` or `app_core/hardware/`
+2. `sudo journalctl -u eas-station-gpio.service -f` (or `-network`/`-zigbee`/`-gps`/`-displays`)
+3. Edit `services/gpio/` or the other `services/*` subsystem packages
 4. Test with actual GPIO pins
 5. Monitor Redis: `redis-cli monitor` (see GPIO state changes)
 
