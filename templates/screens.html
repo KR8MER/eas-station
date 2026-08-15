@@ -862,6 +862,11 @@
 let allScreens = [];
 let allRotations = [];
 let availableScreensForRotation = [];
+// screen.id -> resolved/rendered template_data (from GET /api/screens/<id>/preview),
+// used so card previews show substituted sample values instead of raw
+// "{status.status}"-style placeholders. Populated asynchronously by
+// hydrateScreenPreviews() after the initial (raw) render.
+const screenPreviewCache = {};
 const DISPLAY_ICONS = {
     led: 'fas fa-lightbulb',
     oled: 'fas fa-mobile-screen-button',
@@ -904,6 +909,7 @@ async function loadScreens() {
         allScreens = data.screens || [];
         renderScreens();
         updateScreenStats();
+        hydrateScreenPreviews(allScreens);
     } catch (error) {
         console.error('Error loading screens:', error);
         document.getElementById('screens-list').innerHTML = `
@@ -954,6 +960,39 @@ function renderScreens() {
     }
 
     container.innerHTML = filtered.map(screen => buildScreenCard(screen)).join('');
+}
+
+// Fetch the resolved (sample-substituted) preview for every screen so cards
+// show real-looking values instead of raw "{status.status}" placeholders.
+// Runs after the initial render (which uses the raw template as a fallback)
+// so the page paints immediately; cards get re-rendered once results land.
+// A small concurrency cap keeps a large screen list from opening dozens of
+// simultaneous requests at once.
+async function hydrateScreenPreviews(screens) {
+    const CONCURRENCY = 4;
+    let cursor = 0;
+
+    async function worker() {
+        while (cursor < screens.length) {
+            const screen = screens[cursor++];
+            try {
+                const response = await fetch(`/api/screens/${screen.id}/preview`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.rendered) {
+                        screenPreviewCache[screen.id] = data.rendered;
+                    }
+                }
+            } catch (error) {
+                console.debug(`Preview hydration failed for screen ${screen.id}:`, error);
+            }
+        }
+    }
+
+    await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, screens.length) }, worker)
+    );
+    renderScreens();
 }
 
 // Load rotations
@@ -1121,7 +1160,12 @@ function buildDataSourceChips(screen) {
 }
 
 function buildScreenPreview(screen) {
-    const template = screen.template_data || {};
+    // Prefer the resolved preview (real sample values substituted for
+    // "{status.status}"-style placeholders) once hydrateScreenPreviews() has
+    // fetched it; fall back to the raw template so the card still shows
+    // something on first paint / if resolution fails (e.g. a conditional
+    // screen whose condition currently isn't met).
+    const template = screenPreviewCache[screen.id] || screen.template_data || {};
 
     if (screen.display_type === 'led') {
         const lines = Array.isArray(template.lines) ? template.lines.map(extractLineText).filter(Boolean) : [];

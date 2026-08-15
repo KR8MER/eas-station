@@ -43,6 +43,7 @@ from services.common import (
     configure_logging,
     get_redis,
     init_runtime,
+    install_service_auth,
     install_signal_handlers,
     load_environment,
     publish_network_metrics,
@@ -79,6 +80,7 @@ def _build_app() -> Flask:
         })
 
     app.register_blueprint(create_blueprint())
+    install_service_auth(app, SUBSYSTEM)
     return app
 
 

@@ -30,7 +30,7 @@ from flask import Flask, jsonify, render_template, request
 from sqlalchemy.exc import IntegrityError
 
 from app_core.auth.decorators import require_auth, require_role
-from app_core.config import DISPLAYS_SERVICE_URL
+from app_core.config import DISPLAYS_SERVICE_URL, get_hardware_service_token
 from app_core.extensions import db
 from app_core.models import DisplayScreen, ScreenRotation
 from app_utils import utc_now
@@ -421,7 +421,10 @@ def register(app: Flask, logger) -> None:
             hw_req = urllib.request.Request(
                 hw_url,
                 data=payload,
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Hardware-Auth": get_hardware_service_token(),
+                },
                 method="POST",
             )
             try:

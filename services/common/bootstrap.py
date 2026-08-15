@@ -40,6 +40,7 @@ exact behaviour previously inlined in ``hardware_service.main()`` and the
 top-level module bootstrap.
 """
 
+import hmac
 import logging
 import os
 import signal
@@ -48,7 +49,7 @@ from typing import Callable, Optional, Tuple
 
 import redis
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, jsonify, request
 
 from app_core.logging_context import LOG_FORMAT_WITH_ALERT, install_alert_filter
 from app_utils.glibc_tuning import apply_glibc_tuning, start_malloc_trim_thread
@@ -106,6 +107,45 @@ def install_signal_handlers(on_shutdown: Callable[[int], None]) -> None:
 
     signal.signal(signal.SIGTERM, _handler)
     signal.signal(signal.SIGINT, _handler)
+
+
+def install_service_auth(
+    app: Flask,
+    subsystem: str,
+    *,
+    exempt_paths: Tuple[str, ...] = ("/health",),
+) -> None:
+    """Require a shared-secret header on every request but ``exempt_paths``.
+
+    These subsystem services bind ``0.0.0.0`` (see the ``PORT`` comment in
+    each ``__main__.py``) so systemd's per-service sandboxing stays
+    effective, which means anything on the LAN can reach them unless
+    something checks the caller. This rejects any request that doesn't
+    carry the same token the webapp derives from ``SECRET_KEY`` via
+    ``app_core.config.get_hardware_service_token`` — a second line of
+    defense behind the firewall rules in FIREWALL_REQUIREMENTS.md, not a
+    replacement for them.
+
+    ``/health`` stays open so systemd/diagnostics liveness checks keep
+    working without needing the token.
+    """
+    from app_core.config import get_hardware_service_token
+
+    log = logging.getLogger(__name__)
+    expected_token = get_hardware_service_token()
+
+    @app.before_request
+    def _require_hardware_service_token():  # noqa: ANN202
+        if request.path in exempt_paths:
+            return None
+        supplied = request.headers.get("X-Hardware-Auth", "")
+        if not hmac.compare_digest(supplied, expected_token):
+            log.warning(
+                f"[{subsystem}] rejected unauthenticated request to "
+                f"{request.path} from {request.remote_addr}"
+            )
+            return jsonify({"success": False, "error": "unauthorized"}), 401
+        return None
 
 
 def init_runtime(
