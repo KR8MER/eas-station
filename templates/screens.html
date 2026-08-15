@@ -1219,24 +1219,30 @@ const SECONDS_PER_MINUTE  = 60;
 const SECONDS_PER_HOUR    = 3600;
 const SECONDS_PER_DAY     = 86400;
 
-// ── Canvas-based OLED preview (128×64) ────────────────────────────────
+// ── Canvas-based OLED preview ──────────────────────────────────────────
+// Defaults to the stock SSD1306 128x64 until fetchHardwareStatus() reports
+// the operator's actual configured panel size (state.oled.width/height,
+// read from HardwareSettings server-side) -- otherwise a differently sized
+// panel's elements render clipped/mispositioned against the wrong canvas.
+let oledPreviewDims = { width: 128, height: 64 };
 let _oledPreviewSeq = 0;
 
 function buildOledElementsPreview(elements) {
     const id = 'oled-prev-' + (++_oledPreviewSeq);
+    const { width, height } = oledPreviewDims;
     // Schedule render after this string is injected into the DOM
-    requestAnimationFrame(() => renderOledPreviewCanvas(id, elements));
-    return `<canvas id="${id}" class="oled-preview-canvas" width="128" height="64"></canvas>`;
+    requestAnimationFrame(() => renderOledPreviewCanvas(id, elements, width, height));
+    return `<canvas id="${id}" class="oled-preview-canvas" width="${width}" height="${height}"></canvas>`;
 }
 
-function renderOledPreviewCanvas(canvasId, elements) {
+function renderOledPreviewCanvas(canvasId, elements, width = 128, height = 64) {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
 
     // OLED black background
     ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, 128, 64);
+    ctx.fillRect(0, 0, width, height);
 
     for (const el of elements) {
         renderOledElement(ctx, el);
@@ -1757,6 +1763,14 @@ async function fetchHardwareStatus() {
         updateChip('hw-chip-oled', state.oled);
         updateChip('hw-chip-vfd',  state.vfd);
         updateChip('hw-chip-led',  state.led);
+
+        // Pick up the operator's actual configured OLED panel size (falls
+        // back to 128x64 until this resolves -- see oledPreviewDims above).
+        if (state.oled && state.oled.width && state.oled.height &&
+            (state.oled.width !== oledPreviewDims.width || state.oled.height !== oledPreviewDims.height)) {
+            oledPreviewDims = { width: state.oled.width, height: state.oled.height };
+            renderScreens();
+        }
 
         // Show "now playing" if any display has a current screen
         const nowPlaying = (state.oled && state.oled.current_screen)
