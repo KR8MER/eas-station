@@ -3019,6 +3019,16 @@ class CAPPoller:
                     "Auto-forward failed for %s: %s",
                     new_alert.identifier, exc, exc_info=True,
                 )
+                # A DB error here (e.g. a failed commit inside
+                # auto_forward_cap_alert) leaves self.db_session's
+                # transaction aborted; every later statement on this
+                # long-lived, reused-across-polls session would raise
+                # InFailedSqlTransaction until rolled back. new_alert is
+                # already committed above, so this can't lose it.
+                try:
+                    self.db_session.rollback()
+                except Exception:
+                    pass
 
         # Boundary intersections are analytics for the map/statistics pages.
         # They run AFTER the forwarding decision and behind a guard because
@@ -3036,6 +3046,13 @@ class CAPPoller:
                     "is saved and the forwarding decision was already made): %s",
                     new_alert.identifier, exc,
                 )
+                # process_intersections() re-raises on DB errors, which
+                # leaves self.db_session's transaction aborted -- see the
+                # matching comment in the auto-forward except block above.
+                try:
+                    self.db_session.rollback()
+                except Exception:
+                    pass
 
         self.logger.info(f"Saved new alert: {new_alert.identifier} - {new_alert.event}")
         return True, new_alert, None
@@ -4099,6 +4116,18 @@ class CAPPoller:
             stats['error_message'] = str(e)
             stats['execution_time_ms'] = int((time.time() - start) * 1000)
             self.logger.error(f"Error in polling cycle: {e}")
+
+            # If this exception came from a DB statement, self.db_session's
+            # transaction is now aborted; every statement below (including
+            # log_system_event's own probe query) would raise
+            # InFailedSqlTransaction until rolled back. Do this first so the
+            # rest of this handler -- and the next poll cycle, which reuses
+            # this same long-lived session -- isn't wedged by one failure.
+            try:
+                self.db_session.rollback()
+            except Exception:
+                pass
+
             self.log_system_event('ERROR', f"CAP polling failed: {e}", stats)
 
             self.persist_debug_records(poll_run_id, poll_start_utc, stats, debug_records)
