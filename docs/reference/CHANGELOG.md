@@ -8,6 +8,24 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.168.1] - 2026-08-15 - Fix a DB session leak in the CAP poller's error handling
+
+### Fixed
+- **A single DB error during broadcast forwarding could wedge the poller's
+  session, silently stalling all future alert processing.** `CAPPoller`
+  reuses one long-lived `db_session` across its entire process life. Three
+  `except` blocks in `poller/cap_poller.py` — around `auto_forward_cap_alert()`,
+  `process_intersections()`, and `poll_and_process()`'s own top-level
+  catch-all — logged the failure but never called `db_session.rollback()`.
+  A DB error there (a failed commit inside auto-forwarding, a PostGIS error
+  during intersection calculation) left the session's transaction aborted,
+  so every subsequent statement raised `InFailedSqlTransaction` until a
+  manual service restart, even though the poller's own retry/backoff loop
+  kept running. Added `rollback()` to all three, matching the pattern
+  already used elsewhere in the same file; the already-committed alert row
+  can't be lost since it's saved earlier in the same method, before any of
+  these three blocks run.
+
 ## [2.168.0] - 2026-08-15 - Require a shared-secret token on the hardware subsystem APIs
 
 ### Added
