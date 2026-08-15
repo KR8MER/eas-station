@@ -24,6 +24,8 @@ All service names and URLs are defined here to avoid hardcoding throughout the c
 These can be overridden via environment variables for custom deployments.
 """
 
+import hashlib
+import hmac
 import os
 from typing import List
 
@@ -144,3 +146,27 @@ GPIO_SERVICE_URL = os.environ.get('GPIO_SERVICE_URL', 'http://127.0.0.1:5105')
 AUDIO_SERVICE_URL = os.environ.get('AUDIO_SERVICE_URL', 'http://127.0.0.1:5002')
 SDR_SERVICE_URL = os.environ.get('SDR_SERVICE_URL', 'http://127.0.0.1:5003')
 REDIS_URL = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/0')
+
+
+def get_hardware_service_token() -> str:
+    """Shared secret the network/zigbee/gps/displays subsystem services use
+    to authenticate requests from the webapp (and reject everyone else).
+
+    Those four services bind 0.0.0.0 on ports 5101/5102/5103/5104 so their
+    systemd sandboxing stays effective, which otherwise leaves them reachable
+    to anything on the LAN with no application-layer check — good enough to
+    rewrite WiFi credentials, the hostname, or open the Zigbee join window.
+
+    Rather than provision, generate, and keep yet another secret in sync
+    across every process' EnvironmentFile, derive it from SECRET_KEY: it is
+    already required (``app.py`` fails fast without it in production) and
+    already loaded from the same persistent ``.env`` by every subsystem
+    process at startup, so every process lands on the same token with no
+    extra config.
+    """
+    secret_key = os.environ.get('SECRET_KEY', '')
+    return hmac.new(
+        secret_key.encode('utf-8'),
+        b'eas-station-hardware-service-auth-v1',
+        hashlib.sha256,
+    ).hexdigest()

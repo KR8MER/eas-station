@@ -32,7 +32,7 @@ In the separated service architecture:
 import requests
 from flask import Blueprint, jsonify, render_template, request
 from app_core.auth.decorators import require_permission
-from app_core.config import ZIGBEE_SERVICE_URL
+from app_core.config import ZIGBEE_SERVICE_URL, get_hardware_service_token
 from app_core.extensions import get_redis_client
 from app_core.hardware_settings import get_zigbee_settings
 
@@ -43,12 +43,13 @@ def call_hardware_service(endpoint, method='GET', data=None):
     """Make HTTP request to the Zigbee subsystem service (port 5102)."""
     try:
         url = f"{ZIGBEE_SERVICE_URL}{endpoint}"
+        headers = {'X-Hardware-Auth': get_hardware_service_token()}
         if method == 'GET':
-            response = requests.get(url, timeout=30)
+            response = requests.get(url, headers=headers, timeout=30)
         elif method == 'POST':
-            response = requests.post(url, json=data, timeout=30)
+            response = requests.post(url, json=data, headers=headers, timeout=30)
         elif method == 'DELETE':
-            response = requests.delete(url, timeout=30)
+            response = requests.delete(url, headers=headers, timeout=30)
         else:
             return {'success': False, 'error': f'Unsupported method: {method}'}
 

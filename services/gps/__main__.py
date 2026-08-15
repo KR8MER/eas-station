@@ -45,6 +45,7 @@ from services.common import (
     get_redis,
     init_database,
     init_runtime,
+    install_service_auth,
     install_signal_handlers,
     load_environment,
     publish_gps_metrics,
@@ -136,6 +137,7 @@ def _build_app() -> Flask:
             restart_gps_manager=_restart_gps_manager,
         )
     )
+    install_service_auth(app, SUBSYSTEM)
     return app
 
 

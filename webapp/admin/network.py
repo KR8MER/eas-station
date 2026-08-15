@@ -35,7 +35,7 @@ import subprocess
 import requests
 from flask import Blueprint, jsonify, request, render_template
 from app_core.auth.decorators import require_permission
-from app_core.config import GPS_SERVICE_URL, NETWORK_SERVICE_URL
+from app_core.config import GPS_SERVICE_URL, NETWORK_SERVICE_URL, get_hardware_service_token
 
 network_bp = Blueprint('network', __name__)
 
@@ -64,10 +64,11 @@ def call_hardware_service(endpoint, method='GET', data=None):
     """
     try:
         url = f"{_route_to_subsystem(endpoint)}{endpoint}"
+        headers = {'X-Hardware-Auth': get_hardware_service_token()}
         if method == 'GET':
-            response = requests.get(url, timeout=30)
+            response = requests.get(url, headers=headers, timeout=30)
         elif method == 'POST':
-            response = requests.post(url, json=data, timeout=30)
+            response = requests.post(url, json=data, headers=headers, timeout=30)
         else:
             return {'success': False, 'error': f'Unsupported method: {method}'}
 
