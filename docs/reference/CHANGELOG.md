@@ -8,6 +8,48 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.168.0] - 2026-08-15 - Require a shared-secret token on the hardware subsystem APIs
+
+### Added
+- **Shared-secret auth on the network/zigbee/gps/displays hardware services.**
+  Ports 5101-5104 bound `0.0.0.0` with no application-layer auth, so anything
+  on the LAN that could reach them (a firewall misconfiguration, a
+  non-bare-metal install, a future reverse-proxy slip) could rewrite WiFi
+  credentials, the hostname, GPS wiring, or open the Zigbee pairing window
+  with no credentials at all. `app_core.config.get_hardware_service_token()`
+  derives a shared token from `SECRET_KEY` (already required, already loaded
+  by every subsystem process) and `services.common.bootstrap.
+  install_service_auth()` requires it via `X-Hardware-Auth` on every route
+  but `/health`. The GPIO subsystem has no HTTP command surface beyond
+  `/health`, so it's unaffected. `docs/troubleshooting/FIREWALL_REQUIREMENTS.md`
+  documents this as a second line of defense, not a replacement for keeping
+  those ports off the LAN.
+
+### Fixed
+- **OLED screen-editor preview used a hardcoded 128x64 panel size.**
+  `render_oled_elements_preview()` now reads the operator's actual
+  configured panel dimensions from `HardwareSettings`, falling back to
+  128x64 only when no DB/app context is available (matches the client-side
+  `/screens` canvas thumbnail fix below).
+- **OLED preview rendering could race under concurrent requests.** The
+  preview builder patched `app_core.oled.i2c`/`ssd1306` — shared module
+  globals — with `unittest.mock.patch`, which isn't safe when two preview
+  requests overlap inside the same gunicorn/gevent worker; a losing
+  greenlet could leave the real driver reference clobbered by a stale
+  mock for the rest of the process's life. Replaced with a controller
+  built via `__new__` plus a `_NullOLEDDevice` stand-in that touches no
+  shared state.
+- **`/screens` list-page cards showed raw, unresolved template syntax**
+  (`{status.status}`, `{gps.lat}`, etc.) instead of realistic sample
+  values. The page now hydrates each card from the existing
+  `GET /api/screens/<id>/preview` endpoint (the same resolution path the
+  screen editor's live preview already used) instead of rendering the raw
+  `template_data` directly.
+- **`/screens` OLED canvas thumbnails were hardcoded to 128x64** client-side,
+  same as the server-side preview bug above — `buildOledElementsPreview()`
+  now sizes the canvas from the hardware status bar's live OLED
+  width/height instead of a fixed 128x64.
+
 ## [2.167.0] - 2026-08-14 - Make alert-dedup windows configurable, add an audio-ingest confidence floor
 
 ### Added

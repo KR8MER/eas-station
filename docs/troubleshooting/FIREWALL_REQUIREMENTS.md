@@ -24,14 +24,25 @@ These ports are used internally between services and should **not** be exposed t
 |------|----------|---------|-------------|
 | **5000** | TCP | Flask App | Web application backend (nginx proxies to this). |
 | **5002** | TCP | SDR/Audio Service | Audio streaming server for internal audio processing. |
-| **5101** | TCP | Network Subsystem | nmcli proxy + hostname helpers (Phase 4 split). |
-| **5102** | TCP | Zigbee Subsystem | zigpy-znp coordinator + join window. |
-| **5103** | TCP | GPS Subsystem | GPS manager + PPS trend archive. |
-| **5104** | TCP | Displays Subsystem | OLED / VFD / LED rendering. |
+| **5101** | TCP | Network Subsystem | nmcli proxy + hostname helpers (Phase 4 split). Requires `X-Hardware-Auth` — see below. |
+| **5102** | TCP | Zigbee Subsystem | zigpy-znp coordinator + join window. Requires `X-Hardware-Auth` — see below. |
+| **5103** | TCP | GPS Subsystem | GPS manager + PPS trend archive. Requires `X-Hardware-Auth` — see below. |
+| **5104** | TCP | Displays Subsystem | OLED / VFD / LED rendering. Requires `X-Hardware-Auth` — see below. |
 | **5105** | TCP | GPIO Subsystem | Relays + alert indicators (health endpoint only). |
 | **5432** | TCP | PostgreSQL | Database (embedded profile or external). |
 | **6379** | TCP | Redis | In-memory cache for real-time updates. |
 | **8000** | TCP | Icecast (listen port) | Icecast listen port — expose directly or front it with a proxy. |
+
+**Hardware subsystem auth (ports 5101-5104)**: every route on these four
+services except `/health` requires an `X-Hardware-Auth` header carrying a
+token derived from `SECRET_KEY` (see
+`app_core.config.get_hardware_service_token()` /
+`services.common.bootstrap.install_service_auth()`). This is a second line
+of defense in case one of these ports is ever reachable despite the
+firewall rule above — it is **not** a substitute for keeping them off the
+LAN. The three webapp modules that call these services (`webapp/admin/
+network.py`, `webapp/admin/zigbee.py`, `webapp/routes_screens.py`) already
+send this header automatically; no operator configuration is needed.
 
 ## Automatic Firewall Configuration (Bare-Metal)
 
