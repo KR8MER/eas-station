@@ -8,6 +8,42 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.168.2] - 2026-08-15 - Retire the duplicate EAS decoder (eas_service.py)
+
+### Fixed
+- **Two independent processes were decoding the same live EAS/SAME audio.**
+  `eas_service.py` (`eas-station-eas.service`) ran its own `EASMonitor`
+  subscribed to the same Redis audio stream `eas_monitoring_service.py`
+  (`eas-station-audio.service`) already decodes via its "V3 Unified EAS
+  Monitor" (`app_core/audio/eas_monitor_v3.py`). Git history shows this was
+  leftover from a "3-tier separated architecture" experiment (2025-12-05)
+  that the project's own maintainers reversed three days later
+  (2025-12-08, "BREAKING: Clean service rename - remove confusion, fix
+  architecture" — which merged EAS monitoring back into what became
+  `eas_monitoring_service.py`). `eas_service.py` was never removed when that
+  reversal happened, and both processes have been running in production
+  ever since, with hacky heartbeat-based coordination logic just to stop
+  them fighting over the same `eas:metrics` Redis key.
+  `create_fips_filtering_callback()` forwards a FIPS-matched alert toward
+  the broadcast pipeline before any storage-level dedup runs; since a SAME
+  header repeats 3x over ~3 seconds and both processes decoded
+  independently with no lock between them, there was a real (if narrow)
+  double-broadcast race window. `eas_monitoring_service.py` is now the
+  sole EAS decoder.
+- Deleted `eas_service.py`, `systemd/eas-station-eas.service`, and
+  `app_core/audio/redis_audio_adapter.py` (used only by the retired
+  service); removed the unit from `eas-station.target`'s `Wants=` list and
+  from `EAS_SERVICES` in `app_core/config/services.py`. `update.sh` now
+  actively stops/disables/removes the leftover unit on existing installs,
+  mirroring the existing legacy-hardware-service retirement pattern.
+- Corrected several docs that had drifted from reality around this area:
+  `app_core/audio/README_EAS_MONITORS.md` didn't mention
+  `eas_monitor_v3.py` at all; `docs/audio/EAS_TEST_SIGNAL_PIPELINE.md`
+  documented a two-process pipeline that no longer exists;
+  `docs/architecture/SDR_SERVICE_ARCHITECTURE.md` hedged with
+  "`eas-station-eas.service` (or `-audio.service`)" instead of stating the
+  actual single decoder plainly.
+
 ## [2.168.1] - 2026-08-15 - Fix a DB session leak in the CAP poller's error handling
 
 ### Fixed
