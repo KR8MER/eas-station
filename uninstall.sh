@@ -118,6 +118,9 @@ systemctl stop eas-station-zigbee.service 2>/dev/null || true
 systemctl stop eas-station-gps.service 2>/dev/null || true
 systemctl stop eas-station-displays.service 2>/dev/null || true
 systemctl stop eas-station-gpio.service 2>/dev/null || true
+# Pre-unification installs had separate NOAA/IPAWS poller units before they
+# were merged into eas-station-poller.service; stop both legacy names too so
+# an older install is left completely clean.
 systemctl stop eas-station-ipaws-poller.service 2>/dev/null || true
 systemctl stop eas-station-noaa-poller.service 2>/dev/null || true
 echo_success "Services stopped"

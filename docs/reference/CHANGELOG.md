@@ -8,6 +8,37 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.168.3] - 2026-08-15 - Follow-up cleanup after the duplicate-decoder retirement
+
+### Fixed
+- **Orphaned Redis publish loop.** `eas_monitoring_service.py`'s
+  `_redis_publisher_monitor_loop()` existed solely to feed audio to the
+  now-deleted `eas_service.py`; it had zero subscribers left but kept
+  running a thread every cycle regardless. Removed it along with
+  `app_core/audio/redis_audio_publisher.py`, the module it exclusively
+  depended on (confirmed via repo-wide grep — no other caller existed).
+- **No-op command stub.** `eas_monitoring_service.py`'s `process_commands()`
+  was a leftover no-op from the same "separated architecture" migration
+  (`# Do nothing - all SDR hardware access is in sdr-service.py`), still
+  called every 250ms in the main loop for no effect. Removed the function
+  and its call site.
+- **Wrong systemd unit name in three diagnostics scripts.**
+  `scripts/collect_sdr_diagnostics.sh`, `scripts/diagnostics/check_sdr_status.py`,
+  and `scripts/diagnostics/diagnose_audio_chain.py` all referenced a unit
+  named `eas-station-sdr-hardware.service`, which has never existed — the
+  real unit is `eas-station-sdr.service`. Every SDR status/log check these
+  tools printed has been silently returning "unit not found" since they
+  were written.
+- **Stale references to the already-retired `eas-station-hardware.service`**
+  (superseded by `eas-station-hardware.target` in the Phase 4 hardware
+  split, well before this cleanup) in `.vscode/tasks.json` and
+  `.vscode/VSCODE_SETUP.md`, alongside a `hardware_service.py` file path
+  that no longer exists in either doc.
+- Added an explanatory comment to `uninstall.sh`'s legacy
+  `eas-station-ipaws-poller.service`/`eas-station-noaa-poller.service`
+  stop lines (pre-unification poller units), matching the pattern already
+  used for the other legacy-unit cleanup blocks in the same script.
+
 ## [2.168.2] - 2026-08-15 - Retire the duplicate EAS decoder (eas_service.py)
 
 ### Fixed
