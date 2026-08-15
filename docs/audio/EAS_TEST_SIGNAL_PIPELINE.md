@@ -48,25 +48,15 @@ flowchart TD
         B[POST /api/admin/eas_decoder_monitor/test_signal\neas_decoder_monitor.py] -->|Redis command| C
     end
 
-    subgraph audio_service["Audio-Service Process"]
+    subgraph audio_service["Audio-Service Process (eas_monitoring_service.py)"]
         C[AudioCommandSubscriber\nredis_commands.py\ncommand: inject_test_signal] --> D
         D["AudioIngestController\n.inject_eas_test_signal()\ningest.py"] --> E
         E["Generate synthetic 16 kHz FSK audio\nSAME header × 3 + silence + EOM × 3\n(app_utils/eas_fsk.py)"] --> F
         F["Publish float32 PCM chunks to\nadapter._eas_broadcast\n(16 kHz EAS decode queue)"]
-    end
-
-    subgraph eas_monitoring["EAS Monitoring Service Thread\neas_monitoring_service.py"]
-        F -->|reads _eas_broadcast| G
-        G["_redis_publisher_monitor_loop()\nResamples 16 kHz → same rate\nPublishes to Redis channel\naudio:samples:<source_name>"]
-    end
-
-    subgraph eas_service["EAS Service Process\neas_service.py"]
-        G -->|Redis pub/sub| H
-        H["RedisAudioAdapter\nBuffers incoming PCM frames"]
-        H --> I
-        I["EASMonitor / UnifiedEASMonitorService\nSAME FSK decoder\n(SAMEDemodulatorCore)"]
+        F -->|reads _eas_broadcast| I
+        I["UnifiedEASMonitorService\nSAME FSK decoder\n(eas_monitor_v3.py, SAMEDemodulatorCore)\ninstantiated directly against\nAudioIngestController — no inter-\nprocess hop for decoding"]
         I -->|decoded alert dict| J
-        J["initialize_eas_monitor()\nFIPS filtering callback\nwith app.app_context()"]
+        J["initialize_eas_monitor()\ncreate_fips_filtering_callback()\n(eas_monitor.py) wrapped in\nwith app.app_context()"]
         J -->|FIPS match| K
         K["forward_alert_to_api()\nalert_forwarding.py\n→ _auto_forward_to_air_chain()"]
         K --> L
@@ -97,6 +87,15 @@ flowchart TD
     style U fill:#1d3557,color:#fff
 ```
 
+> **Note:** `eas_monitoring_service.py` also runs a `_redis_publisher_monitor_loop()`
+> thread that republishes audio to Redis channel `audio:samples:<source_name>`. That
+> existed to feed a second, independent decoder in a standalone `eas_service.py`
+> process, which was retired as a redundant duplicate (see
+> `docs/reference/CHANGELOG.md`) — decoding now happens directly against
+> `AudioIngestController` in-process, as shown above. The republish loop currently has
+> no subscriber left; it's flagged here as a candidate for later cleanup, not addressed
+> in this pass.
+
 ---
 
 ## Step-by-step breakdown
@@ -108,17 +107,16 @@ flowchart TD
 | 3 | `redis_commands.py` (audio-service) | `AudioCommandSubscriber` picks up the command |
 | 4 | `ingest.py` | `inject_eas_test_signal()` generates 16 kHz synthetic FSK SAME+EOM audio |
 | 5 | `ingest.py` | Publishes float32 PCM chunks to `adapter._eas_broadcast` (16 kHz EAS decode queue) |
-| 6 | `eas_monitoring_service.py` | `_redis_publisher_monitor_loop()` reads the decode queue and republishes over Redis (`audio:samples:<source>`) |
-| 7 | `eas_service.py` | `RedisAudioAdapter` buffers the incoming PCM; `EASMonitor` SAME decoder processes it |
-| 8 | `eas_service.py` | Decoder fires alert callback; FIPS filtering runs inside Flask app context |
-| 9 | `alert_forwarding.py` | `forward_alert_to_api()` → `_auto_forward_to_air_chain()` → `auto_forward_ota_alert()` |
-| 10 | `app_utils/eas.py` | `EASBroadcaster.handle_alert()` generates the **complete broadcast WAV**: SAME headers × 3 + attention tone (853/960 Hz) + optional TTS narration + EOM × 3 |
-| 11 | `app_utils/eas.py` | `_play_audio_or_bytes()` plays audio via local CLI player (if `audio_player_cmd` is configured) |
-| 12 | `eas_stream_injector.py` | `inject_eas_audio(wav_bytes)` decodes WAV, resamples to each source's native rate, publishes 50 ms chunks to `adapter._source_broadcast` |
-| 13 | `icecast_output.py` | `IcecastStreamer` feeder thread reads `_source_broadcast`, converts float32 → int16 PCM, writes s16le to FFmpeg stdin |
-| 14 | FFmpeg / Icecast | Audio encoded as MP3/OGG and streamed to Icecast server on port 8000 |
-| 15 | Stream listeners | Hear the full EAS alert sequence on `http://easstation.com:8000/wnci.mp3` |
-| 16 | PostgreSQL | `EASMessage` and `ReceivedEASAlert` records saved; Audio Archive shows **View Received Alert** |
+| 6 | `eas_monitoring_service.py` | `UnifiedEASMonitorService` (`eas_monitor_v3.py`) reads `adapter._eas_broadcast` directly and runs the SAME FSK decoder against it — same process, no Redis hop |
+| 7 | `eas_monitoring_service.py` | Decoder fires the alert callback; `create_fips_filtering_callback()` (`eas_monitor.py`) runs FIPS filtering inside `with app.app_context()` |
+| 8 | `alert_forwarding.py` | `forward_alert_to_api()` → `_auto_forward_to_air_chain()` → `auto_forward_ota_alert()` |
+| 9 | `app_utils/eas.py` | `EASBroadcaster.handle_alert()` generates the **complete broadcast WAV**: SAME headers × 3 + attention tone (853/960 Hz) + optional TTS narration + EOM × 3 |
+| 10 | `app_utils/eas.py` | `_play_audio_or_bytes()` plays audio via local CLI player (if `audio_player_cmd` is configured) |
+| 11 | `eas_stream_injector.py` | `inject_eas_audio(wav_bytes)` decodes WAV, resamples to each source's native rate, publishes 50 ms chunks to `adapter._source_broadcast` |
+| 12 | `icecast_output.py` | `IcecastStreamer` feeder thread reads `_source_broadcast`, converts float32 → int16 PCM, writes s16le to FFmpeg stdin |
+| 13 | FFmpeg / Icecast | Audio encoded as MP3/OGG and streamed to Icecast server on port 8000 |
+| 14 | Stream listeners | Hear the full EAS alert sequence on `http://easstation.com:8000/wnci.mp3` |
+| 15 | PostgreSQL | `EASMessage` and `ReceivedEASAlert` records saved; Audio Archive shows **View Received Alert** |
 
 ---
 
@@ -128,7 +126,7 @@ The system uses two distinct audio queues with different purposes:
 
 | Queue | Field | Rate | Consumers | Purpose |
 |-------|-------|------|-----------|---------|
-| **EAS decode queue** | `adapter._eas_broadcast` | 16 kHz | SAME decoder (eas_service.py) | Carries resampled audio for FSK demodulation only |
+| **EAS decode queue** | `adapter._eas_broadcast` | 16 kHz | SAME decoder (`UnifiedEASMonitorService`, in-process within `eas_monitoring_service.py`) | Carries resampled audio for FSK demodulation only |
 | **Source broadcast queue** | `adapter._source_broadcast` | Native (e.g., 44100 Hz) | IcecastStreamer | Carries full-quality audio for stream output |
 
 `inject_eas_test_signal()` writes to the **decode queue** — simulating raw received audio.
@@ -146,10 +144,9 @@ components have all been verified as operational:
 
 - ✅ FSK audio generation (`app_utils/eas_fsk.py`)
 - ✅ EAS decode queue routing (`adapter._eas_broadcast`)
-- ✅ Redis audio transport between services (`audio:samples:<source>`)
-- ✅ SAME FSK decoder (`SAMEDemodulatorCore`)
-- ✅ Flask app context in alert callback (`eas_service.py`)
-- ✅ FIPS filtering logic (`eas_monitor.py`)
+- ✅ SAME FSK decoder (`SAMEDemodulatorCore`, via `UnifiedEASMonitorService`)
+- ✅ Flask app context in alert callback (`eas_monitoring_service.py`)
+- ✅ FIPS filtering logic (`eas_monitor.py`'s `create_fips_filtering_callback()`)
 - ✅ `EASBroadcaster` audio generation pipeline (`app_utils/eas.py`)
 - ✅ EAS stream injector resampling and queue publish (`eas_stream_injector.py`)
 - ✅ Icecast broadcast queue routing (`adapter._source_broadcast`)
@@ -175,7 +172,7 @@ check each step in order:
 
 1. **No running audio source** — `inject_eas_test_signal()` requires at least one running source; if none exists, it logs a warning and returns `None`. Verify sources at **Monitor → Audio Sources**.
 2. **FIPS filtering blocked the alert** — The generated RWT uses FIPS `000000` (all-county wildcard). If your station has FIPS codes configured that don't match, the alert is ignored. Check **Settings → EAS Configuration → FIPS Codes**.
-3. **No Flask app context** — The FIPS callback in `eas_service.py` must run inside `with app.app_context()`. Missing context causes silent alert drops. See `eas_service.py:178`.
+3. **No Flask app context** — The `alert_callback` wrapper in `eas_monitoring_service.py`'s `initialize_eas_monitor()` must run inside `with app.app_context()`. Missing context causes silent alert drops. See `eas_monitoring_service.py:1019`.
 4. **`EASBroadcaster` not configured** — If EAS broadcasting is disabled (`eas_config['enabled'] == False`), `handle_alert()` returns immediately without generating audio.
 5. **Icecast not connected** — The `IcecastStreamer` may have lost its connection to the Icecast server. Check **Monitor → Icecast Stream** status.
 6. **`inject_eas_audio()` has no controller** — The EAS stream injector must have a controller registered at startup. Check that `set_controller()` was called in `_get_audio_controller()`.

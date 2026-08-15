@@ -1237,8 +1237,7 @@ When adding new features that require service-level configuration:
 The main service files are:
 - `eas-station-web.service` - Main web application (Gunicorn)
 - `eas-station-sdr.service` - SDR hardware service
-- `eas-station-audio.service` - Audio processing service
-- `eas-station-eas.service` - EAS monitoring service
+- `eas-station-audio.service` - Audio processing and EAS/SAME monitoring (`eas_monitoring_service.py`)
 - `eas-station-hardware.target` - Bundles the five Phase 4 per-subsystem hardware units (`eas-station-network`, `-zigbee`, `-gps`, `-displays`, `-gpio`; ports 5101–5105)
 - `eas-station-poller.service` - Unified alert poller (NOAA + IPAWS)
 - `eas-station-hwsetup.service` - Hardware setup helper (oneshot at boot)

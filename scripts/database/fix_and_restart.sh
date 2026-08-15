@@ -36,7 +36,7 @@ echo ""
 echo "▶ Checking service status..."
 echo ""
 
-SERVICES=("eas-station-web" "eas-station-poller" "eas-station-audio" "eas-station-eas")
+SERVICES=("eas-station-web" "eas-station-poller" "eas-station-audio")
 ALL_RUNNING=true
 
 for service in "${SERVICES[@]}"; do

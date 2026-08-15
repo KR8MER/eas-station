@@ -120,8 +120,7 @@ The installer now collects **all configuration during installation** using blue/
   - `eas-station.target` - Master service (controls all)
   - `eas-station-web.service` - Web UI (Flask/Gunicorn)
   - `eas-station-sdr.service` - SDR hardware service
-  - `eas-station-audio.service` - Audio processing
-  - `eas-station-eas.service` - EAS monitoring
+  - `eas-station-audio.service` - Audio processing and EAS/SAME monitoring
   - `eas-station-hardware.target` - bundles the five Phase 4 per-subsystem units below
     - `eas-station-network.service` - nmcli proxy (port 5101)
     - `eas-station-zigbee.service` - zigpy coordinator (port 5102)

@@ -826,6 +826,21 @@ if [ -d "$INSTALL_DIR/systemd" ]; then
         echo_success "Legacy monolithic hardware unit removed"
     fi
 
+    # eas-station-eas.service duplicated the EAS/SAME decoder already running
+    # inside eas-station-audio.service (eas_monitoring_service.py) — both
+    # subscribed to the same audio stream and independently decoded it, with
+    # a real (if narrow) double-broadcast race between them. Existing installs
+    # still have the old unit on disk and enabled — strip it before reloading
+    # so systemd doesn't keep trying to revive it.
+    LEGACY_EAS_UNIT=/etc/systemd/system/eas-station-eas.service
+    if [ -f "$LEGACY_EAS_UNIT" ] || systemctl list-unit-files eas-station-eas.service 2>/dev/null | grep -q eas-station-eas.service; then
+        echo_progress "Retiring legacy eas-station-eas.service (duplicate EAS decoder)..."
+        systemctl stop eas-station-eas.service 2>/dev/null || true
+        systemctl disable eas-station-eas.service 2>/dev/null || true
+        rm -f "$LEGACY_EAS_UNIT"
+        echo_success "Legacy duplicate EAS decoder unit removed"
+    fi
+
     systemctl daemon-reload
     echo_success "Service files updated"
 
@@ -1415,7 +1430,7 @@ fi
 # A service that exceeded its start-limit burst enters 'failed' and will NOT
 # be restarted by 'systemctl restart eas-station.target' unless reset first.
 echo_progress "Resetting any failed EAS Station service units..."
-for svc in eas-station-web.service eas-station-audio.service eas-station-eas.service \
+for svc in eas-station-web.service eas-station-audio.service \
             eas-station-sdr.service eas-station-network.service \
             eas-station-zigbee.service eas-station-gps.service \
             eas-station-displays.service eas-station-gpio.service \

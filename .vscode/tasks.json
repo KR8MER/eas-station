@@ -60,16 +60,6 @@
       }
     },
     {
-      "label": "Service: Restart EAS",
-      "type": "shell",
-      "command": "sudo systemctl restart eas-station-eas.service && sudo systemctl status eas-station-eas.service",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "new"
-      }
-    },
-    {
       "label": "Service: Restart Hardware",
       "type": "shell",
       "command": "sudo systemctl restart eas-station-hardware.service && sudo systemctl status eas-station-hardware.service",

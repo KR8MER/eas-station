@@ -1,50 +1,60 @@
 # EAS Monitor Implementations
 
-This directory contains two active EAS monitoring implementations, each designed for different use cases.
+This directory contains two EAS monitoring implementations, each used by a
+different part of the codebase.
 
 ## Active Implementations
 
-### 1. `eas_monitor.py` (Primary Implementation)
-**File:** `app_core/audio/eas_monitor.py` (1,488 lines)
-**Class:** `ContinuousEASMonitor`
+### 1. `eas_monitor_v3.py` (Production Decoder)
+**File:** `app_core/audio/eas_monitor_v3.py` (706 lines)
+**Class:** `UnifiedEASMonitorService` (plus `SourceWatcher`, `HealthTracker`)
 
 **Used by:**
-- `eas_service.py` - Main EAS service
-- `app_core/audio/startup_integration.py` - System initialization
+- `eas_monitoring_service.py` — the `eas-station-audio.service` process, the
+  system's sole EAS/SAME decoder
+- `app_core/audio/ingest.py`
+- `app_core/audio/redis_commands.py`
+- `webapp/admin/eas_decoder_monitor.py`
+- Multiple test files
+
+**Features:**
+- Single monitor thread shared across every audio source, auto-discovered
+  rather than manually registered
+- Centralized health tracking (`HealthTracker`)
+- Lightweight per-source watchers (`SourceWatcher`) instead of one thread per
+  source
+
+**When to use:** This is the implementation that actually runs in
+production. A standalone `eas_service.py` process used to run a second,
+independent decoder (`eas_monitor.py`'s `EASMonitor`, below) against the same
+audio stream; it was retired as a redundant duplicate with a real (if
+narrow) double-broadcast race against this one — see
+`docs/reference/CHANGELOG.md`. `eas_monitor_v3.py` has been the only decoder
+running against live audio since.
+
+---
+
+### 2. `eas_monitor.py` (Single-Source Monitor)
+**File:** `app_core/audio/eas_monitor.py` (1,488 lines)
+**Class:** `EASMonitor` (legacy aliases `ContinuousEASMonitor` and
+`EASMonitorV2` both point at the same class — there is no separate V2
+implementation despite the name)
+
+**Used by:**
+- `app_core/audio/startup_integration.py` — system initialization
 - Multiple test files
 - Example scripts
 
 **Features:**
-- Professional audio subsystem integration
-- 24/7 alert monitoring
-- Comprehensive SAME decoder
-- Ring buffer management
-- Alert deduplication
-- Health monitoring and watchdogs
-- Callback system for alert notifications
-- FIPS code filtering
+- Single-source SAME decoder with its own ring buffer, health
+  monitoring/watchdogs, alert dedup, and FIPS filtering
+- The building block `eas_monitor_v3.py` generalized into a
+  shared-across-sources design; still used directly wherever only one audio
+  source needs monitoring
 
-**When to use:** Default choice for production deployments. Fully featured, battle-tested implementation.
-
----
-
-### 2. `eas_monitor_v2.py` (Alternative Implementation)
-**File:** `app_core/audio/eas_monitor_v2.py` (391 lines)
-**Class:** `EASMonitorV2`
-
-**Used by:**
-- `eas_monitoring_service.py` - Monitoring service
-
-**Features:**
-- Complete architecture rewrite
-- Robust audio reading with timeout detection
-- Consistent status reporting
-- Clear health metrics
-- Proper error recovery
-- No silent failures
-- Simplified architecture
-
-**When to use:** Alternative implementation with improved error handling and health monitoring. Designed to fix fundamental architecture issues found in long-running deployments.
+**When to use:** Not the production decode path (see above) — used for
+single-source contexts (startup checks, tests, examples) where the
+multi-source machinery in `eas_monitor_v3.py` isn't needed.
 
 ---
 
@@ -55,24 +65,14 @@ This directory contains two active EAS monitoring implementations, each designed
 
 **Reason for removal:** This simplified implementation with "no watchdogs, no restarts, no complexity" was an experimental version that was never integrated into the production codebase.
 
----
+### `eas_service.py` (Removed)
+**Status:** Removed along with its systemd unit (`eas-station-eas.service`).
 
-## Choosing an Implementation
-
-| Feature | eas_monitor.py | eas_monitor_v2.py |
-|---------|----------------|-------------------|
-| Lines of code | 1,488 | 391 |
-| Complexity | High | Medium |
-| Features | Comprehensive | Focused |
-| Health monitoring | Yes | Enhanced |
-| Error recovery | Yes | Improved |
-| Production use | Primary | Alternative |
-| Recommended for | Full deployments | Simpler setups |
-
-**Default recommendation:** Use `eas_monitor.py` (ContinuousEASMonitor) unless you have specific requirements for the V2 architecture.
-
----
-
-## Future Consolidation
-
-These two implementations serve different needs. A future enhancement could consolidate the best features of both into a single, unified implementation.
+**Reason for removal:** Ran its own `EASMonitor` (`eas_monitor.py`) instance
+subscribed to the same Redis audio stream `eas_monitoring_service.py`
+already decodes via `eas_monitor_v3.py` — a leftover from a "3-tier
+separated architecture" experiment (2025-12-05) that was reversed three days
+later when EAS monitoring was merged back into the audio service. It went
+unnoticed and kept running for 8+ months, with two processes decoding the
+same SAME headers independently. See `docs/reference/CHANGELOG.md` for the
+double-broadcast race this created.

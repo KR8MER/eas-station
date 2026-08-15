@@ -102,6 +102,9 @@ echo ""
 echo_info "Stopping EAS Station services..."
 systemctl stop eas-station.target 2>/dev/null || true
 systemctl stop eas-station-web.service 2>/dev/null || true
+# eas-station-eas.service was retired (duplicated the decoder already running
+# in eas-station-audio.service) but existing installs may still have it
+# enabled — keep stopping/disabling it here for cleanup.
 systemctl stop eas-station-eas.service 2>/dev/null || true
 systemctl stop eas-station-audio.service 2>/dev/null || true
 systemctl stop eas-station-sdr.service 2>/dev/null || true

@@ -4,7 +4,7 @@
 
 The EAS Station™ uses a **dual-service architecture** for SDR (Software Defined Radio) operations to ensure reliable 24/7 operation required for life-safety systems. This document describes the architecture, components, and operational details.
 
-> **Service naming:** The two processes live at the repo root and run as the `eas-station-sdr.service` and `eas-station-eas.service` (or `-audio.service`) systemd units. They were historically referenced as `sdr_service.py` and `audio_service.py`; the actual files are `sdr_hardware_service.py` and `eas_monitoring_service.py`.
+> **Service naming:** The two processes live at the repo root and run as the `eas-station-sdr.service` and `eas-station-audio.service` systemd units. They were historically referenced as `sdr_service.py` and `audio_service.py`; the actual files are `sdr_hardware_service.py` and `eas_monitoring_service.py`. A separate `eas-station-eas.service` (`eas_service.py`) used to run a second, independent EAS/SAME decoder against the same audio stream; it was retired as a redundant duplicate (see `docs/reference/CHANGELOG.md`) — `eas_monitoring_service.py` is now the sole decoder.
 
 ## Architecture Diagram
 
@@ -113,7 +113,7 @@ buffer_size = sample_rate * 1.0
 - Web audio streaming
 
 **Runtime Requirements:**
-- Runs as the `eas-station-eas.service` and/or `eas-station-audio.service` systemd units (see `systemd/`).
+- Runs as the `eas-station-audio.service` systemd unit (see `systemd/`).
 - No USB access needed
 - Redis connectivity only (publishes/subscribes on the channels listed above)
 

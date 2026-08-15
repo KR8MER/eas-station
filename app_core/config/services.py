@@ -41,7 +41,6 @@ EAS_SERVICES = [
     f'{SERVICE_PREFIX}-web.service',
     f'{SERVICE_PREFIX}-sdr.service',
     f'{SERVICE_PREFIX}-audio.service',
-    f'{SERVICE_PREFIX}-eas.service',
     f'{SERVICE_PREFIX}-network.service',
     f'{SERVICE_PREFIX}-zigbee.service',
     f'{SERVICE_PREFIX}-gps.service',

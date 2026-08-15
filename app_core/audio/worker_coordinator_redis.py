@@ -378,17 +378,13 @@ def read_shared_metrics() -> Optional[Dict[str, Any]]:
             else:
                 metrics[decoded_key] = decoded_value
 
-        # Check heartbeat freshness with a two-tier policy.
-        # Accept _heartbeat (written by eas_monitoring_service.py / audio-service)
-        # OR _eas_heartbeat (written by eas_service.py) as proof that some part of
-        # the EAS stack is alive.  This prevents the webapp from falsely reporting
-        # "Audio service unavailable" when only eas_service.py has written recently.
+        # Check heartbeat freshness. _heartbeat is written by
+        # eas_monitoring_service.py (audio-service), the sole EAS decoder --
+        # eas_service.py used to write a second _eas_heartbeat key as a
+        # fallback here, but that service was retired as a redundant
+        # duplicate decoder (see docs/reference/CHANGELOG.md).
         try:
-            heartbeat = float(
-                metrics.get("_heartbeat")
-                or metrics.get("_eas_heartbeat")
-                or 0
-            )
+            heartbeat = float(metrics.get("_heartbeat") or 0)
             age = time.time() - heartbeat
 
             if heartbeat == 0:
