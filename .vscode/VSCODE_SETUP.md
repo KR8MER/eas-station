@@ -120,7 +120,6 @@ FLASK_ENV=development FLASK_DEBUG=true python app.py
 - `eas-station-web.service` - Flask web application (Gunicorn)
 - `eas-station-audio.service` - Audio processing and monitoring
 - `eas-station-poller.service` - Alert polling (NOAA + IPAWS)
-- `eas-station-eas.service` - EAS encoding and broadcast
 - `eas-station-hardware.service` - GPIO and hardware control
 - `eas-station-sdr.service` - SDR hardware interface
 - `eas-station.target` - All services together
@@ -414,7 +413,7 @@ When paused at a breakpoint:
 │   ├── tasks.json        # Common tasks
 │   └── extensions.json   # Recommended extensions
 ├── app.py                # Main Flask application
-├── eas_service.py        # EAS monitoring service
+├── eas_monitoring_service.py  # Audio processing + EAS/SAME monitoring
 ├── hardware_service.py   # GPIO/hardware control
 ├── app_core/             # Core business logic
 ├── app_utils/            # Utility modules

@@ -81,7 +81,6 @@ SERVICES=(
     "eas-station-web"
     "eas-station-poller"
     "eas-station-audio"
-    "eas-station-eas"
 )
 
 ALL_RUNNING=true

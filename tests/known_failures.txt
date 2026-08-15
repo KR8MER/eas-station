@@ -15,10 +15,10 @@
 # hardware attached. Counts per file are in the section headings below.
 
 
-# tests/test_3tier_architecture.py (3) — Exercises the three-service split; needs the SDR/audio services running.
-tests/test_3tier_architecture.py::TestAudioService::test_syntax
-tests/test_3tier_architecture.py::TestFIPSCodeLoading::test_fips_code_fix
-tests/test_3tier_architecture.py::TestRedisSdrAdapter::test_initialization
+# tests/test_redis_audio_pipeline.py (3) — needs the SDR/audio services running (renamed from test_3tier_architecture.py; eas-service was retired as a redundant duplicate decoder, see docs/reference/CHANGELOG.md).
+tests/test_redis_audio_pipeline.py::TestAudioService::test_syntax
+tests/test_redis_audio_pipeline.py::TestFIPSCodeLoading::test_fips_code_fix
+tests/test_redis_audio_pipeline.py::TestRedisSdrAdapter::test_initialization
 
 # tests/test_8khz_stress_test.py (10) — DSP stress cases at 8 kHz; sensitive to numeric tolerances, needs triage.
 tests/test_8khz_stress_test.py::test_8khz_with_baud_rate_variations[-0.06]

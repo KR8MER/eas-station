@@ -1,11 +1,20 @@
 #!/usr/bin/env python3
 """
-Comprehensive test suite for 3-tier separated architecture.
+Tests for the Redis-backed audio distribution pipeline.
 
-Tests all components of the separated architecture:
-- sdr-service: SDR hardware + IQ publishing
-- audio-service: IQ demodulation + audio publishing
-- eas-service: EAS monitoring + alert storage
+Originally written for a "3-tier separated architecture" experiment
+(sdr-service / audio-service / eas-service as three independent processes)
+that was reversed three days after it landed -- EAS monitoring was merged
+back into audio-service (now eas_monitoring_service.py), and the standalone
+eas-service was retired outright as a redundant duplicate decoder. What
+remains here tests the parts of that experiment still in active use:
+
+- app_core/audio/redis_sdr_adapter.py: IQ sample publishing (sdr-service ->
+  eas_monitoring_service.py)
+- app_core/audio/redis_audio_publisher.py: audio sample publishing out of
+  eas_monitoring_service.py
+- the IQ/audio Redis message encoding itself
+- FIPS code loading used by the EAS monitor
 """
 
 import sys
@@ -83,34 +92,6 @@ class TestRedisSdrAdapter(unittest.TestCase):
         np.testing.assert_array_almost_equal(iq_samples, iq_back)
 
 
-class TestRedisAudioAdapter(unittest.TestCase):
-    """Test Redis audio adapter for EAS service."""
-
-    def test_import(self):
-        """Test that RedisAudioAdapter can be imported."""
-        try:
-            from app_core.audio.redis_audio_adapter import RedisAudioAdapter
-            self.assertIsNotNone(RedisAudioAdapter)
-        except ImportError as e:
-            self.fail(f"Failed to import RedisAudioAdapter: {e}")
-
-    def test_audio_sample_encoding(self):
-        """Test audio sample encoding for Redis."""
-        # Create sample audio data
-        audio_samples = np.random.randn(4410).astype(np.float32)
-
-        # Encode as Redis publisher would send it
-        sample_bytes = audio_samples.tobytes()
-        encoded = base64.b64encode(sample_bytes).decode('ascii')
-
-        # Verify we can decode it back
-        decoded_bytes = base64.b64decode(encoded)
-        decoded_samples = np.frombuffer(decoded_bytes, dtype=np.float32)
-
-        # Verify data integrity
-        np.testing.assert_array_almost_equal(audio_samples, decoded_samples)
-
-
 class TestRedisAudioPublisher(unittest.TestCase):
     """Test Redis audio publisher."""
 
@@ -121,27 +102,6 @@ class TestRedisAudioPublisher(unittest.TestCase):
             self.assertIsNotNone(RedisAudioPublisher)
         except ImportError as e:
             self.fail(f"Failed to import RedisAudioPublisher: {e}")
-
-
-class TestEasService(unittest.TestCase):
-    """Test EAS service."""
-
-    def test_syntax(self):
-        """Test that eas_service.py has valid syntax."""
-        import py_compile
-        import tempfile
-
-        eas_service_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            'eas_service.py'
-        )
-
-        try:
-            # Compile to check syntax
-            with tempfile.NamedTemporaryFile(suffix='.pyc', delete=True) as tmp:
-                py_compile.compile(eas_service_path, tmp.name, doraise=True)
-        except py_compile.PyCompileError as e:
-            self.fail(f"Syntax error in eas_service.py: {e}")
 
 
 class TestAudioService(unittest.TestCase):
@@ -243,9 +203,7 @@ def run_tests():
 
     # Add all test classes
     suite.addTests(loader.loadTestsFromTestCase(TestRedisSdrAdapter))
-    suite.addTests(loader.loadTestsFromTestCase(TestRedisAudioAdapter))
     suite.addTests(loader.loadTestsFromTestCase(TestRedisAudioPublisher))
-    suite.addTests(loader.loadTestsFromTestCase(TestEasService))
     suite.addTests(loader.loadTestsFromTestCase(TestAudioService))
     suite.addTests(loader.loadTestsFromTestCase(TestDataFlow))
     suite.addTests(loader.loadTestsFromTestCase(TestFIPSCodeLoading))

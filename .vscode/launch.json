@@ -81,19 +81,6 @@
       "justMyCode": false
     },
     {
-      "name": "EAS Service",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}/eas_service.py",
-      "console": "integratedTerminal",
-      "cwd": "${workspaceFolder}",
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}"
-      },
-      "envFile": "${workspaceFolder}/.env",
-      "justMyCode": false
-    },
-    {
       "name": "Python: Current File",
       "type": "debugpy",
       "request": "launch",
