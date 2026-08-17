@@ -8,6 +8,53 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.169.0] - 2026-08-17 - Fix broken VTEC chain links, add a lifecycle view to the alert trail
+
+### Fixed
+- **VTEC chain links silently dropped for alerts with an unparsed
+  `vtec_action`.** `poller/cap_poller.py::_insert_new_alert()` only called
+  `_mark_vtec_chain_superseded()` when `new_alert.vtec_action` was both
+  truthy and not `'NEW'` — a follow-on product whose action code failed to
+  parse (falsy) skipped linking entirely, with nothing to ever retry it.
+  The guard now only excludes actual `'NEW'` issuances.
+- **`vtec_year` came back NULL for any product whose VTEC segment carries
+  the all-zeros "ongoing" sentinel (`000000T0000Z`) on *both* begin and
+  end times** — seen on every KIWX Flood Warning CON/EXT product in the
+  live database. `app_utils/vtec.py::extract_vtec_identity()` only tried
+  the VTEC times themselves; with neither usable, the chain key
+  (office+phenomenon+significance+etn+**year**) is incomplete and
+  `_mark_vtec_chain_superseded()` correctly refuses to link it — by
+  design, but with nothing else to supply the missing year, the link was
+  simply never made. Now falls back to the year of the CAP envelope's own
+  `sent` timestamp when both VTEC times are the sentinel.
+- Added a self-healing sweep the poller runs every poll cycle —
+  `repair_vtec_chain_gaps()` — that finds any alert with complete VTEC
+  identity, no `superseded_by_id`, and a newer sibling in the same event
+  chain, and links it. Covers any future gap regardless of cause. It only
+  ever fills a NULL; an existing link is never touched. Windowed to the
+  last 30 days for cost.
+- Audit against the live database found these bugs left roughly a third
+  of `cap_alerts` VTEC chains with at least one broken link — alerts that
+  should have been hidden as superseded on `/alerts` were instead
+  lingering as if still current. A new migration,
+  `20260817_repair_vtec_chain_gaps`, re-derives `vtec_year` for the ~41
+  affected existing rows from their stored `raw_json` using the fixed
+  parser, then backfills every `superseded_by_id` gap that newly makes
+  linkable (plus any other pre-existing gap) using the same logic as the
+  original `20260402_backfill_vtec_superseded_alerts` migration.
+
+### Added
+- **Event Lifecycle panel on the alert trail page**
+  (`/alerts/<identifier>/trail`). Previously the trail page only showed
+  the pipeline events for one specific CAP product (one NEW, EXT, CON, or
+  CAN), so following a warning through its updates meant finding each
+  update's row on `/alerts` one at a time. `app_core/alert_trail.py` now
+  queries every product sharing the alert's VTEC identity directly (not
+  by walking `superseded_by_id`, so it renders correctly even where that
+  column has a gap) and the trail page shows them all as one clickable
+  timeline, with the current state and the entry you're viewing both
+  marked.
+
 ## [2.168.3] - 2026-08-15 - Follow-up cleanup after the duplicate-decoder retirement
 
 ### Fixed

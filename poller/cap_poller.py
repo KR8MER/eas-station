@@ -2935,7 +2935,11 @@ class CAPPoller:
         # Mark prior products in the same VTEC event chain as superseded so the
         # UI can hide stale entries by default.  Only non-NEW actions represent
         # follow-on products (updates, extensions, cancellations, etc.).
-        if getattr(new_alert, 'vtec_action', None) and new_alert.vtec_action != 'NEW':
+        # NOTE: a missing/unparsed vtec_action must still attempt this — it is
+        # not evidence the product is a NEW issuance, and skipping the call
+        # here previously left such follow-ons permanently unlinked from
+        # their chain (nothing else ever retries it).
+        if getattr(new_alert, 'vtec_action', None) != 'NEW':
             try:
                 self._mark_vtec_chain_superseded(new_alert)
             except Exception as exc:
@@ -3135,6 +3139,153 @@ class CAPPoller:
                 updated, new_alert.identifier, new_alert.vtec_action, terminal_note,
             )
         return updated
+
+    # Catch-up window for repair_vtec_chain_gaps().  Bounded so the sweep
+    # stays cheap on every poll cycle; long-closed chains from before the
+    # window don't need continual re-checking once fixed.
+    VTEC_CHAIN_REPAIR_WINDOW_DAYS = 30
+
+    def repair_vtec_chain_gaps(self) -> int:
+        """Self-healing sweep for VTEC chain links missed by the live path.
+
+        ``_mark_vtec_chain_superseded`` links each prior product to its
+        follow-on at ingest time, but that is a best-effort, one-shot
+        attempt: a skipped/failed call (or an unparsed ``vtec_action`` on
+        the older data this backfills) leaves the prior alert's
+        ``superseded_by_id`` permanently NULL with nothing to retry it,
+        which is what actually made the alert trail unreliable — stale
+        "current" rows lingering alongside their real successor.
+
+        This re-derives the correct link for every alert in a VTEC event
+        chain that has a newer sibling (by ``sent``, tie-broken by ``id``)
+        but no ``superseded_by_id`` yet, using the same LEAD-window logic as
+        the one-time 20260402 backfill migration. Idempotent — safe to run
+        every poll cycle.
+
+        Returns the number of rows repaired.
+        """
+        cutoff = utc_now() - timedelta(days=self.VTEC_CHAIN_REPAIR_WINDOW_DAYS)
+        try:
+            result = self.db_session.execute(
+                text(
+                    """
+                    WITH ranked AS (
+                        SELECT
+                            id,
+                            LEAD(id) OVER (
+                                PARTITION BY vtec_office,
+                                             vtec_phenomenon,
+                                             vtec_significance,
+                                             vtec_etn,
+                                             vtec_year
+                                ORDER BY sent ASC, id ASC
+                            ) AS next_id
+                        FROM cap_alerts
+                        WHERE vtec_office       IS NOT NULL
+                          AND vtec_phenomenon   IS NOT NULL
+                          AND vtec_significance IS NOT NULL
+                          AND vtec_etn          IS NOT NULL
+                          AND vtec_year         IS NOT NULL
+                          AND superseded_by_id  IS NULL
+                          AND sent              >= :cutoff
+                    )
+                    UPDATE cap_alerts
+                    SET    superseded_by_id = ranked.next_id
+                    FROM   ranked
+                    WHERE  cap_alerts.id      = ranked.id
+                      AND  ranked.next_id     IS NOT NULL
+                    """
+                ),
+                {"cutoff": cutoff},
+            )
+            repaired = result.rowcount or 0
+        except Exception as exc:
+            self.logger.warning("VTEC chain repair sweep failed: %s", exc)
+            try:
+                self.db_session.rollback()
+            except Exception:
+                pass
+            return 0
+
+        if repaired:
+            self.db_session.commit()
+            self.logger.info(
+                "VTEC chain repair: linked %d alert(s) to a newer sibling "
+                "the live ingest path missed",
+                repaired,
+            )
+        return repaired
+
+    # Catch-up window for repair_missing_vtec_identity().  Same rationale as
+    # VTEC_CHAIN_REPAIR_WINDOW_DAYS.
+    VTEC_IDENTITY_REPAIR_WINDOW_DAYS = 30
+
+    def repair_missing_vtec_identity(self) -> int:
+        """Self-healing sweep for VTEC identity the live path never extracted.
+
+        ``_insert_new_alert`` calls ``extract_vtec_identity(alert_data.get
+        ('raw_json', {}))`` right after building ``new_alert``, wrapped in a
+        broad ``try/except`` that only logs at DEBUG on failure. An audit of
+        the live database found hundreds of alerts with a fully parseable
+        VTEC string in their stored ``raw_json`` — confirmed by running
+        ``extract_vtec_identity`` directly against that same stored value —
+        but every ``vtec_*`` column NULL, meaning the live call silently
+        produced nothing at ingest time. The exact mechanism wasn't pinned
+        down (the parser itself is not at fault: it succeeds every time when
+        run standalone against the persisted data), so rather than guess at
+        a fix to the ingest-time call, this sweep does what
+        ``retry_unevaluated_forwards``/``retry_missing_intersections``
+        already do for their own silently-missed steps: re-derive the
+        result from data already on disk. Only ever fills currently-NULL
+        ``vtec_office`` — an alert that already has identity is untouched.
+
+        Returns the number of alerts repaired.
+        """
+        cutoff = utc_now() - timedelta(days=self.VTEC_IDENTITY_REPAIR_WINDOW_DAYS)
+        try:
+            candidates = (
+                self.db_session.query(CAPAlert)
+                .filter(CAPAlert.vtec_office.is_(None))
+                .filter(CAPAlert.raw_json.isnot(None))
+                .filter(CAPAlert.created_at >= cutoff)
+                .all()
+            )
+        except Exception as exc:
+            self.logger.warning("VTEC identity repair query failed: %s", exc)
+            try:
+                self.db_session.rollback()
+            except Exception:
+                pass
+            return 0
+
+        repaired = 0
+        for alert in candidates:
+            try:
+                identity = extract_vtec_identity(alert.raw_json)
+            except Exception:
+                continue
+            if not identity or not identity.get('vtec_office'):
+                continue
+            for field, value in identity.items():
+                setattr(alert, field, value)
+            repaired += 1
+
+        if repaired:
+            try:
+                self.db_session.commit()
+            except Exception as exc:
+                self.logger.warning("VTEC identity repair commit failed: %s", exc)
+                try:
+                    self.db_session.rollback()
+                except Exception:
+                    pass
+                return 0
+            self.logger.info(
+                "VTEC identity repair: derived identity for %d alert(s) "
+                "the live ingest path never extracted",
+                repaired,
+            )
+        return repaired
 
     # ---------- LED ----------
     def is_alert_expired(self, alert, max_age_days: int = 30) -> bool:
@@ -4046,6 +4197,22 @@ class CAPPoller:
                 self.retry_missing_intersections()
             except Exception as exc:
                 self.logger.error(f"Intersection catch-up sweep failed: {exc}")
+
+            # Catch-up: re-derive VTEC identity for any alert whose ingest-time
+            # extraction silently produced nothing (see
+            # repair_missing_vtec_identity). Runs before the chain-link sweep
+            # below since that one depends on identity already being set.
+            try:
+                self.repair_missing_vtec_identity()
+            except Exception as exc:
+                self.logger.error(f"VTEC identity repair sweep failed: {exc}")
+
+            # Catch-up: relink any VTEC chain alert whose supersession update
+            # was missed at ingest time (see repair_vtec_chain_gaps).
+            try:
+                self.repair_vtec_chain_gaps()
+            except Exception as exc:
+                self.logger.error(f"VTEC chain repair sweep failed: {exc}")
 
             # Ensure every polled source type has an entry (even if 0 alerts came back)
             for src_type, src_endpoints in self.last_endpoints_by_type.items():
