@@ -96,6 +96,35 @@
     </div>
     {% endif %}
 
+    <!-- Event lifecycle (full VTEC chain) ──────────────────────────── -->
+    {% if payload.chain %}
+    <div class="card mb-4">
+        <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0"><i class="fas fa-diagram-project text-primary"></i> Event Lifecycle
+                <span class="badge bg-secondary ms-2">{{ payload.chain|length }} update{{ 's' if payload.chain|length != 1 else '' }}</span>
+            </h5>
+            <small class="text-muted">Full VTEC chain · oldest → newest</small>
+        </div>
+        <div class="list-group list-group-flush">
+            {% for step in payload.chain %}
+            <a href="/alerts/{{ step.identifier }}/trail"
+               class="list-group-item list-group-item-action d-flex flex-wrap align-items-center gap-2{% if step.is_viewing %} active{% endif %}">
+                <span class="badge bg-{{
+                    'danger' if step.vtec_action in ('CAN', 'EXP')
+                    else 'success' if step.is_current
+                    else 'secondary'
+                }}" style="min-width: 3.5rem;">{{ step.vtec_action or '?' }}</span>
+                <small class="text-monospace">{{ format_local_datetime(step.sent, include_utc=False) if step.sent else '—' }}</small>
+                <span class="flex-grow-1 small text-truncate">{{ step.headline or '—' }}</span>
+                {% if step.eas_forwarded %}<i class="fas fa-broadcast-tower text-success" title="Forwarded to air"></i>{% endif %}
+                {% if step.is_current %}<span class="badge bg-success">Current</span>{% endif %}
+                {% if step.is_viewing %}<span class="badge bg-light text-dark">Viewing</span>{% endif %}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Counts strip ─────────────────────────────────────────────── -->
     <div class="row g-2 mb-4">
         {% for key, label in payload.category_labels.items() %}

@@ -303,6 +303,23 @@ def extract_vtec_identity(raw_json: Any) -> Optional[Dict[str, Any]]:
     # Fall back to end time only when begin is the all-zeros "ongoing" sentinel.
     year = _vtec_year_from_time(begin_raw) or _vtec_year_from_time(end_raw)
 
+    if year is None:
+        # Both VTEC times were the all-zeros sentinel — seen on some CON/EXT
+        # products (KIWX Flood Warning follow-ons in particular) that omit
+        # both times rather than restating the real one. Without a chain
+        # key year these follow-ons can never be linked to their event's
+        # prior products, so fall back to the CAP envelope's own `sent`
+        # timestamp: always present on the same product, and the event's
+        # year essentially never differs from the year the update carrying
+        # it was actually sent in.
+        props = raw_json.get('properties')
+        sent_raw = props.get('sent') if isinstance(props, dict) else None
+        if isinstance(sent_raw, str):
+            try:
+                year = datetime.fromisoformat(sent_raw).year
+            except ValueError:
+                pass
+
     return {
         'vtec_office':       office,
         'vtec_phenomenon':   phen,

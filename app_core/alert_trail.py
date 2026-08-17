@@ -121,6 +121,61 @@ def _forwarding_event(cap_alert) -> Optional[Dict[str, Any]]:
     )
 
 
+def _vtec_chain(cap_alert: CAPAlert) -> List[Dict[str, Any]]:
+    """Every product in *cap_alert*'s VTEC event chain, oldest first.
+
+    Queried directly by VTEC identity (office, phenomenon, significance,
+    etn, year) rather than by walking ``superseded_by_id`` pointers, so the
+    chain still renders in full even where that column has a gap (see
+    ``CAPPoller.repair_vtec_chain_gaps``) — a broken pointer is exactly the
+    reason this exists as a separate, direct query instead of a walk.
+
+    The last entry in sent/id order is the current state of the event
+    (NEW through whatever it has since become — EXT, CON, or a terminal
+    CAN/EXP), independent of whether ``superseded_by_id`` happens to agree.
+    Returns ``[]`` when the alert has no VTEC identity or no siblings —
+    the caller uses that to decide whether to render a chain panel at all.
+    """
+    if not all([
+        cap_alert.vtec_office,
+        cap_alert.vtec_phenomenon,
+        cap_alert.vtec_significance,
+        cap_alert.vtec_etn,
+        cap_alert.vtec_year,
+    ]):
+        return []
+
+    siblings = (
+        CAPAlert.query.filter_by(
+            vtec_office=cap_alert.vtec_office,
+            vtec_phenomenon=cap_alert.vtec_phenomenon,
+            vtec_significance=cap_alert.vtec_significance,
+            vtec_etn=cap_alert.vtec_etn,
+            vtec_year=cap_alert.vtec_year,
+        )
+        .order_by(CAPAlert.sent.asc(), CAPAlert.id.asc())
+        .all()
+    )
+    if len(siblings) < 2:
+        return []
+
+    current_id = siblings[-1].id
+    return [
+        {
+            "id": sib.id,
+            "identifier": sib.identifier,
+            "vtec_action": sib.vtec_action,
+            "sent": sib.sent,
+            "status": sib.status,
+            "eas_forwarded": sib.eas_forwarded,
+            "headline": sib.headline,
+            "is_current": sib.id == current_id,
+            "is_viewing": sib.identifier == cap_alert.identifier,
+        }
+        for sib in siblings
+    ]
+
+
 def collect_alert_trail(identifier: str) -> Dict[str, Any]:
     """Aggregate every row associated with *identifier* into a trail payload.
 
@@ -139,7 +194,10 @@ def collect_alert_trail(identifier: str) -> Dict[str, Any]:
         ``messages`` (list of EASMessage), ``manual`` (list of
         ManualEASActivation), ``received`` (list of ReceivedEASAlert),
         ``events`` (chronological list), ``counts`` (per-category tally),
-        and ``audio_urls`` (per-EASMessage stream URLs for the player).
+        ``audio_urls`` (per-EASMessage stream URLs for the player), and
+        ``chain`` (this alert's full VTEC event lifecycle — every NEW/EXT/
+        CON/CAN/etc. product sharing its VTEC identity, oldest first, or
+        ``[]`` when the alert has no VTEC identity or no siblings).
     """
     def _safe(query_callable, default):
         """Run *query_callable* and return its result, or *default* on any
@@ -426,6 +484,10 @@ def collect_alert_trail(identifier: str) -> Dict[str, Any]:
         # missing URLs gracefully.
         audio_urls = {}
 
+    chain: List[Dict[str, Any]] = []
+    if cap_alert is not None:
+        chain = _safe(lambda: _vtec_chain(cap_alert), [])
+
     return {
         "identifier": identifier,
         "alert": cap_alert,
@@ -436,4 +498,5 @@ def collect_alert_trail(identifier: str) -> Dict[str, Any]:
         "counts": counts,
         "audio_urls": audio_urls,
         "category_labels": CATEGORIES,
+        "chain": chain,
     }
