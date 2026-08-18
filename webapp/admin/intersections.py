@@ -183,7 +183,13 @@ def recalculate_intersections():
 @intersections_bp.route("/admin/calculate_intersections/<int:alert_id>", methods=["POST"])
 @require_permission('system.configure')
 def calculate_intersections_for_alert(alert_id: int):
-    """Calculate and store intersections for a specific alert."""
+    """Calculate and store intersections for a specific alert.
+
+    Uses calculate_alert_intersections() -- the same single-batched-query
+    helper the other routes in this module already use -- instead of
+    running one PostGIS query per boundary. It already handles clearing
+    this alert's existing intersections before inserting the new ones.
+    """
 
     try:
         alert = CAPAlert.query.get_or_404(alert_id)
@@ -191,19 +197,12 @@ def calculate_intersections_for_alert(alert_id: int):
         if not alert.geom:
             return jsonify({"error": f"Alert {alert_id} has no geometry"}), 400
 
-        existing_count = Intersection.query.filter_by(
-            cap_alert_id=alert_id
-        ).count()
-        if existing_count > 0:
-            Intersection.query.filter_by(cap_alert_id=alert_id).delete()
-            current_app.logger.info(
-                "Removed %s existing intersections for alert %s",
-                existing_count,
-                alert_id,
-            )
-
-        boundaries = Boundary.query.all()
-        if not boundaries:
+        boundaries_checked = (
+            db.session.query(func.count(Boundary.id))
+            .filter(Boundary.geom.isnot(None))
+            .scalar()
+        ) or 0
+        if boundaries_checked == 0:
             return (
                 jsonify(
                     {
@@ -213,40 +212,17 @@ def calculate_intersections_for_alert(alert_id: int):
                 400,
             )
 
-        intersections_created = 0
-        intersections_with_area = 0
-
-        for boundary in boundaries:
-            if not boundary.geom:
-                continue
-
-            result = db.session.query(
-                func.ST_Intersects(alert.geom, func.ST_MakeValid(boundary.geom)).label("intersects"),
-                func.ST_Area(
-                    func.ST_Intersection(alert.geom, func.ST_MakeValid(boundary.geom))
-                ).label("intersection_area"),
-            ).first()
-
-            if result and result.intersects:
-                intersection_area = result.intersection_area or 0
-                intersection = Intersection(
-                    cap_alert_id=alert_id,
-                    boundary_id=boundary.id,
-                    intersection_area=intersection_area,
-                )
-                db.session.add(intersection)
-                intersections_created += 1
-                if intersection_area:
-                    intersections_with_area += 1
-
+        intersections_created = calculate_alert_intersections(alert)
         db.session.commit()
 
         return jsonify(
             {
                 "success": f"Calculated intersections for alert {alert_id}",
                 "intersections_created": intersections_created,
-                "intersections_with_area": intersections_with_area,
-                "boundaries_checked": len(boundaries),
+                # calculate_alert_intersections() only keeps intersections with
+                # positive overlap area, so every created row already qualifies.
+                "intersections_with_area": intersections_created,
+                "boundaries_checked": boundaries_checked,
                 "alert_event": alert.event,
             }
         )
@@ -260,7 +236,18 @@ def calculate_intersections_for_alert(alert_id: int):
 @intersections_bp.route("/admin/calculate_all_intersections", methods=["POST"])
 @require_permission('system.configure')
 def calculate_all_intersections():
-    """Calculate intersections for every alert with geometry."""
+    """Calculate intersections for every alert with geometry.
+
+    Uses calculate_alert_intersections() -- one batched PostGIS query per
+    alert across all boundaries -- instead of the previous per-alert,
+    per-boundary query loop (with boundaries re-fetched on every alert
+    iteration too). With N alerts and M boundaries that was N*M individual
+    round-trips instead of N; matches the pattern already used by
+    recalculate_intersections()/fix_county_intersections() above, including
+    committing once at the end rather than every 10 alerts -- that batching
+    existed to keep a very slow loop's uncommitted transaction bounded, which
+    is no longer a concern at one query per alert.
+    """
 
     try:
         alerts_with_geom = (
@@ -270,46 +257,26 @@ def calculate_all_intersections():
         total_alerts = len(alerts_with_geom)
         total_intersections = 0
         processed_alerts = 0
+        errors = 0
 
         for alert in alerts_with_geom:
-            Intersection.query.filter_by(cap_alert_id=alert.id).delete()
-
-            boundaries = Boundary.query.all()
-
-            alert_intersections = 0
-            for boundary in boundaries:
-                if not boundary.geom:
-                    continue
-
-                intersection_result = db.session.query(
-                    func.ST_Intersects(alert.geom, func.ST_MakeValid(boundary.geom)).label(
-                        "intersects"
-                    ),
-                    func.ST_Area(
-                        func.ST_Intersection(alert.geom, func.ST_MakeValid(boundary.geom))
-                    ).label("intersection_area"),
-                ).first()
-
-                if intersection_result.intersects:
-                    intersection = Intersection(
-                        cap_alert_id=alert.id,
-                        boundary_id=boundary.id,
-                        intersection_area=intersection_result.intersection_area
-                        or 0,
-                    )
-                    db.session.add(intersection)
-                    alert_intersections += 1
-
-            total_intersections += alert_intersections
+            try:
+                total_intersections += calculate_alert_intersections(alert)
+            except Exception as exc:  # pragma: no cover - defensive
+                errors += 1
+                current_app.logger.error(
+                    "Error calculating intersections for alert %s: %s",
+                    alert.identifier, exc,
+                )
+                continue
             processed_alerts += 1
 
-            if processed_alerts % 10 == 0:
-                db.session.commit()
-                current_app.logger.info(
-                    "Processed %s/%s alerts", processed_alerts, total_alerts
-                )
-
         db.session.commit()
+
+        if errors:
+            current_app.logger.warning(
+                "calculate_all_intersections: %s/%s alerts failed", errors, total_alerts
+            )
 
         log_entry = SystemLog(
             level="INFO",
@@ -362,13 +329,13 @@ def calculate_single_alert(alert_id: int):
                 )
             }), 400
 
-        deleted_count = Intersection.query.filter_by(
-            cap_alert_id=alert_id
-        ).delete()
+        boundaries_tested = (
+            db.session.query(func.count(Boundary.id))
+            .filter(Boundary.geom.isnot(None))
+            .scalar()
+        ) or 0
 
-        boundaries = Boundary.query.all()
-
-        if not boundaries:
+        if boundaries_tested == 0:
             return (
                 jsonify(
                     {
@@ -381,40 +348,10 @@ def calculate_single_alert(alert_id: int):
                 400,
             )
 
-        intersections_created = 0
-        errors = []
-
-        for boundary in boundaries:
-            if not boundary.geom:
-                continue
-            try:
-                intersection_query = (
-                    db.session.query(
-                        func.ST_Area(
-                            func.ST_Intersection(alert.geom, func.ST_MakeValid(boundary.geom))
-                        ).label("intersection_area"),
-                    )
-                    .filter(func.ST_Intersects(alert.geom, func.ST_MakeValid(boundary.geom)))
-                    .first()
-                )
-
-                if (
-                    intersection_query
-                    and intersection_query.intersection_area
-                    and intersection_query.intersection_area > 0
-                ):
-                    intersection = Intersection(
-                        cap_alert_id=alert_id,
-                        boundary_id=boundary.id,
-                        intersection_area=intersection_query.intersection_area,
-                    )
-                    db.session.add(intersection)
-                    intersections_created += 1
-
-            except Exception as boundary_error:  # pragma: no cover - defensive
-                error_msg = f"Boundary {boundary.id}: {boundary_error}"
-                errors.append(error_msg)
-                current_app.logger.warning(error_msg)
+        # calculate_alert_intersections() clears this alert's existing
+        # intersections and inserts the new ones in one batched PostGIS
+        # query across all boundaries, instead of one query per boundary.
+        intersections_created = calculate_alert_intersections(alert)
 
         db.session.commit()
 
@@ -423,9 +360,8 @@ def calculate_single_alert(alert_id: int):
                 "success": "Successfully calculated"
                 f" {intersections_created} boundary intersections",
                 "intersections_created": intersections_created,
-                "boundaries_tested": len(boundaries),
-                "deleted_intersections": deleted_count,
-                "errors": errors,
+                "boundaries_tested": boundaries_tested,
+                "errors": [],
             }
         )
     except Exception as exc:  # pragma: no cover - defensive
