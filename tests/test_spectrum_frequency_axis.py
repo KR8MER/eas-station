@@ -279,3 +279,69 @@ def test_capture_endpoints_convert_duration_at_effective_rate(module_name):
     source = pathlib.Path(module.__file__).read_text()
     assert "effective_sample_rate(receiver_record.sample_rate)" in source
     assert "effective_rate = receiver_record.sample_rate or 250_000" not in source
+
+
+# --------------------------------------------------------------------------
+# Live waterfall / scope zoom invariants
+# --------------------------------------------------------------------------
+#
+# The zoom feature rests on a few non-obvious properties of the template's
+# JavaScript that are easy to undo by accident. These assert the contract
+# in the spirit of tests/test_map_theme.py, which likewise guards template
+# behaviour that has no Python surface.
+
+DIAGNOSTICS_HTML = ROOT / "templates" / "admin" / "radio_diagnostics.html"
+
+
+def _diagnostics_source() -> str:
+    return DIAGNOSTICS_HTML.read_text()
+
+
+def test_waterfall_history_stores_raw_values_not_pixels():
+    """The scrollback buffer must hold per-bin power, not finished RGBA.
+
+    Zoom re-renders the whole history at the current crop. If the buffer
+    goes back to storing rasterised pixels, zoomed history degrades to
+    upscaled blocks -- it cannot recover detail that was already flattened
+    to screen resolution when the row was stored.
+    """
+    src = _diagnostics_source()
+    assert "state.buffer = new Uint8Array(nFreq * LIVE_WF_HEIGHT);" in src
+    assert "new Uint8ClampedArray(nFreq * LIVE_WF_HEIGHT * 4)" not in src
+
+
+def test_zoom_is_bounded_by_real_fft_resolution():
+    """The UI must not offer zoom past the resolution the FFT actually has."""
+    src = _diagnostics_source()
+    assert "const ZOOM_MAX =" in src
+    assert "const ZOOM_MIN_BINS =" in src
+    # zoomRange must clamp the window inside [0, nFreq].
+    assert "Math.min(nFreq - count, start)" in src
+
+
+def test_axis_and_status_follow_the_visible_window():
+    """Labels must describe the crop, not the full span.
+
+    A zoom that leaves the axis reading the full span would recreate the
+    exact class of bug this page already shipped once: a frequency label
+    that does not match the picture under it.
+    """
+    src = _diagnostics_source()
+    assert "function visibleFreqRange(state, payload)" in src
+    # Both views render their axis through the shared, zoom-aware helper.
+    assert src.count("renderSpectrumAxis(state, payload,") >= 2
+    # The span readout takes the zoom state so it can report the crop.
+    assert "function spectrumSpanLabel(payload, state, nFreq)" in src
+
+
+def test_scope_peak_hold_is_indexed_by_absolute_bin():
+    """Panning must not discard peaks accumulated off-screen."""
+    src = _diagnostics_source()
+    assert "state.scopePeak = new Float32Array(spectrum);" in src
+    assert "for (let i = binStart; i < binEnd; i++)" in src
+
+
+def test_zoom_gestures_leave_vertical_page_scroll_alone():
+    """On a phone, claiming both axes would trap the page scroll."""
+    src = _diagnostics_source()
+    assert "canvas.style.touchAction = 'pan-y';" in src

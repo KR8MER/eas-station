@@ -8,6 +8,53 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.171.0] - 2026-08-18 - Zoom and pan on the live waterfall and spectrum scope
+
+### Added
+- **Zoom and pan on the Live Waterfall and Spectrum Scope**
+  (`/admin/radio_diagnostics`). The SDR service already publishes a
+  2048-bin FFT across the whole effective span -- ~125 Hz per bin at
+  256 kHz -- but both views downsampled that to roughly 900 CSS pixels,
+  throwing away most of the resolution the receiver had already produced.
+  Zoom crops the published bins instead of retuning, so it costs no extra
+  SDR work and no extra requests, and yields up to ~16x more real detail
+  before reaching the FFT's own resolution limit. Controls:
+  - Zoom in / out / reset buttons in each panel header, with a live
+    magnification readout.
+  - Mouse wheel to zoom about the cursor, holding whatever is under the
+    pointer still.
+  - Click-drag (or touch-drag) to pan; double-click resets to full span.
+  - Capped at 64x with a 32-bin floor, so the UI cannot pretend to
+    resolution the FFT does not have. Going finer needs a narrower
+    capture or a larger FFT server-side.
+  Zoom is shared between the two views -- they render the same payload,
+  so panning one and not the other would only be confusing -- and
+  survives the WebSocket panel re-render that rebuilds the cards roughly
+  once a second.
+- The frequency axis and status line now describe the **visible** window
+  rather than the full span: edge labels gain decimal places as you zoom
+  (up to 5 dp on a few-kHz window), the status line reads e.g.
+  `64.0 kHz of 256.0 kHz · 125 Hz/bin`, and the centre label drops its
+  "(carrier)" annotation and switches to the window centre once panning
+  takes the tuned frequency off screen.
+
+### Changed
+- **The live waterfall's history buffer now stores raw per-bin power
+  instead of finished RGBA pixels.** Cropping a pixel buffer can only
+  stretch what was already rasterised at full-span scale, so zoomed
+  scrollback would have been a blur of upscaled blocks. Keeping the
+  values means every repaint re-renders the entire 200-row history at the
+  current zoom, so scrolling back through history at 16x shows real
+  per-bin detail. The buffer also got smaller (2048 bins x 200 rows =
+  400 KB, a quarter of the RGBA cost), and colour mapping moved to a
+  precomputed 256-entry lookup table so re-colouring the full history
+  each frame stays cheap.
+- The Spectrum Scope's y-axis auto-scale now follows the visible crop
+  rather than the whole span, so zooming in on a weak feature is not
+  defeated by a strong carrier elsewhere keeping ownership of the axis.
+  Its peak-hold trace is indexed by absolute bin, so zooming or panning
+  no longer discards peaks already accumulated off-screen.
+
 ## [2.170.5] - 2026-08-18 - Fix live spectrum frequency axis labelled with the pre-decimation rate
 
 ### Fixed
