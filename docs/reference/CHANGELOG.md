@@ -8,6 +8,54 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.174.0] - 2026-08-18 - Retire the carrier-squelch feature
+
+### Removed
+- **"Carrier Squelch" is gone from receivers.** It never did what its name
+  and help text promised. `_apply_squelch()` gated on the RMS of the
+  *demodulated audio*, not on carrier presence, so the gate was inverted
+  against its own purpose. Measured against the real code path at the
+  panel's own defaults (threshold -60 dBFS, open 200 ms, hang 900 ms):
+
+  | Input | Level | Squelch |
+  |---|---|---|
+  | Off air, open-carrier hiss | -6 dBFS | **passed through** |
+  | Off air, hiss | -20 dBFS | **passed through** |
+  | Off air, weak hiss | -40 dBFS | **passed through** |
+  | Truly dead feed (digital silence) | -240 dBFS | muted |
+
+  It muted silence -- a no-op, since muting silence produces silence -- and
+  passed hiss, the only thing worth muting. The panel promised to
+  "automatically mute white noise when the carrier drops", and that is
+  precisely the case it could not handle: an off-air FM receiver emits
+  unsquelched noise tens of dB above any usable threshold. Its only working
+  behaviour was therefore a no-op, so nothing functional is lost by
+  removing it.
+- **"Raise alarm on carrier loss" is gone with it.** It wrote a log line
+  and a metadata flag consumed by a single status badge; it drove no GPIO,
+  no tower light and no notification. Dead-air monitoring (added in
+  2.172.0) supersedes it properly: it detects the open-carrier case via
+  spectral flatness rather than level, debounces it, and drives the tower
+  light and rack alarm buzzer with an operator acknowledgement.
+- Removed across the stack: the audio-path gate, the five
+  `radio_receivers` columns (migration `20260818_retire_carrier_squelch`,
+  with a downgrade that recreates them), the `ensure_radio_squelch_columns`
+  startup backfill, the service-config presets, the API payload validation
+  and serialization, and the Edit Receiver form section with its status
+  badges.
+
+### Changed
+- The legacy instantaneous `silence_detected` metric took its thresholds
+  from the squelch columns, which was a coincidence of naming rather than a
+  real relationship. It now uses `AudioSourceConfig`'s own defaults
+  (-60 dBFS / 5 s), which are the same values the old fallbacks used, so
+  behaviour is unchanged. The debounced dead-air alarm was never affected --
+  it reads its own station-wide policy.
+- Renumbered the database-initialisation log steps in `app.py`, which were
+  already inconsistent before this change (twelve labelled `/15` and four
+  `/16`, against sixteen actual steps). They now read `[N/15]` across the
+  fifteen remaining steps.
+
 ## [2.173.1] - 2026-08-18 - Code-review fixes for the dead-air relocation
 
 ### Fixed

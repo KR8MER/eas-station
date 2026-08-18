@@ -96,11 +96,6 @@ def _base_radio_metadata(receiver: RadioReceiver, source_name: str) -> Dict[str,
         'receiver_audio_output': bool(receiver.audio_output),
         'receiver_auto_start': bool(receiver.auto_start),
         'rbds_enabled': bool(receiver.enable_rbds),
-        'squelch_enabled': bool(receiver.squelch_enabled),
-        'squelch_threshold_db': float(receiver.squelch_threshold_db or -65.0),
-        'squelch_open_ms': int(receiver.squelch_open_ms or 150),
-        'squelch_close_ms': int(receiver.squelch_close_ms or 750),
-        'carrier_alarm_enabled': bool(receiver.squelch_alarm),
         'source_category': 'sdr',
         'icecast_mount': generate_mount_point(source_name, format=StreamFormat.MP3),
     }
@@ -194,12 +189,13 @@ def ensure_sdr_audio_monitor_source(
     controller = _get_audio_controller()
     sample_rate, channels = _recommend_audio_stream(receiver)
     buffer_size = 4096 if channels == 1 else 8192
-    silence_threshold = float(receiver.squelch_threshold_db or -60.0)
-    silence_duration = max(float(receiver.squelch_close_ms or 750) / 1000.0, 0.1)
-    squelch_open = int(receiver.squelch_open_ms or 150)
-    squelch_close = int(receiver.squelch_close_ms or 750)
-    squelch_enabled = bool(receiver.squelch_enabled)
-    carrier_alarm_enabled = bool(receiver.squelch_alarm)
+    # Thresholds for the legacy instantaneous `silence_detected` metric.
+    # These used to be derived from the retired squelch columns, which was
+    # always a coincidence of naming rather than a real relationship -- the
+    # debounced dead-air alarm reads its own station-wide policy (see
+    # app_core/audio/silence.py) and is unaffected by these.
+    silence_threshold = AudioSourceConfig.silence_threshold_db
+    silence_duration = AudioSourceConfig.silence_duration_seconds
 
     device_params = {
         'receiver_id': receiver.identifier,
@@ -209,11 +205,6 @@ def ensure_sdr_audio_monitor_source(
         'receiver_modulation': (receiver.modulation_type or 'IQ').upper(),
         'iq_sample_rate': receiver.sample_rate,
         'rbds_enabled': bool(receiver.enable_rbds),
-        'squelch_enabled': squelch_enabled,
-        'squelch_threshold_db': silence_threshold,
-        'squelch_open_ms': squelch_open,
-        'squelch_close_ms': squelch_close,
-        'carrier_alarm_enabled': carrier_alarm_enabled,
     }
 
     managed_params = {
@@ -224,11 +215,6 @@ def ensure_sdr_audio_monitor_source(
         'silence_duration_seconds': silence_duration,
         'device_params': device_params,
         'managed_by': 'radio',
-        'squelch_enabled': squelch_enabled,
-        'squelch_threshold_db': silence_threshold,
-        'squelch_open_ms': squelch_open,
-        'squelch_close_ms': squelch_close,
-        'carrier_alarm_enabled': carrier_alarm_enabled,
     }
 
     start_flag = bool(start_immediately if start_immediately is not None else receiver.auto_start)
@@ -357,10 +343,6 @@ def ensure_sdr_audio_monitor_source(
                 adapter = create_audio_source(runtime_config)
                 metadata = adapter.metrics.metadata or {}
                 metadata.update({k: v for k, v in _base_radio_metadata(receiver, source_name).items() if v is not None})
-                metadata.setdefault('carrier_present', None)
-                metadata.setdefault('squelch_state', 'open' if not squelch_enabled else 'pending')
-                metadata.setdefault('squelch_last_rms_db', None)
-                metadata.setdefault('carrier_alarm', False)
                 metadata.setdefault('rbds_program_type_name', None)
                 metadata.setdefault('rbds_last_updated', None)
                 adapter.metrics.metadata = metadata

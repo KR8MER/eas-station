@@ -32,13 +32,6 @@ from app_core.models import RadioReceiver, RadioReceiverStatus
 
 _TABLE_NAMES: Iterable[str] = ("radio_receivers", "radio_receiver_status")
 
-_SQUELCH_COLUMN_DEFINITIONS: tuple[tuple[str, str]] = (
-    ("squelch_enabled", "BOOLEAN NOT NULL DEFAULT FALSE"),
-    ("squelch_threshold_db", "DOUBLE PRECISION NOT NULL DEFAULT -65"),
-    ("squelch_open_ms", "INTEGER NOT NULL DEFAULT 150"),
-    ("squelch_close_ms", "INTEGER NOT NULL DEFAULT 750"),
-    ("squelch_alarm", "BOOLEAN NOT NULL DEFAULT FALSE"),
-)
 
 _AUDIO_SAMPLE_RATE_COLUMN_DEFINITION: tuple[str, str] = (
     "audio_sample_rate",
@@ -147,58 +140,6 @@ def ensure_radio_tables(logger) -> bool:
         return True
     except SQLAlchemyError as exc:
         logger.error("Failed to ensure radio receiver tables: %s", exc)
-        return False
-
-
-def ensure_radio_squelch_columns(logger) -> bool:
-    """Backfill squelch configuration columns when migrations haven't run.
-
-    The ALTER statements in this module deliberately use a plain
-    ``ADD COLUMN`` rather than PostgreSQL's ``ADD COLUMN IF NOT EXISTS``: every
-    call site already guards on ``existing_columns`` from the inspector, so the
-    clause was redundant on PostgreSQL and made the statement a syntax error on
-    SQLite, which has no such form. Dropping it keeps production behaviour
-    identical while letting these helpers run under the SQLite databases the
-    test suite uses.
-    """
-
-    engine = db.engine
-    inspector = inspect(engine)
-
-    if "radio_receivers" not in inspector.get_table_names():
-        logger.debug(
-            "Skipping radio squelch column verification; radio_receivers table missing",
-        )
-        return True
-
-    dialect = engine.dialect.name
-
-    try:
-        existing_columns = {column["name"] for column in inspector.get_columns("radio_receivers")}
-        changed = False
-
-        for column_name, column_definition in _SQUELCH_COLUMN_DEFINITIONS:
-            if column_name in existing_columns:
-                continue
-
-            logger.info("Adding radio_receivers.%s column for squelch controls", column_name)
-
-            ddl = f"ALTER TABLE radio_receivers ADD COLUMN {column_name} {column_definition}"
-            db.session.execute(text(ddl))
-            if dialect == "postgresql":
-                db.session.execute(
-                    text(
-                        f"ALTER TABLE radio_receivers ALTER COLUMN {column_name} DROP DEFAULT"
-                    )
-                )
-            changed = True
-
-        if changed:
-            db.session.commit()
-        return True
-    except SQLAlchemyError as exc:
-        logger.warning("Could not ensure radio squelch columns: %s", exc)
-        db.session.rollback()
         return False
 
 
@@ -312,7 +253,6 @@ def ensure_radio_frequency_correction_column(logger) -> bool:
 
 __all__ = [
     "ensure_radio_tables",
-    "ensure_radio_squelch_columns",
     "ensure_radio_audio_sample_rate_column",
     "ensure_radio_frequency_correction_column",
 ]

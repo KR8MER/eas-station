@@ -578,3 +578,68 @@ def test_acknowledgement_is_bound_to_an_episode():
     assert "ack == episode" in gpio, (
         "the buzzer must only stay silent for the episode that was acknowledged"
     )
+
+
+# --------------------------------------------------------------------------
+# The retired carrier-squelch feature
+# --------------------------------------------------------------------------
+#
+# "Carrier Squelch" gated on the RMS of the *demodulated audio*, not on
+# carrier presence, so it muted a feed that was already digitally silent
+# (a no-op) and passed full-scale hiss straight through -- the one case its
+# own help text promised to mute. Its "raise alarm on carrier loss" option
+# wrote a log line and a metadata flag behind one status badge, driving no
+# GPIO, tower light or notification, and is superseded by the dead-air
+# monitor above, which detects the open-carrier case properly.
+
+def test_carrier_squelch_is_gone_from_the_runtime():
+    """No squelch gate may sit in the audio path again.
+
+    A gate keyed on audio level cannot distinguish an off-air carrier from
+    programme material -- that is exactly the mistake this codebase already
+    made once, and the reason dead-air detection needs spectral flatness.
+    """
+    sources = (ROOT / "app_core" / "audio" / "sources.py").read_text(encoding="utf-8")
+    for token in ("_apply_squelch", "_update_squelch_metadata",
+                  "_emit_carrier_event", "squelch"):
+        assert token not in sources, f"{token} should be retired from the audio path"
+
+
+def test_carrier_squelch_is_gone_from_the_model_and_api():
+    for rel in (
+        ("app_core", "_models_radio.py"),
+        ("app_core", "radio", "manager.py"),
+        ("app_core", "radio", "schema.py"),
+        ("app_core", "radio", "service_config.py"),
+        ("app_core", "audio", "source_config.py"),
+        ("webapp", "radio_settings", "payload.py"),
+        ("webapp", "radio_settings", "serialization.py"),
+    ):
+        text = ROOT.joinpath(*rel).read_text(encoding="utf-8")
+        assert "squelch" not in text.lower(), f"{'/'.join(rel)} still references squelch"
+
+
+def test_carrier_squelch_is_gone_from_the_receiver_form():
+    """The Edit Receiver panel must not offer a control that does nothing."""
+    radio_html = (ROOT / "templates" / "admin" / "radio.html").read_text(encoding="utf-8")
+    for token in ("Carrier Squelch", "receiverSquelch", "toggleSquelchInputs",
+                  "squelch_", "carrier_present", "carrier_alarm"):
+        assert token not in radio_html, f"{token} should be gone from the receiver form"
+
+
+def test_legacy_silence_thresholds_no_longer_derive_from_squelch():
+    """The instantaneous silence metric keeps working on its own defaults.
+
+    Its thresholds used to be read off the squelch columns, which was a
+    coincidence of naming rather than a real relationship.
+    """
+    from app_core.audio.ingest import AudioSourceConfig
+
+    assert AudioSourceConfig.silence_threshold_db == -60.0
+    assert AudioSourceConfig.silence_duration_seconds == 5.0
+
+    for rel in (("webapp", "admin", "audio_ingest", "radio_sources.py"),
+                ("eas_monitoring_service.py",)):
+        text = ROOT.joinpath(*rel).read_text(encoding="utf-8")
+        assert "AudioSourceConfig.silence_threshold_db" in text
+        assert "receiver.squelch" not in text

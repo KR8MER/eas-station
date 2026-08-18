@@ -146,11 +146,6 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
         "stereo_enabled": receiver.stereo_enabled,
         "deemphasis_us": receiver.deemphasis_us,
         "enable_rbds": receiver.enable_rbds,
-        "squelch_enabled": receiver.squelch_enabled,
-        "squelch_threshold_db": receiver.squelch_threshold_db,
-        "squelch_open_ms": receiver.squelch_open_ms,
-        "squelch_close_ms": receiver.squelch_close_ms,
-        "squelch_alarm": receiver.squelch_alarm,
         "latest_status": status_data,
     }
 
