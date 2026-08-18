@@ -191,6 +191,9 @@
     var trendsCharts = {};              // "receiverId:metric" -> Chart instance
     var trendsActiveReceivers = {};     // receiverId -> true
     var trendsCurrentWindow = {};       // receiverId -> window string
+    var trendsRequestGen = {};          // receiverId -> generation counter, guards against
+                                         // a slow fetch resolving after a newer rebuild/window
+                                         // change and painting stale samples over fresh ones
 
     function trendsFindContainer(receiverId) {
         return document.querySelector('.trends-container[data-trends-for="' + CSS.escape(receiverId) + '"]');
@@ -292,11 +295,16 @@
         var statusEl = container.querySelector('[data-trends-status="' + receiverId + '"]');
         if (statusEl) statusEl.textContent = 'Loading…';
 
+        var myGen = (trendsRequestGen[receiverId] || 0) + 1;
+        trendsRequestGen[receiverId] = myGen;
+        var isCurrent = function () { return trendsRequestGen[receiverId] === myGen; };
+
         fetch(TRENDS_ENDPOINT + encodeURIComponent(receiverId) + '?window=' + encodeURIComponent(win), { cache: 'no-store' })
             .then(function (resp) {
                 return resp.json().then(function (data) { return { ok: resp.ok, status: resp.status, data: data }; });
             })
             .then(function (result) {
+                if (!isCurrent()) return; // superseded by a newer rebuild/window change
                 if (!result.ok) {
                     if (statusEl) statusEl.textContent = 'Error: ' + (result.data.error || ('HTTP ' + result.status));
                     return;
@@ -327,6 +335,7 @@
                 ], { min: 0 });
             })
             .catch(function (err) {
+                if (!isCurrent()) return; // superseded by a newer rebuild/window change
                 if (statusEl) statusEl.textContent = 'Fetch error: ' + err.message;
             });
     }
@@ -368,9 +377,20 @@
     function trendsRebuildActive() {
         Object.keys(trendsActiveReceivers).forEach(function (receiverId) {
             var container = trendsFindContainer(receiverId);
-            if (!container || container.firstChild) return; // gone, or not yet clobbered
+            if (!container) {
+                // The receiver itself is gone (removed/renamed) -- drop its
+                // state instead of leaving a dangling active flag and
+                // detached Chart.js instances behind.
+                trendsDestroyCharts(receiverId);
+                delete trendsActiveReceivers[receiverId];
+                delete trendsRequestGen[receiverId];
+                return;
+            }
+            if (container.firstChild) return; // not yet clobbered by this refresh
             trendsBuildPanel(container, receiverId);
             trendsFetchAndRender(receiverId);
+            var label = trendsFindLabel(receiverId);
+            if (label) label.textContent = 'Hide Historical Trends';
         });
     }
 
