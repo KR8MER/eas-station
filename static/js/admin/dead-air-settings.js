@@ -36,7 +36,15 @@
         openCarrier: document.getElementById('deadAirOpenCarrier'),
         save: document.getElementById('deadAirSaveBtn'),
         status: document.getElementById('deadAirLiveStatus'),
+        formError: document.getElementById('deadAirFormError'),
     };
+
+    // The numeric inputs are populated by load(), not server-rendered. If
+    // the load fails and the operator hits Save, Number('') is 0 and the
+    // API clamps that to each field's minimum -- silently rewriting a 20 s
+    // hold-off to 1 s. So Save stays disabled until a load succeeds.
+    let loaded = false;
+    els.save.disabled = true;
 
     function apply(data) {
         if (!data || data.ok === false) return;
@@ -45,6 +53,8 @@
         els.level.value = data.level_threshold_db;
         els.flatness.value = data.flatness_threshold_pct;
         els.openCarrier.checked = !!data.detect_open_carrier;
+        loaded = true;
+        if (els.formError) els.formError.textContent = '';
         syncDisabled();
     }
 
@@ -53,8 +63,9 @@
     function syncDisabled() {
         const on = els.enabled.checked;
         [els.duration, els.level, els.flatness, els.openCarrier].forEach((el) => {
-            el.disabled = !on;
+            el.disabled = !on || !loaded;
         });
+        els.save.disabled = !loaded;
     }
     els.enabled.addEventListener('change', syncDisabled);
 
@@ -65,11 +76,18 @@
             });
             apply(await resp.json());
         } catch (err) {
-            /* leave the server-rendered defaults in place */
+            loaded = false;
+            syncDisabled();
+            if (els.formError) {
+                els.formError.textContent =
+                    'Could not load dead-air settings — saving is disabled '
+                    + 'so blank values cannot overwrite what is stored. Reload to retry.';
+            }
         }
     }
 
     els.save.addEventListener('click', async function () {
+        if (!loaded) return;   // never post blanks over stored settings
         els.save.disabled = true;
         try {
             const resp = await fetch('/api/audio/dead-air/settings', {
@@ -95,12 +113,13 @@
             } else if (window.showToast) {
                 window.showToast(data.error || 'Save failed', 'danger');
             }
+            if (!data.ok) { /* keep the operator's edits on screen to retry */ }
         } catch (err) {
             if (window.showToast) {
                 window.showToast('Save failed: ' + err.message, 'danger');
             }
         }
-        els.save.disabled = false;
+        els.save.disabled = !loaded;
     });
 
     // A compact live indicator in the card header, so the operator can see
@@ -116,15 +135,33 @@
                 els.status.textContent = '';
                 return;
             }
+            els.status.textContent = '';
+            els.status.className = 'small text-muted';
             if (data.active) {
-                const names = Object.keys(data.sources || {});
-                els.status.innerHTML =
-                    '<span class="badge bg-danger"><i class="fas fa-volume-mute me-1"></i>'
-                    + `DEAD AIR</span> <span class="text-muted">${names.join(', ')}</span>`;
+                // Source names come from operator input via Redis, so they
+                // are appended as text rather than interpolated into HTML.
+                const badge = document.createElement('span');
+                badge.className = 'badge bg-danger';
+                const bIcon = document.createElement('i');
+                bIcon.className = 'fas fa-volume-mute me-1';
+                badge.appendChild(bIcon);
+                badge.appendChild(document.createTextNode('DEAD AIR'));
+                els.status.appendChild(badge);
+
+                const names = document.createElement('span');
+                names.className = 'text-muted ms-1';
+                names.textContent = Object.keys(data.sources || {}).join(', ');
+                els.status.appendChild(names);
             } else {
-                els.status.innerHTML =
-                    '<span class="text-success"><i class="fas fa-check-circle me-1"></i>'
-                    + 'Audio present on all monitored sources</span>';
+                const okSpan = document.createElement('span');
+                okSpan.className = 'text-success';
+                const oIcon = document.createElement('i');
+                oIcon.className = 'fas fa-check-circle me-1';
+                okSpan.appendChild(oIcon);
+                okSpan.appendChild(document.createTextNode(
+                    'Audio present on all monitored sources'
+                ));
+                els.status.appendChild(okSpan);
             }
         } catch (err) {
             els.status.textContent = '';

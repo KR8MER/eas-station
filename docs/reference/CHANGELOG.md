@@ -8,6 +8,43 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.173.1] - 2026-08-18 - Code-review fixes for the dead-air relocation
+
+### Fixed
+- **Operator-supplied source names were interpolated into `innerHTML`.**
+  `AudioSource.name` is free text with no markup validation and reaches the
+  browser through Redis, so a source named with a tag would have executed
+  in another operator's session on both the Audio Health dashboard and the
+  Audio Ingestion page. Both renderers now build text nodes; verified in
+  Chromium with an `<img src=x onerror=...>` payload, which renders
+  literally and does not fire.
+- **An active dead-air alarm was invisible to the people meant to watch for
+  it.** The navigation registry gates the Audio Health dashboard on the
+  view-role trio (`alerts.view` / `receivers.view` / `logs.view`), but the
+  status endpoint required `system.configure` -- so a radio watcher could
+  open the dashboard while every poll returned 403 and the alarm banner
+  silently never appeared. Status is now readable at the dashboard's own
+  level; acknowledging stays restricted, and the response carries
+  `can_acknowledge` so the UI hides that control rather than offering a
+  button that would only fail.
+- **An acknowledgement could mute a later, unrelated outage.** The ack was
+  a bare flag with a 24 h TTL and could be written with no alarm active.
+  The publisher now mints an episode id when the alarm goes active and
+  drops it on recovery; the ack stores that id, the API refuses to
+  acknowledge when nothing is wrong or when the operator's page is showing
+  a stale episode, and the GPIO reader only stays silent for the episode
+  that was actually acknowledged.
+- **A failed settings load could silently rewrite stored thresholds.** The
+  numeric inputs are populated by JavaScript rather than server-rendered,
+  so an empty form posted `Number('') == 0`, which the API clamped to each
+  field's minimum -- turning a 20 s hold-off into 1 s. Saving is now
+  disabled until a load succeeds, with the failure surfaced in a dedicated
+  error line kept separate from the live alarm readout so the two cannot
+  overwrite each other.
+- Completed the page-exclusivity tests, which checked fewer fields than
+  they claimed: `dead_air_detect_open_carrier` was not asserted absent from
+  Hardware, and only the buzzer pin was asserted absent from Audio Sources.
+
 ## [2.173.0] - 2026-08-18 - Move dead-air settings to where the operator looks for them
 
 ### Changed

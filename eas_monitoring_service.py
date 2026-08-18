@@ -46,6 +46,7 @@ import os
 import sys
 import math
 import time
+import uuid
 import signal
 import logging
 import threading
@@ -1058,6 +1059,11 @@ def _install_dead_air_criteria(app) -> None:
         logger.warning("Could not install dead-air criteria: %s", exc)
 
 
+#: Identifier for the current continuous dead-air episode, or None when no
+#: source is silent. See _publish_dead_air_state().
+_dead_air_episode: Optional[str] = None
+
+
 def _publish_dead_air_state(sources: Dict[str, Any]) -> None:
     """Publish the aggregate dead-air state for the GPIO indicator service.
 
@@ -1071,6 +1077,8 @@ def _publish_dead_air_state(sources: Dict[str, Any]) -> None:
     indication, and audio-service liveness already has its own monitoring.
     """
     from app_core.config.redis_config import RedisChannels
+
+    global _dead_air_episode
 
     silent_sources = {}
     any_enabled = False
@@ -1087,10 +1095,22 @@ def _publish_dead_air_state(sources: Dict[str, Any]) -> None:
                 "duration_seconds": dead_air.get("silence_duration_seconds"),
             }
 
+    # Episode id: a token minted when the alarm goes active and held for
+    # the whole continuous outage. The acknowledgement is stored as this
+    # value, so an ack from an earlier outage cannot mute a later one --
+    # without it a stale ack would sit in Redis for its TTL and silence the
+    # next genuine failure.
+    if silent_sources:
+        if not _dead_air_episode:
+            _dead_air_episode = uuid.uuid4().hex[:12]
+    else:
+        _dead_air_episode = None
+
     payload = {
         "active": bool(silent_sources),
         "enabled": any_enabled,
         "sources": silent_sources,
+        "episode": _dead_air_episode,
         "updated": time.time(),
     }
 

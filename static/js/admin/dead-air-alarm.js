@@ -32,19 +32,43 @@
     const ackBtn = document.getElementById('deadAirAckBtn');
     if (!banner || !ackBtn) return;
 
-    function describe(sources) {
+    function heldFor(seconds) {
+        const secs = Number(seconds);
+        if (!Number.isFinite(secs) || secs <= 0) return '';
+        return secs >= 60
+            ? ` for ${Math.round(secs / 60)} min`
+            : ` for ${Math.round(secs)} s`;
+    }
+
+    // Source names and detail strings are operator-supplied and reach here
+    // through Redis, so they are built as text nodes rather than
+    // interpolated into innerHTML. A source named with markup would
+    // otherwise execute in another operator's session.
+    function describeInto(el, sources) {
+        el.textContent = '';
         const names = Object.keys(sources || {});
-        if (!names.length) return 'A monitored source is silent.';
-        return names.map((name) => {
+        if (!names.length) {
+            el.textContent = 'A monitored source is silent.';
+            return;
+        }
+        names.forEach((name, i) => {
+            if (i) el.appendChild(document.createElement('br'));
+            const strong = document.createElement('strong');
+            strong.textContent = name;
+            el.appendChild(strong);
             const src = sources[name] || {};
-            const secs = Number(src.duration_seconds);
-            const held = Number.isFinite(secs) && secs > 0
-                ? ` for ${secs >= 60
-                    ? `${Math.round(secs / 60)} min`
-                    : `${Math.round(secs)} s`}`
-                : '';
-            return `<strong>${name}</strong>: ${src.detail || 'silent'}${held}`;
-        }).join('<br>');
+            el.appendChild(document.createTextNode(
+                `: ${src.detail || 'silent'}${heldFor(src.duration_seconds)}`
+            ));
+        });
+    }
+
+    function setButton(label, iconClass) {
+        ackBtn.textContent = '';
+        const icon = document.createElement('i');
+        icon.className = `${iconClass} me-1`;
+        ackBtn.appendChild(icon);
+        ackBtn.appendChild(document.createTextNode(label));
     }
 
     function render(data) {
@@ -53,15 +77,38 @@
             return;
         }
         banner.style.display = '';
-        detail.innerHTML = describe(data.sources)
-            + (data.acknowledged
-                ? '<br><span class="text-warning"><i class="fas fa-bell-slash me-1"></i>'
-                  + 'Buzzer acknowledged &mdash; indication stays until audio returns</span>'
-                : '');
+        describeInto(detail, data.sources);
+
+        if (data.acknowledged) {
+            detail.appendChild(document.createElement('br'));
+            const note = document.createElement('span');
+            note.className = 'text-warning';
+            const icon = document.createElement('i');
+            icon.className = 'fas fa-bell-slash me-1';
+            note.appendChild(icon);
+            note.appendChild(document.createTextNode(
+                'Buzzer acknowledged \u2014 indication stays until audio returns'
+            ));
+            detail.appendChild(note);
+        }
+
+        // Carry the episode so acknowledging cannot land on a newer outage
+        // than the one this page is showing.
+        ackBtn.dataset.episode = data.episode || '';
         ackBtn.dataset.acknowledged = data.acknowledged ? 'true' : 'false';
-        ackBtn.innerHTML = data.acknowledged
-            ? '<i class="fas fa-bell me-1"></i>Un-acknowledge (let it sound)'
-            : '<i class="fas fa-bell-slash me-1"></i>Acknowledge / silence buzzer';
+
+        // Acknowledging needs system.configure; a viewer still sees the
+        // alarm but is not offered a control that would only 403.
+        if (data.can_acknowledge === false) {
+            ackBtn.style.display = 'none';
+            return;
+        }
+        ackBtn.style.display = '';
+        if (data.acknowledged) {
+            setButton('Un-acknowledge (let it sound)', 'fas fa-bell');
+        } else {
+            setButton('Acknowledge / silence buzzer', 'fas fa-bell-slash');
+        }
     }
 
     async function poll() {
@@ -82,7 +129,10 @@
             const resp = await fetch('/api/audio/dead-air/acknowledge', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ acknowledged: !wasAcked }),
+                body: JSON.stringify({
+                    acknowledged: !wasAcked,
+                    episode: ackBtn.dataset.episode || undefined,
+                }),
             });
             const data = await resp.json();
             if (window.showToast) {

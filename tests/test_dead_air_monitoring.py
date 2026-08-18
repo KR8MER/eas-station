@@ -425,7 +425,8 @@ def test_detection_settings_are_not_on_the_hardware_page():
     hardware = HARDWARE_HTML.read_text(encoding="utf-8")
     for field in ("dead_air_enabled", "dead_air_duration_seconds",
                   "dead_air_level_threshold_db",
-                  "dead_air_flatness_threshold_pct"):
+                  "dead_air_flatness_threshold_pct",
+                  "dead_air_detect_open_carrier"):
         assert field not in hardware, f"{field} should have moved off Hardware"
 
 
@@ -436,7 +437,11 @@ def test_output_wiring_stays_on_the_hardware_page():
         assert field in hardware, f"{field} belongs on Hardware"
 
     audio = AUDIO_HTML.read_text(encoding="utf-8")
-    assert "dead_air_buzzer_gpio_pin" not in audio
+    for field in _OUTPUT_FIELDS:
+        assert field not in audio, f"{field} should remain on Hardware only"
+    assert "deadAirAckBtn" not in audio, (
+        "acknowledging belongs on the health dashboard, not a settings form"
+    )
 
 
 def test_acknowledge_lives_on_the_health_dashboard():
@@ -487,3 +492,89 @@ def test_both_settings_pages_are_reachable_from_the_navigation():
 
     assert "/admin/audio-sources" in hrefs
     assert "hardware.hardware_settings_page" in endpoints
+
+
+# --------------------------------------------------------------------------
+# Fixes from code review on PR #2417
+# --------------------------------------------------------------------------
+
+ALARM_JS = ROOT / "static" / "js" / "admin" / "dead-air-alarm.js"
+SETTINGS_JS = ROOT / "static" / "js" / "admin" / "dead-air-settings.js"
+
+
+def test_operator_supplied_names_are_never_interpolated_into_html():
+    """Source names are free text and reach the browser through Redis.
+
+    ``AudioSource.name`` has no markup validation, so a source named with
+    a tag would execute in another operator's session if these renderers
+    used innerHTML. Both build text nodes instead.
+    """
+    for path in (ALARM_JS, SETTINGS_JS):
+        src = path.read_text(encoding="utf-8")
+        code = "\n".join(
+            line for line in src.splitlines()
+            if not line.strip().startswith(("//", "*", "/*"))
+        )
+        assert "innerHTML" not in code, f"{path.name} must not assign innerHTML"
+        assert "textContent" in code
+
+
+def test_saving_is_blocked_until_settings_load():
+    """A failed load must not let blank inputs overwrite stored thresholds.
+
+    The numeric fields are not server-rendered, so an empty form posts
+    Number('') == 0, which the API clamps to each field's minimum -- a
+    silent rewrite of a 20 s hold-off to 1 s.
+    """
+    src = SETTINGS_JS.read_text(encoding="utf-8")
+    assert "let loaded = false;" in src
+    assert "els.save.disabled = true;" in src
+    assert "if (!loaded) return;" in src
+
+
+def test_status_is_readable_by_the_dashboard_audience():
+    """The API must not be stricter than the page that renders it.
+
+    The navigation registry gates Audio Health on the view-role trio. When
+    the status endpoint required system.configure instead, a radio watcher
+    could open the dashboard while every poll 403'd, so an active alarm
+    was invisible to exactly the people meant to watch for it.
+    """
+    src = (ROOT / "webapp" / "admin" / "audio_ingest"
+           / "routes_dead_air.py").read_text(encoding="utf-8")
+    status = src.split("def audio_dead_air_status", 1)[0]
+    assert "require_any_permission" in status
+    for perm in ("alerts.view", "receivers.view", "logs.view"):
+        assert perm in status, f"{perm} should be able to read dead-air status"
+    # Acknowledging stays privileged, and the response tells the UI so it
+    # can hide the control instead of offering a button that only 403s.
+    assert "can_acknowledge" in src
+    ack_decorators = src.split("def audio_dead_air_acknowledge", 1)[0]
+    ack_decorators = ack_decorators.rsplit("@audio_ingest_bp.route", 1)[1]
+    assert "require_permission('system.configure')" in ack_decorators
+
+
+def test_acknowledgement_is_bound_to_an_episode():
+    """An unbound ack would sit in Redis and mute the *next* outage.
+
+    The publisher mints an episode id when the alarm goes active and drops
+    it on recovery; the ack stores that id, and both the API and the GPIO
+    reader compare against it.
+    """
+    routes = (ROOT / "webapp" / "admin" / "audio_ingest"
+              / "routes_dead_air.py").read_text(encoding="utf-8")
+    ack = routes.split("def audio_dead_air_acknowledge", 1)[1]
+    assert "if not state.get('active')" in ack, (
+        "acknowledging with no active alarm must be refused"
+    )
+    assert "DEAD_AIR_ACK_KEY, 86400, episode" in ack
+
+    service = (ROOT / "eas_monitoring_service.py").read_text(encoding="utf-8")
+    assert '"episode": _dead_air_episode' in service
+    assert "_dead_air_episode = None" in service
+
+    gpio = (ROOT / "services" / "gpio"
+            / "alert_indicators.py").read_text(encoding="utf-8")
+    assert "ack == episode" in gpio, (
+        "the buzzer must only stay silent for the episode that was acknowledged"
+    )
