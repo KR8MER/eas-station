@@ -27,14 +27,21 @@ See also:
 
 ### `check_sdr_status.py`
 
-Diagnostic tool to check SDR receiver and RadioManager status.
+Diagnostic tool to check SDR receiver and pipeline status. A thin CLI
+wrapper around `app_core/radio/diagnostics_report.py` -- the same
+checklist the web UI's "Run Full Diagnostics" button runs (SDR Diagnostics
+page, `POST /api/radio/diagnostics/run-check`), so the two surfaces can't
+drift apart.
 
 **Usage:**
 ```bash
 python3 scripts/diagnostics/check_sdr_status.py
 ```
 
-**Purpose:** Verifies SDR audio pipeline health, displays receiver configuration, and checks if receivers are locked to signals.
+**Purpose:** Verifies SDR audio pipeline health via the Redis state the
+`eas-station-sdr.service` process publishes (heartbeat, per-receiver
+metrics, ring-buffer overflow/underflow, spectrum cache freshness) and
+checks database receiver configuration for sanity.
 
 ---
 

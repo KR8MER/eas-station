@@ -28,6 +28,8 @@ from typing import Any
 
 from flask import Flask, jsonify, request
 
+from app_core.config.redis_config import RedisChannels
+
 from app_core.models import RadioReceiver
 
 from . import deps
@@ -138,8 +140,14 @@ def register(app: Flask, route_logger) -> None:
                 from app_core.redis_client import get_redis_client
                 redis_client = get_redis_client()
 
-                # Try to read pre-computed spectrum from Redis
-                spectrum_key = f"eas:spectrum:{receiver_identifier}"
+                # Try to read pre-computed spectrum from Redis. Shares
+                # RedisChannels.SPECTRUM_PREFIX with sdr_hardware_service.py's
+                # publisher -- these used to be two independently hardcoded
+                # keys ("eas:spectrum:" here, "sdr:spectrum:" there) that
+                # never matched, so this fast path always missed and every
+                # request fell through to the slow command-queue fallback
+                # below.
+                spectrum_key = f"{RedisChannels.SPECTRUM_PREFIX}{receiver_identifier}"
                 spectrum_raw = redis_client.get(spectrum_key)
 
                 if spectrum_raw:

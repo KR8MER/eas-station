@@ -52,6 +52,7 @@ from . import (
     routes_receiver_control,
     routes_receivers,
     routes_signal,
+    routes_trends,
     sdr_client,
     serialization,
     sync,
@@ -75,6 +76,7 @@ _ROUTE_MODULES = (
     routes_diagnostics_capture,
     routes_diagnostics_waterfall,
     routes_diagnostics_analyze,
+    routes_trends,
 )
 
 
@@ -99,6 +101,7 @@ __all__ = [
     "deps",
     "payload",
     "register",
+    "routes_trends",
     "sdr_client",
     "serialization",
     "sync",

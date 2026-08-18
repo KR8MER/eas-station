@@ -690,6 +690,31 @@
                             </div>
                         </div>
 
+                        <!-- SDR Diagnostics -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="sdrDiagnosticsHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sdrDiagnosticsCollapse">
+                                    <i class="fas fa-stethoscope me-2"></i>SDR Diagnostics
+                                </button>
+                            </h2>
+                            <div id="sdrDiagnosticsCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p>Deep-dive tools for troubleshooting a receiver's RF front-end and audio pipeline, in one place per receiver.</p>
+                                    <ul>
+                                        <li><strong>Live Waterfall:</strong> a continuously scrolling time-vs-frequency-vs-power view, updated roughly twice a second.</li>
+                                        <li><strong>Spectrum Scope:</strong> a classic frequency-vs-power line trace with a peak-hold overlay, sharing the waterfall's data feed so running both costs nothing extra.</li>
+                                        <li><strong>Historical Trends:</strong> charts of signal strength, lock percentage, sample-rate health, and buffer overflow/underflow over a selectable window (1h/6h/24h/7d), plus an always-on sparkline strip for an at-a-glance read.</li>
+                                        <li><strong>Run Full Diagnostics:</strong> a pass/warn/fail checklist covering the SDR service heartbeat, per-receiver health, ring-buffer drops, and spectrum-cache freshness — the same checks available from the command line via <code>scripts/diagnostics/check_sdr_status.py</code>.</li>
+                                        <li><strong>Snapshot Waterfall &amp; Run Diagnostic:</strong> capture a short IQ window and get a clipping/front-end-health verdict plus a subcarrier inventory (pilot, stereo, RBDS, SCA).</li>
+                                    </ul>
+                                    <div class="alert alert-light">
+                                        <i class="fas fa-link me-2"></i>
+                                        <strong>Access:</strong> Navigate to <strong>Diagnostics &rarr; SDR Diagnostics</strong> or visit <code>/admin/radio/diagnostics</code>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Display Controls -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="displaysHeading">

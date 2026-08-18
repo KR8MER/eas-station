@@ -28,114 +28,50 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(script_dir))
 sys.path.insert(0, project_root)
 
+_STATUS_SYMBOLS = {
+    "pass": "✓",   # check mark
+    "warn": "⚠",   # warning triangle
+    "fail": "✗",   # cross mark
+    "info": "ℹ",   # info
+}
+
+
 def main():
-    """Check SDR receiver and RadioManager status."""
+    """Run the shared SDR diagnostics checklist and print it.
+
+    This is a thin wrapper around ``app_core.radio.diagnostics_report`` --
+    the same function the web UI's "Run Full Diagnostics" button calls
+    (``POST /api/radio/diagnostics/run-check``). Keeping the checks in one
+    place means the CLI and the web page can never silently drift apart.
+    """
     print("=" * 70)
     print("SDR Audio Pipeline Diagnostic Tool")
     print("=" * 70)
     print()
 
     # Import after path is set
-    from app import app, db
+    from app import app
     from app_core.models import RadioReceiver
-    from app_core.extensions import get_radio_manager
+    from app_core.extensions import get_redis_client
+    from app_core.radio.diagnostics_report import overall_status, run_sdr_diagnostics_checks
 
     with app.app_context():
-        print("1. Checking database for configured receivers...")
-        print("-" * 70)
         receivers = RadioReceiver.query.all()
-        print(f"   Total receivers in database: {len(receivers)}")
+        try:
+            redis_client = get_redis_client()
+        except Exception:
+            redis_client = None
 
-        if not receivers:
-            print("   ⚠️  WARNING: No receivers configured in database!")
-            print("   → Add a receiver at /settings/radio to get started")
-            print()
-            return
+        checks = run_sdr_diagnostics_checks(receivers, redis_client)
 
-        for r in receivers:
-            print(f"\n   Receiver: {r.display_name} ({r.identifier})")
-            print(f"     - ID: {r.id}")
-            print(f"     - Driver: {r.driver}")
-            print(f"     - Frequency: {r.frequency_hz / 1e6:.3f} MHz")
-            print(f"     - Enabled: {r.enabled}")
-            print(f"     - Auto-start: {r.auto_start}")
-            print(f"     - Modulation: {r.modulation_type}")
+        for check in checks:
+            symbol = _STATUS_SYMBOLS.get(check["status"], "?")
+            print(f"[{symbol}] {check['label']}: {check['message']}")
 
         print()
-        print("2. Checking RadioManager...")
         print("-" * 70)
-
-        radio_manager = get_radio_manager()
-        print(f"   RadioManager instance: {radio_manager}")
-        print(f"   Registered drivers: {list(radio_manager.available_drivers().keys())}")
-
-        # Check internal receivers dict
-        if hasattr(radio_manager, '_receivers'):
-            print(f"   Loaded receiver instances: {len(radio_manager._receivers)}")
-            if radio_manager._receivers:
-                for identifier, receiver_instance in radio_manager._receivers.items():
-                    status = receiver_instance.get_status()
-                    print(f"\n     {identifier}:")
-                    print(f"       - Running: {receiver_instance._running.is_set() if hasattr(receiver_instance, '_running') else 'unknown'}")
-                    print(f"       - Locked: {status.locked}")
-                    print(f"       - Signal strength: {status.signal_strength}")
-                    print(f"       - Last error: {status.last_error or 'None'}")
-
-                    # Check if samples are available
-                    if hasattr(receiver_instance, 'get_samples'):
-                        samples = receiver_instance.get_samples(num_samples=100)
-                        if samples is not None:
-                            print(f"       - Sample buffer: ✓ Working ({len(samples)} samples)")
-                        else:
-                            print(f"       - Sample buffer: ✗ No samples available")
-                    else:
-                        print(f"       - Sample buffer: ✗ get_samples() not available")
-            else:
-                print("   ⚠️  WARNING: RadioManager has no loaded receivers!")
-                print("   → This means receivers in database haven't been initialized")
-                print("   → Try restarting the application")
-
-        print()
-        print("3. Summary")
+        print(f"Overall status: {overall_status(checks).upper()}")
         print("-" * 70)
-
-        enabled_receivers = [r for r in receivers if r.enabled]
-        auto_start_receivers = [r for r in enabled_receivers if r.auto_start]
-
-        print(f"   Database receivers: {len(receivers)}")
-        print(f"   Enabled receivers: {len(enabled_receivers)}")
-        print(f"   Auto-start enabled: {len(auto_start_receivers)}")
-
-        if hasattr(radio_manager, '_receivers'):
-            running_receivers = sum(1 for r in radio_manager._receivers.values()
-                                   if hasattr(r, '_running') and r._running.is_set())
-            locked_receivers = sum(1 for r in radio_manager._receivers.values()
-                                  if r.get_status().locked)
-
-            print(f"   RadioManager instances: {len(radio_manager._receivers)}")
-            print(f"   Running receivers: {running_receivers}")
-            print(f"   Locked receivers: {locked_receivers}")
-
-            print()
-            if locked_receivers > 0 and len(radio_manager._receivers) > 0:
-                print("   ✓ Status: Audio pipeline appears healthy")
-                print("   → Receivers are locked and should be producing data")
-                print("   → Check /settings/radio for waterfall display")
-            elif len(radio_manager._receivers) == 0 and len(enabled_receivers) > 0:
-                # In separated architecture, RadioManager runs in audio-service process
-                print("   ℹ Status: Radio processing handled by audio-service process")
-                print("   → SDR receivers run in the SDR hardware service process")
-                print("   → Check service logs: journalctl -u eas-station-sdr.service -f")
-            elif len(radio_manager._receivers) == 0:
-                print("   ℹ Status: No receivers configured or enabled")
-                print("   → Add receivers at /settings/radio to get started")
-            elif running_receivers == 0:
-                print("   ✗ Status: Receivers configured but not running")
-                print("   → Check receiver configuration and auto_start setting")
-            else:
-                print("   ⚠️  Status: Receivers running but not locked to signal")
-                print("   → Check antenna connection and frequency settings")
-
         print()
         print("=" * 70)
         print("Diagnostic complete")
