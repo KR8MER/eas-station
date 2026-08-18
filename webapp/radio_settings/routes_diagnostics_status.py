@@ -26,8 +26,10 @@ from typing import Any
 
 from flask import Flask, jsonify
 
+from app_core.auth.roles import require_permission
 from app_core.cache import cache
 from app_core.models import RadioReceiver
+from app_core.radio.diagnostics_report import overall_status, run_sdr_diagnostics_checks
 
 from . import deps
 from .serialization import _receiver_to_dict
@@ -301,6 +303,42 @@ def register(app: Flask, route_logger) -> None:
                 "health_status": "error",
                 "health_message": f"Diagnostic check failed: {exc}"
             }), 500
+
+    @app.route("/api/radio/diagnostics/run-check", methods=["POST"])
+    @require_permission('receivers.configure')
+    def api_radio_diagnostics_run_check() -> Any:
+        """Run the "Run Full Diagnostics" checklist and return it as JSON.
+
+        Shares its check logic with ``scripts/diagnostics/check_sdr_status.py``
+        via ``app_core.radio.diagnostics_report`` so the CLI and web surfaces
+        can never drift. See that module's docstring for what each check
+        actually verifies and why (the separated-architecture SDR service
+        publishes its health to Redis; this checklist reads that, not a
+        local in-process RadioManager).
+        """
+        try:
+            receivers = RadioReceiver.query.all()
+            try:
+                redis_client = deps.get_redis_client()
+            except Exception as redis_exc:
+                route_logger.debug("Run-check: could not get Redis client: %s", redis_exc)
+                redis_client = None
+
+            checks = run_sdr_diagnostics_checks(receivers, redis_client)
+            return jsonify({
+                "timestamp": time.time(),
+                "overall_status": overall_status(checks),
+                "checks": checks,
+            })
+        except Exception as exc:
+            route_logger.error("Failed to run SDR diagnostics checklist: %s", exc, exc_info=True)
+            deps._log_radio_event(
+                "ERROR",
+                f"Failed to run SDR diagnostics checklist: {exc}",
+                module_suffix="diagnostics",
+                details={"error": str(exc)},
+            )
+            return jsonify({"error": str(exc)}), 500
 
 
 __all__ = ["register"]

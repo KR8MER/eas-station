@@ -29,7 +29,7 @@ flowchart TB
     subgraph redis["REDIS"]
         direction LR
         channels["Channels<br/>• <code>sdr:samples:{receiver_id}</code>"]
-        keys["Keys<br/>• <code>sdr:metrics</code> (health)<br/>• <code>sdr:spectrum:{id}</code> (waterfall)<br/>• <code>sdr:ring_buffer:{id}</code> (stats)<br/>• <code>sdr:heartbeat</code><br/>• <code>sdr:commands</code> (control queue)<br/>• <code>sdr:command_result:{id}</code>"]
+        keys["Keys<br/>• <code>sdr:metrics</code> (health)<br/>• <code>eas:spectrum:{id}</code> (waterfall/scope, 5s TTL)<br/>• <code>sdr:ring_buffer:{id}</code> (stats)<br/>• <code>sdr:heartbeat</code><br/>• <code>sdr:trends:{id}</code> / <code>sdr:trends:{id}:5m</code> (historical archive)<br/>• <code>sdr:commands</code> (control queue)<br/>• <code>sdr:command_result:{id}</code>"]
     end
 
     subgraph audio["EAS MONITORING SERVICE — <code>eas_monitoring_service.py</code><br/>No USB access required — receives samples via Redis"]
@@ -136,10 +136,10 @@ Format: JSON with zlib+base64 encoded samples
 }
 ```
 
-### Spectrum Data (Waterfall)
+### Spectrum Data (Waterfall / Spectrum Scope)
 
 ```
-Key: sdr:spectrum:{receiver_id}
+Key: eas:spectrum:{receiver_id}    (RedisChannels.SPECTRUM_PREFIX, app_core/config/redis_config.py)
 TTL: 5 seconds
 
 {
@@ -152,6 +152,35 @@ TTL: 5 seconds
   "status": "available"
 }
 ```
+
+Read by `/api/radio/spectrum/<id>` (`webapp/radio_settings/routes_signal.py`),
+which feeds both the SDR Diagnostics page's Live Waterfall and Spectrum
+Scope views (they share one 500ms poll loop client-side). Falls back to a
+slower Redis command-queue round trip if this key has expired.
+
+### Historical Trend Archive (SDR Diagnostics "Historical Trends")
+
+```
+Key: sdr:trends:{receiver_id}        raw tier,  10s cadence, cap 360  (1h)
+Key: sdr:trends:{receiver_id}:5m     rollup tier, 5min buckets, cap 2016 (7d)
+
+# Each list entry (LPUSH'd newest-first) is one JSON sample/bucket:
+{
+  "t": 1701532800123,
+  "signal_strength": -42.0,
+  "locked": 1.0,                  // raw tier; rollup tier stores "locked_pct" (0-100) instead
+  "sample_rate_ratio": 1.0,       // effective / configured sample rate
+  "overflow_count": 0.0,          // delta since the previous sample (raw) or bucket sum (rollup)
+  "underflow_count": 0.0
+}
+```
+
+Sampled every 10s from `publish_samples_and_metrics()` (own wall-clock
+throttle, same discipline as the 100ms spectrum throttle) by
+`app_core/radio/trends.py`, modeled on `services/gps/trends.py`'s
+bucket/rollup pattern but with 2 tiers instead of GPS's 4. Read by
+`GET /api/radio/diagnostics/trends/<id>?window=1h|6h|24h|7d`
+(`webapp/radio_settings/routes_trends.py`).
 
 ### Health Metrics
 
@@ -289,10 +318,12 @@ Solutions:
 
 2. Check spectrum key:
    ```bash
-   redis-cli keys 'sdr:spectrum:*'
+   redis-cli keys 'eas:spectrum:*'
    ```
 
-3. Verify receiver is locked:
+3. Run the full diagnostics checklist (heartbeat, per-receiver health,
+   ring-buffer drops, spectrum-cache freshness — also available from the
+   web UI's "Run Full Diagnostics" button on `/admin/radio/diagnostics`):
    ```bash
    python3 scripts/diagnostics/check_sdr_status.py
    ```

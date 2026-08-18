@@ -10,6 +10,7 @@
 {% set header_icon = 'fas fa-stethoscope' %}
 {% set header_title = 'SDR Diagnostics' %}
 {% set header_subtitle = 'Real-time status of receivers, RadioManager, and audio pipeline' %}
+{% set header_variant = 'gradient' %}
 {% include 'components/page_header.html' %}
 
 <div class="container py-4">
@@ -17,9 +18,23 @@
         <a href="/admin/radio" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left"></i> Back to Settings
         </a>
+        <button class="btn btn-outline-primary" id="runFullDiagnosticsBtn" title="Run a full checklist against the SDR service's live Redis state: heartbeat freshness, per-receiver running/locked/sample status, ring-buffer overflow/underflow, and spectrum-cache health. The same checks scripts/diagnostics/check_sdr_status.py runs from the CLI.">
+            <i class="fas fa-clipboard-check"></i> Run Full Diagnostics
+        </button>
         <button class="btn btn-primary" id="refreshBtn">
             <i class="fas fa-sync"></i> Refresh
         </button>
+    </div>
+
+    <!-- Run Full Diagnostics results -->
+    <div class="card mb-4 shadow-sm border-0" id="fullDiagnosticsCard" style="display:none;">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-clipboard-check me-2"></i><strong>Full Diagnostics Checklist</strong></span>
+            <span class="badge" id="fullDiagnosticsOverallBadge">—</span>
+        </div>
+        <div class="card-body">
+            <ul class="list-group list-group-flush" id="fullDiagnosticsList"></ul>
+        </div>
     </div>
 
     <!-- Overall Health Status -->
@@ -424,6 +439,7 @@ sudo systemctl restart eas-station</code></pre>
 </div>
 
 <script src="{{ url_for('static', filename='vendor/chartjs/chart-v3.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/radio_diagnostics_trends.js') }}"></script>
 <script>
 (() => {
     let autoRefreshHandle = null;
@@ -694,6 +710,18 @@ sudo systemctl restart eas-station</code></pre>
                                 `) : ''}
                             </div>
                         </div>
+                        ${receiver.receiver_id ? `
+                            <div class="row g-2 mt-1 trends-sparkline-strip" data-sparkline-for="${receiver.receiver_id}">
+                                <div class="col-6">
+                                    <div class="small text-muted mb-1">Signal Strength (1h)</div>
+                                    <canvas data-sparkline-canvas="signal" data-receiver-id="${receiver.receiver_id}" style="width:100%;height:36px;display:block;"></canvas>
+                                </div>
+                                <div class="col-6">
+                                    <div class="small text-muted mb-1">Buffer Drops (1h)</div>
+                                    <canvas data-sparkline-canvas="drops" data-receiver-id="${receiver.receiver_id}" style="width:100%;height:36px;display:block;"></canvas>
+                                </div>
+                            </div>
+                        ` : ''}
                         <div class="mt-2">
                             <div class="d-flex flex-wrap gap-2" role="group">
                                 <a href="/api/radio/spectrum/by-identifier/${identifier}" target="_blank" class="btn btn-sm btn-outline-primary">
@@ -709,6 +737,12 @@ sudo systemctl restart eas-station</code></pre>
                                     <button type="button" class="btn btn-sm btn-outline-info" data-action="live-waterfall" data-receiver-id="${receiver.receiver_id}" title="Start/stop a live, continuously-updating waterfall. New FFT rows scroll down every ~500 ms, using the same blue→green→yellow→red dBFS colour ramp as the Snapshot view. Useful for watching a signal change in real time (e.g. fades, drift, interference). Data source: /api/radio/spectrum/&lt;id&gt; (published by the SDR service).">
                                         <i class="fas fa-water"></i> <span data-live-wf-label="${receiver.receiver_id}">Live Waterfall</span>
                                     </button>
+                                    <button type="button" class="btn btn-sm btn-outline-info" data-action="spectrum-scope" data-receiver-id="${receiver.receiver_id}" title="Start/stop a live spectrum scope -- a classic frequency-vs-power line trace (as opposed to the waterfall's time-vs-frequency-vs-power heatmap), with a peak-hold overlay. Shares the same ~500 ms poll as Live Waterfall, so running both at once costs no extra requests.">
+                                        <i class="fas fa-chart-line"></i> <span data-scope-label="${receiver.receiver_id}">Spectrum Scope</span>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" data-action="historical-trends" data-receiver-id="${receiver.receiver_id}" title="Show historical charts for this receiver: signal strength, lock %, sample-rate health, and buffer overflow/underflow counts, over a selectable window (1h/6h/24h/7d). Backed by a Redis trend archive sampled every 10s.">
+                                        <i class="fas fa-chart-area"></i> <span data-trends-label="${receiver.receiver_id}">Historical Trends</span>
+                                    </button>
                                     <button type="button" class="btn btn-sm btn-outline-primary" data-action="run-diagnostic" data-receiver-id="${receiver.receiver_id}" title="Capture a 2 s IQ window and run a full diagnostic report: front-end health (saturation, DC offset, click rate, channel-filter rolloff) plus a subcarrier inventory (pilot, stereo, RBDS, SCA #1, DARC, SCA #2). Answers 'is RBDS being suppressed by the rtl-sdr?' and 'what signals are on the air that we're discarding?'">
                                         <i class="fas fa-microscope"></i> Run Diagnostic
                                     </button>
@@ -722,6 +756,8 @@ sudo systemctl restart eas-station</code></pre>
                             </div>
                             ${receiver.receiver_id ? `
                                 <div class="waterfall-container mt-2" data-waterfall-for="${receiver.receiver_id}" style="display:none;"></div>
+                                <div class="spectrum-scope-container mt-2" data-scope-for="${receiver.receiver_id}" style="display:none;"></div>
+                                <div class="trends-container mt-2" data-trends-for="${receiver.receiver_id}" style="display:none;"></div>
                                 <div class="diagnostic-container mt-2" data-diagnostic-for="${receiver.receiver_id}" style="display:none;"></div>
                             ` : ''}
                         </div>
@@ -741,17 +777,27 @@ sudo systemctl restart eas-station</code></pre>
         // ``container.innerHTML = html`` assignment below.
         const preservedPanels = [];
         for (const panel of container.querySelectorAll(
-            '.diagnostic-container, .waterfall-container'
+            '.diagnostic-container, .waterfall-container, .spectrum-scope-container, .trends-container'
         )) {
             // Fast-path: skip empty panels without touching innerHTML.
             if (!panel.firstChild) continue;
-            const isDiag = panel.classList.contains('diagnostic-container');
-            const recvId = isDiag
-                ? panel.getAttribute('data-diagnostic-for')
-                : panel.getAttribute('data-waterfall-for');
+            let kind, recvId;
+            if (panel.classList.contains('diagnostic-container')) {
+                kind = 'diag';
+                recvId = panel.getAttribute('data-diagnostic-for');
+            } else if (panel.classList.contains('spectrum-scope-container')) {
+                kind = 'scope';
+                recvId = panel.getAttribute('data-scope-for');
+            } else if (panel.classList.contains('trends-container')) {
+                kind = 'trends';
+                recvId = panel.getAttribute('data-trends-for');
+            } else {
+                kind = 'wf';
+                recvId = panel.getAttribute('data-waterfall-for');
+            }
             if (!recvId) continue;
             preservedPanels.push({
-                kind: isDiag ? 'diag' : 'wf',
+                kind,
                 recvId,
                 html: panel.innerHTML,
                 display: panel.style.display,
@@ -760,12 +806,15 @@ sudo systemctl restart eas-station</code></pre>
 
         container.innerHTML = html;
 
-        // Restore any preserved diagnostic / waterfall panels.
+        // Restore any preserved diagnostic / waterfall / scope / trends panels.
+        const selectorFor = {
+            diag: (id) => `.diagnostic-container[data-diagnostic-for="${CSS.escape(id)}"]`,
+            wf: (id) => `.waterfall-container[data-waterfall-for="${CSS.escape(id)}"]`,
+            scope: (id) => `.spectrum-scope-container[data-scope-for="${CSS.escape(id)}"]`,
+            trends: (id) => `.trends-container[data-trends-for="${CSS.escape(id)}"]`,
+        };
         for (const state of preservedPanels) {
-            const selector = state.kind === 'diag'
-                ? `.diagnostic-container[data-diagnostic-for="${CSS.escape(state.recvId)}"]`
-                : `.waterfall-container[data-waterfall-for="${CSS.escape(state.recvId)}"]`;
-            const panel = container.querySelector(selector);
+            const panel = container.querySelector(selectorFor[state.kind](state.recvId));
             if (panel) {
                 panel.innerHTML = state.html;
                 if (state.display) panel.style.display = state.display;
@@ -1091,6 +1140,74 @@ sudo systemctl restart eas-station</code></pre>
         }
     });
 
+    // ---- Run Full Diagnostics -------------------------------------------
+    //
+    // Runs the shared checklist in app_core/radio/diagnostics_report.py
+    // (also used by scripts/diagnostics/check_sdr_status.py) against the
+    // SDR service's live Redis state: heartbeat freshness, per-receiver
+    // running/locked/samples, ring-buffer overflow/underflow, and spectrum
+    // cache health. One-shot on click -- not part of the auto-refresh loop,
+    // since it's a deliberate "check everything now" action, not ambient
+    // status.
+    const runFullDiagnosticsBtn = document.getElementById('runFullDiagnosticsBtn');
+    const fullDiagnosticsCard = document.getElementById('fullDiagnosticsCard');
+    const fullDiagnosticsList = document.getElementById('fullDiagnosticsList');
+    const fullDiagnosticsOverallBadge = document.getElementById('fullDiagnosticsOverallBadge');
+
+    const DIAG_STATUS_META = {
+        pass: { icon: 'fa-circle-check', text: 'text-success', badge: 'bg-success', label: 'PASS' },
+        warn: { icon: 'fa-triangle-exclamation', text: 'text-warning', badge: 'bg-warning text-dark', label: 'WARN' },
+        fail: { icon: 'fa-circle-xmark', text: 'text-danger', badge: 'bg-danger', label: 'FAIL' },
+        info: { icon: 'fa-circle-info', text: 'text-muted', badge: 'bg-secondary', label: 'INFO' },
+    };
+
+    if (runFullDiagnosticsBtn) {
+        runFullDiagnosticsBtn.addEventListener('click', async () => {
+            const originalHtml = runFullDiagnosticsBtn.innerHTML;
+            runFullDiagnosticsBtn.disabled = true;
+            runFullDiagnosticsBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running…';
+            fullDiagnosticsCard.style.display = '';
+            fullDiagnosticsList.innerHTML = '<li class="list-group-item text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Running checks…</li>';
+
+            try {
+                const resp = await fetch('/api/radio/diagnostics/run-check', { method: 'POST' });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    throw new Error(data.error || `HTTP ${resp.status}`);
+                }
+
+                const overallMeta = DIAG_STATUS_META[data.overall_status] || DIAG_STATUS_META.info;
+                fullDiagnosticsOverallBadge.className = `badge ${overallMeta.badge}`;
+                fullDiagnosticsOverallBadge.textContent = overallMeta.label;
+
+                const checks = Array.isArray(data.checks) ? data.checks : [];
+                fullDiagnosticsList.innerHTML = checks.map(check => {
+                    const meta = DIAG_STATUS_META[check.status] || DIAG_STATUS_META.info;
+                    return `
+                        <li class="list-group-item d-flex align-items-start gap-2">
+                            <i class="fas ${meta.icon} ${meta.text} mt-1" aria-hidden="true"></i>
+                            <div>
+                                <strong>${check.label}</strong>
+                                <div class="small text-muted">${check.message}</div>
+                            </div>
+                        </li>
+                    `;
+                }).join('') || '<li class="list-group-item text-muted">No checks ran.</li>';
+            } catch (error) {
+                fullDiagnosticsOverallBadge.className = 'badge bg-danger';
+                fullDiagnosticsOverallBadge.textContent = 'ERROR';
+                fullDiagnosticsList.innerHTML = `
+                    <li class="list-group-item text-danger">
+                        <i class="fas fa-circle-xmark me-2"></i>Failed to run diagnostics: ${error.message}
+                    </li>
+                `;
+            } finally {
+                runFullDiagnosticsBtn.disabled = false;
+                runFullDiagnosticsBtn.innerHTML = originalHtml;
+            }
+        });
+    }
+
     // Delegated event listener for "Capture IQ" buttons. Triggers a
     // server-side write of complex64 .npy samples and then opens the
     // download URL so the browser streams the file. Single-use: the
@@ -1358,6 +1475,12 @@ sudo systemctl restart eas-station</code></pre>
     //   * History is stored as a single Uint8ClampedArray rather than a
     //     list of rows so we can `set()` whole slices for the scroll-up
     //     step (which is the hot path at 2 Hz).
+    //
+    // Spectrum Scope shares this same state Map and polling loop (see
+    // "Spectrum Scope" section below) — each entry tracks independent
+    // waterfallActive/scopeActive flags so either view can be toggled on
+    // its own, but the underlying fetch/interval only runs once per
+    // receiver no matter how many views are active.
     const liveWaterfallState = new Map();
     const LIVE_WF_HEIGHT = 200;       // rows of history
     // Poll interval. The SDR service publishes at ~10 Hz (100 ms), so we
@@ -1519,25 +1642,238 @@ sudo systemctl restart eas-station</code></pre>
         state.axisEl.appendChild(right);
     }
 
-    async function liveWfTick(receiverId) {
-        const state = liveWaterfallState.get(receiverId);
-        if (!state || !state.running) return;
+    // ---- Spectrum Scope ---------------------------------------------------
+    //
+    // A classic SDR analyser view: a single frequency-vs-power line trace,
+    // as opposed to the waterfall's time-vs-frequency-vs-power heatmap.
+    // Draws from the exact same /api/radio/spectrum/<id> payload the
+    // waterfall polls (see liveSpectrumTick() below) — when both views are
+    // active for the same receiver, this costs zero extra requests.
+    const SCOPE_PEAK_DECAY = 0.02;   // peak-hold trace fades this much per tick
 
-        // If the receiver panel was re-rendered, our canvas is gone — find
-        // the resurrected container and rebuild the panel in place.
-        const container = liveWfFindContainer(receiverId);
-        if (!container) {
-            // Receiver card is no longer visible (e.g. filtered out or
-            // removed). Stop silently; the user can re-click to resume.
-            liveWfStop(receiverId);
+    function scopeFindContainer(receiverId) {
+        return document.querySelector(
+            `.spectrum-scope-container[data-scope-for="${CSS.escape(receiverId)}"]`
+        );
+    }
+
+    function scopeFindLabel(receiverId) {
+        return document.querySelector(
+            `span[data-scope-label="${CSS.escape(receiverId)}"]`
+        );
+    }
+
+    function scopeBuildPanel(state) {
+        const container = state.scopeContainer;
+        container.innerHTML = '';
+        container.style.display = '';
+
+        const header = document.createElement('div');
+        header.className = 'd-flex flex-wrap gap-2 mb-1 small align-items-center';
+        const live = document.createElement('span');
+        live.className = 'badge bg-primary text-uppercase';
+        live.textContent = 'Scope';
+        header.appendChild(live);
+        state.scopeStatusEl = document.createElement('span');
+        state.scopeStatusEl.className = 'text-muted';
+        state.scopeStatusEl.textContent = 'Waiting for spectrum…';
+        header.appendChild(state.scopeStatusEl);
+        container.appendChild(header);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 160;
+        canvas.style.width = '100%';
+        canvas.style.height = '160px';
+        canvas.style.border = '1px solid rgba(128,128,128,0.3)';
+        canvas.style.display = 'block';
+        canvas.style.background = '#04040c';
+        container.appendChild(canvas);
+        state.scopeCanvas = canvas;
+        state.scopeCtx = canvas.getContext('2d');
+        state.scopePeak = null;
+
+        state.scopeAxisEl = document.createElement('div');
+        state.scopeAxisEl.className = 'd-flex justify-content-between text-muted small mt-1';
+        container.appendChild(state.scopeAxisEl);
+    }
+
+    function scopeUpdateAxis(state, payload) {
+        if (!state.scopeAxisEl) return;
+        const fMin = Number(payload.freq_min);
+        const fMax = Number(payload.freq_max);
+        const fCtr = Number(payload.center_frequency);
+        if (!Number.isFinite(fMin) || !Number.isFinite(fMax)) {
+            state.scopeAxisEl.textContent = '';
             return;
         }
-        if (container !== state.container || !state.canvas || !state.canvas.isConnected) {
-            state.container = container;
+        const fmt = (hz) => Number.isFinite(hz) ? `${(hz / 1e6).toFixed(3)} MHz` : '—';
+        state.scopeAxisEl.innerHTML = '';
+        const left = document.createElement('span');
+        left.textContent = fmt(fMin);
+        const centre = document.createElement('span');
+        centre.textContent = Number.isFinite(fCtr) ? `${fmt(fCtr)} (carrier)` : '';
+        const right = document.createElement('span');
+        right.textContent = fmt(fMax);
+        state.scopeAxisEl.appendChild(left);
+        state.scopeAxisEl.appendChild(centre);
+        state.scopeAxisEl.appendChild(right);
+    }
+
+    function scopeRender(state, spectrum) {
+        const canvas = state.scopeCanvas;
+        const ctx = state.scopeCtx;
+        if (!canvas || !ctx) return;
+        const w = canvas.width;
+        const h = canvas.height;
+        const n = spectrum.length;
+        if (n === 0) return;
+
+        // Peak-hold trace: fast attack / slow release, same idea already
+        // used for the VU meters on the audio monitoring page, so a
+        // transient (e.g. a brief burst of interference between polls) is
+        // still visible instead of being lost to subsampling.
+        if (!state.scopePeak || state.scopePeak.length !== n) {
+            state.scopePeak = new Float32Array(spectrum);
+        } else {
+            for (let i = 0; i < n; i++) {
+                const v = Number(spectrum[i]) || 0;
+                state.scopePeak[i] = v > state.scopePeak[i]
+                    ? v
+                    : Math.max(0, state.scopePeak[i] - SCOPE_PEAK_DECAY);
+            }
+        }
+
+        ctx.fillStyle = '#04040c';
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.strokeStyle = 'rgba(128,128,128,0.2)';
+        ctx.lineWidth = 1;
+        for (let g = 1; g < 4; g++) {
+            const y = Math.round((h * g) / 4) + 0.5;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(w, y);
+            ctx.stroke();
+        }
+
+        const xStep = w / (n - 1 || 1);
+
+        // Peak-hold trace drawn first (dim amber) so the live trace sits
+        // visually on top of it.
+        ctx.strokeStyle = 'rgba(255, 176, 0, 0.55)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+            const x = i * xStep;
+            const y = h - (Math.max(0, Math.min(1, state.scopePeak[i])) * h);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        // Live trace — bright green, matching the waterfall colour ramp's
+        // midpoint so the two views read as the same signal.
+        ctx.strokeStyle = '#39ff8f';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+            const x = i * xStep;
+            const v = Math.max(0, Math.min(1, Number(spectrum[i]) || 0));
+            const y = h - (v * h);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+    }
+
+    // ---- Shared polling: one fetch loop serves both views -----------------
+
+    function ensureLiveSpectrumState(receiverId) {
+        let state = liveWaterfallState.get(receiverId);
+        if (state) return state;
+        state = {
+            receiverId,
+            waterfallActive: false,
+            scopeActive: false,
+            rowCount: 0,
+            lastTimestamp: 0,
+            nFreq: 0,
+            buffer: null,
+            canvas: null,
+            ctx: null,
+            statusEl: null,
+            axisEl: null,
+            container: null,
+            scopeContainer: null,
+            scopeCanvas: null,
+            scopeCtx: null,
+            scopeStatusEl: null,
+            scopeAxisEl: null,
+            scopePeak: null,
+            intervalId: null,
+        };
+        liveWaterfallState.set(receiverId, state);
+        return state;
+    }
+
+    function liveSpectrumEnsurePolling(state) {
+        if (state.intervalId) {
+            // Already polling for the other view — tick immediately so the
+            // newly-activated view is painted right away rather than
+            // waiting up to LIVE_WF_POLL_MS for the next scheduled tick.
+            liveSpectrumTick(state.receiverId);
+            return;
+        }
+        liveSpectrumTick(state.receiverId);
+        state.intervalId = window.setInterval(
+            () => liveSpectrumTick(state.receiverId),
+            LIVE_WF_POLL_MS
+        );
+    }
+
+    function liveSpectrumMaybeStop(state) {
+        if (state.waterfallActive || state.scopeActive) return;
+        if (state.intervalId) {
+            window.clearInterval(state.intervalId);
+        }
+        liveWaterfallState.delete(state.receiverId);
+    }
+
+    async function liveSpectrumTick(receiverId) {
+        const state = liveWaterfallState.get(receiverId);
+        if (!state) return;
+
+        // If a receiver panel was re-rendered, its containers are gone —
+        // find the resurrected ones and rebuild in place, same as before.
+        const wfContainer = state.waterfallActive ? liveWfFindContainer(receiverId) : null;
+        const scopeContainer = state.scopeActive ? scopeFindContainer(receiverId) : null;
+
+        if (state.waterfallActive && !wfContainer) {
+            state.waterfallActive = false;
+            const label = liveWfFindLabel(receiverId);
+            if (label) label.textContent = 'Live Waterfall';
+        }
+        if (state.scopeActive && !scopeContainer) {
+            state.scopeActive = false;
+            const label = scopeFindLabel(receiverId);
+            if (label) label.textContent = 'Spectrum Scope';
+        }
+        if (!state.waterfallActive && !state.scopeActive) {
+            liveSpectrumMaybeStop(state);
+            return;
+        }
+
+        if (state.waterfallActive
+            && (wfContainer !== state.container || !state.canvas || !state.canvas.isConnected)) {
+            state.container = wfContainer;
             liveWfBuildPanel(state);
             if (state.buffer) {
                 liveWfRepaint(state);
             }
+        }
+        if (state.scopeActive
+            && (scopeContainer !== state.scopeContainer || !state.scopeCanvas || !state.scopeCanvas.isConnected)) {
+            state.scopeContainer = scopeContainer;
+            scopeBuildPanel(state);
         }
 
         try {
@@ -1547,47 +1883,60 @@ sudo systemctl restart eas-station</code></pre>
             });
             const payload = await response.json();
             if (!response.ok) {
-                state.statusEl.textContent =
-                    `HTTP ${response.status}: ${payload.error || 'spectrum unavailable'}`;
+                const msg = `HTTP ${response.status}: ${payload.error || 'spectrum unavailable'}`;
+                if (state.statusEl) state.statusEl.textContent = msg;
+                if (state.scopeStatusEl) state.scopeStatusEl.textContent = msg;
                 return;
             }
             if (payload.status && payload.status !== 'available') {
-                state.statusEl.textContent =
-                    `${payload.status}: ${payload.error || 'no samples'}`;
+                const msg = `${payload.status}: ${payload.error || 'no samples'}`;
+                if (state.statusEl) state.statusEl.textContent = msg;
+                if (state.scopeStatusEl) state.scopeStatusEl.textContent = msg;
                 return;
             }
             const spectrum = Array.isArray(payload.spectrum) ? payload.spectrum : [];
             if (spectrum.length === 0) {
-                state.statusEl.textContent = 'Empty spectrum payload';
+                if (state.statusEl) state.statusEl.textContent = 'Empty spectrum payload';
+                if (state.scopeStatusEl) state.scopeStatusEl.textContent = 'Empty spectrum payload';
                 return;
             }
-            // Skip stale frames so we don't re-push the same row 5× in a
-            // row if the SDR service stalls. The server timestamps each
-            // payload at publication time.
+            // Skip stale frames so we don't re-push the same row/trace 5×
+            // in a row if the SDR service stalls. The server timestamps
+            // each payload at publication time.
             const ts = Number(payload.timestamp) || 0;
             if (ts && ts === state.lastTimestamp) {
                 return;
             }
             state.lastTimestamp = ts;
-
-            if (!state.buffer || state.nFreq !== spectrum.length) {
-                liveWfResizeBuffer(state, spectrum.length);
-                // Canvas width follows the FFT size; resize and repaint.
-                state.canvas.width = spectrum.length;
-                liveWfRepaint(state);
-            }
-            liveWfPushRow(state, spectrum);
-            state.rowCount = (state.rowCount || 0) + 1;
-            liveWfUpdateAxis(state, payload);
             const ageMs = ts ? Math.max(0, Date.now() - ts * 1000) : 0;
-            state.statusEl.textContent =
-                `${spectrum.length}-bin FFT · ${state.rowCount} rows · `
-                + `latency ${ageMs.toFixed(0)} ms`;
+
+            if (state.waterfallActive) {
+                if (!state.buffer || state.nFreq !== spectrum.length) {
+                    liveWfResizeBuffer(state, spectrum.length);
+                    state.canvas.width = spectrum.length;
+                    liveWfRepaint(state);
+                }
+                liveWfPushRow(state, spectrum);
+                state.rowCount = (state.rowCount || 0) + 1;
+                liveWfUpdateAxis(state, payload);
+                state.statusEl.textContent =
+                    `${spectrum.length}-bin FFT · ${state.rowCount} rows · `
+                    + `latency ${ageMs.toFixed(0)} ms`;
+            }
+            if (state.scopeActive) {
+                scopeRender(state, spectrum);
+                scopeUpdateAxis(state, payload);
+                state.scopeStatusEl.textContent =
+                    `${spectrum.length}-bin FFT · latency ${ageMs.toFixed(0)} ms`;
+            }
         } catch (err) {
-            // Network blip — keep the loop running. The next tick will
-            // try again. Show the most recent error in the status line.
+            // Network blip — keep the loop running. The next tick will try
+            // again. Show the most recent error in the status line(s).
             if (state.statusEl) {
                 state.statusEl.textContent = `Fetch error: ${err.message}`;
+            }
+            if (state.scopeStatusEl) {
+                state.scopeStatusEl.textContent = `Fetch error: ${err.message}`;
             }
         }
     }
@@ -1595,78 +1944,124 @@ sudo systemctl restart eas-station</code></pre>
     function liveWfStart(receiverId) {
         const container = liveWfFindContainer(receiverId);
         if (!container) return;
-        const state = {
-            receiverId,
-            container,
-            running: true,
-            rowCount: 0,
-            lastTimestamp: 0,
-            nFreq: 0,
-            buffer: null,
-            canvas: null,
-            ctx: null,
-            statusEl: null,
-            axisEl: null,
-            intervalId: null,
-        };
-        liveWaterfallState.set(receiverId, state);
+        const state = ensureLiveSpectrumState(receiverId);
+        state.waterfallActive = true;
+        state.container = container;
         liveWfBuildPanel(state);
-        // Kick off an immediate tick so the operator sees feedback within
-        // the first 500 ms even if the poll interval hasn't elapsed.
-        liveWfTick(receiverId);
-        state.intervalId = window.setInterval(
-            () => liveWfTick(receiverId),
-            LIVE_WF_POLL_MS
-        );
+        liveSpectrumEnsurePolling(state);
         const label = liveWfFindLabel(receiverId);
         if (label) label.textContent = 'Stop Live Waterfall';
     }
 
     function liveWfStop(receiverId) {
         const state = liveWaterfallState.get(receiverId);
-        if (state && state.intervalId) {
-            window.clearInterval(state.intervalId);
+        if (!state) return;
+        state.waterfallActive = false;
+        if (state.container) {
+            state.container.style.display = 'none';
+            state.container.innerHTML = '';
         }
-        liveWaterfallState.delete(receiverId);
         const label = liveWfFindLabel(receiverId);
         if (label) label.textContent = 'Live Waterfall';
+        liveSpectrumMaybeStop(state);
+    }
+
+    function scopeStart(receiverId) {
+        const container = scopeFindContainer(receiverId);
+        if (!container) return;
+        const state = ensureLiveSpectrumState(receiverId);
+        state.scopeActive = true;
+        state.scopeContainer = container;
+        scopeBuildPanel(state);
+        liveSpectrumEnsurePolling(state);
+        const label = scopeFindLabel(receiverId);
+        if (label) label.textContent = 'Stop Spectrum Scope';
+    }
+
+    function scopeStop(receiverId) {
+        const state = liveWaterfallState.get(receiverId);
+        if (!state) return;
+        state.scopeActive = false;
+        if (state.scopeContainer) {
+            state.scopeContainer.style.display = 'none';
+            state.scopeContainer.innerHTML = '';
+        }
+        const label = scopeFindLabel(receiverId);
+        if (label) label.textContent = 'Spectrum Scope';
+        liveSpectrumMaybeStop(state);
     }
 
     document.addEventListener('click', (event) => {
-        const btn = event.target.closest('button[data-action="live-waterfall"]');
-        if (!btn) return;
-        const receiverId = btn.getAttribute('data-receiver-id');
-        if (!receiverId) return;
-        if (liveWaterfallState.has(receiverId)) {
-            liveWfStop(receiverId);
-        } else {
-            liveWfStart(receiverId);
+        const wfBtn = event.target.closest('button[data-action="live-waterfall"]');
+        if (wfBtn) {
+            const receiverId = wfBtn.getAttribute('data-receiver-id');
+            if (!receiverId) return;
+            const state = liveWaterfallState.get(receiverId);
+            if (state && state.waterfallActive) {
+                liveWfStop(receiverId);
+            } else {
+                liveWfStart(receiverId);
+            }
+            return;
+        }
+        const scopeBtn = event.target.closest('button[data-action="spectrum-scope"]');
+        if (scopeBtn) {
+            const receiverId = scopeBtn.getAttribute('data-receiver-id');
+            if (!receiverId) return;
+            const state = liveWaterfallState.get(receiverId);
+            if (state && state.scopeActive) {
+                scopeStop(receiverId);
+            } else {
+                scopeStart(receiverId);
+            }
         }
     });
 
-    // Stop all live waterfalls when the page is hidden / unloaded so we
-    // don't burn server CPU + Redis bandwidth on background tabs. When the
-    // tab becomes visible again, automatically resume the waterfalls that
+    // Stop all live waterfalls/scopes when the page is hidden / unloaded so
+    // we don't burn server CPU + Redis bandwidth on background tabs. When
+    // the tab becomes visible again, automatically resume whichever view(s)
     // were running so the operator doesn't have to re-click Start after
-    // every tab switch. We track the prior-running set in a closure-scoped
-    // Set rather than relying on the live state Map (which liveWfStop()
-    // clears).
-    const liveWfPausedOnHide = new Set();
+    // every tab switch.
+    function liveSpectrumStopAll(receiverId) {
+        const state = liveWaterfallState.get(receiverId);
+        if (!state) return { waterfallActive: false, scopeActive: false };
+        const flags = { waterfallActive: state.waterfallActive, scopeActive: state.scopeActive };
+        if (state.intervalId) {
+            window.clearInterval(state.intervalId);
+        }
+        liveWaterfallState.delete(receiverId);
+        if (state.container) {
+            state.container.style.display = 'none';
+            state.container.innerHTML = '';
+        }
+        if (state.scopeContainer) {
+            state.scopeContainer.style.display = 'none';
+            state.scopeContainer.innerHTML = '';
+        }
+        const wfLabel = liveWfFindLabel(receiverId);
+        if (wfLabel) wfLabel.textContent = 'Live Waterfall';
+        const scopeLabel = scopeFindLabel(receiverId);
+        if (scopeLabel) scopeLabel.textContent = 'Spectrum Scope';
+        return flags;
+    }
+
+    const liveWfPausedOnHide = new Map();
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
             liveWfPausedOnHide.clear();
             for (const id of Array.from(liveWaterfallState.keys())) {
-                liveWfPausedOnHide.add(id);
-                liveWfStop(id);
+                liveWfPausedOnHide.set(id, liveSpectrumStopAll(id));
             }
         } else if (document.visibilityState === 'visible' && liveWfPausedOnHide.size) {
-            for (const id of Array.from(liveWfPausedOnHide)) {
+            for (const [id, flags] of Array.from(liveWfPausedOnHide.entries())) {
                 // Only restart if the DOM still has this receiver's panel
                 // (the operator might have navigated to a different
-                // receiver while the tab was hidden). liveWfFindContainer
-                // returns null when the panel isn't in the DOM.
-                if (liveWfFindContainer(id)) {
+                // receiver while the tab was hidden).
+                if (flags.waterfallActive && liveWfFindContainer(id)) {
                     liveWfStart(id);
+                }
+                if (flags.scopeActive && scopeFindContainer(id)) {
+                    scopeStart(id);
                 }
             }
             liveWfPausedOnHide.clear();
@@ -1674,7 +2069,7 @@ sudo systemctl restart eas-station</code></pre>
     });
     window.addEventListener('beforeunload', () => {
         for (const id of Array.from(liveWaterfallState.keys())) {
-            liveWfStop(id);
+            liveSpectrumStopAll(id);
         }
     });
 

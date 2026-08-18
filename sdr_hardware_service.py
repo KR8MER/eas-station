@@ -113,7 +113,8 @@ else:
     load_dotenv(override=True)
 
 # Import centralized Redis configuration
-from app_core.config.redis_config import get_redis_host, get_redis_port, get_redis_db
+from app_core.config.redis_config import get_redis_host, get_redis_port, get_redis_db, RedisChannels
+from app_core.radio import trends as _sdr_trends
 
 # Redis configuration
 REDIS_HOST = get_redis_host()
@@ -145,7 +146,13 @@ SDR_SAMPLE_CHUNK_DURATION_SEC = 0.032  # Target ~32 ms of audio per message
 SDR_SAMPLE_CHUNK_MIN = 2048  # Floor; must be >= FFT_SIZE so spectrum still works
 SDR_SAMPLE_CHANNEL = "sdr:samples"  # Redis pub/sub channel for IQ data
 SDR_METRICS_KEY = "sdr:metrics"  # Redis hash for SDR health metrics
-SDR_SPECTRUM_KEY_PREFIX = "sdr:spectrum:"  # Per-receiver spectrum data
+# Per-receiver spectrum data. Uses the shared RedisChannels.SPECTRUM_PREFIX
+# (app_core/config/redis_config.py) rather than a locally-defined key --
+# this used to be its own "sdr:spectrum:" constant that silently diverged
+# from the "eas:spectrum:" key the webapp reader expected, so every
+# spectrum poll (including every waterfall tick) missed the Redis cache
+# and fell through to a slow 5s-timeout command-queue round trip instead.
+SDR_SPECTRUM_KEY_PREFIX = RedisChannels.SPECTRUM_PREFIX
 
 # Publisher loop timing - adaptive based on buffer fill level
 PUBLISHER_SLEEP_MIN_MS = 1   # Minimum sleep when buffer is filling up
@@ -1090,7 +1097,15 @@ def publish_samples_and_metrics():
     redis_client = get_redis_client()
     last_spectrum_time = {}  # Per-receiver spectrum update tracking
     spectrum_interval = 0.1  # 100ms spectrum updates
-    
+
+    # SDR Diagnostics historical trend archive (signal strength, lock %,
+    # sample-rate health, buffer over/underrun rate). Own wall-clock
+    # throttle, same discipline as spectrum_interval above — see
+    # app_core/radio/trends.py for the tiered Redis archive this feeds.
+    last_trend_time = {}          # Per-receiver trend-sample tracking
+    trend_prev_counters = {}      # Per-receiver overflow/underflow snapshot
+    trend_last_bucket_ids = _sdr_trends.new_last_bucket_ids()
+
     while _state.running:
         try:
             radio_manager = _state.radio_manager
@@ -1199,7 +1214,39 @@ def publish_samples_and_metrics():
                                         for k, v in ring_stats.items()}
                             )
                             redis_client.expire(f"sdr:ring_buffer:{identifier}", 10)
-                
+                        else:
+                            ring_stats = None
+                    else:
+                        ring_stats = None
+
+                    # SDR Diagnostics historical trend sample -- own 10s
+                    # wall-clock throttle, independent of the spectrum/
+                    # metrics throttles above. See app_core/radio/trends.py.
+                    last_trend = last_trend_time.get(identifier, 0)
+                    if current_time - last_trend >= _sdr_trends.SDR_TRENDS_INTERVAL_S:
+                        try:
+                            configured_rate = receiver.config.sample_rate
+                            if hasattr(receiver, 'get_effective_sample_rate'):
+                                try:
+                                    effective_rate_for_trend = receiver.get_effective_sample_rate()
+                                except Exception:
+                                    effective_rate_for_trend = configured_rate
+                            else:
+                                effective_rate_for_trend = configured_rate
+                            _sdr_trends.publish_sample(
+                                redis_client,
+                                identifier,
+                                receiver.get_status(),
+                                ring_stats,
+                                configured_rate,
+                                effective_rate_for_trend,
+                                trend_prev_counters,
+                                trend_last_bucket_ids,
+                            )
+                        except Exception as trend_exc:
+                            logger.debug(f"Error publishing trend sample for {identifier}: {trend_exc}")
+                        last_trend_time[identifier] = current_time
+
                 except Exception as e:
                     logger.debug(f"Error publishing for receiver {identifier}: {e}")
             

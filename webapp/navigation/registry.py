@@ -323,7 +323,7 @@ _DIAGNOSTICS = NavSection(
                     label="SDR Diagnostics",
                     icon="fas fa-signal",
                     href="/admin/radio/diagnostics",
-                    description="Per-receiver SNR, sample rate and tuning diagnostics.",
+                    description="Live waterfall, spectrum scope, historical trend charts and a full pipeline health checklist per receiver.",
                     permissions=(RECEIVERS_VIEW,),
                 ),
             ) + (
