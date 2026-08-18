@@ -8,6 +8,191 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.172.1] - 2026-08-18 - Fix undefined logger in the dead-air buzzer pin resolver
+
+### Fixed
+- `_dead_air_buzzer_pin()` in `services/gpio/__main__.py` referenced a
+  module-level `logger` that does not exist -- that module resolves its
+  logger inline via `logging.getLogger(__name__)` at each call site. Caught
+  by `ruff` (F821) in CI. Not merely a lint nit: the `NameError` in the
+  `except` clause would have escaped uncaught, so a failure to read the
+  buzzer pin would have taken down GPIO service startup instead of falling
+  back to "no buzzer configured".
+
+## [2.172.0] - 2026-08-18 - Dead-air monitoring with tower light and rack alarm buzzer
+
+### Added
+- **Dead-air (silence) monitoring for monitored audio sources**, wired to
+  the USB tower light and an optional GPIO rack alarm buzzer. Every other
+  health check in the system watches *process* liveness -- service up,
+  Redis reachable, SDR locked, buffers healthy -- and all of those can be
+  green while the audio itself is dead. For an EAS monitoring station a
+  silently dead assigned source means monitoring has stopped, and until now
+  nothing said so.
+- **`app_core/audio/silence.py`** -- the detector. Classifies on two
+  independent axes, because a level threshold alone cannot do this job:
+  - *level*: RMS below a floor (default -65 dBFS) catches true digital
+    silence -- a stopped file, a muted feed, a dead stream.
+  - *flatness*: spectral flatness (Wiener entropy) catches an unmodulated
+    carrier. **This is the axis that matters for an SDR.** When an FM
+    station leaves the air the receiver does not go quiet, it outputs
+    unsquelched noise at full scale -- measured at -6 dBFS in testing,
+    which every level-only detector in this codebase reports as "audio
+    present". Noise spreads energy evenly and scores 0.40-0.57; speech and
+    music concentrate it into harmonics and score below 0.01. The default
+    threshold of 0.25 sits in a two-to-three order of magnitude gap, so it
+    is not a delicate calibration.
+- Timing reuses `SilenceDetector` in `app_core/audio/metering.py` rather
+  than adding a fourth parallel implementation. That class already had
+  duration debouncing, recovery-edge detection and an alert callback
+  fan-out, and had been dead code since it was written -- exported but
+  never instantiated outside tests. It now takes an optional explicit
+  verdict so the flatness axis can drive the same state machine.
+- **Tower light**: a new `silence` state in `resolve_tower_state()`,
+  ranked with the existing fault tier -- above every alert indication,
+  because an alert pipeline can look perfectly healthy while the source
+  feeding it is dead. Deliberately **not** suppressed by quiet hours: an
+  overnight schedule must never hide that monitoring has stopped.
+  Configurable colour, optional tower buzzer, and can be switched off.
+- **Rack alarm buzzer** on a configurable GPIO pin, with an operator
+  acknowledgement. This does not reuse the existing `_key_relay_on_edges`
+  path, which is edge-triggered off the broadcast marker and backed by a
+  300 s watchdog sized for an alert playout; dead air is a *level*
+  condition that can persist for hours, so it gets its own pin held for
+  as long as the condition lasts. Acknowledging silences the buzzer but
+  leaves the tower light lit -- standard alarm-panel behaviour, since an
+  acknowledgement means the fault was noticed, not fixed. The audio
+  service clears the acknowledgement when audio returns, so the next
+  outage sounds again instead of starting pre-silenced.
+- **Admin UI** at Admin -> Hardware (existing "Station Hardware" page):
+  enable toggle, hold-off, silence level, open-carrier sensitivity,
+  buzzer pin, tower-light colour, and a live status readout with an
+  Acknowledge button. Controls live in a new `static/js/admin/dead-air.js`
+  rather than extending `hardware-settings.js`, which is already well past
+  the size guidance.
+- New endpoints `GET /admin/hardware/dead-air/status` and
+  `POST /admin/hardware/dead-air/acknowledge`.
+- Redis key `eas:dead_air` (30 s TTL) carries the aggregate state from the
+  audio service to the GPIO service. A missing key reads as *not*
+  alarming: absence means the feature is off or the publisher is gone, and
+  neither should strand a rack buzzer on -- audio-service liveness already
+  has its own monitoring.
+
+### Fixed
+- `SilenceDetector` reported silence *immediately* when its first observed
+  chunk was silent, bypassing the duration debounce entirely. On a service
+  restart, where a source simply has not produced its first audio yet,
+  that would have sounded the rack buzzer straight away. Alarm consumers
+  now pass `assume_prior_signal=True` so the hold-off always applies.
+
+### Notes
+- Dead-air thresholds are a station-wide policy, installed once via
+  `set_default_criteria()` and re-read every 30 s by the source watchdog,
+  so changes in the admin UI take effect without a service restart.
+- The pre-existing `AudioMetrics.silence_detected` flag is unchanged. It
+  is an instantaneous per-chunk comparison with no debounce -- it flips on
+  every pause between words -- and continues to feed the analytics
+  `silence_detection_rate` only. It is not what drives the alarm.
+
+## [2.171.1] - 2026-08-18 - Code-review fixes for the spectrum zoom
+
+### Fixed
+- **A null frequency axis rendered as `0.00000 MHz` instead of blank.**
+  `build_spectrum_payload()` emits `freq_min`/`freq_max` as `None` when the
+  centre frequency cannot be coerced, which serialises to JSON `null` --
+  and `Number(null)` is `0`, which passes `Number.isFinite`. The guard in
+  `visibleFreqRange()` therefore let it through and labelled both axis
+  edges `0.00000 MHz` across a zero-width span. It now rejects explicit
+  nulls and degenerate (zero or inverted) ranges before converting. Older
+  services that omit the keys entirely were never affected -- `undefined`
+  becomes `NaN`, which the finite check already caught.
+- **The mouse wheel swallowed the page scroll at both zoom limits.**
+  `preventDefault()` ran before the zoom was evaluated, so at 1x every
+  scroll-down and at the 64x cap every scroll-up cancelled the page scroll
+  while doing nothing, leaving the operator unable to scroll past a
+  full-width canvas. The default is now cancelled only when the gesture
+  actually changes the zoom.
+- **The Spectrum Scope's peak-hold trace clipped against the top edge.**
+  The y-axis auto-scale computed its range from the live spectrum only,
+  but `scaleY()` clamps to that range and the peak-hold line retains
+  historical maxima above it. Peaks were pinned flat at `y=0` instead of
+  the axis scaling to show them. Both traces are now included in the range.
+
+### Changed
+- Corrected an overstated claim in the 2.171.0 notes and the template's
+  header comment. Zoom recovers the ~125 Hz bin resolution the unzoomed
+  view discards -- 2048 bins over ~900 CSS pixels is ~2.3 bins per pixel
+  (~5.7 on a phone), dropped rather than averaged by the nearest-neighbour
+  upscale -- so the genuine gain is ~2-6x depending on panel width, not the
+  "~16x" originally claimed. Past one bin per pixel, zoom magnifies for
+  legibility without adding information.
+- Pan repaints are coalesced to one per animation frame. Pointer events can
+  outpace the display and each repaint recolours up to `count x 200` bins,
+  which matters on the Raspberry Pi hardware this runs on.
+- The two status lines are built by shared `waterfallStatusText()` /
+  `scopeStatusText()` helpers instead of being assembled separately in the
+  poll tick and the zoom refresh, so the two paths cannot drift apart.
+- Rebuilt zoom controls seed their readout and reset-button state from live
+  zoom state. The panels rebuild roughly once a second, and a hardcoded
+  `1x` contradicted the already-zoomed canvas until the next poll.
+- `tests/test_spectrum_frequency_axis.py` reads the template with an
+  explicit UTF-8 encoding (the platform default is ASCII under a C/POSIX
+  locale), asserts the two `renderSpectrumAxis` call sites individually
+  rather than by a count that also matched the declaration, and matches the
+  history-buffer invariant with a whitespace-tolerant regex.
+
+## [2.171.0] - 2026-08-18 - Zoom and pan on the live waterfall and spectrum scope
+
+### Added
+- **Zoom and pan on the Live Waterfall and Spectrum Scope**
+  (`/admin/radio_diagnostics`). The SDR service already publishes a
+  2048-bin FFT across the whole effective span -- ~125 Hz per bin at
+  256 kHz -- but both views downsampled that to roughly 900 CSS pixels:
+  ~2.3 bins per pixel (~5.7 on a phone), dropped rather than averaged by
+  the nearest-neighbour upscale, so a one-bin spur could miss the screen
+  entirely. Zoom crops the published bins instead of retuning, so it costs
+  no extra SDR work and no extra requests, and recovers the full ~125 Hz
+  bin resolution the unzoomed view discards -- a genuine ~2-6x, depending
+  on panel width. Past the point where one bin fills one pixel, further
+  zoom magnifies for legibility without adding information; the cap and
+  bin floor bound that so the UI never implies resolution the FFT lacks.
+  Controls:
+  - Zoom in / out / reset buttons in each panel header, with a live
+    magnification readout.
+  - Mouse wheel to zoom about the cursor, holding whatever is under the
+    pointer still.
+  - Click-drag (or touch-drag) to pan; double-click resets to full span.
+  - Capped at 64x with a 32-bin floor, so the UI cannot pretend to
+    resolution the FFT does not have. Going finer needs a narrower
+    capture or a larger FFT server-side.
+  Zoom is shared between the two views -- they render the same payload,
+  so panning one and not the other would only be confusing -- and
+  survives the WebSocket panel re-render that rebuilds the cards roughly
+  once a second.
+- The frequency axis and status line now describe the **visible** window
+  rather than the full span: edge labels gain decimal places as you zoom
+  (up to 5 dp on a few-kHz window), the status line reads e.g.
+  `64.0 kHz of 256.0 kHz · 125 Hz/bin`, and the centre label drops its
+  "(carrier)" annotation and switches to the window centre once panning
+  takes the tuned frequency off screen.
+
+### Changed
+- **The live waterfall's history buffer now stores raw per-bin power
+  instead of finished RGBA pixels.** Cropping a pixel buffer can only
+  stretch what was already rasterised at full-span scale, so zoomed
+  scrollback would have been a blur of upscaled blocks. Keeping the
+  values means every repaint re-renders the entire 200-row history at the
+  current zoom, so scrolling back through history at 16x shows real
+  per-bin detail. The buffer also got smaller (2048 bins x 200 rows =
+  400 KB, a quarter of the RGBA cost), and colour mapping moved to a
+  precomputed 256-entry lookup table so re-colouring the full history
+  each frame stays cheap.
+- The Spectrum Scope's y-axis auto-scale now follows the visible crop
+  rather than the whole span, so zooming in on a weak feature is not
+  defeated by a strong carrier elsewhere keeping ownership of the axis.
+  Its peak-hold trace is indexed by absolute bin, so zooming or panning
+  no longer discards peaks already accumulated off-screen.
+
 ## [2.170.5] - 2026-08-18 - Fix live spectrum frequency axis labelled with the pre-decimation rate
 
 ### Fixed

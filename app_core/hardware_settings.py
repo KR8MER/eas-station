@@ -236,6 +236,43 @@ def get_tower_light_settings() -> Dict[str, Any]:
         'quiet_enabled': bool(getattr(settings, 'tower_light_quiet_enabled', False)),
         'quiet_start': getattr(settings, 'tower_light_quiet_start', '22:00') or '22:00',
         'quiet_end': getattr(settings, 'tower_light_quiet_end', '07:00') or '07:00',
+        'silence_enabled': bool(getattr(settings, 'tower_light_silence_enabled', True)),
+        'silence_color': getattr(settings, 'tower_light_silence_color', 'magenta') or 'magenta',
+        'silence_buzzer': bool(getattr(settings, 'tower_light_silence_buzzer', False)),
+    }
+
+
+def get_dead_air_settings() -> Dict[str, Any]:
+    """Get dead-air (silence) monitoring settings.
+
+    Feeds both the audio ingest monitors (thresholds) and the GPIO
+    indicator service (rack buzzer pin).
+
+    Returns:
+        Dictionary with dead-air configuration. ``buzzer_gpio_pin`` is
+        ``None`` when the rack buzzer is disabled or unconfigured, which
+        the GPIO side reads as "never touch a pin".
+    """
+    settings = get_hardware_settings()
+    buzzer_enabled = bool(getattr(settings, 'dead_air_buzzer_enabled', False))
+    pin = getattr(settings, 'dead_air_buzzer_gpio_pin', None)
+    return {
+        'enabled': bool(getattr(settings, 'dead_air_enabled', False)),
+        'level_threshold_db': float(
+            getattr(settings, 'dead_air_level_threshold_db', -65) or -65
+        ),
+        'detect_open_carrier': bool(
+            getattr(settings, 'dead_air_detect_open_carrier', True)
+        ),
+        # Stored as whole percent in the UI; the monitor wants a 0-1 ratio.
+        'flatness_threshold': float(
+            getattr(settings, 'dead_air_flatness_threshold_pct', 25) or 25
+        ) / 100.0,
+        'duration_seconds': float(
+            getattr(settings, 'dead_air_duration_seconds', 20) or 20
+        ),
+        'buzzer_enabled': buzzer_enabled,
+        'buzzer_gpio_pin': int(pin) if (buzzer_enabled and pin) else None,
     }
 
 

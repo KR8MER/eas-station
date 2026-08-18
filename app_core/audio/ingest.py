@@ -88,6 +88,12 @@ class AudioSourceConfig:
     buffer_size: int = 4096
     silence_threshold_db: float = -60.0
     silence_duration_seconds: float = 5.0
+    # NOTE: dead-air (silence) monitoring is configured station-wide, not
+    # per source -- see app_core.audio.silence.set_default_criteria(). The
+    # `silence_threshold_db` field above is unrelated: it drives the
+    # instantaneous `AudioMetrics.silence_detected` flag, which has no
+    # debounce (it flips on every pause between words) and exists only as
+    # a statistic for the analytics aggregator.
     device_params: Dict = None
 
     def __post_init__(self):
@@ -193,6 +199,14 @@ class AudioSourceAdapter(ABC):
         
         self._last_metrics_update = 0.0
         self._start_time = 0.0
+
+        # Debounced dead-air monitor. Owns its own thresholds so it can be
+        # reconfigured at runtime from the admin UI without restarting the
+        # source. `silence_detected` on AudioMetrics stays exactly as it
+        # was -- an instantaneous per-chunk flag feeding the analytics
+        # rate -- so nothing downstream of it changes behaviour.
+        from .silence import SilenceMonitor
+        self._silence_monitor = SilenceMonitor(config.name)
         # Optional callback(source_name: str, updates: dict) invoked on each
         # ICY metadata change.  Set by the monitoring service to persist
         # now-playing events to the database.
@@ -587,6 +601,24 @@ class AudioSourceAdapter(ABC):
         current_metadata['source_restart_count'] = self._restart_count
         current_metadata['source_last_error'] = self._last_error
         current_metadata['source_start_time'] = self._start_time
+        try:
+            current_metadata['dead_air'] = self._silence_monitor.snapshot()
+        except Exception:
+            current_metadata['dead_air'] = None
+
+        # Feed the debounced dead-air monitor. It gets the same samples the
+        # levels were measured from, because the spectral axis needs the
+        # waveform -- a level alone cannot tell programme audio from the
+        # full-scale hiss an SDR emits when its station goes off the air.
+        try:
+            self._silence_monitor.process(
+                samples_for_metrics if len(audio_chunk) > 0 else None,
+                rms_db if np.isfinite(rms_db) else -120.0,
+            )
+        except Exception as exc:
+            logger.debug(
+                "Dead-air monitor failed for %s: %s", self.config.name, exc
+            )
 
         # Update metrics
         # Use broadcast queue utilization instead of legacy queue for accurate streaming health

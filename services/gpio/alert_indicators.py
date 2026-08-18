@@ -27,8 +27,8 @@ pipeline, the Redis health probe, and the wall clock (quiet hours), and
 only writes to the hardware when the desired state differs from the
 last applied one. Priority order:
 
-    fault > active broadcast (test / severity / plain)
-          > incoming / active alert present > quiet hours > standby
+    fault (Redis loss / dead air) > active broadcast (test / severity /
+          plain) > incoming / active alert present > quiet hours > standby
 
 "Active alert present" mirrors the website stack light
 (``templates/components/navbar.html``): once audio playout finishes the
@@ -51,7 +51,8 @@ TEST_EVENT_CODES = frozenset({"RWT", "RMT", "NPT", "DMO"})
 class TowerState(NamedTuple):
     """A fully resolved tower-light state, ready to apply."""
 
-    name: str       # 'standby' / 'incoming' / 'alert*' / 'test' / 'fault' / 'quiet'
+    name: str       # 'standby' / 'incoming' / 'alert*' / 'test' / 'fault'
+                    # / 'silence' / 'quiet'
     color: str      # preferred colour (may be 'off')
     fallback: str   # colour used when the protocol can't render `color`
     flash: bool
@@ -106,6 +107,7 @@ def resolve_tower_state(
     now: Optional[datetime] = None,
     active_alert_count: int = 0,
     pending_gate_count: int = 0,
+    silence_active: bool = False,
 ) -> TowerState:
     """Pure resolver — decide what the tower light should show right now.
 
@@ -127,6 +129,20 @@ def resolve_tower_state(
     """
     if not redis_ok and getattr(config, "fault_enabled", True):
         return TowerState("fault", config.fault_color, "red", True, False)
+
+    # Dead air on a monitored source. Ranks with the Redis fault, above
+    # every alert indication: a silent monitored source means the station
+    # has stopped monitoring, which no other indicator on this light would
+    # ever show. Quiet hours deliberately do not suppress it -- an
+    # overnight schedule must not hide the fact that monitoring is down.
+    if silence_active and getattr(config, "silence_enabled", True):
+        return TowerState(
+            "silence",
+            getattr(config, "silence_color", config.fault_color),
+            "red",
+            True,
+            bool(getattr(config, "silence_buzzer", False)),
+        )
 
     if broadcast_state.get("active"):
         code = str(broadcast_state.get("event_code") or "").strip().upper()
@@ -187,6 +203,82 @@ def _redis_ok() -> bool:
         return True
     except Exception:
         return False
+
+
+def read_dead_air_state() -> dict:
+    """Read the dead-air summary the audio service publishes.
+
+    Returns a dict with ``active`` (bool), ``sources`` (dict) and
+    ``acknowledged`` (bool). A missing or unparseable key reads as *not*
+    active: the key carries a short TTL, so absence means either the
+    feature is off or the publisher is gone, and neither should strand the
+    rack buzzer on. Audio-service liveness has its own monitoring.
+    """
+    blank = {"active": False, "sources": {}, "acknowledged": False}
+    try:
+        import json as _json
+
+        from app_core.config.redis_config import RedisChannels
+        from app_core.redis_client import get_redis_client
+
+        client = get_redis_client()
+        if client is None:
+            return blank
+        raw = client.get(RedisChannels.DEAD_AIR_KEY)
+        if not raw:
+            return blank
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
+        payload = _json.loads(raw)
+        acknowledged = bool(client.get(RedisChannels.DEAD_AIR_ACK_KEY))
+        return {
+            "active": bool(payload.get("active")),
+            "sources": payload.get("sources") or {},
+            "acknowledged": acknowledged,
+        }
+    except Exception as exc:
+        logger.debug("Dead-air state unavailable: %s", exc)
+        return blank
+
+
+def _drive_silence_buzzer(gpio_controller, silence_active: bool,
+                          acknowledged: bool, buzzer_state: dict) -> None:
+    """Hold the rack alarm buzzer while dead air is unacknowledged.
+
+    This is deliberately NOT routed through :func:`_key_relay_on_edges`.
+    That path is edge-triggered off the broadcast marker and backed by a
+    300 s controller watchdog sized for the length of an alert playout.
+    Dead air is a *level* condition that can persist for hours, so it gets
+    its own pin, asserted for as long as the condition holds and released
+    the moment it clears.
+
+    Acknowledgement silences the buzzer without clearing the tower light,
+    which is how a rack alarm panel is expected to behave: the operator
+    stops the noise, the indication stays until the fault is actually
+    fixed. The audio service drops the ack when audio returns, so the next
+    outage sounds again rather than starting pre-silenced.
+    """
+    if gpio_controller is None:
+        return
+    pin = buzzer_state.get("pin")
+    if not pin:
+        return
+
+    should_sound = bool(silence_active) and not acknowledged
+    was_sounding = bool(buzzer_state.get("sounding"))
+    if should_sound == was_sounding:
+        return
+
+    try:
+        if should_sound:
+            gpio_controller.activate(pin, reason="dead_air")
+            logger.warning("Dead air: rack buzzer ON (GPIO %s)", pin)
+        else:
+            gpio_controller.deactivate(pin, force=True)
+            logger.info("Dead air: rack buzzer OFF (GPIO %s)", pin)
+        buzzer_state["sounding"] = should_sound
+    except Exception as exc:
+        logger.warning("Dead-air buzzer GPIO %s failed: %s", pin, exc)
 
 
 def _key_relay_on_edges(
@@ -324,6 +416,7 @@ def update_alert_indicators(
     relay_state: Optional[dict] = None,
     gate_pending_was_active: bool = False,
     pending_gate_count_fn: Optional[Callable[[], int]] = None,
+    buzzer_state: Optional[dict] = None,
 ) -> Tuple[bool, bool, Optional[TowerState], bool]:
     """Resolve and apply the indicator state for this refresh.
 
@@ -425,6 +518,16 @@ def update_alert_indicators(
             except Exception as exc:
                 logger.warning("NeoPixel end_alert failed: %s", exc)
 
+    # Dead air: read once per refresh and use it for both indicators.
+    dead_air = read_dead_air_state()
+    silence_active = bool(dead_air.get("active"))
+    _drive_silence_buzzer(
+        gpio_controller,
+        silence_active,
+        bool(dead_air.get("acknowledged")),
+        buzzer_state if buzzer_state is not None else {},
+    )
+
     # Tower light: resolved-state model.
     tower_state = tower_state_was
     if tower_light_controller is not None and getattr(
@@ -437,6 +540,7 @@ def update_alert_indicators(
             redis_ok,
             active_alert_count=active_alert_count,
             pending_gate_count=pending_gate_count,
+            silence_active=silence_active,
         )
         if desired != tower_state_was:
             try:
@@ -486,12 +590,20 @@ class AlertIndicatorMonitor:
         active_alert_count_fn: Optional[Callable[[], int]] = None,
         gpio_controller=None,
         pending_gate_count_fn: Optional[Callable[[], int]] = None,
+        dead_air_buzzer_pin: Optional[int] = None,
     ) -> None:
         self.tower_light_controller = tower_light_controller
         self.neopixel_controller = neopixel_controller
         self.active_alert_count_fn = active_alert_count_fn
         self.gpio_controller = gpio_controller
         self.pending_gate_count_fn = pending_gate_count_fn
+        #: Rack-alarm buzzer bookkeeping: the configured pin and whether we
+        #: are currently holding it. Level-triggered, so the state has to
+        #: persist across refreshes rather than being re-derived per edge.
+        self._buzzer_state: dict = {
+            "pin": dead_air_buzzer_pin,
+            "sounding": False,
+        }
         self._broadcast_was_active = False
         self._incoming_was_active = False
         self._tower_state: Optional[TowerState] = None
@@ -524,5 +636,6 @@ class AlertIndicatorMonitor:
                 relay_state=self._relay_state,
                 gate_pending_was_active=self._gate_pending_was_active,
                 pending_gate_count_fn=self.pending_gate_count_fn,
+                buzzer_state=self._buzzer_state,
             )
             return self._broadcast_was_active, self._incoming_was_active
