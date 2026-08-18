@@ -8,6 +8,42 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.170.4] - 2026-08-18 - Fix SDR Diagnostics charts vanishing and running narrower than the page
+
+### Fixed
+- **The per-receiver "Historical Trends" charts on `/admin/radio_diagnostics`
+  disappeared almost immediately after being shown, and were never as wide
+  as their container.** The page's WebSocket-driven auto-refresh
+  (`renderReceivers()`, firing roughly once a second) replaces the entire
+  receiver-card tree, and a `preservedPanels` mechanism cloned each open
+  panel's `innerHTML` across that replacement to survive it -- which works
+  for the Run Diagnostic / Waterfall / Spectrum Scope panels, but not for
+  the trends panel's Chart.js line charts: a `<canvas>` element's drawn
+  pixels are never serialized into its HTML, and Chart.js's inline
+  `style="width:...px"` (baked in at whatever moment the clone was taken)
+  froze the chart at a stale size instead of tracking the container. Net
+  effect: the chart flashed onto screen and then went blank on the very
+  next refresh tick, and any width it did retain was a snapshot from
+  whenever it was last captured rather than the current layout.
+  `templates/admin/radio_diagnostics.html` now excludes `.trends-container`
+  from the clone-and-restore list entirely, and
+  `static/js/radio_diagnostics_trends.js` adds a `MutationObserver` on the
+  receivers container (`trendsRebuildActive()`) that rebuilds and refetches
+  any trends panel left open once the WebSocket refresh clobbers it, so the
+  chart is always constructed fresh against the DOM's current width instead
+  of replayed from a frozen snapshot.
+- **The whole SDR Diagnostics page -- including the Live Waterfall and
+  Spectrum Scope canvases -- was narrower than it needed to be on any
+  viewport at or above the 576px Bootstrap breakpoint.** The page wrapped
+  its content in `<div class="container">`, which caps at 540px/720px/
+  960px/1140px/1320px regardless of the actual viewport width, instead of
+  `<div class="container-fluid">`, which the comparable GNSS & Time
+  Dashboard (`templates/admin/gps_dashboard.html`) already uses for the
+  same reason: chart-heavy diagnostics pages should use the full width
+  available rather than being centered in a fixed-width column. Both
+  canvases already sized themselves to 100% of their parent, so this
+  wasn't a canvas bug -- the parent itself was capped.
+
 ## [2.170.3] - 2026-08-18 - Fix spectrum saturation behind the "still zoomed in" waterfall/scope
 
 ### Fixed
