@@ -206,10 +206,14 @@ def _dead_air_buzzer_pin(flask_app):
         with flask_app.app_context():
             pin = get_dead_air_settings().get("buzzer_gpio_pin")
         if pin:
-            logger.info("Dead-air rack buzzer configured on GPIO %s", pin)
+            logging.getLogger(__name__).info(
+                "Dead-air rack buzzer configured on GPIO %s", pin
+            )
         return pin
     except Exception as exc:
-        logger.warning("Could not resolve dead-air buzzer pin: %s", exc)
+        logging.getLogger(__name__).warning(
+            "Could not resolve dead-air buzzer pin: %s", exc
+        )
         return None
 
 

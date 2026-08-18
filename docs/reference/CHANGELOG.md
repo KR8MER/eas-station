@@ -8,6 +8,17 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.172.1] - 2026-08-18 - Fix undefined logger in the dead-air buzzer pin resolver
+
+### Fixed
+- `_dead_air_buzzer_pin()` in `services/gpio/__main__.py` referenced a
+  module-level `logger` that does not exist -- that module resolves its
+  logger inline via `logging.getLogger(__name__)` at each call site. Caught
+  by `ruff` (F821) in CI. Not merely a lint nit: the `NameError` in the
+  `except` clause would have escaped uncaught, so a failure to read the
+  buzzer pin would have taken down GPIO service startup instead of falling
+  back to "no buzzer configured".
+
 ## [2.172.0] - 2026-08-18 - Dead-air monitoring with tower light and rack alarm buzzer
 
 ### Added
