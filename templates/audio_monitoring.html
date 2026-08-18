@@ -448,20 +448,6 @@ const EAS_WARMUP_DURATION_SECONDS = 10; // Show "warming up" only during first 1
 // At 250ms WebSocket intervals, this is 750ms of consistent state before updating display
 const AUDIO_FLOWING_STABILITY_THRESHOLD = 3;
 
-// VU meter state tracking for smoothing and peak hold
-const vuMeterState = new Map(); // sourceId -> { lastPeak, lastRms, peakHold, peakHoldTime }
-
-// VU meter behavior constants
-const PEAK_HOLD_TIME_MS = 1500; // Hold peak for 1.5 seconds
-const PEAK_ATTACK_SMOOTHING = 0.7; // Attack: high alpha = quick response to increases (0-1)
-const PEAK_RELEASE_SMOOTHING = 0.2; // Release: low alpha = slow response to decreases (0-1)
-const RMS_SMOOTHING = 0.3; // RMS uses moderate smoothing (0-1)
-
-// Debug logging throttle - only log once per interval to avoid console spam
-const DEBUG_LOG_INTERVAL_MS = 5000; // Log debug messages at most once every 5 seconds
-let lastVuMeterDebugLog = 0;
-let lastBroadcastQueueDebugLog = 0;
-
 // Stream mode functions removed - web audio ALWAYS uses secure HTTPS proxy
 // Icecast is only for external players (VLC, Winamp, etc.) - not for web playback
 
@@ -544,28 +530,19 @@ function updateMetricsOnly() {
 
         // Update metrics if source is running
         if (source.status === 'running' && source.metrics) {
-            // Update level meters
-            const peakMeter = document.getElementById(`peak-meter-${safeId}`);
-            const rmsMeter = document.getElementById(`rms-meter-${safeId}`);
-            const peakLabel = document.getElementById(`peak-label-${safeId}`);
-            const rmsLabel = document.getElementById(`rms-label-${safeId}`);
+            // The vu-fill bars and their peak/rms labels are owned exclusively
+            // by realtime-vu-meters.js's 60Hz Web Audio API tap on the actual
+            // playing <audio> element -- that reflects what's really audible
+            // right now. This function used to also write those same elements
+            // from server-reported metrics on every 30s refresh, intermittently
+            // stomping the accurate live values with a stale snapshot (the
+            // reported "VU meters don't follow the audio" symptom). Only the
+            // PEAK/RMS cards and RSSI meter below are still this function's to
+            // update -- neither is duplicated by the client-side tap.
 
-            if (peakMeter) {
-                peakMeter.style.width = `${calculateFillWidth(source.metrics.peak_level_db)}%`;
-            }
-            if (rmsMeter) {
-                rmsMeter.style.width = `${calculateFillWidth(source.metrics.rms_level_db)}%`;
-            }
-            if (peakLabel) {
-                peakLabel.textContent = `Peak: ${formatDbLabel(source.metrics.peak_level_db)}`;
-            }
-            if (rmsLabel) {
-                rmsLabel.textContent = `RMS: ${formatDbLabel(source.metrics.rms_level_db)}`;
-            }
-
-            // The big PEAK/RMS cards below the bar read the same field but
-            // were only painted at full-render time, so they drifted behind
-            // the bar label.  Keep them in lockstep here.
+            // The big PEAK/RMS cards were only painted at full-render time
+            // otherwise, so they drifted stale between renders. Keep them
+            // current here.
             const peakCard = document.getElementById(`peak-card-${safeId}`);
             const rmsCard = document.getElementById(`rms-card-${safeId}`);
             if (peakCard) {
@@ -1720,101 +1697,32 @@ async function stopSource(sourceName) {
 }
 
 function updateLevelMetersFromSnapshot(snapshot) {
+    // The vu-fill bars and their peak/rms labels are owned exclusively by
+    // realtime-vu-meters.js's 60Hz Web Audio API tap on the actual playing
+    // <audio> element -- that reflects what's really audible right now.
+    // This function used to also write those same elements from server-
+    // reported metrics on every WebSocket push (as often as every 250ms per
+    // startLevelPolling()'s comment), intermittently stomping the accurate
+    // live values with a slower/staler snapshot -- the reported "VU meters
+    // don't follow the audio" symptom. Only the PEAK/RMS cards and RSSI
+    // meter below are still this function's to update -- neither is
+    // duplicated by the client-side tap, and RSSI in particular (radio
+    // signal strength) has no client-side equivalent at all.
     if (!snapshot || !Array.isArray(snapshot.live_metrics)) {
         return;
     }
 
-    const now = Date.now();
     let updatedCount = 0;
-    
+
     snapshot.live_metrics.forEach(metric => {
         const safeId = sanitizeId(metric.source_id);
-        const peakBar = document.getElementById(`peak-meter-${safeId}`);
-        const rmsBar = document.getElementById(`rms-meter-${safeId}`);
-        const peakLabel = document.getElementById(`peak-label-${safeId}`);
-        const rmsLabel = document.getElementById(`rms-label-${safeId}`);
+        const peakCard = document.getElementById(`peak-card-${safeId}`);
+        const rmsCard = document.getElementById(`rms-card-${safeId}`);
 
-        if (!peakBar) {
+        if (!peakCard && !rmsCard) {
             return;
         }
 
-        // Validate metric values - use defaults if null/undefined
-        const peakValue = (typeof metric.peak_level_db === 'number' && !Number.isNaN(metric.peak_level_db))
-            ? metric.peak_level_db
-            : -120.0;
-        const rmsValue = (typeof metric.rms_level_db === 'number' && !Number.isNaN(metric.rms_level_db))
-            ? metric.rms_level_db
-            : -120.0;
-
-        // Get or initialize state for this meter
-        let state = vuMeterState.get(metric.source_id);
-        if (!state) {
-            state = {
-                lastPeak: peakValue,
-                lastRms: rmsValue,
-                peakHold: peakValue,
-                peakHoldTime: now
-            };
-            vuMeterState.set(metric.source_id, state);
-        }
-
-        // Smooth peak value using exponential moving average
-        // Peak rises quickly but falls slowly for realistic VU behavior
-        // EMA formula: smoothed = old * (1 - alpha) + new * alpha
-        // Higher alpha = more weight on new value = faster response
-        const targetPeak = peakValue;
-        let smoothedPeak;
-        if (targetPeak > state.lastPeak) {
-            // Rise quickly (attack) - high alpha for fast response
-            smoothedPeak = state.lastPeak * (1 - PEAK_ATTACK_SMOOTHING) + targetPeak * PEAK_ATTACK_SMOOTHING;
-        } else {
-            // Fall slowly (release) - low alpha for slow response
-            smoothedPeak = state.lastPeak * (1 - PEAK_RELEASE_SMOOTHING) + targetPeak * PEAK_RELEASE_SMOOTHING;
-        }
-
-        // Update peak hold: hold the highest peak, reset after timeout
-        if (targetPeak > state.peakHold) {
-            // New peak is higher - update hold
-            state.peakHold = targetPeak;
-            state.peakHoldTime = now;
-        } else if ((now - state.peakHoldTime) > PEAK_HOLD_TIME_MS) {
-            // Hold time expired - reset to current level
-            state.peakHold = targetPeak;
-            state.peakHoldTime = now;
-        }
-
-        // Smooth RMS value using exponential moving average
-        // RMS uses moderate smoothing for stable level indication
-        const smoothedRms = state.lastRms * (1 - RMS_SMOOTHING) + rmsValue * RMS_SMOOTHING;
-
-        // Update state
-        state.lastPeak = smoothedPeak;
-        state.lastRms = smoothedRms;
-
-        // Apply to UI - peak shows current smoothed value
-        const peakWidth = calculateFillWidth(smoothedPeak);
-        peakBar.style.width = `${peakWidth}%`;
-        peakBar.style.opacity = metric.source_status === 'running' ? 1 : 0.35;
-
-        // RMS bar shows average level
-        if (rmsBar) {
-            const rmsWidth = calculateFillWidth(smoothedRms);
-            rmsBar.style.width = `${rmsWidth}%`;
-            rmsBar.style.opacity = metric.source_status === 'running' ? 0.9 : 0.3;
-        }
-
-        // Labels show raw server measurements, not client-side smoothed values
-        if (peakLabel) {
-            peakLabel.textContent = `Peak: ${formatDbLabel(metric.peak_level_db)}`;
-        }
-        if (rmsLabel) {
-            rmsLabel.textContent = `RMS: ${formatDbLabel(metric.rms_level_db)}`;
-        }
-
-        // Mirror the raw measurements into the PEAK/RMS cards so they
-        // always agree with the bar label above (broadcast path).
-        const peakCard = document.getElementById(`peak-card-${safeId}`);
-        const rmsCard = document.getElementById(`rms-card-${safeId}`);
         if (peakCard) {
             peakCard.textContent = formatDbCard(metric.peak_level_db);
         }
