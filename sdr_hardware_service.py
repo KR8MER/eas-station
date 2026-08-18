@@ -161,8 +161,10 @@ PUBLISHER_SLEEP_MAX_MS = 10  # Maximum sleep when buffer is low
 # Spectrum computation constants
 FFT_SIZE = 2048
 FFT_MIN_MAGNITUDE = 1e-10
-SPECTRUM_DB_MIN = -80.0
-SPECTRUM_DB_MAX = 0.0
+# Floor on the per-capture dB span used to normalize the spectrum to 0-1
+# (see compute_spectrum()) -- prevents a near-silent capture from being
+# auto-amplified into apparent noise.
+MIN_SPECTRUM_DB_SPAN = 10.0
 
 # IQ capture configuration (capture_iq command)
 # Captures are written as complex64 .npy files for use with
@@ -1064,17 +1066,35 @@ def compute_spectrum(samples, numpy_module) -> Optional[list]:
         window = numpy_module.hanning(FFT_SIZE)
         windowed = samples_centered * window
         fft_result = numpy_module.fft.fftshift(numpy_module.fft.fft(windowed))
-        
-        # Convert to magnitude (dB)
-        magnitude = numpy_module.abs(fft_result)
+
+        # Convert to magnitude (dB), referenced to full-scale (dBFS) so a
+        # unit-amplitude input reads ~0 dB at its bin. Without dividing by
+        # the window's coherent gain (sum(window)), a raw FFT bin's
+        # magnitude scales with FFT_SIZE and the window shape -- for
+        # FFT_SIZE=2048 with a Hanning window, a full-scale tone's peak bin
+        # sits around +54 dB raw, far above any reasonable fixed ceiling.
+        magnitude = numpy_module.abs(fft_result) / numpy_module.sum(window)
         magnitude = numpy_module.where(magnitude > 0, magnitude, FFT_MIN_MAGNITUDE)
         magnitude_db = 20 * numpy_module.log10(magnitude)
-        
-        # Normalize to 0-1 range
-        normalized = numpy_module.clip(
-            (magnitude_db - SPECTRUM_DB_MIN) / (SPECTRUM_DB_MAX - SPECTRUM_DB_MIN),
-            0.0, 1.0
-        )
+
+        # Normalize to 0-1 range using THIS capture's own dB span, not a
+        # fixed SPECTRUM_DB_MIN/MAX window. A fixed window can't hold for
+        # every receiver/gain/antenna combination -- the absolute dBFS
+        # level of "the same real signal" varies enormously with gain
+        # settings and cable loss, so any single fixed calibration either
+        # saturates strong signals at 1.0 (clips the useful shape away) or
+        # crushes weak ones to 0.0. Reproduced live: with a fixed -80..0 dB
+        # window, 87% of bins (1781/2048) on a real, moderate-strength FM
+        # signal clipped to 1.0, flattening the waterfall and spectrum
+        # scope into a saturated "brick" instead of a legible spectral
+        # shape. Per-capture normalization always uses the full available
+        # dynamic range instead. MIN_SPECTRUM_DB_SPAN floors the divisor so
+        # a near-silent capture (no antenna, receiver just started) isn't
+        # auto-amplified into apparent noise.
+        db_min = float(numpy_module.min(magnitude_db))
+        db_max = float(numpy_module.max(magnitude_db))
+        span = max(db_max - db_min, MIN_SPECTRUM_DB_SPAN)
+        normalized = numpy_module.clip((magnitude_db - db_min) / span, 0.0, 1.0)
         
         return normalized.tolist()
     except Exception as e:
