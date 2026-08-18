@@ -90,20 +90,25 @@ def _get_fips_from_cap_alert(alert, raw_json: Optional[Dict] = None) -> List[str
 
 
 def _resolve_event_code(alert) -> Optional[str]:
-    """Try to resolve the 3-letter EAS event code from a CAP alert."""
-    from app_utils.event_codes import EVENT_CODE_REGISTRY
+    """Try to resolve the 3-letter EAS event code from a CAP alert.
+
+    Delegates to the shared resolver in app_utils.eas / app_utils.event_codes
+    -- this used to be an independent, weaker reimplementation that only
+    matched the CAP `event` name against the registry's canonical names,
+    checking neither the CAP `eventCode` block (the alert source's own
+    authoritative SAME code) nor the registry's curated aliases. That gap
+    let a real alert through as "UNKNOWN" (e.g. a local agency's "Natural
+    gas leak" shelter-in-place alert, which has no eventCode block and
+    whose free-text name wasn't a registered alias) and silently dropped
+    it at the forwarding-allowlist check, even though the allowlist itself
+    was configured correctly.
+    """
+    from app_utils.eas import _collect_event_code_candidates
+    from app_utils.event_codes import resolve_event_code
 
     event_name = (getattr(alert, 'event', '') or '').strip()
-    if not event_name:
-        return None
-
-    # Direct lookup by event name
-    for code, info in EVENT_CODE_REGISTRY.items():
-        name = info.get('name', '') if isinstance(info, dict) else str(info)
-        if name.lower() == event_name.lower():
-            return code
-
-    return None
+    candidates = _collect_event_code_candidates(alert, {})
+    return resolve_event_code(event_name, candidates)
 
 
 def _is_must_carry(raw_json: Optional[Dict]) -> bool:

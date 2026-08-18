@@ -1202,6 +1202,26 @@ def _collect_event_code_candidates(alert: object, payload: Dict[str, object]) ->
             return
         if isinstance(value, str):
             candidates.append(value)
+        elif isinstance(value, dict):
+            # NWS/IPAWS CAP-JSON (e.g. api.weather.gov) represents eventCode
+            # as a dict keyed by valueName, e.g.
+            # {'SAME': ['SVR'], 'NationalWeatherService': ['SVW']} -- 'SAME'
+            # is the CAP-standard valueName carrying the 3-letter SAME code.
+            # This branch used to be missing entirely, so a dict here (the
+            # normal shape for every NWS-sourced alert) was silently
+            # dropped and resolution always fell through to matching the
+            # human-readable `event` name instead of the authoritative
+            # SAME code the alert actually carried.
+            for key in ('SAME', 'same'):
+                if key in value:
+                    _extend(value[key])
+                    return
+            # No SAME key -- don't drop the block entirely, but don't
+            # guess either; other valueNames (e.g. 'NationalWeatherService')
+            # aren't SAME codes and normalise_event_code() will reject
+            # anything that isn't a 3-char alnum token anyway.
+            for nested in value.values():
+                _extend(nested)
         elif isinstance(value, (list, tuple, set)):
             for item in value:
                 if item is not None:
