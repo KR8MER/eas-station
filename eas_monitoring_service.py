@@ -70,6 +70,20 @@ install_alert_filter()
 
 logger = logging.getLogger(__name__)
 
+# This process runs a CPU-bound numpy-heavy monitor loop (SAME/FSK decode
+# across every audio source) continuously alongside I/O-bound threads that
+# need to run promptly -- the EAS decoder stream's ffmpeg-feeder thread
+# (stream_eas_decoder() below) chief among them. Python's default GIL
+# switch interval (5ms) lets one long-running CPU-bound thread hold the GIL
+# for stretches long enough that a sibling I/O thread trying to keep an
+# ffmpeg subprocess fed in real time falls behind -- observed live as
+# /api/eas/decoder-stream producing zero audio bytes for 15+ seconds while
+# this process's CPU briefly spiked well past 100% on the request. Shortening
+# the interval makes the interpreter hand off the GIL more often, at a small
+# constant cost in context-switch overhead, which is worth paying here since
+# audio timing correctness matters more than raw throughput.
+sys.setswitchinterval(0.001)
+
 # Constants
 FFT_MIN_MAGNITUDE = 1e-10  # Minimum magnitude to avoid log(0) in dB conversion
 MIN_AUDIO_SAMPLE_RATE = 8000  # Minimum valid audio sample rate (Hz)

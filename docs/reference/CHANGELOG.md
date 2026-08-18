@@ -8,6 +8,47 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.169.2] - 2026-08-18 - Fix the EAS decoder stream and VU meters not following live audio
+
+### Fixed
+- **`/api/eas/decoder-stream` ("Listen to EAS Decoder Feed") produced zero
+  audio bytes.** Reproduced live: a 15+ second connection to the endpoint
+  received no data at all, despite the server correctly subscribing to
+  every running source and starting its ffmpeg encoder. `eas_monitoring_service.py`
+  runs a continuous, numpy-heavy, CPU-bound monitor loop (SAME/FSK decode
+  across every audio source) that holds Python's GIL for long stretches
+  under Python's default 5ms switch interval — long enough to starve the
+  decoder stream's I/O-bound ffmpeg-feeder thread of the scheduling it
+  needs to keep the encoder fed in real time. Observed live: this
+  process's CPU spiked well past 100% the moment a stream request came in.
+  Added `sys.setswitchinterval(0.001)` near the top of the service so the
+  interpreter hands off the GIL more often.
+- **VU meters didn't follow the actual playing audio.** Three separate
+  code paths in `templates/audio_monitoring.html` were all writing to the
+  same `peak-meter-*`/`rms-meter-*` bar and `peak-label-*`/`rms-label-*`
+  text elements: the current 60Hz `realtime-vu-meters.js` system (a Web
+  Audio API tap on the actual `<audio>` element — the only one that
+  reflects what's really audible), plus two older systems
+  (`updateLevelMetersFromSnapshot()`, fed by a WebSocket push as often as
+  every 250ms, and `updateMetricsOnly()`, fired every 30s) that wrote
+  server-reported metrics computed from the same decode pipeline affected
+  by the GIL-starvation bug above. The faster, more frequent WebSocket
+  path in particular kept stomping the accurate live values with a
+  slower/staler snapshot. Trimmed both older functions down to only the
+  work that isn't already owned by the client-side tap — the PEAK/RMS
+  cards and the RF RSSI meter, neither of which the Web Audio API can
+  derive on its own — and removed the now-dead EMA-smoothing state and
+  constants that existed solely to feed the redundant bar/label writes.
+- Investigated general per-source live audio playback (item reported
+  alongside the above): backend tested healthy on live verification
+  (Icecast mounts serve real audio both directly and through nginx's
+  existing proxy rule) — a prior nginx routing fix for exactly this
+  symptom (`/etc/nginx/sites-available/eas-station`'s per-source `.mp3`
+  mount proxy block) is already deployed and working. No further backend
+  changes made for this one; if still reproducible after this update, it
+  needs browser-side detail (which source, console error) to pin down
+  further.
+
 ## [2.169.1] - 2026-08-18 - Fix three efficiency problems found in a performance audit
 
 ### Fixed
