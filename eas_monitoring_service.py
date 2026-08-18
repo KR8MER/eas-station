@@ -2102,8 +2102,13 @@ def main():
                             running = eas_metrics.get("running", False)
                             logger.debug(f"EAS Monitor: running={running}, samples={samples}")
 
-                # Sleep briefly (check for commands every 500ms)
-                time.sleep(0.5)
+                # Sleep briefly. Command handling runs on its own Redis
+                # pub/sub subscriber thread, not this loop -- this sleep only
+                # paces the metrics_interval check above, so it needs to be
+                # shorter than metrics_interval or the publish rate silently
+                # halves (a 0.5s sleep here previously made the "4 Hz" target
+                # above only achievable at 2 Hz).
+                time.sleep(0.1)
 
             except KeyboardInterrupt:
                 logger.info("Received keyboard interrupt")

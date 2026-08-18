@@ -1418,13 +1418,23 @@ def _augment_discovery_with_active_receivers(devices):
     return devices
 
 
-def process_commands(redis_client):
-    """Process control commands from Redis."""
+def process_commands(redis_client, timeout: int = 2):
+    """Process control commands from Redis.
+
+    Blocks (BLPOP) for up to ``timeout`` seconds waiting for a command
+    instead of polling with a non-blocking LPOP every 100ms. SDR commands
+    (device discovery, receiver start/stop) are rare, human-triggered admin
+    actions -- the previous 10Hz poll spent on the order of 864,000 Redis
+    round-trips/day asking "anything yet?" of a queue that's empty well
+    over 99.9% of the time. The timeout keeps the caller's loop responsive
+    to a shutdown flag instead of blocking forever.
+    """
     try:
-        command_json = redis_client.lpop("sdr:commands")
-        if not command_json:
+        popped = redis_client.blpop(["sdr:commands"], timeout=timeout)
+        if not popped:
             return
-        
+        _queue_key, command_json = popped
+
         command = json.loads(command_json)
         action = command.get("action")
         receiver_id = command.get("receiver_id")
@@ -2231,15 +2241,14 @@ def main():
         logger.info("   - Sample publishing: ACTIVE")
         logger.info("=" * 80)
         
-        # Main loop: process commands and maintain health
+        # Main loop: process commands and maintain health.
+        # process_commands() blocks (BLPOP) for up to a few seconds waiting
+        # for a command, so it paces this loop itself -- no extra sleep
+        # needed between iterations.
         while _state.running:
             try:
-                # Process any pending commands
                 process_commands(redis_client)
-                
-                # Brief sleep
-                time.sleep(0.1)
-                
+
             except KeyboardInterrupt:
                 logger.info("Received keyboard interrupt")
                 break
