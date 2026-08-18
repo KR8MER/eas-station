@@ -775,9 +775,20 @@ sudo systemctl restart eas-station</code></pre>
         // ends up rendered into a detached DOM node. Capture the existing
         // panel HTML keyed by receiver id, then restore it after the
         // ``container.innerHTML = html`` assignment below.
+        //
+        // NOTE: `.trends-container` is deliberately excluded here. Cloning
+        // its innerHTML does not carry the Chart.js-rendered bitmap (canvas
+        // pixel data is never serialized into markup), so a clone-and-restore
+        // just swaps in a blank, disconnected `<canvas>` -- the chart looked
+        // like it "disappeared almost immediately" and, once frozen, its
+        // baked-in inline width from whatever moment it was last captured
+        // stopped tracking the container's actual width. radio_diagnostics_trends.js
+        // instead watches the receivers container for its children being
+        // replaced and rebuilds (and refetches) each open panel against the
+        // fresh DOM -- see trendsRebuildActive().
         const preservedPanels = [];
         for (const panel of container.querySelectorAll(
-            '.diagnostic-container, .waterfall-container, .spectrum-scope-container, .trends-container'
+            '.diagnostic-container, .waterfall-container, .spectrum-scope-container'
         )) {
             // Fast-path: skip empty panels without touching innerHTML.
             if (!panel.firstChild) continue;
@@ -788,9 +799,6 @@ sudo systemctl restart eas-station</code></pre>
             } else if (panel.classList.contains('spectrum-scope-container')) {
                 kind = 'scope';
                 recvId = panel.getAttribute('data-scope-for');
-            } else if (panel.classList.contains('trends-container')) {
-                kind = 'trends';
-                recvId = panel.getAttribute('data-trends-for');
             } else {
                 kind = 'wf';
                 recvId = panel.getAttribute('data-waterfall-for');
@@ -806,12 +814,11 @@ sudo systemctl restart eas-station</code></pre>
 
         container.innerHTML = html;
 
-        // Restore any preserved diagnostic / waterfall / scope / trends panels.
+        // Restore any preserved diagnostic / waterfall / scope panels.
         const selectorFor = {
             diag: (id) => `.diagnostic-container[data-diagnostic-for="${CSS.escape(id)}"]`,
             wf: (id) => `.waterfall-container[data-waterfall-for="${CSS.escape(id)}"]`,
             scope: (id) => `.spectrum-scope-container[data-scope-for="${CSS.escape(id)}"]`,
-            trends: (id) => `.trends-container[data-trends-for="${CSS.escape(id)}"]`,
         };
         for (const state of preservedPanels) {
             const panel = container.querySelector(selectorFor[state.kind](state.recvId));

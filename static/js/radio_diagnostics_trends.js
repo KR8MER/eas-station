@@ -353,6 +353,34 @@
         if (label) label.textContent = 'Historical Trends';
     }
 
+    // -- Survive the receiver cards' WebSocket-driven auto-refresh --------
+    // `renderReceivers()` in radio_diagnostics.html replaces the entire
+    // receiver-card tree (roughly once a second) with freshly-rendered,
+    // empty `.trends-container` placeholders -- server markup has no notion
+    // of "this panel was open". A Chart.js canvas's drawn pixels are never
+    // serialized into HTML, so any attempt to clone-and-restore the old
+    // panel markup across that replacement only ever produces a blank,
+    // disconnected canvas frozen at whatever width it happened to have at
+    // capture time (the "chart disappears almost immediately" / "isn't wide
+    // enough" symptoms). Instead, watch the receivers container for its
+    // children being replaced and, for any receiver whose trends panel was
+    // left open, rebuild it from scratch against the fresh DOM.
+    function trendsRebuildActive() {
+        Object.keys(trendsActiveReceivers).forEach(function (receiverId) {
+            var container = trendsFindContainer(receiverId);
+            if (!container || container.firstChild) return; // gone, or not yet clobbered
+            trendsBuildPanel(container, receiverId);
+            trendsFetchAndRender(receiverId);
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var receiversContainer = document.getElementById('receiversContainer');
+        if (receiversContainer && window.MutationObserver) {
+            new MutationObserver(trendsRebuildActive).observe(receiversContainer, { childList: true });
+        }
+    });
+
     document.addEventListener('click', function (event) {
         var btn = event.target.closest('button[data-action="historical-trends"]');
         if (!btn) return;
@@ -365,10 +393,10 @@
         }
     });
 
-    // Delegated so it survives the periodic innerHTML-based panel restore
-    // (the "preservedPanels" mechanism in radio_diagnostics.html's inline
-    // script clones panel HTML across re-renders; a directly-attached
-    // listener would not survive that, a document-level delegated one does).
+    // Delegated so it keeps working after trendsRebuildActive() rebuilds the
+    // panel's <select> as a brand-new element every refresh cycle -- a
+    // directly-attached listener would not survive that, a document-level
+    // delegated one does.
     document.addEventListener('change', function (event) {
         var select = event.target.closest('select[data-trends-window]');
         if (!select) return;
