@@ -766,9 +766,9 @@ sudo systemctl restart eas-station</code></pre>
             `;
         }
 
-        // Preserve any in-progress / completed "Run Diagnostic" and "Show
-        // Waterfall" panel content across this re-render. Without this, the
-        // WebSocket-driven auto-refresh (which fires on every ``radio_status_update``,
+        // Preserve any in-progress / completed "Run Diagnostic" panel content
+        // across this re-render. Without this, the WebSocket-driven
+        // auto-refresh (which fires on every ``radio_status_update``,
         // typically every ~1 s, with a 15 s polling fallback) wipes out the
         // spinner placed by the click handler before the 2 s capture+analyze
         // round-trip completes, so the operator sees nothing and the result
@@ -776,36 +776,33 @@ sudo systemctl restart eas-station</code></pre>
         // panel HTML keyed by receiver id, then restore it after the
         // ``container.innerHTML = html`` assignment below.
         //
-        // NOTE: `.trends-container` is deliberately excluded here. Cloning
-        // its innerHTML does not carry the Chart.js-rendered bitmap (canvas
-        // pixel data is never serialized into markup), so a clone-and-restore
-        // just swaps in a blank, disconnected `<canvas>` -- the chart looked
-        // like it "disappeared almost immediately" and, once frozen, its
-        // baked-in inline width from whatever moment it was last captured
-        // stopped tracking the container's actual width. radio_diagnostics_trends.js
-        // instead watches the receivers container for its children being
-        // replaced and rebuilds (and refetches) each open panel against the
-        // fresh DOM -- see trendsRebuildActive().
+        // NOTE: `.trends-container`, `.waterfall-container` and
+        // `.spectrum-scope-container` are deliberately excluded here.
+        // Cloning innerHTML does not carry a `<canvas>`'s rendered bitmap
+        // (pixel data is never serialized into markup) or any
+        // addEventListener bindings on cloned elements (the zoom buttons'
+        // click handlers, the canvas's wheel/pointer gesture listeners) --
+        // a clone-and-restore swaps in a blank, disconnected canvas and
+        // visually-identical but completely inert buttons. That first broke
+        // the trends charts ("disappeared almost immediately"); the same
+        // defect later made the waterfall/scope zoom controls look like
+        // they did nothing ("buttons visible, clicking does nothing") once
+        // this file grew live zoom/pan gestures on those same canvases.
+        // Neither panel type needs this preservation mechanism at all: both
+        // already detect their own DOM replacement and rebuild themselves
+        // with fresh listeners on their own poll cadence --
+        // radio_diagnostics_trends.js watches the receivers container for
+        // its children being replaced (see trendsRebuildActive()), and
+        // liveSpectrumTick() checks `!state.canvas.isConnected` every
+        // 500 ms. Only `.diagnostic-container` (plain text/table content,
+        // no canvas, no listeners) is safe to innerHTML-preserve.
         const preservedPanels = [];
-        for (const panel of container.querySelectorAll(
-            '.diagnostic-container, .waterfall-container, .spectrum-scope-container'
-        )) {
+        for (const panel of container.querySelectorAll('.diagnostic-container')) {
             // Fast-path: skip empty panels without touching innerHTML.
             if (!panel.firstChild) continue;
-            let kind, recvId;
-            if (panel.classList.contains('diagnostic-container')) {
-                kind = 'diag';
-                recvId = panel.getAttribute('data-diagnostic-for');
-            } else if (panel.classList.contains('spectrum-scope-container')) {
-                kind = 'scope';
-                recvId = panel.getAttribute('data-scope-for');
-            } else {
-                kind = 'wf';
-                recvId = panel.getAttribute('data-waterfall-for');
-            }
+            const recvId = panel.getAttribute('data-diagnostic-for');
             if (!recvId) continue;
             preservedPanels.push({
-                kind,
                 recvId,
                 html: panel.innerHTML,
                 display: panel.style.display,
@@ -814,14 +811,11 @@ sudo systemctl restart eas-station</code></pre>
 
         container.innerHTML = html;
 
-        // Restore any preserved diagnostic / waterfall / scope panels.
-        const selectorFor = {
-            diag: (id) => `.diagnostic-container[data-diagnostic-for="${CSS.escape(id)}"]`,
-            wf: (id) => `.waterfall-container[data-waterfall-for="${CSS.escape(id)}"]`,
-            scope: (id) => `.spectrum-scope-container[data-scope-for="${CSS.escape(id)}"]`,
-        };
+        // Restore any preserved diagnostic panels.
         for (const state of preservedPanels) {
-            const panel = container.querySelector(selectorFor[state.kind](state.recvId));
+            const panel = container.querySelector(
+                `.diagnostic-container[data-diagnostic-for="${CSS.escape(state.recvId)}"]`
+            );
             if (panel) {
                 panel.innerHTML = state.html;
                 if (state.display) panel.style.display = state.display;
