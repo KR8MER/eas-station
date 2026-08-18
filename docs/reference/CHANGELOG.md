@@ -8,6 +8,38 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.169.1] - 2026-08-18 - Fix three efficiency problems found in a performance audit
+
+### Fixed
+- **SDR service polled Redis 10x/second forever for a queue that's empty
+  99.9%+ of the time.** `sdr_hardware_service.py`'s main loop called
+  `process_commands()` (a non-blocking `LPOP` on `sdr:commands`) every
+  100ms regardless of whether any command was pending — SDR commands
+  (device discovery, receiver start/stop) are rare, human-triggered admin
+  actions, so this spent on the order of 864,000 wasted Redis round-trips
+  per day. Switched to a blocking `BLPOP` with a short timeout so the
+  process sleeps until a command actually arrives instead of polling.
+- **Audio service's metrics loop silently ran at half its documented
+  rate.** `eas_monitoring_service.py`'s main loop is commented "publish
+  metrics at 4 Hz" (`metrics_interval = 0.25`) but only woke up every
+  0.5s, so the 0.25s threshold could never be checked more often than
+  every 0.5s — the loop actually ran at 2Hz, halving how fresh VU
+  meters/RSSI/RBDS updates reaching the UI were. The 0.5s sleep was sized
+  for a "check for commands every 500ms" step that no longer exists in
+  this loop (removed in 2.168.3). Shortened the sleep to 0.1s so the
+  4Hz target is actually achievable.
+- **Two admin routes recalculated intersections with a per-boundary query
+  loop instead of the already-existing batched query.** `/admin/
+  calculate_all_intersections` re-fetched the *entire* boundaries table on
+  every alert iteration and ran a separate PostGIS query per alert×boundary
+  pair — with N alerts and M boundaries, N×M individual round-trips instead
+  of N. `/admin/calculate_intersections/<id>` and `/admin/
+  calculate_single_alert/<id>` had the same one-query-per-boundary pattern
+  for a single alert. All three now call `calculate_alert_intersections()`
+  (`app_core/alerts.py`), the single-batched-query helper the other three
+  routes in the same file already used — this was a duplicate,
+  unmodernized implementation left behind, not a new algorithm.
+
 ## [2.169.0] - 2026-08-17 - Fix broken VTEC chain links, add a lifecycle view to the alert trail
 
 ### Fixed
