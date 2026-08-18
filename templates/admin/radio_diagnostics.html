@@ -1747,6 +1747,31 @@ sudo systemctl restart eas-station</code></pre>
         ctx.fillStyle = '#04040c';
         ctx.fillRect(0, 0, w, h);
 
+        // Auto-scale the y-axis to this payload's actual min/max, the same
+        // way drawSparkline() (used by the sparkline strip elsewhere on
+        // this page) already does -- rather than assuming the server's 0-1
+        // normalised power spans the full canvas. Real FM passbands only
+        // occupy a fraction of that nominal range, while FFT edge bins
+        // (index 0 / N-1) commonly carry a DC-offset artifact well above
+        // the rest of the spectrum; without auto-scaling, that edge spike
+        // pegs the trace to the very top of the canvas with zero headroom
+        // (looks "clipped") while the real signal collapses into a thin
+        // band at the bottom ("too zoomed in" on the noise floor).
+        let lo = Infinity, hi = -Infinity;
+        for (let i = 0; i < n; i++) {
+            const v = Number(spectrum[i]);
+            if (!isFinite(v)) continue;
+            if (v < lo) lo = v;
+            if (v > hi) hi = v;
+        }
+        if (!isFinite(lo) || !isFinite(hi)) { lo = 0; hi = 1; }
+        if (lo === hi) { lo -= 0.05; hi += 0.05; }
+        const span = hi - lo;
+        lo = Math.max(0, lo - span * 0.08);
+        hi = hi + span * 0.08;
+        state.scopeYRange = [lo, hi];
+        const scaleY = (v) => h - ((Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * h;
+
         ctx.strokeStyle = 'rgba(128,128,128,0.2)';
         ctx.lineWidth = 1;
         for (let g = 1; g < 4; g++) {
@@ -1766,7 +1791,7 @@ sudo systemctl restart eas-station</code></pre>
         ctx.beginPath();
         for (let i = 0; i < n; i++) {
             const x = i * xStep;
-            const y = h - (Math.max(0, Math.min(1, state.scopePeak[i])) * h);
+            const y = scaleY(state.scopePeak[i]);
             if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
@@ -1778,8 +1803,7 @@ sudo systemctl restart eas-station</code></pre>
         ctx.beginPath();
         for (let i = 0; i < n; i++) {
             const x = i * xStep;
-            const v = Math.max(0, Math.min(1, Number(spectrum[i]) || 0));
-            const y = h - (v * h);
+            const y = scaleY(Number(spectrum[i]) || 0);
             if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
@@ -1926,8 +1950,11 @@ sudo systemctl restart eas-station</code></pre>
             if (state.scopeActive) {
                 scopeRender(state, spectrum);
                 scopeUpdateAxis(state, payload);
+                const range = state.scopeYRange
+                    ? ` · y-axis ${state.scopeYRange[0].toFixed(2)}–${state.scopeYRange[1].toFixed(2)} (auto)`
+                    : '';
                 state.scopeStatusEl.textContent =
-                    `${spectrum.length}-bin FFT · latency ${ageMs.toFixed(0)} ms`;
+                    `${spectrum.length}-bin FFT · latency ${ageMs.toFixed(0)} ms${range}`;
             }
         } catch (err) {
             // Network blip — keep the loop running. The next tick will try

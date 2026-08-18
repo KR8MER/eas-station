@@ -223,10 +223,14 @@
                 '<span class="small text-muted" data-trends-status="' + receiverId + '">Loading…</span>' +
             '</div>' +
             '<div class="row g-2">' +
-                '<div class="col-md-6"><div class="small text-muted mb-1">Signal Strength</div><canvas data-trends-chart="signal" data-receiver-id="' + receiverId + '" height="120"></canvas></div>' +
-                '<div class="col-md-6"><div class="small text-muted mb-1">Lock %</div><canvas data-trends-chart="locked" data-receiver-id="' + receiverId + '" height="120"></canvas></div>' +
-                '<div class="col-md-6"><div class="small text-muted mb-1">Sample Rate Ratio (effective / configured)</div><canvas data-trends-chart="rate" data-receiver-id="' + receiverId + '" height="120"></canvas></div>' +
-                '<div class="col-md-6"><div class="small text-muted mb-1">Buffer Overflow / Underflow</div><canvas data-trends-chart="buffer" data-receiver-id="' + receiverId + '" height="120"></canvas></div>' +
+                '<div class="col-md-6"><div class="small text-muted mb-1">Signal Strength</div>' +
+                    '<div style="position:relative;height:220px;"><canvas data-trends-chart="signal" data-receiver-id="' + receiverId + '"></canvas></div></div>' +
+                '<div class="col-md-6"><div class="small text-muted mb-1">Lock %</div>' +
+                    '<div style="position:relative;height:220px;"><canvas data-trends-chart="locked" data-receiver-id="' + receiverId + '"></canvas></div></div>' +
+                '<div class="col-md-6"><div class="small text-muted mb-1">Sample Rate Ratio (effective / configured)</div>' +
+                    '<div style="position:relative;height:220px;"><canvas data-trends-chart="rate" data-receiver-id="' + receiverId + '"></canvas></div></div>' +
+                '<div class="col-md-6"><div class="small text-muted mb-1">Buffer Overflow / Underflow</div>' +
+                    '<div style="position:relative;height:220px;"><canvas data-trends-chart="buffer" data-receiver-id="' + receiverId + '"></canvas></div></div>' +
             '</div>';
         container.style.display = '';
     }
