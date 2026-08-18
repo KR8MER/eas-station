@@ -8,6 +8,81 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.172.0] - 2026-08-18 - Dead-air monitoring with tower light and rack alarm buzzer
+
+### Added
+- **Dead-air (silence) monitoring for monitored audio sources**, wired to
+  the USB tower light and an optional GPIO rack alarm buzzer. Every other
+  health check in the system watches *process* liveness -- service up,
+  Redis reachable, SDR locked, buffers healthy -- and all of those can be
+  green while the audio itself is dead. For an EAS monitoring station a
+  silently dead assigned source means monitoring has stopped, and until now
+  nothing said so.
+- **`app_core/audio/silence.py`** -- the detector. Classifies on two
+  independent axes, because a level threshold alone cannot do this job:
+  - *level*: RMS below a floor (default -65 dBFS) catches true digital
+    silence -- a stopped file, a muted feed, a dead stream.
+  - *flatness*: spectral flatness (Wiener entropy) catches an unmodulated
+    carrier. **This is the axis that matters for an SDR.** When an FM
+    station leaves the air the receiver does not go quiet, it outputs
+    unsquelched noise at full scale -- measured at -6 dBFS in testing,
+    which every level-only detector in this codebase reports as "audio
+    present". Noise spreads energy evenly and scores 0.40-0.57; speech and
+    music concentrate it into harmonics and score below 0.01. The default
+    threshold of 0.25 sits in a two-to-three order of magnitude gap, so it
+    is not a delicate calibration.
+- Timing reuses `SilenceDetector` in `app_core/audio/metering.py` rather
+  than adding a fourth parallel implementation. That class already had
+  duration debouncing, recovery-edge detection and an alert callback
+  fan-out, and had been dead code since it was written -- exported but
+  never instantiated outside tests. It now takes an optional explicit
+  verdict so the flatness axis can drive the same state machine.
+- **Tower light**: a new `silence` state in `resolve_tower_state()`,
+  ranked with the existing fault tier -- above every alert indication,
+  because an alert pipeline can look perfectly healthy while the source
+  feeding it is dead. Deliberately **not** suppressed by quiet hours: an
+  overnight schedule must never hide that monitoring has stopped.
+  Configurable colour, optional tower buzzer, and can be switched off.
+- **Rack alarm buzzer** on a configurable GPIO pin, with an operator
+  acknowledgement. This does not reuse the existing `_key_relay_on_edges`
+  path, which is edge-triggered off the broadcast marker and backed by a
+  300 s watchdog sized for an alert playout; dead air is a *level*
+  condition that can persist for hours, so it gets its own pin held for
+  as long as the condition lasts. Acknowledging silences the buzzer but
+  leaves the tower light lit -- standard alarm-panel behaviour, since an
+  acknowledgement means the fault was noticed, not fixed. The audio
+  service clears the acknowledgement when audio returns, so the next
+  outage sounds again instead of starting pre-silenced.
+- **Admin UI** at Admin -> Hardware (existing "Station Hardware" page):
+  enable toggle, hold-off, silence level, open-carrier sensitivity,
+  buzzer pin, tower-light colour, and a live status readout with an
+  Acknowledge button. Controls live in a new `static/js/admin/dead-air.js`
+  rather than extending `hardware-settings.js`, which is already well past
+  the size guidance.
+- New endpoints `GET /admin/hardware/dead-air/status` and
+  `POST /admin/hardware/dead-air/acknowledge`.
+- Redis key `eas:dead_air` (30 s TTL) carries the aggregate state from the
+  audio service to the GPIO service. A missing key reads as *not*
+  alarming: absence means the feature is off or the publisher is gone, and
+  neither should strand a rack buzzer on -- audio-service liveness already
+  has its own monitoring.
+
+### Fixed
+- `SilenceDetector` reported silence *immediately* when its first observed
+  chunk was silent, bypassing the duration debounce entirely. On a service
+  restart, where a source simply has not produced its first audio yet,
+  that would have sounded the rack buzzer straight away. Alarm consumers
+  now pass `assume_prior_signal=True` so the hold-off always applies.
+
+### Notes
+- Dead-air thresholds are a station-wide policy, installed once via
+  `set_default_criteria()` and re-read every 30 s by the source watchdog,
+  so changes in the admin UI take effect without a service restart.
+- The pre-existing `AudioMetrics.silence_detected` flag is unchanged. It
+  is an instantaneous per-chunk comparison with no debounce -- it flips on
+  every pause between words -- and continues to feed the analytics
+  `silence_detection_rate` only. It is not what drives the alarm.
+
 ## [2.171.1] - 2026-08-18 - Code-review fixes for the spectrum zoom
 
 ### Fixed

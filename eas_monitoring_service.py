@@ -822,6 +822,16 @@ def _source_watchdog_loop(app, audio_controller, stop_event, interval_seconds: f
 
     while not stop_event.wait(interval_seconds):
         try:
+            # Re-read dead-air thresholds each cycle so a change in
+            # Admin -> Hardware takes effect without a service restart.
+            # This loop already owns an app context per iteration and runs
+            # on a fixed schedule, unlike the FIPS refresh which only fires
+            # when an alert happens to arrive.
+            _install_dead_air_criteria(app)
+        except Exception as exc:
+            logger.debug("Dead-air criteria refresh failed: %s", exc)
+
+        try:
             # Look up which sources should be running.  This query MUST run
             # inside a Flask app context — the previous inline implementation
             # ran it without one, so Flask-SQLAlchemy raised on every cycle,
@@ -911,6 +921,11 @@ def initialize_eas_monitor(app, audio_controller):
 
         logger.info("Initializing unified EAS monitor service (V3 architecture)...")
 
+        # Install station-wide dead-air criteria before any source starts,
+        # so monitors are built already configured rather than defaulting
+        # to disabled until the first settings refresh.
+        _install_dead_air_criteria(app)
+
         # Load FIPS codes into a mutable list so in-place updates are reflected
         # in the FIPS-filtering callback without rebuilding it.
         _live_fips: list = load_fips_codes_from_config()
@@ -997,6 +1012,103 @@ def initialize_eas_monitor(app, audio_controller):
         return _eas_monitor
 
 
+def _install_dead_air_criteria(app) -> None:
+    """Load station-wide dead-air criteria from HardwareSettings.
+
+    Called at startup and whenever the settings change, so every audio
+    source built afterwards picks the thresholds up, and every monitor
+    already running is retuned in place without a restart.
+    """
+    try:
+        from app_core.audio.silence import (
+            SilenceCriteria,
+            set_default_criteria,
+        )
+        from app_core.hardware_settings import get_dead_air_settings
+
+        with app.app_context():
+            cfg = get_dead_air_settings()
+
+        criteria = SilenceCriteria(
+            enabled=bool(cfg.get("enabled")),
+            level_threshold_db=float(cfg.get("level_threshold_db", -65.0)),
+            detect_open_carrier=bool(cfg.get("detect_open_carrier", True)),
+            flatness_threshold=float(cfg.get("flatness_threshold", 0.25)),
+            duration_seconds=float(cfg.get("duration_seconds", 20.0)),
+        )
+        set_default_criteria(criteria)
+
+        # Retune monitors on sources that already exist.
+        if _audio_controller is not None:
+            for source in _audio_controller.get_all_sources().values():
+                monitor = getattr(source, "_silence_monitor", None)
+                if monitor is not None:
+                    monitor.update_criteria(criteria)
+
+        logger.info(
+            "Dead-air monitoring %s (level %.0f dBFS, flatness %.2f, "
+            "hold-off %.0fs, open-carrier %s)",
+            "enabled" if criteria.enabled else "disabled",
+            criteria.level_threshold_db,
+            criteria.flatness_threshold,
+            criteria.duration_seconds,
+            "on" if criteria.detect_open_carrier else "off",
+        )
+    except Exception as exc:
+        logger.warning("Could not install dead-air criteria: %s", exc)
+
+
+def _publish_dead_air_state(sources: Dict[str, Any]) -> None:
+    """Publish the aggregate dead-air state for the GPIO indicator service.
+
+    Aggregates every source's debounced monitor into one flag plus a
+    per-source breakdown, so the tower light and rack buzzer can be driven
+    without the GPIO process knowing anything about audio internals.
+
+    The key carries a short TTL. If this service dies the key expires and
+    the GPIO side stops asserting the alarm, which is the safe direction:
+    a buzzer stuck on because a publisher vanished is worse than a missed
+    indication, and audio-service liveness already has its own monitoring.
+    """
+    from app_core.config.redis_config import RedisChannels
+
+    silent_sources = {}
+    any_enabled = False
+    for name, stats in (sources or {}).items():
+        meta = (stats or {}).get("metadata") or {}
+        dead_air = meta.get("dead_air") or {}
+        if not dead_air.get("enabled"):
+            continue
+        any_enabled = True
+        if dead_air.get("silent"):
+            silent_sources[name] = {
+                "reason": dead_air.get("reason"),
+                "detail": dead_air.get("detail"),
+                "duration_seconds": dead_air.get("silence_duration_seconds"),
+            }
+
+    payload = {
+        "active": bool(silent_sources),
+        "enabled": any_enabled,
+        "sources": silent_sources,
+        "updated": time.time(),
+    }
+
+    client = get_redis_client()
+    client.setex(
+        RedisChannels.DEAD_AIR_KEY,
+        RedisChannels.DEAD_AIR_TTL_SECONDS,
+        json.dumps(payload),
+    )
+    # Clear a stale acknowledgement once audio is back, so the next
+    # outage sounds the buzzer instead of starting pre-silenced.
+    if not silent_sources:
+        try:
+            client.delete(RedisChannels.DEAD_AIR_ACK_KEY)
+        except Exception:
+            pass
+
+
 def collect_metrics():
     """Collect metrics from audio controller, radio manager, and EAS monitor."""
     metrics = {
@@ -1064,6 +1176,15 @@ def collect_metrics():
                     logger.error(f"Error getting source stats for '{name}': {e}")
 
             metrics["audio_controller"] = controller_stats
+
+            # Publish a compact dead-air summary for the GPIO service.
+            # Kept separate from the metrics hash because the GPIO process
+            # needs one small, cheap read on every indicator refresh and
+            # should not have to parse the whole flattened metrics blob.
+            try:
+                _publish_dead_air_state(controller_stats.get("sources", {}))
+            except Exception as exc:
+                logger.debug("Failed to publish dead-air state: %s", exc)
 
             # Get broadcast queue stats from all sources
             # Note: Each source has its own broadcast queue (architecture change)

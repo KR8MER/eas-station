@@ -191,6 +191,28 @@ def _make_active_alert_counter(flask_app):
     return _count
 
 
+def _dead_air_buzzer_pin(flask_app):
+    """Resolve the rack-alarm buzzer pin from hardware settings.
+
+    Returns ``None`` when the buzzer is disabled or no pin is configured,
+    which :func:`services.gpio.alert_indicators._drive_silence_buzzer`
+    reads as "never touch a pin". Read once at startup alongside the other
+    controller wiring; changing it takes a service restart, same as every
+    other GPIO pin assignment.
+    """
+    try:
+        from app_core.hardware_settings import get_dead_air_settings
+
+        with flask_app.app_context():
+            pin = get_dead_air_settings().get("buzzer_gpio_pin")
+        if pin:
+            logger.info("Dead-air rack buzzer configured on GPIO %s", pin)
+        return pin
+    except Exception as exc:
+        logger.warning("Could not resolve dead-air buzzer pin: %s", exc)
+        return None
+
+
 def _make_pending_gate_counter(flask_app):
     """Return a callable counting alerts in the gated-alerts Pending queue.
 
@@ -392,6 +414,7 @@ def main() -> None:
             active_alert_count_fn=_make_active_alert_counter(flask_app),
             gpio_controller=_gpio_controller,
             pending_gate_count_fn=_make_pending_gate_counter(flask_app),
+            dead_air_buzzer_pin=_dead_air_buzzer_pin(flask_app),
         )
         # The monitor now also keys the relay off the broadcast-state marker, so
         # it must run whenever a relay controller exists — not only when a tower
