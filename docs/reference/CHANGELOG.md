@@ -8,17 +8,69 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.171.1] - 2026-08-18 - Code-review fixes for the spectrum zoom
+
+### Fixed
+- **A null frequency axis rendered as `0.00000 MHz` instead of blank.**
+  `build_spectrum_payload()` emits `freq_min`/`freq_max` as `None` when the
+  centre frequency cannot be coerced, which serialises to JSON `null` --
+  and `Number(null)` is `0`, which passes `Number.isFinite`. The guard in
+  `visibleFreqRange()` therefore let it through and labelled both axis
+  edges `0.00000 MHz` across a zero-width span. It now rejects explicit
+  nulls and degenerate (zero or inverted) ranges before converting. Older
+  services that omit the keys entirely were never affected -- `undefined`
+  becomes `NaN`, which the finite check already caught.
+- **The mouse wheel swallowed the page scroll at both zoom limits.**
+  `preventDefault()` ran before the zoom was evaluated, so at 1x every
+  scroll-down and at the 64x cap every scroll-up cancelled the page scroll
+  while doing nothing, leaving the operator unable to scroll past a
+  full-width canvas. The default is now cancelled only when the gesture
+  actually changes the zoom.
+- **The Spectrum Scope's peak-hold trace clipped against the top edge.**
+  The y-axis auto-scale computed its range from the live spectrum only,
+  but `scaleY()` clamps to that range and the peak-hold line retains
+  historical maxima above it. Peaks were pinned flat at `y=0` instead of
+  the axis scaling to show them. Both traces are now included in the range.
+
+### Changed
+- Corrected an overstated claim in the 2.171.0 notes and the template's
+  header comment. Zoom recovers the ~125 Hz bin resolution the unzoomed
+  view discards -- 2048 bins over ~900 CSS pixels is ~2.3 bins per pixel
+  (~5.7 on a phone), dropped rather than averaged by the nearest-neighbour
+  upscale -- so the genuine gain is ~2-6x depending on panel width, not the
+  "~16x" originally claimed. Past one bin per pixel, zoom magnifies for
+  legibility without adding information.
+- Pan repaints are coalesced to one per animation frame. Pointer events can
+  outpace the display and each repaint recolours up to `count x 200` bins,
+  which matters on the Raspberry Pi hardware this runs on.
+- The two status lines are built by shared `waterfallStatusText()` /
+  `scopeStatusText()` helpers instead of being assembled separately in the
+  poll tick and the zoom refresh, so the two paths cannot drift apart.
+- Rebuilt zoom controls seed their readout and reset-button state from live
+  zoom state. The panels rebuild roughly once a second, and a hardcoded
+  `1x` contradicted the already-zoomed canvas until the next poll.
+- `tests/test_spectrum_frequency_axis.py` reads the template with an
+  explicit UTF-8 encoding (the platform default is ASCII under a C/POSIX
+  locale), asserts the two `renderSpectrumAxis` call sites individually
+  rather than by a count that also matched the declaration, and matches the
+  history-buffer invariant with a whitespace-tolerant regex.
+
 ## [2.171.0] - 2026-08-18 - Zoom and pan on the live waterfall and spectrum scope
 
 ### Added
 - **Zoom and pan on the Live Waterfall and Spectrum Scope**
   (`/admin/radio_diagnostics`). The SDR service already publishes a
   2048-bin FFT across the whole effective span -- ~125 Hz per bin at
-  256 kHz -- but both views downsampled that to roughly 900 CSS pixels,
-  throwing away most of the resolution the receiver had already produced.
-  Zoom crops the published bins instead of retuning, so it costs no extra
-  SDR work and no extra requests, and yields up to ~16x more real detail
-  before reaching the FFT's own resolution limit. Controls:
+  256 kHz -- but both views downsampled that to roughly 900 CSS pixels:
+  ~2.3 bins per pixel (~5.7 on a phone), dropped rather than averaged by
+  the nearest-neighbour upscale, so a one-bin spur could miss the screen
+  entirely. Zoom crops the published bins instead of retuning, so it costs
+  no extra SDR work and no extra requests, and recovers the full ~125 Hz
+  bin resolution the unzoomed view discards -- a genuine ~2-6x, depending
+  on panel width. Past the point where one bin fills one pixel, further
+  zoom magnifies for legibility without adding information; the cap and
+  bin floor bound that so the UI never implies resolution the FFT lacks.
+  Controls:
   - Zoom in / out / reset buttons in each panel header, with a live
     magnification readout.
   - Mouse wheel to zoom about the cursor, holding whatever is under the

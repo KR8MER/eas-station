@@ -1526,15 +1526,20 @@ sudo systemctl restart eas-station</code></pre>
     // ---- Zoom / pan -------------------------------------------------------
     //
     // The SDR service publishes a fixed 2048-bin FFT across the whole
-    // effective span. At 256 kHz that is ~125 Hz per bin, which is far
-    // finer than the ~900 CSS pixels either canvas gets — so most of the
-    // resolution the receiver already produces is being thrown away by
-    // downsampling to screen width. Zoom here is therefore a *crop* of
-    // the published bins, not a retune: no extra SDR work, no extra
-    // requests, and up to ~16x more real detail than the unzoomed view
-    // before hitting the FFT's own resolution limit. Zooming past that
-    // would need a narrower capture or a bigger FFT server-side; the bin
-    // floor below stops the UI pretending otherwise.
+    // effective span. At 256 kHz that is ~125 Hz per bin, finer than the
+    // ~900 CSS pixels either canvas gets — 2048 bins over 900 px is ~2.3
+    // bins per pixel (~5.7 on a phone), and because the canvas upscales
+    // with nearest-neighbour the surplus columns are *dropped*, not
+    // averaged, so a one-bin spur can miss the screen entirely.
+    //
+    // Zoom is therefore a *crop* of the published bins, not a retune: no
+    // extra SDR work and no extra requests. It recovers the full 125 Hz
+    // bin resolution the unzoomed view discards — a genuine ~2-6x
+    // depending on panel width. Beyond the point where one bin occupies
+    // one pixel, further zoom magnifies bins for legibility without
+    // adding information; the cap and bin floor below bound that so the
+    // UI never implies resolution the FFT does not have. Going finer
+    // needs a narrower capture or a bigger FFT server-side.
     const ZOOM_MAX = 64;          // 2048 bins -> 32 visible (~4 kHz @ 256 kHz)
     const ZOOM_MIN_BINS = 32;     // never crop below this many real bins
     const ZOOM_STEP = 2;          // per button press / wheel detent
@@ -1624,16 +1629,35 @@ sudo systemctl restart eas-station</code></pre>
         zoomRefreshStatus(state);
     }
 
+    function zoomLabelText(state) {
+        return `${Math.round(state.zoom || 1)}\u00d7`;
+    }
+
     function zoomRefreshControls(state) {
-        const label = zoomIsActive(state)
-            ? `${(state.zoom || 1).toFixed(state.zoom < 10 ? 0 : 0)}\u00d7`
-            : '1\u00d7';
+        const label = zoomLabelText(state);
         (state.zoomLabels || []).forEach((el) => {
             if (el && el.isConnected) el.textContent = label;
         });
         (state.zoomResetBtns || []).forEach((btn) => {
             if (btn && btn.isConnected) btn.disabled = !zoomIsActive(state);
         });
+    }
+
+    // Single source of truth for the two status lines. Both the poll tick
+    // and a zoom/pan refresh render them, so building the strings in one
+    // place stops the two paths drifting apart on any future format change.
+    function waterfallStatusText(state, payload, n, ageMs) {
+        return `${n}-bin FFT \u00b7 ${state.rowCount} rows \u00b7 `
+            + `latency ${Number(ageMs || 0).toFixed(0)} ms`
+            + spectrumSpanLabel(payload, state, n);
+    }
+
+    function scopeStatusText(state, payload, n, ageMs) {
+        const range = state.scopeYRange
+            ? ` \u00b7 y-axis ${state.scopeYRange[0].toFixed(2)}\u2013${state.scopeYRange[1].toFixed(2)} (auto)`
+            : '';
+        return `${n}-bin FFT \u00b7 latency ${Number(ageMs || 0).toFixed(0)} ms`
+            + spectrumSpanLabel(payload, state, n) + range;
     }
 
     function zoomRefreshStatus(state) {
@@ -1645,17 +1669,11 @@ sudo systemctl restart eas-station</code></pre>
         const age = Number(state.lastAgeMs) || 0;
         if (state.waterfallActive && state.statusEl) {
             state.statusEl.textContent =
-                `${n}-bin FFT \u00b7 ${state.rowCount} rows \u00b7 `
-                + `latency ${age.toFixed(0)} ms`
-                + spectrumSpanLabel(state.lastPayload, state, n);
+                waterfallStatusText(state, state.lastPayload, n, age);
         }
         if (state.scopeActive && state.scopeStatusEl) {
-            const range = state.scopeYRange
-                ? ` \u00b7 y-axis ${state.scopeYRange[0].toFixed(2)}\u2013${state.scopeYRange[1].toFixed(2)} (auto)`
-                : '';
             state.scopeStatusEl.textContent =
-                `${n}-bin FFT \u00b7 latency ${age.toFixed(0)} ms`
-                + spectrumSpanLabel(state.lastPayload, state, n) + range;
+                scopeStatusText(state, state.lastPayload, n, age);
         }
     }
 
@@ -1694,13 +1712,17 @@ sudo systemctl restart eas-station</code></pre>
             'Reset zoom to full span',
             () => { zoomReset(state); zoomChanged(state); }
         );
+        reset.disabled = !zoomIsActive(state);
 
         const label = document.createElement('span');
         label.className = 'btn btn-outline-secondary py-0 px-2 disabled';
         label.style.minWidth = '3.2em';
         label.style.opacity = '1';
         label.style.fontVariantNumeric = 'tabular-nums';
-        label.textContent = '1\u00d7';
+        // Seed from live state, not a hardcoded 1x. The panels are rebuilt
+        // roughly once a second by the WebSocket refresh, so a hardcoded
+        // label contradicted the already-zoomed canvas until the next poll.
+        label.textContent = zoomLabelText(state);
 
         wrap.appendChild(out);
         wrap.appendChild(label);
@@ -1724,7 +1746,6 @@ sudo systemctl restart eas-station</code></pre>
 
         canvas.addEventListener('wheel', (ev) => {
             if (!state.lastSpectrum) return;
-            ev.preventDefault();
             const rect = canvas.getBoundingClientRect();
             if (!rect.width) return;
             const nFreq = state.lastSpectrum.length;
@@ -1733,11 +1754,24 @@ sudo systemctl restart eas-station</code></pre>
             const relInView = (ev.clientX - rect.left) / rect.width;
             const anchor = (start + relInView * count) / nFreq;
             const factor = ev.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
-            if (zoomBy(state, factor, anchor)) zoomChanged(state);
+            // Only swallow the scroll when the gesture actually zoomed.
+            // Cancelling unconditionally trapped the page at both limits:
+            // at 1x every scroll-down, and at ZOOM_MAX every scroll-up,
+            // left the operator unable to scroll past a full-width canvas.
+            if (zoomBy(state, factor, anchor)) {
+                ev.preventDefault();
+                zoomChanged(state);
+            }
         }, { passive: false });
 
         let dragging = false;
         let lastX = 0;
+        // Pointer events can outpace the display, and each repaint recolours
+        // up to count x LIVE_WF_HEIGHT bins. Apply every movement to the pan
+        // state immediately, but coalesce the repaint to one per frame so a
+        // fast drag cannot queue more work than the browser can present —
+        // this box is a Raspberry Pi, not a workstation.
+        let panFrame = 0;
         canvas.addEventListener('pointerdown', (ev) => {
             if (!zoomIsActive(state)) return;   // nothing to pan at 1x
             dragging = true;
@@ -1752,7 +1786,12 @@ sudo systemctl restart eas-station</code></pre>
             lastX = ev.clientX;
             const widthFrac = 1 / Math.max(1, state.zoom || 1);
             zoomPanByFraction(state, -(dx / rect.width) * widthFrac);
-            zoomChanged(state);
+            if (!panFrame) {
+                panFrame = requestAnimationFrame(() => {
+                    panFrame = 0;
+                    zoomChanged(state);
+                });
+            }
         });
         const endDrag = (ev) => {
             if (!dragging) return;
@@ -1936,9 +1975,18 @@ sudo systemctl restart eas-station</code></pre>
     // actually covers, which is the whole point of being able to zoom —
     // you can read the edges off the axis instead of estimating.
     function visibleFreqRange(state, payload) {
+        // build_spectrum_payload() emits freq_min/freq_max as null when the
+        // centre frequency cannot be coerced, and Number(null) is 0 — which
+        // passes Number.isFinite and would label both edges 0.00000 MHz over
+        // a zero-width span. Reject the explicit-null and degenerate cases
+        // before converting. (Older services omit the keys entirely, giving
+        // undefined -> NaN, which the isFinite guard already caught.)
+        if (payload.freq_min == null || payload.freq_max == null) return null;
         const fMin = Number(payload.freq_min);
         const fMax = Number(payload.freq_max);
-        if (!Number.isFinite(fMin) || !Number.isFinite(fMax)) return null;
+        if (!Number.isFinite(fMin) || !Number.isFinite(fMax) || fMax <= fMin) {
+            return null;
+        }
         const nFreq = (state.lastSpectrum && state.lastSpectrum.length)
             || state.nFreq || 0;
         if (!nFreq || !zoomIsActive(state)) {
@@ -2106,12 +2154,19 @@ sudo systemctl restart eas-station</code></pre>
         // Scale over the VISIBLE bins only. Zooming in on a weak feature
         // is pointless if a strong carrier elsewhere in the span keeps
         // owning the y-axis, so the range follows the crop.
+        // Both traces must fit: the peak-hold line retains historical
+        // maxima that can sit above the current spectrum, and scaleY()
+        // clamps to [lo, hi] — so excluding it pinned the amber trace flat
+        // against the top edge instead of scaling to show it.
         let lo = Infinity, hi = -Infinity;
         for (let i = binStart; i < binEnd; i++) {
             const v = Number(spectrum[i]);
-            if (!isFinite(v)) continue;
-            if (v < lo) lo = v;
-            if (v > hi) hi = v;
+            if (isFinite(v)) {
+                if (v < lo) lo = v;
+                if (v > hi) hi = v;
+            }
+            const pk = state.scopePeak ? Number(state.scopePeak[i]) : NaN;
+            if (isFinite(pk) && pk > hi) hi = pk;
         }
         if (!isFinite(lo) || !isFinite(hi)) { lo = 0; hi = 1; }
         if (lo === hi) { lo -= 0.05; hi += 0.05; }
@@ -2307,19 +2362,13 @@ sudo systemctl restart eas-station</code></pre>
                 state.rowCount = (state.rowCount || 0) + 1;
                 liveWfUpdateAxis(state, payload);
                 state.statusEl.textContent =
-                    `${spectrum.length}-bin FFT · ${state.rowCount} rows · `
-                    + `latency ${ageMs.toFixed(0)} ms`
-                    + spectrumSpanLabel(payload, state, spectrum.length);
+                    waterfallStatusText(state, payload, spectrum.length, ageMs);
             }
             if (state.scopeActive) {
                 scopeRender(state, spectrum);
                 scopeUpdateAxis(state, payload);
-                const range = state.scopeYRange
-                    ? ` · y-axis ${state.scopeYRange[0].toFixed(2)}–${state.scopeYRange[1].toFixed(2)} (auto)`
-                    : '';
                 state.scopeStatusEl.textContent =
-                    `${spectrum.length}-bin FFT · latency ${ageMs.toFixed(0)} ms`
-                    + spectrumSpanLabel(payload, state, spectrum.length) + range;
+                    scopeStatusText(state, payload, spectrum.length, ageMs);
             }
             zoomRefreshControls(state);
         } catch (err) {

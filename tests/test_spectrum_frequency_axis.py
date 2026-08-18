@@ -38,6 +38,7 @@ occupying ~78% of a 256 kHz span was therefore labelled as occupying
 from __future__ import annotations
 
 import pathlib
+import re
 import sys
 
 import pytest
@@ -294,7 +295,10 @@ DIAGNOSTICS_HTML = ROOT / "templates" / "admin" / "radio_diagnostics.html"
 
 
 def _diagnostics_source() -> str:
-    return DIAGNOSTICS_HTML.read_text()
+    # Explicit encoding: the platform default is ASCII under a C/POSIX
+    # locale, which would raise UnicodeDecodeError on the template's
+    # non-ASCII characters and make the result runner-dependent.
+    return DIAGNOSTICS_HTML.read_text(encoding="utf-8")
 
 
 def test_waterfall_history_stores_raw_values_not_pixels():
@@ -306,8 +310,12 @@ def test_waterfall_history_stores_raw_values_not_pixels():
     to screen resolution when the row was stored.
     """
     src = _diagnostics_source()
-    assert "state.buffer = new Uint8Array(nFreq * LIVE_WF_HEIGHT);" in src
-    assert "new Uint8ClampedArray(nFreq * LIVE_WF_HEIGHT * 4)" not in src
+    assert re.search(r"state\.buffer\s*=\s*new\s+Uint8Array\(", src), (
+        "waterfall history must be a Uint8Array of per-bin power"
+    )
+    assert not re.search(
+        r"state\.buffer\s*=\s*new\s+Uint8ClampedArray\(", src
+    ), "waterfall history must not go back to storing RGBA pixels"
 
 
 def test_zoom_is_bounded_by_real_fft_resolution():
@@ -329,7 +337,11 @@ def test_axis_and_status_follow_the_visible_window():
     src = _diagnostics_source()
     assert "function visibleFreqRange(state, payload)" in src
     # Both views render their axis through the shared, zoom-aware helper.
-    assert src.count("renderSpectrumAxis(state, payload,") >= 2
+    # Assert each call site by its distinct third argument: a bare count of
+    # "renderSpectrumAxis(state, payload," also matches the declaration, so
+    # it stayed >= 2 even if one of the two call sites were deleted.
+    assert "renderSpectrumAxis(state, payload, state.axisEl)" in src
+    assert "renderSpectrumAxis(state, payload, state.scopeAxisEl)" in src
     # The span readout takes the zoom state so it can report the crop.
     assert "function spectrumSpanLabel(payload, state, nFreq)" in src
 
@@ -345,3 +357,76 @@ def test_zoom_gestures_leave_vertical_page_scroll_alone():
     """On a phone, claiming both axes would trap the page scroll."""
     src = _diagnostics_source()
     assert "canvas.style.touchAction = 'pan-y';" in src
+
+
+# --------------------------------------------------------------------------
+# Fixes from code review on PR #2416
+# --------------------------------------------------------------------------
+
+def test_null_frequency_bounds_are_rejected_not_coerced_to_zero():
+    """``Number(null)`` is 0 and passes ``Number.isFinite``.
+
+    ``build_spectrum_payload`` emits ``freq_min``/``freq_max`` as ``None``
+    when the centre frequency cannot be coerced, which serialises to JSON
+    ``null``. A guard that only checks ``Number.isFinite`` therefore lets
+    the null through and labels both axis edges ``0.00000 MHz`` across a
+    zero-width span. The explicit null check must stay.
+    """
+    src = _diagnostics_source()
+    assert "if (payload.freq_min == null || payload.freq_max == null) return null;" in src
+    # A degenerate (zero or inverted) span is rejected too.
+    assert "fMax <= fMin" in src
+
+
+def test_wheel_only_cancels_the_page_scroll_when_it_zooms():
+    """Cancelling unconditionally trapped the page at both zoom limits.
+
+    At 1x every scroll-down and at ZOOM_MAX every scroll-up produced no
+    zoom, so an unconditional ``preventDefault`` left the operator unable
+    to scroll the page while the pointer sat over a full-width canvas.
+    """
+    src = _diagnostics_source()
+    wheel = src.split("addEventListener('wheel'", 1)[1].split("}, { passive: false });", 1)[0]
+    # preventDefault must be inside the "did it zoom?" branch.
+    assert "if (zoomBy(state, factor, anchor)) {" in wheel
+    guarded = wheel.split("if (zoomBy(state, factor, anchor)) {", 1)[1]
+    assert "ev.preventDefault();" in guarded
+    # ...and must not appear before the zoom is evaluated.
+    before = wheel.split("if (zoomBy(state, factor, anchor)) {", 1)[0]
+    assert "ev.preventDefault();" not in before
+
+
+def test_scope_autoscale_includes_the_peak_hold_trace():
+    """scaleY() clamps to [lo, hi]; excluding the peaks pinned them flat.
+
+    The peak-hold line retains maxima above the current spectrum, so a
+    y-range computed from the live trace alone clipped the amber trace
+    against the top edge instead of scaling to show it.
+    """
+    src = _diagnostics_source()
+    assert "state.scopePeak ? Number(state.scopePeak[i]) : NaN" in src
+    assert "if (isFinite(pk) && pk > hi) hi = pk;" in src
+
+
+def test_status_lines_are_built_in_one_place():
+    """The poll tick and a zoom refresh must not build the text separately."""
+    src = _diagnostics_source()
+    assert "function waterfallStatusText(state, payload, n, ageMs)" in src
+    assert "function scopeStatusText(state, payload, n, ageMs)" in src
+    # Two call sites each: the poll tick and zoomRefreshStatus.
+    assert src.count("waterfallStatusText(state,") == 3   # decl + 2 calls
+    assert src.count("scopeStatusText(state,") == 3
+
+
+def test_pan_repaints_are_coalesced_to_one_per_frame():
+    """A fast drag must not queue more repaints than the display can show."""
+    src = _diagnostics_source()
+    assert "requestAnimationFrame(() => {" in src
+    assert "panFrame = 0;" in src
+
+
+def test_zoom_controls_seed_from_live_state():
+    """Panels rebuild ~1/s; a hardcoded 1x contradicted the zoomed canvas."""
+    src = _diagnostics_source()
+    assert "label.textContent = zoomLabelText(state);" in src
+    assert "reset.disabled = !zoomIsActive(state);" in src
