@@ -8,6 +8,58 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.170.1] - 2026-08-18 - Fix a silently dropped IPAWS shelter-in-place alert
+
+### Fixed
+- **`CAPPoller._convert_cap_alert()` never extracted `<eventCode>` from
+  IPAWS-sourced CAP XML.** Reproduced against two live alerts from the
+  same sender:
+  - A county "Natural gas leak" shelter-in-place warning (severity
+    Extreme, urgency Immediate, instruction "Shelter in place.") carried
+    a correct `<eventCode><valueName>SAME</valueName><value>SPW</value></eventCode>`
+    block in its raw CAP XML, but `properties['eventCode']` was never
+    populated, so the event code was unresolvable and the alert was
+    silently rejected by the auto-forward allowlist ("Event 'UNKNOWN' is
+    not in the configured forwarding allowlist") even though SPW itself
+    was already on the allowlist. It was never broadcast.
+  - Three days earlier, an alert whose `event` field read exactly like a
+    routine "Severe Thunderstorm Warning" (matching headline, radar-
+    indicated hail/wind description, "prepare to seek shelter"
+    instruction) but whose eventCode explicitly said SAME=SPW was
+    actually broadcast as `ZCZC-CIV-SVR-039137+0130-2212336-KR8MER-`
+    (event code SVR) -- a shelter-in-place alert masquerading as a
+    severe thunderstorm warning, because the missing eventCode meant
+    name-based resolution took over.
+
+  The IPAWS XML parser built `<parameter>`, geocode, and `<resource>`
+  extraction from the CAP `<info>` block, but had no equivalent for
+  `<eventCode>` at all. Added `CAPPoller._extract_cap_event_codes()`
+  (mirrors the existing `_extract_cap_parameters()` pattern) and wired
+  it into `properties['eventCode']`.
+- **`app_utils.eas._collect_event_code_candidates()` silently dropped a
+  dict-shaped `eventCode`** (`{"SAME": ["SVR"], "NationalWeatherService":
+  ["SVW"]}` -- the shape both NWS's CAP-JSON feed and the now-fixed IPAWS
+  XML parser produce). It only handled flat strings/lists, so resolution
+  always fell back to matching the alert's plain-English `event` name
+  instead of the source-supplied SAME code. Caught while investigating
+  the alert above: NWS "Severe Thunderstorm Warning" VTEC continuation
+  statements (`eventCode.SAME=SVS`, meaning "statement/update, not a
+  fresh warning") were resolving to SVR by name instead of SVS by code.
+  A separate, correct VTEC-action check already suppressed those from
+  broadcast, so this hadn't caused a visible problem, but it's a real
+  defect in the resolver itself.
+- **`app_core.audio.auto_forward._resolve_event_code()` was an
+  independent, weaker duplicate of the same resolution logic**, checking
+  neither the `eventCode` block nor the event-code registry's aliases --
+  only an exact match against the CAP `event` name. This is the function
+  that actually gated the forwarding-allowlist check for the dropped
+  alert above; fixing the parser and the dict-handling bug wouldn't have
+  been enough without also fixing this. Replaced its body to delegate to
+  the shared resolver so the SAME-header-generation path and the
+  allowlist-check path can never resolve an alert differently again.
+- Added `tests/test_ipaws_event_code_extraction.py` (19 tests) covering
+  all three fixes, including a replay of both real-world alerts.
+
 ## [2.170.0] - 2026-08-18 - Strengthen SDR Diagnostics: spectrum scope, trend charts, full checklist
 
 ### Fixed
@@ -48,7 +100,7 @@ tracks releases under the 2.x series.
   almost-always-empty in-process `RadioManager` left over from the
   pre-separated-architecture design, so most of its checks had gone dead).
 
-
+## [2.169.2] - 2026-08-18 - Fix the EAS decoder stream and VU meters not following live audio
 
 ### Fixed
 - **`/api/eas/decoder-stream` ("Listen to EAS Decoder Feed") produced zero

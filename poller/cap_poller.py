@@ -1366,6 +1366,7 @@ class CAPPoller:
         info_elem = self._select_cap_info(info_elems, ns)
 
         parameters = self._extract_cap_parameters(info_elem, ns)
+        event_codes = self._extract_cap_event_codes(info_elem, ns)
         geometry, area_desc, geocodes = self._extract_area_details(info_elem, ns)
         resources = self._extract_cap_resources(info_elem, ns)
 
@@ -1391,6 +1392,7 @@ class CAPPoller:
             'web': get_text(info_elem, 'cap:web'),
             'areaDesc': area_desc,
             'geocode': geocodes,
+            'eventCode': event_codes,
             'parameters': parameters,
             'resources': resources,
             'source': ALERT_SOURCE_IPAWS,
@@ -1427,6 +1429,47 @@ class CAPPoller:
                     return info_elem
 
         return info_elements[0]
+
+    def _extract_cap_event_codes(self, info_elem: Optional[ET.Element], ns: Dict[str, str]) -> Dict[str, List[str]]:
+        """Extract <eventCode> elements from a CAP <info> block.
+
+        Same shape as <parameter> (a <valueName>/<value> pair), and this
+        used to be the one CAP <info> child _convert_cap_alert() didn't
+        extract at all -- properties['eventCode'] was simply never set for
+        IPAWS-sourced alerts, even when the source alert carried one.
+        Reproduced live: a county gas-leak "shelter in place" alert whose
+        raw CAP XML had <eventCode><valueName>SAME</valueName><value>SPW
+        </value></eventCode> was stored with no eventCode in `properties`
+        at all, so the event code fell through as unresolved ("UNKNOWN")
+        downstream and the alert was silently dropped by the forwarding
+        allowlist -- even though the allowlist itself already included
+        SPW. NWS's api.weather.gov CAP-JSON feed doesn't need this (it
+        already includes eventCode natively in the properties it returns);
+        this only affects the IPAWS-OPEN XML path this method parses.
+
+        Returned shape matches the geocode dict convention used elsewhere
+        (and what app_utils.eas._collect_event_code_candidates() expects):
+        {"SAME": ["SPW"], ...}, keyed by valueName with one list per name
+        so multiple <eventCode> elements sharing a valueName all survive.
+        """
+        event_codes: Dict[str, List[str]] = {}
+        if info_elem is None:
+            return event_codes
+
+        for code_elem in info_elem.findall('cap:eventCode', ns):
+            name = code_elem.findtext('cap:valueName', default='', namespaces=ns)
+            value = code_elem.findtext('cap:value', default='', namespaces=ns)
+            if not name:
+                continue
+            name = name.strip()
+            if not name:
+                continue
+            value = (value or '').strip()
+            if not value:
+                continue
+            event_codes.setdefault(name, []).append(value)
+
+        return event_codes
 
     def _extract_cap_parameters(self, info_elem: Optional[ET.Element], ns: Dict[str, str]) -> Dict[str, List[str]]:
         parameters: Dict[str, List[str]] = {}
