@@ -35,6 +35,7 @@ from app_core.radio import (
     ensure_radio_tables,
 )
 from app_core.auth.roles import require_permission
+from app_core.radio.decimation import effective_sample_rate
 
 from . import deps
 
@@ -98,7 +99,13 @@ def register(app: Flask, route_logger) -> None:
         # 10 s caps the JSON payload and the wall-clock wait.
         duration_sec = max(0.5, min(duration_sec, 10.0))
 
-        effective_rate = receiver_record.sample_rate or 250_000
+        # Captures are tapped from the ring buffer, i.e. *after* early
+        # decimation, so the requested duration must be converted at the
+        # effective rate. Using the configured hardware rate here asked
+        # for decim-factor times too many samples -- an Airspy at 2.5 MHz
+        # (decim 10) turned a 5 s request into a 50 s capture that always
+        # blew the wait budget below.
+        effective_rate = effective_sample_rate(receiver_record.sample_rate) or 250_000
         num_samples = int(duration_sec * effective_rate)
 
         try:

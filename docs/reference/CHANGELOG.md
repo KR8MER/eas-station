@@ -8,6 +8,59 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.170.5] - 2026-08-18 - Fix live spectrum frequency axis labelled with the pre-decimation rate
+
+### Fixed
+- **The Live Waterfall and Spectrum Scope on `/admin/radio_diagnostics`
+  labelled their frequency axis with the receiver's *configured* sample
+  rate instead of the rate the displayed FFT is actually clocked at,
+  drawing every signal several times wider than it is.** Reported from a
+  receiver tuned to an FM broadcast station at 93.900 MHz: the axis read
+  93.388-94.412 MHz, so a US FM channel -- 200 kHz wide by regulation --
+  appeared to occupy a full megahertz, which is physically impossible.
+  High-rate SDRs are decimated in the USB callback *before* samples reach
+  the ring buffer (Python cannot process multi-megahertz IQ in real time),
+  so the samples every spectrum view FFTs are clocked at the post-decimation
+  *effective* rate. On the reported receiver, 1.024 MHz configured decimates
+  by 4 to 256 kHz, meaning the bins covered 256 kHz of RF while the axis
+  claimed 1.024 MHz -- a 4x overstatement, and up to 10x on an Airspy at
+  2.5 MHz. The root cause was a missing field: `sdr_hardware_service.py`
+  published `sample_rate` (correctly, the effective rate) but never
+  `freq_min`/`freq_max`, so `/api/radio/spectrum/<id>` always hit its
+  fallback of `receiver.frequency_hz ± receiver.sample_rate / 2` -- the
+  hardware rate off the `RadioReceiver` row. The service now publishes the
+  axis explicitly via a new testable `build_spectrum_payload()`, alongside
+  `hardware_sample_rate` and `early_decim_factor`; the route resolves the
+  axis through a new `_spectrum_axis()` helper that prefers the published
+  values and recomputes the effective span locally when an older
+  sdr-service omits them. The same fallback in the command-queue path
+  (which defaulted to 2.5 MHz for Airspy) is fixed identically.
+- **Capture requests asked the SDR service for decimation-factor times more
+  samples than the requested duration.** `/api/radio/diagnostics/capture`,
+  `/analyze` and `/waterfall` each named a local `effective_rate` but
+  assigned `receiver_record.sample_rate` -- the pre-decimation rate -- to
+  it. Because the capture tap fires after early decimation, a 5 s request
+  against an Airspy at 2.5 MHz (decim 10) queued 50 s worth of samples
+  while the client waited only `duration + 20 s`, so longer captures timed
+  out by construction. All three now convert duration at the effective
+  rate.
+
+### Added
+- `app_core/radio/decimation.py` -- the early-decimation threshold, factor
+  and effective-rate math as one dependency-free module (no numpy, SciPy or
+  SoapySDR imports) so the web layer can label a frequency axis with the
+  same numbers the driver decimates by. `app_core/radio/drivers.py` now
+  calls it instead of carrying its own copy, which is what let the two
+  drift apart in the first place.
+- The Live Waterfall and Spectrum Scope status lines now show the RF span
+  the FFT covers, annotated with the decimation when it is active (e.g.
+  `256.0 kHz span (1.024 MHz ÷ 4)`), so an axis that disagrees with the
+  hardware rate is visible on screen rather than silently wrong.
+- `tests/test_spectrum_frequency_axis.py` -- regression coverage pinning
+  the reported case (1.024 MHz configured must render a 256 kHz span, never
+  1.024 MHz), the recompute path for an older sdr-service, the
+  service-payload/route round trip, and the capture duration conversion.
+
 ## [2.170.4] - 2026-08-18 - Fix SDR Diagnostics charts vanishing and running narrower than the page
 
 ### Fixed

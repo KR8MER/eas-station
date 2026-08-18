@@ -28,6 +28,11 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from .decimation import (
+    EARLY_DECIM_TARGET_RATE,
+    early_decimation_factor,
+    effective_sample_rate,
+)
 from .manager import ReceiverConfig, ReceiverInterface, ReceiverStatus, RadioManager
 
 # Import ring buffer at module level to avoid repeated import overhead
@@ -226,7 +231,10 @@ class _SoapySDRReceiver(ReceiverInterface):
         # cannot process that many samples in real-time. Decimating early reduces
         # both ring buffer memory usage and downstream processing load.
         # Target ~250 kHz intermediate rate (sufficient for FM stereo with 38 kHz subcarrier)
-        self._early_decim_target_rate = 250000  # Target output rate after decimation
+        # Target output rate after decimation. Canonical value + the
+        # factor/effective-rate math live in app_core.radio.decimation so
+        # the web layer can label spectrum axes with the same numbers.
+        self._early_decim_target_rate = EARLY_DECIM_TARGET_RATE
         self._early_decim_factor = 1  # Will be calculated on stream start
         self._early_decim_buffer = None  # Accumulator for partial decimation blocks
         self._effective_sample_rate = config.sample_rate  # Effective rate after decimation
@@ -756,8 +764,8 @@ class _SoapySDRReceiver(ReceiverInterface):
         # Calculate early decimation factor for high sample rate SDRs
         # This is critical for rates > 500 kHz because Python can't process that in real-time
         if self.config.sample_rate > self._early_decim_target_rate * 2:
-            self._early_decim_factor = max(1, self.config.sample_rate // self._early_decim_target_rate)
-            self._effective_sample_rate = self.config.sample_rate // self._early_decim_factor
+            self._early_decim_factor = early_decimation_factor(self.config.sample_rate)
+            self._effective_sample_rate = effective_sample_rate(self.config.sample_rate)
             self._early_decim_buffer = numpy_module.array([], dtype=numpy_module.complex64)
             # Build a proper linear-phase anti-alias FIR sized from the
             # input rate.  Cutoff preserves the 57 kHz RBDS subcarrier

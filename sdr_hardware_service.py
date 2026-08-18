@@ -1102,6 +1102,68 @@ def compute_spectrum(samples, numpy_module) -> Optional[list]:
         return None
 
 
+def build_spectrum_payload(
+    identifier,
+    spectrum,
+    effective_rate,
+    center_frequency,
+    hardware_sample_rate=None,
+    early_decim_factor=1,
+    timestamp=None,
+) -> dict:
+    """Build the Redis payload the webapp's spectrum views consume.
+
+    Publishes the frequency axis explicitly. compute_spectrum() runs on
+    samples taken from the ring buffer, which sit *after* early
+    decimation, so the RF span those bins cover is ``effective_rate``
+    wide -- NOT the configured hardware rate.
+
+    This used to omit ``freq_min``/``freq_max`` entirely, leaving the web
+    route to fall back to the RadioReceiver row's configured sample_rate.
+    On a receiver set to 1.024 MHz (decim 4, 256 kHz effective) that drew
+    the Live Waterfall and Spectrum Scope axes 4x too wide, so a normal
+    ~200 kHz FM broadcast signal appeared to span a full megahertz.
+
+    Args:
+        identifier (str): Receiver identifier.
+        spectrum (list): Normalized 0-1 FFT bins from compute_spectrum().
+        effective_rate (int): Post-decimation sample rate in Hz.
+        center_frequency (int): Tuned frequency in Hz.
+        hardware_sample_rate (int): Configured rate before decimation.
+        early_decim_factor (int): Active decimation factor.
+        timestamp (float): Publication time; defaults to now.
+
+    Returns:
+        dict: JSON-serialisable spectrum payload.
+    """
+    half_span = float(effective_rate) / 2.0
+    try:
+        centre = float(center_frequency)
+        freq_min = centre - half_span
+        freq_max = centre + half_span
+    except (TypeError, ValueError):
+        freq_min = freq_max = None
+
+    try:
+        decim = int(early_decim_factor or 1)
+    except (TypeError, ValueError):
+        decim = 1
+
+    return {
+        'identifier': identifier,
+        'spectrum': spectrum,
+        'fft_size': FFT_SIZE,
+        'sample_rate': effective_rate,  # Effective rate for decimated samples
+        'hardware_sample_rate': hardware_sample_rate,
+        'early_decim_factor': max(1, decim),
+        'center_frequency': center_frequency,
+        'freq_min': freq_min,
+        'freq_max': freq_max,
+        'timestamp': timestamp if timestamp is not None else time.time(),
+        'status': 'available',
+    }
+
+
 def publish_samples_and_metrics():
     """Publisher thread: reads from receivers and publishes to Redis."""
     logger.info("Sample publisher thread started")
@@ -1208,15 +1270,17 @@ def publish_samples_and_metrics():
                             if current_time - last_time >= spectrum_interval:
                                 spectrum = compute_spectrum(samples, np)
                                 if spectrum is not None:
-                                    spectrum_payload = {
-                                        'identifier': identifier,
-                                        'spectrum': spectrum,
-                                        'fft_size': FFT_SIZE,
-                                        'sample_rate': effective_rate,  # Use effective rate for decimated samples
-                                        'center_frequency': receiver.config.frequency_hz,
-                                        'timestamp': current_time,
-                                        'status': 'available'
-                                    }
+                                    spectrum_payload = build_spectrum_payload(
+                                        identifier=identifier,
+                                        spectrum=spectrum,
+                                        effective_rate=effective_rate,
+                                        center_frequency=receiver.config.frequency_hz,
+                                        hardware_sample_rate=receiver.config.sample_rate,
+                                        early_decim_factor=getattr(
+                                            receiver, '_early_decim_factor', 1
+                                        ),
+                                        timestamp=current_time,
+                                    )
                                     redis_client.setex(
                                         f"{SDR_SPECTRUM_KEY_PREFIX}{identifier}",
                                         5,  # 5 second TTL
@@ -1750,11 +1814,32 @@ def process_commands(redis_client, timeout: int = 2):
                         else:
                             # Convert complex samples to list of [real, imag] pairs
                             samples_list = [[float(s.real), float(s.imag)] for s in iq_samples[:num_samples]]
+                            # Report the rate these samples are actually
+                            # clocked at. get_samples() returns IQ from the
+                            # ring buffer, i.e. post-early-decimation, so
+                            # the caller must not label an FFT of them with
+                            # the configured hardware rate.
+                            if hasattr(receiver, "get_effective_sample_rate"):
+                                sample_rate_hz = int(receiver.get_effective_sample_rate())
+                            else:
+                                sample_rate_hz = int(
+                                    getattr(receiver.config, "sample_rate", 0) or 0
+                                )
                             result = {
                                 "command_id": command_id,
                                 "success": True,
                                 "samples": samples_list,
-                                "num_samples": len(samples_list)
+                                "num_samples": len(samples_list),
+                                "sample_rate": sample_rate_hz,
+                                "hardware_sample_rate": int(
+                                    getattr(receiver.config, "sample_rate", 0) or 0
+                                ),
+                                "early_decim_factor": int(
+                                    getattr(receiver, "_early_decim_factor", 1) or 1
+                                ),
+                                "center_frequency": int(
+                                    getattr(receiver.config, "frequency_hz", 0) or 0
+                                ),
                             }
                     except Exception as e:
                         logger.error(f"Failed to get spectrum for receiver {receiver_id}: {e}")
