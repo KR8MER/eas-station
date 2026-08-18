@@ -8,6 +8,30 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.170.2] - 2026-08-18 - Fix Spectrum Scope clipping and Historical Trends chart growth
+
+### Fixed
+- **Spectrum Scope drew directly against a fixed 0-1 range** instead of
+  auto-scaling to the current payload's actual min/max, unlike the
+  sparkline strip on the same page which already did this correctly.
+  Reported live: the trace looked "too zoomed in," with FFT edge-bin
+  DC-offset spikes pegging the top of the canvas with no headroom while
+  the real passband signal collapsed into a thin band near the bottom.
+  `scopeRender()` now computes `lo`/`hi` from the current spectrum array
+  (with an 8% margin) each tick, the same auto-scale approach
+  `drawSparkline()` already uses, and the scope's status line now shows
+  the current auto-scaled y-axis range so operators can see it's
+  adaptive rather than a fixed scale.
+- **Historical Trends charts grew without bound ("kept scrolling").**
+  Chart.js's `responsive: true` + `maintainAspectRatio: false` (used for
+  all four trend charts) requires the canvas's *parent* element to have
+  an explicit, bounded CSS height -- the canvas's own `height="120"` HTML
+  attribute only sets its intrinsic pixel resolution and is ignored once
+  responsive mode takes over. The charts sat directly in unconstrained
+  `.col-md-6` grid cells, so each one could resize upward indefinitely.
+  Wrapped each chart canvas in a `position:relative; height:220px;` div,
+  the pattern Chart.js's own docs require for this configuration.
+
 ## [2.170.1] - 2026-08-18 - Fix a silently dropped IPAWS shelter-in-place alert
 
 ### Fixed
