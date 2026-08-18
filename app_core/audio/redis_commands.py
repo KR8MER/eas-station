@@ -524,9 +524,14 @@ class AudioCommandSubscriber:
                         buffer_size=config.get('buffer_size', 4096),
                         silence_threshold_db=config.get('silence_threshold_db', -60.0),
                         silence_duration_seconds=config.get('silence_duration_seconds', 5.0),
+                        dead_air_enabled=config.get('dead_air_enabled', False),
+                        dead_air_level_threshold_db=config.get('dead_air_level_threshold_db', -65.0),
+                        dead_air_detect_open_carrier=config.get('dead_air_detect_open_carrier', True),
+                        dead_air_flatness_threshold_pct=config.get('dead_air_flatness_threshold_pct', 25),
+                        dead_air_duration_seconds=config.get('dead_air_duration_seconds', 20.0),
                         device_params=config.get('device_params', {}),
                     )
-                    
+
                     # Remove existing source if it exists
                     if source_name in self.audio_controller._sources:
                         if self.auto_streaming_service:
@@ -570,6 +575,11 @@ class AudioCommandSubscriber:
                     buffer_size=config.get('buffer_size', 4096),
                     silence_threshold_db=config.get('silence_threshold_db', -60.0),
                     silence_duration_seconds=config.get('silence_duration_seconds', 5.0),
+                    dead_air_enabled=config.get('dead_air_enabled', False),
+                    dead_air_level_threshold_db=config.get('dead_air_level_threshold_db', -65.0),
+                    dead_air_detect_open_carrier=config.get('dead_air_detect_open_carrier', True),
+                    dead_air_flatness_threshold_pct=config.get('dead_air_flatness_threshold_pct', 25),
+                    dead_air_duration_seconds=config.get('dead_air_duration_seconds', 20.0),
                     device_params=config.get('device_params', {}),
                 )
 

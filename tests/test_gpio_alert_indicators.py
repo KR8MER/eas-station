@@ -59,8 +59,17 @@ class _FakeNeo:
         self.events.append("end_alert")
 
 
-def _patch_state(monkeypatch, *, broadcast, incoming, event_code="", redis_ok=True):
-    """Patch the Redis-backed state readers used by update_alert_indicators."""
+def _patch_state(
+    monkeypatch, *, broadcast, incoming, event_code="", redis_ok=True, dead_air_active=False
+):
+    """Patch the Redis-backed state readers used by update_alert_indicators.
+
+    ``dead_air_active`` defaults to False so every test that doesn't care
+    about the dead-air fault light gets a clean, deterministic "no fault"
+    reading -- without this the tests read this station's *live*
+    ``eas:dead_air`` Redis key, and pass or fail based on whether a real
+    source happened to be alarming at the moment the suite ran.
+    """
     import app_utils.eas as eas
 
     broadcast_payload = (
@@ -69,6 +78,15 @@ def _patch_state(monkeypatch, *, broadcast, incoming, event_code="", redis_ok=Tr
     monkeypatch.setattr(eas, "get_broadcast_state", lambda: dict(broadcast_payload))
     monkeypatch.setattr(eas, "get_incoming_alert_state", lambda: {"incoming": incoming})
     monkeypatch.setattr(indicators, "_redis_ok", lambda: redis_ok)
+    monkeypatch.setattr(
+        indicators,
+        "read_dead_air_state",
+        lambda: {
+            "active": dead_air_active,
+            "sources": {"TEST-SRC": {}} if dead_air_active else {},
+            "acknowledged": False,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -32,7 +32,7 @@ from flask import jsonify, request
 
 from app_core.cache import clear_audio_source_cache
 from app_core.extensions import db
-from app_core.models import AudioSourceConfigDB, RadioReceiver
+from app_core.models import AudioSourceConfigDB
 from app_core.audio.ingest import AudioSourceConfig, AudioSourceType
 from app_core.audio.sources import create_audio_source
 from app_core.audio.redis_commands import get_audio_command_publisher
@@ -125,6 +125,11 @@ def api_create_audio_source():
             buffer_size=data.get('buffer_size', 4096),
             silence_threshold_db=data.get('silence_threshold_db', -60.0),
             silence_duration_seconds=data.get('silence_duration_seconds', 5.0),
+            dead_air_enabled=data.get('dead_air_enabled', False),
+            dead_air_level_threshold_db=data.get('dead_air_level_threshold_db', -65.0),
+            dead_air_detect_open_carrier=data.get('dead_air_detect_open_carrier', True),
+            dead_air_flatness_threshold_pct=data.get('dead_air_flatness_threshold_pct', 25),
+            dead_air_duration_seconds=data.get('dead_air_duration_seconds', 20.0),
             device_params=data.get('device_params', {}),
         )
 
@@ -144,6 +149,11 @@ def api_create_audio_source():
                 'buffer_size': config.buffer_size,
                 'silence_threshold_db': config.silence_threshold_db,
                 'silence_duration_seconds': config.silence_duration_seconds,
+                'dead_air_enabled': config.dead_air_enabled,
+                'dead_air_level_threshold_db': config.dead_air_level_threshold_db,
+                'dead_air_detect_open_carrier': config.dead_air_detect_open_carrier,
+                'dead_air_flatness_threshold_pct': config.dead_air_flatness_threshold_pct,
+                'dead_air_duration_seconds': config.dead_air_duration_seconds,
                 'device_params': config.device_params,
             },
             priority=config.priority,
@@ -185,6 +195,11 @@ def api_create_audio_source():
                 'buffer_size': config.buffer_size,
                 'silence_threshold_db': config.silence_threshold_db,
                 'silence_duration_seconds': config.silence_duration_seconds,
+                'dead_air_enabled': config.dead_air_enabled,
+                'dead_air_level_threshold_db': config.dead_air_level_threshold_db,
+                'dead_air_detect_open_carrier': config.dead_air_detect_open_carrier,
+                'dead_air_flatness_threshold_pct': config.dead_air_flatness_threshold_pct,
+                'dead_air_duration_seconds': config.dead_air_duration_seconds,
                 'device_params': config.device_params,
             })
             if data.get('auto_start'):
@@ -243,6 +258,16 @@ def api_update_audio_source(source_name: str):
             config_params['silence_threshold_db'] = float(data['silence_threshold_db'])
         if 'silence_duration_seconds' in data:
             config_params['silence_duration_seconds'] = float(data['silence_duration_seconds'])
+        if 'dead_air_enabled' in data:
+            config_params['dead_air_enabled'] = bool(data['dead_air_enabled'])
+        if 'dead_air_level_threshold_db' in data:
+            config_params['dead_air_level_threshold_db'] = float(data['dead_air_level_threshold_db'])
+        if 'dead_air_detect_open_carrier' in data:
+            config_params['dead_air_detect_open_carrier'] = bool(data['dead_air_detect_open_carrier'])
+        if 'dead_air_flatness_threshold_pct' in data:
+            config_params['dead_air_flatness_threshold_pct'] = int(data['dead_air_flatness_threshold_pct'])
+        if 'dead_air_duration_seconds' in data:
+            config_params['dead_air_duration_seconds'] = float(data['dead_air_duration_seconds'])
         if 'device_params' in data and isinstance(data['device_params'], dict):
             device_params = dict(config_params.get('device_params', {}))
             device_params.update(data['device_params'])
@@ -270,8 +295,36 @@ def api_update_audio_source(source_name: str):
                     cfg.silence_threshold_db = float(data['silence_threshold_db'])
                 if 'silence_duration_seconds' in data:
                     cfg.silence_duration_seconds = float(data['silence_duration_seconds'])
+                dead_air_changed = False
+                if 'dead_air_enabled' in data:
+                    cfg.dead_air_enabled = bool(data['dead_air_enabled'])
+                    dead_air_changed = True
+                if 'dead_air_level_threshold_db' in data:
+                    cfg.dead_air_level_threshold_db = float(data['dead_air_level_threshold_db'])
+                    dead_air_changed = True
+                if 'dead_air_detect_open_carrier' in data:
+                    cfg.dead_air_detect_open_carrier = bool(data['dead_air_detect_open_carrier'])
+                    dead_air_changed = True
+                if 'dead_air_flatness_threshold_pct' in data:
+                    cfg.dead_air_flatness_threshold_pct = int(data['dead_air_flatness_threshold_pct'])
+                    dead_air_changed = True
+                if 'dead_air_duration_seconds' in data:
+                    cfg.dead_air_duration_seconds = float(data['dead_air_duration_seconds'])
+                    dead_air_changed = True
                 if 'device_params' in data and isinstance(data['device_params'], dict):
                     cfg.device_params.update(data['device_params'])
+                if dead_air_changed:
+                    # Apply immediately rather than waiting for the next
+                    # periodic sweep (see eas_monitoring_service.py's
+                    # source watchdog loop) -- only meaningful in
+                    # integrated mode, where this process also runs the
+                    # monitor; the separated-architecture case is handled
+                    # by the audio-service's own source_update command
+                    # handler below.
+                    monitor = getattr(adapter, '_silence_monitor', None)
+                    if monitor is not None:
+                        from app_core.audio.silence import criteria_from_source_config
+                        monitor.update_criteria(criteria_from_source_config(cfg))
         except Exception as local_exc:  # pylint: disable=broad-except
             logger.debug('Local adapter update skipped for %s: %s', source_name, local_exc)
 
@@ -301,89 +354,3 @@ def api_update_audio_source(source_name: str):
         return jsonify({'error': str(exc)}), 500
 
 
-@audio_ingest_bp.route('/api/audio/sources/<path:source_name>', methods=['DELETE'])
-@require_permission('receivers.configure')
-def api_delete_audio_source(source_name: str):
-    """Delete an audio source.
-
-    Queries the database directly without attempting to restore the source in
-    memory.  A fire-and-forget stop command is sent to the audio-service so
-    that delete succeeds even when the audio-service is unresponsive.
-
-    For radio-managed (SDR) sources the corresponding RadioReceiver row has
-    its ``audio_output`` flag cleared so that ``sync_radio_receiver_audio_sources``
-    does not silently recreate the source on the next audio-service restart.
-    """
-    try:
-        # Clear cache before deleting
-        clear_audio_source_cache(source_name)
-
-        # Query DB directly – do NOT call _get_controller_and_adapter, which
-        # would try to restore/start the source and time out when the
-        # audio-service is dead.
-        db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
-
-        if not db_config:
-            # Source already absent from DB — still clean up Redis/in-memory state so
-            # the source stops appearing in the UI (it may linger in Redis metrics from
-            # the last time the audio service had it loaded).
-            try:
-                publisher = get_audio_command_publisher()
-                publisher.delete_source(source_name, wait_for_response=False)
-            except Exception:
-                pass
-            logger.info('Source %s already absent from DB — cleaned up runtime state', source_name)
-            return jsonify({'message': 'Audio source deleted successfully'})
-
-        config_params = db_config.config_params or {}
-        is_radio_managed = config_params.get('managed_by') == 'radio'
-
-        # For radio-managed sources, disable audio_output on the RadioReceiver
-        # so that sync_radio_receiver_audio_sources() does not recreate this
-        # source the next time the audio service starts.
-        if is_radio_managed:
-            receiver_id = config_params.get('device_params', {}).get('receiver_id')
-            if receiver_id:
-                try:
-                    receiver = RadioReceiver.query.filter_by(identifier=receiver_id).first()
-                    if receiver and receiver.audio_output:
-                        receiver.audio_output = False
-                        logger.info(
-                            'Disabled audio_output on RadioReceiver %s to prevent '
-                            'source %s from being recreated by sync',
-                            receiver_id, source_name,
-                        )
-                except Exception as recv_exc:
-                    logger.warning(
-                        'Could not disable audio_output on receiver %s (continuing): %s',
-                        receiver_id, recv_exc,
-                    )
-
-        # Tell the audio-service to delete the source (fire-and-forget so that a
-        # dead audio-service never blocks the delete).  Using source_delete rather
-        # than source_stop ensures the audio-service also removes the source from
-        # memory and stops any associated Icecast stream.
-        try:
-            publisher = get_audio_command_publisher()
-            publisher.delete_source(source_name, wait_for_response=False)
-        except Exception as stop_exc:
-            logger.warning(
-                'Could not send delete command to audio-service for %s (continuing with delete): %s',
-                source_name, stop_exc,
-            )
-
-        # Remove from database and commit in a single transaction.
-        # The RadioReceiver update (if any) is included in the same commit.
-        db.session.delete(db_config)
-        try:
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-            raise
-
-        logger.info('Deleted audio source from database: %s', source_name)
-        return jsonify({'message': 'Audio source deleted successfully'})
-
-    except Exception as exc:
-        logger.error('Error deleting audio source %s: %s', source_name, exc)
-        return jsonify({'error': str(exc)}), 500

@@ -181,24 +181,18 @@ class HardwareSettings(db.Model):
     tower_light_quiet_end = db.Column(db.String(5), nullable=False, default='07:00')
 
     # ========================================================================
-    # Dead-air (silence) monitoring
+    # Dead-air (silence) monitoring -- output half only
     # ------------------------------------------------------------------
-    # Watches monitored audio for loss of programme content and drives the
-    # tower light plus an optional rack alarm buzzer. See
-    # app_core/audio/silence.py for why a level threshold alone cannot
-    # detect an SDR whose station has gone off the air -- the receiver then
-    # emits full-scale hiss, which any level test reads as "audio present".
+    # Drives the tower light plus an optional rack alarm buzzer when any
+    # monitored source is silent. The *detection* half (whether a given
+    # source alarms on silence, and at what threshold) is per-source
+    # config now, not here -- see AudioSourceConfigDB.config_params's
+    # dead_air_* keys and app_core/audio/silence.py for why a level
+    # threshold alone cannot detect an SDR whose station has gone off the
+    # air (the receiver then emits full-scale hiss, which any level test
+    # reads as "audio present"). This stays station-wide because there is
+    # one tower light and one buzzer, not one per source.
     # ========================================================================
-    dead_air_enabled = db.Column(db.Boolean, nullable=False, default=False)
-    # RMS below this counts as silence outright (true digital silence).
-    dead_air_level_threshold_db = db.Column(db.Integer, nullable=False, default=-65)
-    # Spectral-flatness detection of an unmodulated carrier / off-air hiss.
-    dead_air_detect_open_carrier = db.Column(db.Boolean, nullable=False, default=True)
-    # 0-100 (percent) in the UI; stored as an integer to keep the form
-    # simple. 25 == flatness 0.25. Noise measures 40-57, programme < 1.
-    dead_air_flatness_threshold_pct = db.Column(db.Integer, nullable=False, default=25)
-    # How long the condition must hold before alarming.
-    dead_air_duration_seconds = db.Column(db.Integer, nullable=False, default=20)
     # Rack alarm buzzer on a GPIO pin. Level-triggered for as long as the
     # condition holds (not the edge/watchdog path the alert relays use),
     # and silenced by an operator acknowledgement that leaves the tower

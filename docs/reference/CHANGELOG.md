@@ -8,6 +8,40 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.175.0] - 2026-08-18 - Make dead-air monitoring per-source
+
+### Changed
+- **Dead-air (silence) alarming moved from one station-wide policy to a
+  per-source setting.** Shipped in 2.174.0 as a single enabled flag and
+  threshold set applied identically to every monitored source, it could not
+  express "alarm on silence for this continuous broadcast monitor, but
+  never for that state-relay source that's supposed to be silent except
+  when relaying an actual alert." Confirmed live on this station: a
+  state-relay source (`ERN-LUC`) sat in a false dead-air alarm for 39
+  minutes straight because the station-wide policy had no way to exempt it
+  without also disabling alarming for every source that genuinely needed
+  it.
+- Detection policy (enabled, hold-off, silence level, open-carrier
+  sensitivity) is now configured per source in that source's Add/Edit
+  dialog on the Audio Sources page, stored alongside the source's other
+  settings. The station-wide "Dead Air Monitoring" settings card on that
+  page is now a live status readout only.
+- The physical output side (rack buzzer GPIO pin, tower-light colour) is
+  unchanged: one buzzer and one light for the whole station, configured on
+  the Hardware page, same as before.
+- `/api/audio/dead-air/settings` (GET/POST) is removed; `/api/audio/dead-air/status`
+  and `/api/audio/dead-air/acknowledge` are unchanged.
+- Database: the five station-wide detection columns
+  (`dead_air_enabled`, `dead_air_level_threshold_db`,
+  `dead_air_detect_open_carrier`, `dead_air_flatness_threshold_pct`,
+  `dead_air_duration_seconds`) are dropped from `hardware_settings`; the
+  output columns (`dead_air_buzzer_enabled`, `dead_air_buzzer_gpio_pin`,
+  `tower_light_silence_*`) are untouched.
+- Fixed 7 failing tests in `tests/test_gpio_alert_indicators.py` that read
+  this station's live `eas:dead_air` Redis key instead of a mocked one, so
+  they passed or failed based on whatever this station's real alarm state
+  happened to be at test time.
+
 ## [2.174.0] - 2026-08-18 - Retire the carrier-squelch feature
 
 ### Removed

@@ -243,34 +243,24 @@ def get_tower_light_settings() -> Dict[str, Any]:
 
 
 def get_dead_air_settings() -> Dict[str, Any]:
-    """Get dead-air (silence) monitoring settings.
+    """Get dead-air (silence) alarm *output* settings -- the rack buzzer pin.
 
-    Feeds both the audio ingest monitors (thresholds) and the GPIO
-    indicator service (rack buzzer pin).
+    Detection (whether a source alarms on silence, and at what threshold)
+    is per-source now -- see AudioSourceConfigDB.config_params's dead_air_*
+    keys, applied in eas_monitoring_service.py::_install_dead_air_criteria().
+    This function only feeds the GPIO indicator service, which owns the one
+    physical buzzer for the whole station regardless of which source
+    tripped the alarm.
 
     Returns:
-        Dictionary with dead-air configuration. ``buzzer_gpio_pin`` is
-        ``None`` when the rack buzzer is disabled or unconfigured, which
-        the GPIO side reads as "never touch a pin".
+        Dictionary with ``buzzer_enabled`` and ``buzzer_gpio_pin``.
+        ``buzzer_gpio_pin`` is ``None`` when the rack buzzer is disabled or
+        unconfigured, which the GPIO side reads as "never touch a pin".
     """
     settings = get_hardware_settings()
     buzzer_enabled = bool(getattr(settings, 'dead_air_buzzer_enabled', False))
     pin = getattr(settings, 'dead_air_buzzer_gpio_pin', None)
     return {
-        'enabled': bool(getattr(settings, 'dead_air_enabled', False)),
-        'level_threshold_db': float(
-            getattr(settings, 'dead_air_level_threshold_db', -65) or -65
-        ),
-        'detect_open_carrier': bool(
-            getattr(settings, 'dead_air_detect_open_carrier', True)
-        ),
-        # Stored as whole percent in the UI; the monitor wants a 0-1 ratio.
-        'flatness_threshold': float(
-            getattr(settings, 'dead_air_flatness_threshold_pct', 25) or 25
-        ) / 100.0,
-        'duration_seconds': float(
-            getattr(settings, 'dead_air_duration_seconds', 20) or 20
-        ),
         'buzzer_enabled': buzzer_enabled,
         'buzzer_gpio_pin': int(pin) if (buzzer_enabled and pin) else None,
     }

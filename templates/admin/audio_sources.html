@@ -108,73 +108,27 @@
         </div>
     </div>
 
-    <!-- Dead-air (silence) detection policy. Station-wide, applies to every
-         monitored source. The physical indication (rack buzzer pin, tower
-         light colour) is configured in Admin -> Hardware; this page owns
-         only what counts as dead air, so a notifier added later can share
-         the same policy without it living inside the GPIO page. -->
+    <!-- Dead-air (silence) alarm: live aggregate status only. Detection
+         policy -- whether a source alarms on silence, and at what threshold
+         -- is configured per source in the Add/Edit Source modal below, so
+         a state-relay or alert-only feed can be left disabled while a
+         continuous broadcast monitor stays covered. The physical output
+         (rack buzzer pin, tower light colour) is configured in Admin ->
+         Hardware. -->
     <div class="card shadow-sm mb-4" id="deadAirCard">
         <div class="card-header d-flex flex-column flex-md-row gap-2 align-items-md-center justify-content-between">
             <div>
-                <h2 class="h5 mb-1"><i class="fas fa-volume-mute me-2"></i>Dead Air Monitoring</h2>
-                <div class="text-muted small">What counts as loss of programme audio, on every monitored source</div>
+                <h2 class="h5 mb-1"><i class="fas fa-volume-mute me-2"></i>Dead Air Alarm</h2>
+                <div class="text-muted small">Live status across every source with dead-air alarming enabled</div>
             </div>
             <div id="deadAirLiveStatus" class="small text-muted" role="status" aria-live="polite"></div>
         </div>
         <div class="card-body">
-            <p class="text-muted small">
-                Every other health check on this page watches whether the <em>service</em> is alive. This one watches
-                whether the <em>audio</em> is. A source can be running, locked and buffering happily while the station
-                it is monitoring has gone off the air &mdash; and for an EAS station that means monitoring has silently
-                stopped.
+            <p class="text-muted small mb-2">
+                Enable and tune the alarm per source in that source's Add/Edit dialog below &mdash; leave it disabled
+                for sources that are normally silent, such as a state relay or alert-only feed.
             </p>
-
-            <div class="form-check form-switch mb-3">
-                <input class="form-check-input" type="checkbox" role="switch" id="deadAirEnabled">
-                <label class="form-check-label" for="deadAirEnabled">Enable dead-air monitoring</label>
-            </div>
-
-            <div class="row g-3">
-                <div class="col-12 col-md-4">
-                    <label for="deadAirDuration" class="form-label">Hold-off before alarming</label>
-                    <div class="input-group">
-                        <input type="number" class="form-control" id="deadAirDuration" min="1" max="3600">
-                        <span class="input-group-text">sec</span>
-                    </div>
-                    <small class="form-text text-muted">Too short and normal programme pauses alarm; 10&ndash;30 s is the broadcast convention.</small>
-                </div>
-                <div class="col-12 col-md-4">
-                    <label for="deadAirLevel" class="form-label">Silence level</label>
-                    <div class="input-group">
-                        <input type="number" class="form-control" id="deadAirLevel" min="-120" max="-30">
-                        <span class="input-group-text">dBFS</span>
-                    </div>
-                    <small class="form-text text-muted">Audio quieter than this counts as silence. Catches a stopped or muted feed.</small>
-                </div>
-                <div class="col-12 col-md-4">
-                    <label for="deadAirFlatness" class="form-label">Open-carrier sensitivity</label>
-                    <div class="input-group">
-                        <input type="number" class="form-control" id="deadAirFlatness" min="1" max="99">
-                        <span class="input-group-text">%</span>
-                    </div>
-                    <small class="form-text text-muted">Spectral flatness above this reads as noise. Off-air hiss measures 40&ndash;57%; speech and music under 1%.</small>
-                </div>
-            </div>
-
-            <div class="form-check form-switch mt-3">
-                <input class="form-check-input" type="checkbox" role="switch" id="deadAirOpenCarrier">
-                <label class="form-check-label" for="deadAirOpenCarrier">Detect an unmodulated carrier (recommended for SDR sources)</label>
-            </div>
-            <small class="form-text text-muted d-block">
-                Required for off-air detection on a radio source. When a station leaves the air the receiver outputs
-                full-scale hiss, which sits far above any silence level &mdash; without this, that reads as
-                &ldquo;audio present&rdquo;.
-            </small>
-
-            <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
-                <button type="button" class="btn btn-primary" id="deadAirSaveBtn">
-                    <i class="fas fa-save me-1"></i>Save detection settings
-                </button>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
                 <a href="/admin/hardware" class="btn btn-outline-secondary">
                     <i class="fas fa-lightbulb me-1"></i>Tower light &amp; rack buzzer
                 </a>
@@ -182,12 +136,6 @@
                     <i class="fas fa-heart-pulse me-1"></i>Live status &amp; acknowledge
                 </a>
             </div>
-            <!-- Form-level errors (failed load / failed save). Kept separate
-                 from the header's live alarm readout so the two cannot
-                 overwrite each other -- an operator must not lose sight of
-                 "DEAD AIR" because a settings fetch failed, nor lose the
-                 "saving is disabled" warning to the next status poll. -->
-            <div id="deadAirFormError" class="small text-danger mt-2" role="alert"></div>
         </div>
     </div>
 
@@ -269,6 +217,50 @@
                             <small class="form-text text-muted">How long silence must persist before alert</small>
                         </div>
 
+                        <!-- Dead-air alarm: a debounced, per-source fault alarm (rack buzzer /
+                             tower light) -- distinct from the Silence Threshold/Duration fields
+                             above, which only drive an instantaneous analytics statistic. Off by
+                             default: leave disabled for sources that are normally silent, such
+                             as a state relay or alert-only feed. -->
+                        <div class="col-12">
+                            <hr class="my-1">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="sourceDeadAirEnabled" name="dead_air_enabled">
+                                <label class="form-check-label" for="sourceDeadAirEnabled">Enable dead-air alarm for this source</label>
+                            </div>
+                            <small class="form-text text-muted d-block">
+                                Sounds the rack buzzer and tower light when this source goes silent. Leave disabled for
+                                sources that are normally silent, such as a state relay or alert-only feed.
+                            </small>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="sourceDeadAirDuration" class="form-label">Hold-off</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="sourceDeadAirDuration" name="dead_air_duration_seconds" value="20" min="1" max="3600" step="1">
+                                <span class="input-group-text">sec</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="sourceDeadAirLevel" class="form-label">Silence level</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="sourceDeadAirLevel" name="dead_air_level_threshold_db" value="-65" min="-120" max="-30" step="1">
+                                <span class="input-group-text">dBFS</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="sourceDeadAirFlatness" class="form-label">Open-carrier sensitivity</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="sourceDeadAirFlatness" name="dead_air_flatness_threshold_pct" value="25" min="1" max="99" step="1">
+                                <span class="input-group-text">%</span>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="sourceDeadAirOpenCarrier" name="dead_air_detect_open_carrier" checked>
+                                <label class="form-check-label" for="sourceDeadAirOpenCarrier">Detect an unmodulated carrier (recommended for SDR sources)</label>
+                            </div>
+                        </div>
+
                         <!-- Device-specific parameters -->
                         <div id="sourceTypeConfig" class="col-12"></div>
                     </div>
@@ -346,6 +338,51 @@
                             <label for="editSilenceDuration" class="form-label">Silence Duration (seconds)</label>
                             <input type="number" class="form-control" id="editSilenceDuration" min="1" step="1">
                         </div>
+
+                        <!-- Dead-air alarm: a debounced, per-source fault alarm (rack buzzer /
+                             tower light) -- distinct from Silence Threshold/Duration above, which
+                             only drive an instantaneous analytics statistic. Leave disabled for
+                             sources that are normally silent, such as a state relay or alert-only
+                             feed. -->
+                        <div class="col-12">
+                            <hr class="my-1">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="editDeadAirEnabled">
+                                <label class="form-check-label" for="editDeadAirEnabled">Enable dead-air alarm for this source</label>
+                            </div>
+                            <small class="form-text text-muted d-block">
+                                Sounds the rack buzzer and tower light when this source goes silent. Leave disabled for
+                                sources that are normally silent, such as a state relay or alert-only feed.
+                            </small>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="editDeadAirDuration" class="form-label">Hold-off</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="editDeadAirDuration" min="1" max="3600" step="1">
+                                <span class="input-group-text">sec</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="editDeadAirLevel" class="form-label">Silence level</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="editDeadAirLevel" min="-120" max="-30" step="1">
+                                <span class="input-group-text">dBFS</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="editDeadAirFlatness" class="form-label">Open-carrier sensitivity</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="editDeadAirFlatness" min="1" max="99" step="1">
+                                <span class="input-group-text">%</span>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="editDeadAirOpenCarrier">
+                                <label class="form-check-label" for="editDeadAirOpenCarrier">Detect an unmodulated carrier (recommended for SDR sources)</label>
+                            </div>
+                        </div>
+
                         <div class="col-md-12">
                             <label for="editDescription" class="form-label">Description (optional)</label>
                             <textarea class="form-control" id="editDescription" rows="2"></textarea>
