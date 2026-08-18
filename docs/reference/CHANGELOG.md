@@ -8,7 +8,47 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.169.2] - 2026-08-18 - Fix the EAS decoder stream and VU meters not following live audio
+## [2.170.0] - 2026-08-18 - Strengthen SDR Diagnostics: spectrum scope, trend charts, full checklist
+
+### Fixed
+- **The Live Waterfall's fast path was silently broken.** `sdr_hardware_service.py`
+  computed and published a spectrum FFT to Redis every 100ms per receiver, but
+  under its own ad-hoc key (`sdr:spectrum:{id}`) that never matched what
+  `webapp/radio_settings/routes_signal.py` read (`eas:spectrum:{id}`, the
+  key `RedisChannels.SPECTRUM_PREFIX` actually defines). Every spectrum
+  poll — including every waterfall tick — missed the Redis cache and fell
+  through to a slow ~5s command-queue round trip instead. Both sides now
+  import `RedisChannels.SPECTRUM_PREFIX` from `app_core/config/redis_config.py`
+  as the single source of truth.
+
+### Added
+- **Spectrum Scope**, a classic frequency-vs-power line trace with a
+  peak-hold overlay, next to the existing Live Waterfall on
+  `/admin/radio/diagnostics`. Shares the waterfall's 500ms poll and Redis
+  spectrum feed rather than opening a second one — running both at once
+  for the same receiver costs no extra requests.
+- **Historical Trends**: a new 2-tier Redis archive (`app_core/radio/trends.py`,
+  modeled on `services/gps/trends.py`'s bucket/rollup pattern — raw 10s
+  samples capped at 1h, 5-minute rollups capped at 7d) tracks signal
+  strength, lock percentage, sample-rate health, and ring-buffer
+  overflow/underflow per receiver, sampled from `sdr_hardware_service.py`'s
+  existing publisher loop on its own 10s throttle. Served by
+  `GET /api/radio/diagnostics/trends/<id>?window=1h|6h|24h|7d`
+  (`webapp/radio_settings/routes_trends.py`) and rendered as four Chart.js
+  line charts behind a new "Historical Trends" toggle, plus an always-on
+  compact sparkline strip (signal strength, buffer drops) on every
+  receiver card.
+- **"Run Full Diagnostics"** button: a pass/warn/fail checklist
+  (`app_core/radio/diagnostics_report.py`) covering the SDR service
+  heartbeat, per-receiver running/locked/sample-flow status, ring-buffer
+  drops, and spectrum-cache freshness, read from the live Redis state the
+  separated `eas-station-sdr.service` process publishes.
+  `scripts/diagnostics/check_sdr_status.py` is now a thin CLI wrapper
+  around the same shared function (previously it read a local,
+  almost-always-empty in-process `RadioManager` left over from the
+  pre-separated-architecture design, so most of its checks had gone dead).
+
+
 
 ### Fixed
 - **`/api/eas/decoder-stream` ("Listen to EAS Decoder Feed") produced zero
