@@ -1052,74 +1052,31 @@
                             </div>
 
                             <div class="hw-section">
-                                <div class="hw-section-title"><i class="fas fa-volume-mute"></i>Dead Air (Silence) Monitoring</div>
+                                <div class="hw-section-title"><i class="fas fa-volume-mute"></i>Dead Air Indication</div>
                                 <p class="text-muted small mb-3">
-                                    Watches monitored audio for loss of programme content and raises the tower light &mdash;
-                                    optionally sounding a rack alarm buzzer. This is the only check that looks at the
-                                    <em>audio</em> rather than the service: an SDR can be locked, the poller healthy and the
-                                    buffers full while the station you are monitoring is off the air.
+                                    How this station <em>signals</em> dead air. What counts as dead air &mdash; the
+                                    thresholds and hold-off &mdash; is an audio policy and lives with the sources it
+                                    watches, under
+                                    <a href="/admin/audio-sources"><strong>Audio Ingestion &rarr; Dead Air Monitoring</strong></a>.
                                 </p>
-                                <div class="form-check form-switch mb-3">
-                                    <input class="form-check-input" type="checkbox" role="switch" id="dead_air_enabled" name="dead_air_enabled" value="true" {% if settings.dead_air_enabled %}checked{% endif %}>
-                                    <label class="form-check-label" for="dead_air_enabled">Enable dead-air monitoring</label>
-                                </div>
-                                <div class="row g-3">
-                                    <div class="col-12 col-md-4">
-                                        <label for="dead_air_duration_seconds" class="form-label">Hold-off before alarming</label>
-                                        <div class="input-group">
-                                            <input type="number" class="form-control" id="dead_air_duration_seconds" name="dead_air_duration_seconds"
-                                                   min="1" max="3600" value="{{ settings.dead_air_duration_seconds or 20 }}">
-                                            <span class="input-group-text">sec</span>
-                                        </div>
-                                        <small class="form-text text-muted">How long silence must persist. Too short and normal programme pauses will alarm; 10&ndash;30 s is the broadcast convention.</small>
-                                    </div>
-                                    <div class="col-12 col-md-4">
-                                        <label for="dead_air_level_threshold_db" class="form-label">Silence level</label>
-                                        <div class="input-group">
-                                            <input type="number" class="form-control" id="dead_air_level_threshold_db" name="dead_air_level_threshold_db"
-                                                   min="-120" max="-30" value="{{ settings.dead_air_level_threshold_db or -65 }}">
-                                            <span class="input-group-text">dBFS</span>
-                                        </div>
-                                        <small class="form-text text-muted">Audio quieter than this counts as silence. Catches a stopped or muted feed.</small>
-                                    </div>
-                                    <div class="col-12 col-md-4">
-                                        <label for="dead_air_flatness_threshold_pct" class="form-label">Open-carrier sensitivity</label>
-                                        <div class="input-group">
-                                            <input type="number" class="form-control" id="dead_air_flatness_threshold_pct" name="dead_air_flatness_threshold_pct"
-                                                   min="1" max="99" value="{{ settings.dead_air_flatness_threshold_pct or 25 }}">
-                                            <span class="input-group-text">%</span>
-                                        </div>
-                                        <small class="form-text text-muted">Spectral flatness above this reads as noise. Off-air hiss measures 40&ndash;57%; speech and music measure under 1%.</small>
-                                    </div>
-                                </div>
-                                <div class="form-check form-switch mt-3">
-                                    <input class="form-check-input" type="checkbox" role="switch" id="dead_air_detect_open_carrier" name="dead_air_detect_open_carrier" value="true" {% if settings.dead_air_detect_open_carrier %}checked{% endif %}>
-                                    <label class="form-check-label" for="dead_air_detect_open_carrier">Detect an unmodulated carrier (recommended for SDR sources)</label>
-                                </div>
-                                <small class="form-text text-muted d-block mb-3">
-                                    Required for off-air detection on a radio source. When a station leaves the air the receiver
-                                    outputs full-scale hiss, which sits far above any silence level &mdash; without this, that
-                                    reads as &ldquo;audio present&rdquo;.
-                                </small>
 
                                 <div class="row g-3 align-items-end">
-                                    <div class="col-12 col-md-5">
+                                    <div class="col-12 col-md-6">
                                         <div class="form-check form-switch mb-2">
                                             <input class="form-check-input" type="checkbox" role="switch" id="dead_air_buzzer_enabled" name="dead_air_buzzer_enabled" value="true" {% if settings.dead_air_buzzer_enabled %}checked{% endif %}>
                                             <label class="form-check-label" for="dead_air_buzzer_enabled">Sound a rack alarm buzzer on a GPIO pin</label>
                                         </div>
+                                        <small class="form-text text-muted">
+                                            Held for as long as the condition lasts, not pulsed. An operator can
+                                            acknowledge it from the Audio Health dashboard to stop the noise while
+                                            leaving the light lit.
+                                        </small>
                                     </div>
                                     <div class="col-12 col-md-3">
                                         <label for="dead_air_buzzer_gpio_pin" class="form-label">Buzzer GPIO pin</label>
                                         <input type="number" class="form-control" id="dead_air_buzzer_gpio_pin" name="dead_air_buzzer_gpio_pin"
                                                min="2" max="27" placeholder="e.g. 17" value="{{ settings.dead_air_buzzer_gpio_pin if settings.dead_air_buzzer_gpio_pin is not none else '' }}">
-                                        <small class="form-text text-muted">BCM numbering.</small>
-                                    </div>
-                                    <div class="col-12 col-md-4">
-                                        <button type="button" class="btn btn-outline-warning w-100" id="deadAirAckBtn">
-                                            <i class="fas fa-bell-slash me-1"></i>Acknowledge / silence buzzer
-                                        </button>
-                                        <small class="form-text text-muted">Stops the noise now; the tower light stays lit until audio returns.</small>
+                                        <small class="form-text text-muted">BCM numbering. Takes effect on service restart.</small>
                                     </div>
                                 </div>
 
@@ -1476,7 +1433,6 @@
     };
 </script>
 <script src="{{ url_for('static', filename='js/admin/hardware-settings.js') }}"></script>
-<script src="{{ url_for('static', filename='js/admin/dead-air.js') }}"></script>
 
 <!-- ──────────────────────────────────────────────────────────────────
      GPS HAT action-runner modal. Lives at the bottom of the content

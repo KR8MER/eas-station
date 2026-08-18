@@ -383,3 +383,107 @@ def test_missing_dead_air_key_reads_as_not_alarming(monkeypatch):
     )
     state = alert_indicators.read_dead_air_state()
     assert state["active"] is False
+
+
+# --------------------------------------------------------------------------
+# Where the controls live
+# --------------------------------------------------------------------------
+#
+# Dead-air settings were first shipped entirely on the Hardware page,
+# beside the tower-light block. That was placement by implementation
+# adjacency rather than by task: the thresholds are audio quantities, and
+# GPIO is only *today's* output -- an email or SMS notifier added later
+# must be able to share the same detection policy without reading it out
+# of the GPIO page. These pin the split so it does not drift back.
+
+HARDWARE_HTML = ROOT / "templates" / "admin" / "hardware_settings.html"
+AUDIO_HTML = ROOT / "templates" / "admin" / "audio_sources.html"
+HEALTH_HTML = ROOT / "templates" / "audio" / "health_dashboard.html"
+
+_DETECTION_FIELDS = (
+    "deadAirEnabled",
+    "deadAirDuration",
+    "deadAirLevel",
+    "deadAirFlatness",
+    "deadAirOpenCarrier",
+)
+_OUTPUT_FIELDS = (
+    "dead_air_buzzer_gpio_pin",
+    "tower_light_silence_color",
+    "tower_light_silence_enabled",
+)
+
+
+def test_detection_settings_live_with_the_audio_sources():
+    audio = AUDIO_HTML.read_text(encoding="utf-8")
+    for field in _DETECTION_FIELDS:
+        assert field in audio, f"{field} should be on the audio page"
+
+
+def test_detection_settings_are_not_on_the_hardware_page():
+    """The thresholds must not be editable in two places at once."""
+    hardware = HARDWARE_HTML.read_text(encoding="utf-8")
+    for field in ("dead_air_enabled", "dead_air_duration_seconds",
+                  "dead_air_level_threshold_db",
+                  "dead_air_flatness_threshold_pct"):
+        assert field not in hardware, f"{field} should have moved off Hardware"
+
+
+def test_output_wiring_stays_on_the_hardware_page():
+    """The buzzer pin and light colour are physical wiring, not policy."""
+    hardware = HARDWARE_HTML.read_text(encoding="utf-8")
+    for field in _OUTPUT_FIELDS:
+        assert field in hardware, f"{field} belongs on Hardware"
+
+    audio = AUDIO_HTML.read_text(encoding="utf-8")
+    assert "dead_air_buzzer_gpio_pin" not in audio
+
+
+def test_acknowledge_lives_on_the_health_dashboard():
+    """Acknowledging is an operational act, not configuration.
+
+    It belongs where an operator is already looking when the buzzer is
+    sounding, not buried in a settings form.
+    """
+    health = HEALTH_HTML.read_text(encoding="utf-8")
+    assert "deadAirAckBtn" in health
+    assert "dead-air-alarm.js" in health
+
+    hardware = HARDWARE_HTML.read_text(encoding="utf-8")
+    assert "deadAirAckBtn" not in hardware
+
+
+def test_the_three_pages_cross_link():
+    """Splitting a feature across pages only works if they point at each other."""
+    audio = AUDIO_HTML.read_text(encoding="utf-8")
+    assert "/admin/hardware" in audio
+    assert "/audio/health/dashboard" in audio
+
+    hardware = HARDWARE_HTML.read_text(encoding="utf-8")
+    assert "/admin/audio-sources" in hardware
+
+    health = HEALTH_HTML.read_text(encoding="utf-8")
+    assert "/admin/audio-sources" in health
+
+
+def test_both_settings_pages_are_reachable_from_the_navigation():
+    """Regression: neither page was ever a NavItem.
+
+    'Station Hardware' is a NavGroup *label*, not a link -- so the
+    Hardware Settings page could only be reached by typing the URL or via
+    the Admin panel, and /admin/audio-sources was not in the registry at
+    all. Both now have entries.
+    """
+    from webapp.navigation.registry import NAVIGATION
+
+    hrefs, endpoints = set(), set()
+    for section in NAVIGATION:
+        for group in section.groups:
+            for item in group.items:
+                if getattr(item, "href", None):
+                    hrefs.add(item.href)
+                if getattr(item, "endpoint", None):
+                    endpoints.add(item.endpoint)
+
+    assert "/admin/audio-sources" in hrefs
+    assert "hardware.hardware_settings_page" in endpoints

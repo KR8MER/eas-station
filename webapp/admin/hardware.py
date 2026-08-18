@@ -108,78 +108,6 @@ def gps_hat_diagnostics():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
-@hardware_bp.route('/hardware/dead-air/status', methods=['GET'])
-@require_permission('system.configure')
-def dead_air_status():
-    """Report the current dead-air state for the settings page."""
-    try:
-        import json as _json
-
-        from app_core.config.redis_config import RedisChannels
-        from app_core.redis_client import get_redis_client
-
-        client = get_redis_client()
-        if client is None:
-            return jsonify({"ok": False, "error": "Redis unavailable"}), 503
-        raw = client.get(RedisChannels.DEAD_AIR_KEY)
-        if not raw:
-            return jsonify({
-                "ok": True, "active": False, "enabled": False,
-                "acknowledged": False, "sources": {},
-            })
-        if isinstance(raw, bytes):
-            raw = raw.decode("utf-8")
-        payload = _json.loads(raw)
-        payload["acknowledged"] = bool(client.get(RedisChannels.DEAD_AIR_ACK_KEY))
-        payload["ok"] = True
-        return jsonify(payload)
-    except Exception as exc:
-        logger.exception("Dead-air status read failed")
-        return jsonify({"ok": False, "error": str(exc)}), 500
-
-
-@hardware_bp.route('/hardware/dead-air/acknowledge', methods=['POST'])
-@require_permission('system.configure')
-def dead_air_acknowledge():
-    """Silence the rack alarm buzzer for the current dead-air episode.
-
-    Standard alarm-panel behaviour: acknowledging stops the noise but
-    leaves the tower light lit, because the fault has not been fixed --
-    only noticed. The audio service clears the acknowledgement when audio
-    returns, so the next outage sounds again instead of starting
-    pre-silenced.
-
-    POST ``{"acknowledged": false}`` to un-acknowledge and let the buzzer
-    sound again while the condition is still active.
-    """
-    try:
-        from app_core.config.redis_config import RedisChannels
-        from app_core.redis_client import get_redis_client
-
-        payload = request.get_json(silent=True) or {}
-        acknowledged = payload.get('acknowledged', True)
-        if isinstance(acknowledged, str):
-            acknowledged = acknowledged.lower() in ('true', '1', 'yes', 'on')
-
-        client = get_redis_client()
-        if client is None:
-            return jsonify({"ok": False, "error": "Redis unavailable"}), 503
-
-        if acknowledged:
-            # TTL is a backstop only: the audio service deletes this the
-            # moment audio returns. The ceiling stops a forgotten ack from
-            # muting a genuinely dead source indefinitely.
-            client.setex(RedisChannels.DEAD_AIR_ACK_KEY, 86400, "1")
-            logger.warning("Dead-air alarm acknowledged by operator")
-        else:
-            client.delete(RedisChannels.DEAD_AIR_ACK_KEY)
-            logger.info("Dead-air acknowledgement cleared by operator")
-        return jsonify({"ok": True, "acknowledged": bool(acknowledged)})
-    except Exception as exc:
-        logger.exception("Dead-air acknowledge failed")
-        return jsonify({"ok": False, "error": str(exc)}), 500
-
-
 @hardware_bp.route('/hardware/gps-hat/ping', methods=['POST'])
 @require_permission('system.configure')
 def gps_hat_ping():
@@ -571,7 +499,6 @@ def update_hardware():
             'tower_light_buzzer_disabled', 'tower_light_fault_enabled',
             'tower_light_gate_pending_enabled',
             'tower_light_severity_colors', 'tower_light_quiet_enabled',
-            'dead_air_enabled', 'dead_air_detect_open_carrier',
             'dead_air_buzzer_enabled', 'tower_light_silence_enabled',
             'tower_light_silence_buzzer',
             'neopixel_enabled', 'neopixel_flash_on_alert',
@@ -599,8 +526,7 @@ def update_hardware():
             'neopixel_flash_interval_ms',
             'gps_baudrate', 'gps_pps_gpio_pin', 'gps_min_satellites',
             'gps_gpsd_port',
-            'dead_air_level_threshold_db', 'dead_air_flatness_threshold_pct',
-            'dead_air_duration_seconds', 'dead_air_buzzer_gpio_pin',
+            'dead_air_buzzer_gpio_pin',
         ]
         for field in int_fields:
             if field in data and data[field] is not None:
@@ -663,22 +589,18 @@ def update_hardware():
                 value = str(data[color_field]).strip().lower()
                 data[color_field] = value if value in _tower_colors else fallback
 
-        # Dead-air thresholds: clamp to the ranges the monitor accepts.
-        # A level threshold above about -30 dBFS would alarm on normal
-        # programme audio, and a flatness threshold at 0 would alarm on
-        # everything, so neither is left to a hand-edited form post.
-        _dead_air_bounds = {
-            'dead_air_level_threshold_db': (-120, -30),
-            'dead_air_flatness_threshold_pct': (1, 99),
-            'dead_air_duration_seconds': (1, 3600),
-            'dead_air_buzzer_gpio_pin': (2, 27),
-        }
-        for field, (low, high) in _dead_air_bounds.items():
-            if field in data and data[field] is not None:
-                try:
-                    data[field] = max(low, min(high, int(data[field])))
-                except (TypeError, ValueError):
-                    data[field] = None if field.endswith('gpio_pin') else low
+        # The rack-buzzer pin is the only dead-air value this page owns;
+        # the detection thresholds live with the audio sources they watch
+        # (see webapp/admin/audio_ingest/routes_dead_air.py) so a future
+        # email/SMS notifier can share the same policy rather than reading
+        # it out of the GPIO page.
+        if data.get('dead_air_buzzer_gpio_pin') is not None:
+            try:
+                data['dead_air_buzzer_gpio_pin'] = max(
+                    2, min(27, int(data['dead_air_buzzer_gpio_pin']))
+                )
+            except (TypeError, ValueError):
+                data['dead_air_buzzer_gpio_pin'] = None
 
         # Quiet-hours times must be HH:MM; fall back to the defaults rather
         # than storing a value the indicator scheduler cannot parse.

@@ -8,6 +8,54 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.173.0] - 2026-08-18 - Move dead-air settings to where the operator looks for them
+
+### Changed
+- **Dead-air monitoring is no longer configured entirely on the Hardware
+  page.** It shipped there in 2.172.0 because that is where the tower-light
+  settings already were -- placement by implementation adjacency rather
+  than by task. Every threshold it exposes is an audio quantity (dBFS,
+  spectral flatness, a hold-off in seconds), and GPIO is only *today's*
+  output: an email or SMS notifier added later would have had to read its
+  detection policy out of the GPIO page. The controls now split along the
+  seam that actually matters, detection policy versus output device:
+
+  | Control | Page |
+  |---|---|
+  | Enable, hold-off, silence level, open-carrier sensitivity, detect-unmodulated-carrier | **Audio Ingestion** (`/admin/audio-sources`) |
+  | Rack buzzer enable + GPIO pin, tower-light colour / enable / buzzer | **Hardware Settings** (`/admin/hardware`) |
+  | Live alarm state + Acknowledge | **Audio Health dashboard** (`/audio/health/dashboard`) |
+
+  All three cross-link to each other. This is the same separation the
+  system already makes elsewhere: the alert pipeline decides what
+  constitutes an alert, and hardware settings only decide what colour the
+  light goes.
+- **Acknowledging moved off the settings form entirely.** It is an
+  operational act taken while an alarm is sounding, not configuration, so
+  it now lives on the Audio Health dashboard as a banner that appears only
+  when a source is actually silent -- naming the source, the reason and
+  how long it has been dead. Acknowledging still silences the buzzer while
+  leaving the indication up.
+- No migration: the settings columns are unchanged, only which page edits
+  them. Detection fields are no longer writable from the hardware form, so
+  the two pages cannot fight over the same values.
+
+### Added
+- `webapp/admin/audio_ingest/routes_dead_air.py` -- `GET`/`POST
+  /api/audio/dead-air/settings` for the detection policy, plus
+  `/api/audio/dead-air/status` and `/acknowledge`. The equivalents under
+  `/admin/hardware/dead-air/*` are removed rather than left as duplicates.
+- **Navigation entries for two pages that never had them.** Neither
+  `/admin/hardware` nor `/admin/audio-sources` was in
+  `webapp/navigation/registry.py` -- "Station Hardware" is a NavGroup
+  *label*, not a link, so the hardware settings page could only be reached
+  by typing the URL or via a card on the Admin panel. Both are now proper
+  `NavItem`s, which is the actual fix for "I could not find this".
+- Regression tests pinning the split: detection fields on the audio page
+  and absent from Hardware, output wiring the other way round,
+  Acknowledge only on the dashboard, all three pages cross-linking, and
+  both pages present in the navigation registry.
+
 ## [2.172.1] - 2026-08-18 - Fix undefined logger in the dead-air buzzer pin resolver
 
 ### Fixed

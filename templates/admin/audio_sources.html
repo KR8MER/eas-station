@@ -108,6 +108,83 @@
         </div>
     </div>
 
+    <!-- Dead-air (silence) detection policy. Station-wide, applies to every
+         monitored source. The physical indication (rack buzzer pin, tower
+         light colour) is configured in Admin -> Hardware; this page owns
+         only what counts as dead air, so a notifier added later can share
+         the same policy without it living inside the GPIO page. -->
+    <div class="card shadow-sm mb-4" id="deadAirCard">
+        <div class="card-header d-flex flex-column flex-md-row gap-2 align-items-md-center justify-content-between">
+            <div>
+                <h2 class="h5 mb-1"><i class="fas fa-volume-mute me-2"></i>Dead Air Monitoring</h2>
+                <div class="text-muted small">What counts as loss of programme audio, on every monitored source</div>
+            </div>
+            <div id="deadAirLiveStatus" class="small text-muted" role="status" aria-live="polite"></div>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small">
+                Every other health check on this page watches whether the <em>service</em> is alive. This one watches
+                whether the <em>audio</em> is. A source can be running, locked and buffering happily while the station
+                it is monitoring has gone off the air &mdash; and for an EAS station that means monitoring has silently
+                stopped.
+            </p>
+
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" role="switch" id="deadAirEnabled">
+                <label class="form-check-label" for="deadAirEnabled">Enable dead-air monitoring</label>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-12 col-md-4">
+                    <label for="deadAirDuration" class="form-label">Hold-off before alarming</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" id="deadAirDuration" min="1" max="3600">
+                        <span class="input-group-text">sec</span>
+                    </div>
+                    <small class="form-text text-muted">Too short and normal programme pauses alarm; 10&ndash;30 s is the broadcast convention.</small>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label for="deadAirLevel" class="form-label">Silence level</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" id="deadAirLevel" min="-120" max="-30">
+                        <span class="input-group-text">dBFS</span>
+                    </div>
+                    <small class="form-text text-muted">Audio quieter than this counts as silence. Catches a stopped or muted feed.</small>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label for="deadAirFlatness" class="form-label">Open-carrier sensitivity</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" id="deadAirFlatness" min="1" max="99">
+                        <span class="input-group-text">%</span>
+                    </div>
+                    <small class="form-text text-muted">Spectral flatness above this reads as noise. Off-air hiss measures 40&ndash;57%; speech and music under 1%.</small>
+                </div>
+            </div>
+
+            <div class="form-check form-switch mt-3">
+                <input class="form-check-input" type="checkbox" role="switch" id="deadAirOpenCarrier">
+                <label class="form-check-label" for="deadAirOpenCarrier">Detect an unmodulated carrier (recommended for SDR sources)</label>
+            </div>
+            <small class="form-text text-muted d-block">
+                Required for off-air detection on a radio source. When a station leaves the air the receiver outputs
+                full-scale hiss, which sits far above any silence level &mdash; without this, that reads as
+                &ldquo;audio present&rdquo;.
+            </small>
+
+            <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+                <button type="button" class="btn btn-primary" id="deadAirSaveBtn">
+                    <i class="fas fa-save me-1"></i>Save detection settings
+                </button>
+                <a href="/admin/hardware" class="btn btn-outline-secondary">
+                    <i class="fas fa-lightbulb me-1"></i>Tower light &amp; rack buzzer
+                </a>
+                <a href="/audio/health/dashboard" class="btn btn-outline-secondary">
+                    <i class="fas fa-heart-pulse me-1"></i>Live status &amp; acknowledge
+                </a>
+            </div>
+        </div>
+    </div>
+
     <div id="audioStatus" class="alert d-none" role="alert" aria-live="polite"></div>
 
     <!-- Alerts Section (hidden container for JS) -->
@@ -295,6 +372,7 @@
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/audio_monitoring.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin/dead-air-settings.js') }}"></script>
 <script>
 // Wire up event handlers
 document.addEventListener('DOMContentLoaded', function() {
