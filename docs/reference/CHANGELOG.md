@@ -8,6 +8,28 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.170.3] - 2026-08-18 - Fix spectrum saturation behind the "still zoomed in" waterfall/scope
+
+### Fixed
+- **The Live Waterfall and Spectrum Scope both still looked "zoomed in"
+  after 2.170.2's client-side auto-scale fix** -- because the underlying
+  data was actually saturated, not just badly rendered.
+  `sdr_hardware_service.py`'s `compute_spectrum()` converted the raw FFT
+  magnitude to dB without dividing by the window's coherent gain
+  (`sum(window)`) first, so for `FFT_SIZE=2048` with a Hanning window, a
+  full-scale tone's peak bin read around +54 dB raw -- far above the
+  fixed `SPECTRUM_DB_MIN=-80`/`SPECTRUM_DB_MAX=0` window the
+  normalization assumed. Confirmed against a live capture: 1781 of 2048
+  bins (87%) clipped to the normalized maximum of 1.0, flattening both
+  views into a saturated "brick" with no legible spectral shape. A
+  single fixed dB window can't hold across every receiver/gain/antenna
+  combination anyway, so the fix replaces it with per-capture
+  normalization: stretch *this* capture's own dB min/max across 0-1,
+  floored by a new `MIN_SPECTRUM_DB_SPAN` constant so a near-silent
+  capture (no antenna, receiver just started) isn't auto-amplified into
+  apparent noise. Added `tests/test_sdr_spectrum_calibration.py`
+  (7 tests).
+
 ## [2.170.2] - 2026-08-18 - Fix Spectrum Scope clipping and Historical Trends chart growth
 
 ### Fixed
@@ -31,23 +53,6 @@ tracks releases under the 2.x series.
   `.col-md-6` grid cells, so each one could resize upward indefinitely.
   Wrapped each chart canvas in a `position:relative; height:220px;` div,
   the pattern Chart.js's own docs require for this configuration.
-- **The Live Waterfall and Spectrum Scope both still looked "zoomed in"
-  after the fix above** -- because the underlying data was actually
-  saturated, not just badly rendered. `sdr_hardware_service.py`'s
-  `compute_spectrum()` converted the raw FFT magnitude to dB without
-  dividing by the window's coherent gain (`sum(window)`) first, so for
-  `FFT_SIZE=2048` with a Hanning window, a full-scale tone's peak bin
-  read around +54 dB raw -- far above the fixed `SPECTRUM_DB_MIN=-80`/
-  `SPECTRUM_DB_MAX=0` window the normalization assumed. Confirmed against
-  a live capture: 1781 of 2048 bins (87%) clipped to the normalized
-  maximum of 1.0, flattening both views into a saturated "brick" with no
-  legible spectral shape. A single fixed dB window can't hold across
-  every receiver/gain/antenna combination anyway, so the fix replaces it
-  with per-capture normalization: stretch *this* capture's own dB min/max
-  across 0-1, floored by a new `MIN_SPECTRUM_DB_SPAN` constant so a
-  near-silent capture (no antenna, receiver just started) isn't
-  auto-amplified into apparent noise. Added
-  `tests/test_sdr_spectrum_calibration.py` (7 tests).
 
 ## [2.170.1] - 2026-08-18 - Fix a silently dropped IPAWS shelter-in-place alert
 
