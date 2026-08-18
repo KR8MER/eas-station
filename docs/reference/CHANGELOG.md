@@ -12,19 +12,30 @@ tracks releases under the 2.x series.
 
 ### Fixed
 - **`CAPPoller._convert_cap_alert()` never extracted `<eventCode>` from
-  IPAWS-sourced CAP XML.** Reproduced against a live alert: a county
-  "Natural gas leak" shelter-in-place warning (severity Extreme, urgency
-  Immediate, instruction "Shelter in place.") carried a correct
-  `<eventCode><valueName>SAME</valueName><value>SPW</value></eventCode>`
-  block in its raw CAP XML, but `properties['eventCode']` was never
-  populated -- the IPAWS XML parser built `<parameter>`, geocode, and
-  `<resource>` extraction, but had no equivalent for `<eventCode>`. With
-  the event code unresolvable, the alert was silently rejected by the
-  auto-forward allowlist ("Event 'UNKNOWN' is not in the configured
-  forwarding allowlist") even though SPW itself was already on the
-  allowlist, and the alert was never broadcast. Added
-  `CAPPoller._extract_cap_event_codes()` (mirrors the existing
-  `_extract_cap_parameters()` pattern) and wired it into `properties['eventCode']`.
+  IPAWS-sourced CAP XML.** Reproduced against two live alerts from the
+  same sender:
+  - A county "Natural gas leak" shelter-in-place warning (severity
+    Extreme, urgency Immediate, instruction "Shelter in place.") carried
+    a correct `<eventCode><valueName>SAME</valueName><value>SPW</value></eventCode>`
+    block in its raw CAP XML, but `properties['eventCode']` was never
+    populated, so the event code was unresolvable and the alert was
+    silently rejected by the auto-forward allowlist ("Event 'UNKNOWN' is
+    not in the configured forwarding allowlist") even though SPW itself
+    was already on the allowlist. It was never broadcast.
+  - Three days earlier, an alert whose `event` field read exactly like a
+    routine "Severe Thunderstorm Warning" (matching headline, radar-
+    indicated hail/wind description, "prepare to seek shelter"
+    instruction) but whose eventCode explicitly said SAME=SPW was
+    actually broadcast as `ZCZC-CIV-SVR-039137+0130-2212336-KR8MER-`
+    (event code SVR) -- a shelter-in-place alert masquerading as a
+    severe thunderstorm warning, because the missing eventCode meant
+    name-based resolution took over.
+
+  The IPAWS XML parser built `<parameter>`, geocode, and `<resource>`
+  extraction from the CAP `<info>` block, but had no equivalent for
+  `<eventCode>` at all. Added `CAPPoller._extract_cap_event_codes()`
+  (mirrors the existing `_extract_cap_parameters()` pattern) and wired
+  it into `properties['eventCode']`.
 - **`app_utils.eas._collect_event_code_candidates()` silently dropped a
   dict-shaped `eventCode`** (`{"SAME": ["SVR"], "NationalWeatherService":
   ["SVW"]}` -- the shape both NWS's CAP-JSON feed and the now-fixed IPAWS
@@ -46,8 +57,8 @@ tracks releases under the 2.x series.
   been enough without also fixing this. Replaced its body to delegate to
   the shared resolver so the SAME-header-generation path and the
   allowlist-check path can never resolve an alert differently again.
-- Added `tests/test_ipaws_event_code_extraction.py` (18 tests) covering
-  all three fixes, including a replay of the exact real-world alert.
+- Added `tests/test_ipaws_event_code_extraction.py` (19 tests) covering
+  all three fixes, including a replay of both real-world alerts.
 
 ## [2.170.0] - 2026-08-18 - Strengthen SDR Diagnostics: spectrum scope, trend charts, full checklist
 

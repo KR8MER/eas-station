@@ -22,13 +22,23 @@ whose raw XML carried a valid <eventCode><valueName>SAME</valueName>
 in `properties` -- CAPPoller._convert_cap_alert() never extracted
 <eventCode> from the CAP <info> block, only <parameter> and geocode.
 
-Reproduced live: a county "Natural gas leak" shelter-in-place alert
-(instruction "Shelter in place.", severity Extreme, urgency Immediate)
-had its event code fall through as unresolved. Downstream, the auto-forward
-allowlist check saw an unresolved code and rejected it with "Event
-'UNKNOWN' is not in the configured forwarding allowlist" -- even though
-the site's allowlist already included SPW -- so a real emergency alert
-was never broadcast.
+Reproduced against two live alerts from the same sender:
+  1. A county "Natural gas leak" shelter-in-place alert (instruction
+     "Shelter in place.", severity Extreme, urgency Immediate) had its
+     event code fall through as unresolved. Downstream, the auto-forward
+     allowlist check saw an unresolved code and rejected it with "Event
+     'UNKNOWN' is not in the configured forwarding allowlist" -- even
+     though the site's allowlist already included SPW -- so a real
+     emergency alert was never broadcast.
+  2. Three days earlier, the same sender issued an alert whose `event`
+     field read exactly like a routine NWS "Severe Thunderstorm Warning"
+     (matching headline, radar-indicated hail/wind description, "prepare
+     to seek shelter" instruction) but whose eventCode explicitly said
+     SAME=SPW -- Shelter in Place Warning, not SVR. With the eventCode
+     block dropped, name-based resolution took over and the alert was
+     actually broadcast as "ZCZC-CIV-SVR-039137+0130-2212336-KR8MER-":
+     a shelter-in-place alert masquerading as a severe thunderstorm
+     warning.
 
 Three call sites were involved and are each covered here:
   1. CAPPoller._extract_cap_event_codes() / _convert_cap_alert() /
@@ -79,6 +89,34 @@ _GAS_LEAK_INFO_XML = """
   <description>Please shelter in place half mile from Sr 190 in the 17000 block of Sr 190</description>
   <instruction>Shelter in place. </instruction>
   <parameter><valueName>BLOCKCHANNEL</valueName><value>EAS</value></parameter>
+  <parameter><valueName>BLOCKCHANNEL</valueName><value>NWEM</value></parameter>
+  <area><areaDesc>039137</areaDesc><geocode><valueName>SAME</valueName><value>039137</value></geocode></area>
+</info>
+"""
+
+# A second, independently confirmed real-world alert from the same sender
+# (three days earlier): its `event` field reads exactly like a routine NWS
+# "Severe Thunderstorm Warning" (matching headline, radar-indicated hail/
+# wind description, "prepare to seek shelter" instruction), but the source
+# explicitly coded it SAME=SPW -- Shelter in Place Warning, not SVR. Before
+# this fix, the missing eventCode block meant name-based resolution took
+# over and the alert was actually broadcast as
+# "ZCZC-CIV-SVR-039137+0130-2212336-KR8MER-" (event_code SVR): a shelter-
+# in-place alert masquerading as a routine severe thunderstorm warning.
+_MASQUERADING_SVR_INFO_XML = """
+<info>
+  <language>en-US</language>
+  <category>Safety</category>
+  <event>Severe Thunderstorm Warning</event>
+  <urgency>Immediate</urgency>
+  <severity>Severe</severity>
+  <certainty>Likely</certainty>
+  <eventCode><valueName>SAME</valueName><value>SPW</value></eventCode>
+  <expires>2026-08-10T01:06:34-00:00</expires>
+  <senderName>OCV</senderName>
+  <headline>Severe Thunderstorm Warning</headline>
+  <description>Severe thunderstorms were located along a line, moving east at 50 mph. HAZARD...60 mph wind gusts and quarter size hail.</description>
+  <instruction>Prepare to seek shelter</instruction>
   <parameter><valueName>BLOCKCHANNEL</valueName><value>NWEM</value></parameter>
   <area><areaDesc>039137</areaDesc><geocode><valueName>SAME</valueName><value>039137</value></geocode></area>
 </info>
@@ -164,6 +202,38 @@ class TestConvertCapAlertIncludesEventCode:
 
         assert feature['properties']['eventCode'] == {'SAME': ['SPW']}
         assert feature['properties']['event'] == 'Natural gas leak'
+
+    def test_masquerading_svr_alert_gets_spw_not_svr(self):
+        """The second confirmed real-world alert: `event` reads exactly
+        like a routine severe thunderstorm warning, but the source's
+        authoritative eventCode says SPW. Before this fix, the missing
+        eventCode meant name-based resolution took over and the alert
+        was actually broadcast as SVR -- a shelter-in-place alert
+        masquerading as a severe thunderstorm warning."""
+        poller = _make_test_poller()
+        from app_utils.optimized_parsing import parse_xml_string
+        alert_xml = (
+            '<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">'
+            '<identifier>a2de9a8cb6b94b18b83ab65398c9c8ae_202933</identifier>'
+            '<sender>ocv_ipaws@202933</sender>'
+            '<sent>2026-08-09T23:36:34-00:00</sent><status>Actual</status>'
+            '<msgType>Alert</msgType><scope>Public</scope>'
+            f'{_MASQUERADING_SVR_INFO_XML}'
+            '</alert>'
+        )
+        alert_elem = parse_xml_string(alert_xml)
+        feature = poller._convert_cap_alert(alert_elem, _NS)
+
+        assert feature['properties']['eventCode'] == {'SAME': ['SPW']}
+        assert feature['properties']['event'] == 'Severe Thunderstorm Warning'
+
+        # End-to-end: the resolver must now pick SPW from the eventCode
+        # block, not SVR from the `event` name.
+        from types import SimpleNamespace
+        alert_obj = SimpleNamespace(event=feature['properties']['event'], raw_json=feature)
+        candidates = _collect_event_code_candidates(alert_obj, {})
+        assert resolve_event_code(alert_obj.event, candidates) == 'SPW'
+        assert _resolve_event_code(alert_obj) == 'SPW'
 
     def test_alert_without_eventcode_gets_empty_dict_not_missing_key(self):
         """properties['eventCode'] must always be present (possibly empty),
