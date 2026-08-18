@@ -1623,6 +1623,27 @@ sudo systemctl restart eas-station</code></pre>
         );
     }
 
+    // Human-readable RF span covered by the FFT. This is the *effective*
+    // (post-early-decimation) sample rate, which is what the bins really
+    // cover -- for a while the axis was labelled from the configured
+    // hardware rate instead, making a normal ~200 kHz FM signal look like
+    // it was a megahertz wide. Showing the span (and the decimation
+    // factor when it is active) keeps that honest on screen.
+    function spectrumSpanLabel(payload) {
+        const rate = Number(payload.sample_rate);
+        if (!Number.isFinite(rate) || rate <= 0) return '';
+        const span = rate >= 1e6
+            ? `${(rate / 1e6).toFixed(3)} MHz`
+            : `${(rate / 1e3).toFixed(1)} kHz`;
+        const decim = Number(payload.early_decim_factor);
+        const hw = Number(payload.hardware_sample_rate);
+        let suffix = '';
+        if (Number.isFinite(decim) && decim > 1 && Number.isFinite(hw) && hw > 0) {
+            suffix = ` (${(hw / 1e6).toFixed(3)} MHz \u00f7 ${decim})`;
+        }
+        return ` \u00b7 ${span} span${suffix}`;
+    }
+
     function liveWfUpdateAxis(state, payload) {
         if (!state.axisEl) return;
         const fMin = Number(payload.freq_min);
@@ -1952,7 +1973,8 @@ sudo systemctl restart eas-station</code></pre>
                 liveWfUpdateAxis(state, payload);
                 state.statusEl.textContent =
                     `${spectrum.length}-bin FFT · ${state.rowCount} rows · `
-                    + `latency ${ageMs.toFixed(0)} ms`;
+                    + `latency ${ageMs.toFixed(0)} ms`
+                    + spectrumSpanLabel(payload);
             }
             if (state.scopeActive) {
                 scopeRender(state, spectrum);
@@ -1961,7 +1983,8 @@ sudo systemctl restart eas-station</code></pre>
                     ? ` · y-axis ${state.scopeYRange[0].toFixed(2)}–${state.scopeYRange[1].toFixed(2)} (auto)`
                     : '';
                 state.scopeStatusEl.textContent =
-                    `${spectrum.length}-bin FFT · latency ${ageMs.toFixed(0)} ms${range}`;
+                    `${spectrum.length}-bin FFT · latency ${ageMs.toFixed(0)} ms`
+                    + spectrumSpanLabel(payload) + range;
             }
         } catch (err) {
             // Network blip — keep the loop running. The next tick will try
