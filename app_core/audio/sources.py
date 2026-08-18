@@ -158,16 +158,6 @@ class SDRSourceAdapter(AudioSourceAdapter):
         self._demodulator = None  # Audio demodulator (if enabled)
         self._rbds_data = None  # Latest RBDS data
         self._receiver_config = None  # Receiver configuration
-        self._squelch_enabled = False
-        self._squelch_threshold_db = -65.0
-        self._squelch_open_ms = 150
-        self._squelch_close_ms = 750
-        self._squelch_alarm_enabled = False
-        self._squelch_state_open = True
-        self._squelch_last_change = time.time()
-        self._squelch_open_timer: Optional[float] = None
-        self._squelch_close_timer: Optional[float] = None
-        self._last_rms_db = float("-inf")
 
     def _start_capture(self) -> None:
         """Start SDR audio capture via radio manager."""
@@ -191,16 +181,6 @@ class SDRSourceAdapter(AudioSourceAdapter):
         if db_receiver:
             self._receiver_config = db_receiver.to_receiver_config()
 
-            self._squelch_enabled = bool(self._receiver_config.squelch_enabled)
-            self._squelch_threshold_db = float(self._receiver_config.squelch_threshold_db)
-            self._squelch_open_ms = int(self._receiver_config.squelch_open_ms)
-            self._squelch_close_ms = int(self._receiver_config.squelch_close_ms)
-            self._squelch_alarm_enabled = bool(self._receiver_config.squelch_alarm)
-            self._squelch_state_open = not self._squelch_enabled
-            self._squelch_last_change = time.time()
-            self._squelch_open_timer = None
-            self._squelch_close_timer = None
-
             metadata = self.metrics.metadata or {}
             metadata.setdefault('receiver_identifier', receiver_id)
             metadata.setdefault('receiver_display_name', db_receiver.display_name)
@@ -223,18 +203,7 @@ class SDRSourceAdapter(AudioSourceAdapter):
                     metadata['receiver_frequency_display'] = f"{freq_hz:.0f} Hz"
 
             metadata.setdefault('receiver_modulation', (self._receiver_config.modulation_type or 'IQ').upper())
-            metadata.setdefault('squelch_enabled', self._squelch_enabled)
-            metadata.setdefault('squelch_threshold_db', self._squelch_threshold_db)
-            metadata.setdefault('squelch_open_ms', self._squelch_open_ms)
-            metadata.setdefault('squelch_close_ms', self._squelch_close_ms)
-            metadata.setdefault('carrier_alarm_enabled', self._squelch_alarm_enabled)
-            metadata.setdefault('carrier_present', None if self._squelch_enabled else True)
-            metadata.setdefault('squelch_state', 'pending' if self._squelch_enabled else 'open')
-            metadata.setdefault('squelch_state_since', self._squelch_last_change)
-            metadata.setdefault('squelch_last_rms_db', None)
-            metadata.setdefault('carrier_alarm', False)
             self.metrics.metadata = metadata
-            self._update_squelch_metadata(float('-inf'))
 
             # Create demodulator if audio output is enabled and modulation is not IQ
             if self._receiver_config.audio_output and self._receiver_config.modulation_type != 'IQ':
@@ -288,115 +257,6 @@ class SDRSourceAdapter(AudioSourceAdapter):
             self._capture_handle = None
         self._radio_manager = None
         self._receiver_id = None
-
-    def _update_squelch_metadata(self, rms_db: float, carrier_present: Optional[bool] = None) -> None:
-        """Update metadata reflecting the latest squelch measurements."""
-
-        metadata = self.metrics.metadata or {}
-        metadata['squelch_last_rms_db'] = (
-            round(float(rms_db), 2)
-            if np.isfinite(rms_db)
-            else None
-        )
-
-        if carrier_present is None:
-            carrier_present = self._squelch_state_open if self._squelch_enabled else True
-
-        metadata['carrier_present'] = carrier_present
-        metadata['squelch_state'] = 'open' if carrier_present else 'muted'
-        metadata['squelch_state_since'] = self._squelch_last_change
-
-        if carrier_present:
-            metadata['carrier_alarm'] = False
-        elif self._squelch_alarm_enabled:
-            metadata['carrier_alarm'] = True
-        else:
-            metadata.setdefault('carrier_alarm', False)
-
-        self.metrics.metadata = metadata
-
-    def _emit_carrier_event(self, carrier_present: bool, rms_db: float) -> None:
-        """Emit structured events when the carrier state changes."""
-
-        self._update_squelch_metadata(rms_db, carrier_present)
-
-        if not self._radio_manager:
-            return
-
-        receiver_id = self._receiver_id or self.config.device_params.get('receiver_id')
-        source_name = self.config.name
-
-        try:
-            self._radio_manager.log_event(
-                'INFO' if carrier_present else 'WARNING',
-                f"Carrier {'restored' if carrier_present else 'lost'} on {receiver_id or source_name}",
-                module='radio.audio',
-                details={
-                    'receiver_id': receiver_id,
-                    'source': source_name,
-                    'rms_db': round(float(rms_db), 2) if np.isfinite(rms_db) else None,
-                    'threshold_db': self._squelch_threshold_db,
-                },
-            )
-        except Exception:
-            logger.debug('Failed to emit carrier state event for %s', receiver_id, exc_info=True)
-
-    def _apply_squelch(self, audio_array: np.ndarray) -> np.ndarray:
-        """Mute audio when carrier is lost according to squelch configuration."""
-
-        if audio_array is None or audio_array.size == 0:
-            self._update_squelch_metadata(float('-inf'))
-            return audio_array
-
-        if isinstance(audio_array, np.ndarray) and audio_array.ndim > 1:
-            samples = audio_array.mean(axis=1)
-        else:
-            samples = audio_array
-
-        samples64 = np.asarray(samples, dtype=np.float64)
-        rms = float(np.sqrt(np.mean(samples64 ** 2))) if samples64.size else 0.0
-        rms_db = 20.0 * np.log10(max(rms, 1e-10))
-
-        if not self._squelch_enabled:
-            self._update_squelch_metadata(rms_db, True)
-            return audio_array
-
-        now = time.time()
-        previous_state = self._squelch_state_open
-        open_threshold = self._squelch_threshold_db + 2.5
-
-        if self._squelch_state_open:
-            if rms_db < self._squelch_threshold_db:
-                if self._squelch_close_timer is None:
-                    self._squelch_close_timer = now
-                elif (now - self._squelch_close_timer) * 1000.0 >= self._squelch_close_ms:
-                    self._squelch_state_open = False
-                    self._squelch_last_change = now
-                    self._squelch_close_timer = None
-                    self._emit_carrier_event(False, rms_db)
-            else:
-                self._squelch_close_timer = None
-        else:
-            if rms_db >= open_threshold:
-                if self._squelch_open_timer is None:
-                    self._squelch_open_timer = now
-                elif (now - self._squelch_open_timer) * 1000.0 >= self._squelch_open_ms:
-                    self._squelch_state_open = True
-                    self._squelch_last_change = now
-                    self._squelch_open_timer = None
-                    self._emit_carrier_event(True, rms_db)
-            else:
-                self._squelch_open_timer = None
-
-        if previous_state == self._squelch_state_open:
-            self._update_squelch_metadata(rms_db)
-
-        self._last_rms_db = rms_db
-
-        if not self._squelch_state_open:
-            return np.zeros_like(audio_array)
-
-        return audio_array
 
     def _read_audio_chunk(self) -> Optional[np.ndarray]:
         """Read audio chunk from SDR via radio manager."""
@@ -682,7 +542,7 @@ class SDRSourceAdapter(AudioSourceAdapter):
 
                         self.metrics.metadata = metadata
 
-                    return self._apply_squelch(audio_array)
+                    return audio_array
 
                 else:
                     # No demodulation - handle raw IQ samples
@@ -710,7 +570,7 @@ class SDRSourceAdapter(AudioSourceAdapter):
                         # Simple envelope detection for raw IQ
                         audio_array = np.abs(iq_complex).astype(np.float32)
 
-                    return self._apply_squelch(audio_array)
+                    return audio_array
 
         except Exception as e:
             logger.error(f"Error reading SDR audio: {e}", exc_info=True)

@@ -56,6 +56,7 @@ from . import (  # noqa: F401  - imported for their side effect of registering r
     radio_sources,
     listing,
     routes_alerts,
+    routes_dead_air,
     routes_devices,
     routes_health,
     routes_icecast,
@@ -180,6 +181,7 @@ _LOGGING_MODULES = (
     routes_health,
     listing,
     routes_alerts,
+    routes_dead_air,
     routes_devices,
     routes_icecast,
 )

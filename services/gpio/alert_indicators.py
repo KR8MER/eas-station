@@ -230,11 +230,18 @@ def read_dead_air_state() -> dict:
         if isinstance(raw, bytes):
             raw = raw.decode("utf-8")
         payload = _json.loads(raw)
-        acknowledged = bool(client.get(RedisChannels.DEAD_AIR_ACK_KEY))
+        # The ack stores the episode id it was made against, so an
+        # acknowledgement left over from an earlier outage cannot silence
+        # the buzzer for a new one.
+        ack = client.get(RedisChannels.DEAD_AIR_ACK_KEY)
+        if isinstance(ack, bytes):
+            ack = ack.decode("utf-8")
+        episode = payload.get("episode")
         return {
             "active": bool(payload.get("active")),
             "sources": payload.get("sources") or {},
-            "acknowledged": acknowledged,
+            "episode": episode,
+            "acknowledged": bool(ack) and bool(episode) and ack == episode,
         }
     except Exception as exc:
         logger.debug("Dead-air state unavailable: %s", exc)

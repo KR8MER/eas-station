@@ -8,6 +8,139 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.174.0] - 2026-08-18 - Retire the carrier-squelch feature
+
+### Removed
+- **"Carrier Squelch" is gone from receivers.** It never did what its name
+  and help text promised. `_apply_squelch()` gated on the RMS of the
+  *demodulated audio*, not on carrier presence, so the gate was inverted
+  against its own purpose. Measured against the real code path at the
+  panel's own defaults (threshold -60 dBFS, open 200 ms, hang 900 ms):
+
+  | Input | Level | Squelch |
+  |---|---|---|
+  | Off air, open-carrier hiss | -6 dBFS | **passed through** |
+  | Off air, hiss | -20 dBFS | **passed through** |
+  | Off air, weak hiss | -40 dBFS | **passed through** |
+  | Truly dead feed (digital silence) | -240 dBFS | muted |
+
+  It muted silence -- a no-op, since muting silence produces silence -- and
+  passed hiss, the only thing worth muting. The panel promised to
+  "automatically mute white noise when the carrier drops", and that is
+  precisely the case it could not handle: an off-air FM receiver emits
+  unsquelched noise tens of dB above any usable threshold. Its only working
+  behaviour was therefore a no-op, so nothing functional is lost by
+  removing it.
+- **"Raise alarm on carrier loss" is gone with it.** It wrote a log line
+  and a metadata flag consumed by a single status badge; it drove no GPIO,
+  no tower light and no notification. Dead-air monitoring (added in
+  2.172.0) supersedes it properly: it detects the open-carrier case via
+  spectral flatness rather than level, debounces it, and drives the tower
+  light and rack alarm buzzer with an operator acknowledgement.
+- Removed across the stack: the audio-path gate, the five
+  `radio_receivers` columns (migration `20260818_retire_carrier_squelch`,
+  with a downgrade that recreates them), the `ensure_radio_squelch_columns`
+  startup backfill, the service-config presets, the API payload validation
+  and serialization, and the Edit Receiver form section with its status
+  badges.
+
+### Changed
+- The legacy instantaneous `silence_detected` metric took its thresholds
+  from the squelch columns, which was a coincidence of naming rather than a
+  real relationship. It now uses `AudioSourceConfig`'s own defaults
+  (-60 dBFS / 5 s), which are the same values the old fallbacks used, so
+  behaviour is unchanged. The debounced dead-air alarm was never affected --
+  it reads its own station-wide policy.
+- Renumbered the database-initialisation log steps in `app.py`, which were
+  already inconsistent before this change (twelve labelled `/15` and four
+  `/16`, against sixteen actual steps). They now read `[N/15]` across the
+  fifteen remaining steps.
+
+## [2.173.1] - 2026-08-18 - Code-review fixes for the dead-air relocation
+
+### Fixed
+- **Operator-supplied source names were interpolated into `innerHTML`.**
+  `AudioSource.name` is free text with no markup validation and reaches the
+  browser through Redis, so a source named with a tag would have executed
+  in another operator's session on both the Audio Health dashboard and the
+  Audio Ingestion page. Both renderers now build text nodes; verified in
+  Chromium with an `<img src=x onerror=...>` payload, which renders
+  literally and does not fire.
+- **An active dead-air alarm was invisible to the people meant to watch for
+  it.** The navigation registry gates the Audio Health dashboard on the
+  view-role trio (`alerts.view` / `receivers.view` / `logs.view`), but the
+  status endpoint required `system.configure` -- so a radio watcher could
+  open the dashboard while every poll returned 403 and the alarm banner
+  silently never appeared. Status is now readable at the dashboard's own
+  level; acknowledging stays restricted, and the response carries
+  `can_acknowledge` so the UI hides that control rather than offering a
+  button that would only fail.
+- **An acknowledgement could mute a later, unrelated outage.** The ack was
+  a bare flag with a 24 h TTL and could be written with no alarm active.
+  The publisher now mints an episode id when the alarm goes active and
+  drops it on recovery; the ack stores that id, the API refuses to
+  acknowledge when nothing is wrong or when the operator's page is showing
+  a stale episode, and the GPIO reader only stays silent for the episode
+  that was actually acknowledged.
+- **A failed settings load could silently rewrite stored thresholds.** The
+  numeric inputs are populated by JavaScript rather than server-rendered,
+  so an empty form posted `Number('') == 0`, which the API clamped to each
+  field's minimum -- turning a 20 s hold-off into 1 s. Saving is now
+  disabled until a load succeeds, with the failure surfaced in a dedicated
+  error line kept separate from the live alarm readout so the two cannot
+  overwrite each other.
+- Completed the page-exclusivity tests, which checked fewer fields than
+  they claimed: `dead_air_detect_open_carrier` was not asserted absent from
+  Hardware, and only the buzzer pin was asserted absent from Audio Sources.
+
+## [2.173.0] - 2026-08-18 - Move dead-air settings to where the operator looks for them
+
+### Changed
+- **Dead-air monitoring is no longer configured entirely on the Hardware
+  page.** It shipped there in 2.172.0 because that is where the tower-light
+  settings already were -- placement by implementation adjacency rather
+  than by task. Every threshold it exposes is an audio quantity (dBFS,
+  spectral flatness, a hold-off in seconds), and GPIO is only *today's*
+  output: an email or SMS notifier added later would have had to read its
+  detection policy out of the GPIO page. The controls now split along the
+  seam that actually matters, detection policy versus output device:
+
+  | Control | Page |
+  |---|---|
+  | Enable, hold-off, silence level, open-carrier sensitivity, detect-unmodulated-carrier | **Audio Ingestion** (`/admin/audio-sources`) |
+  | Rack buzzer enable + GPIO pin, tower-light colour / enable / buzzer | **Hardware Settings** (`/admin/hardware`) |
+  | Live alarm state + Acknowledge | **Audio Health dashboard** (`/audio/health/dashboard`) |
+
+  All three cross-link to each other. This is the same separation the
+  system already makes elsewhere: the alert pipeline decides what
+  constitutes an alert, and hardware settings only decide what colour the
+  light goes.
+- **Acknowledging moved off the settings form entirely.** It is an
+  operational act taken while an alarm is sounding, not configuration, so
+  it now lives on the Audio Health dashboard as a banner that appears only
+  when a source is actually silent -- naming the source, the reason and
+  how long it has been dead. Acknowledging still silences the buzzer while
+  leaving the indication up.
+- No migration: the settings columns are unchanged, only which page edits
+  them. Detection fields are no longer writable from the hardware form, so
+  the two pages cannot fight over the same values.
+
+### Added
+- `webapp/admin/audio_ingest/routes_dead_air.py` -- `GET`/`POST
+  /api/audio/dead-air/settings` for the detection policy, plus
+  `/api/audio/dead-air/status` and `/acknowledge`. The equivalents under
+  `/admin/hardware/dead-air/*` are removed rather than left as duplicates.
+- **Navigation entries for two pages that never had them.** Neither
+  `/admin/hardware` nor `/admin/audio-sources` was in
+  `webapp/navigation/registry.py` -- "Station Hardware" is a NavGroup
+  *label*, not a link, so the hardware settings page could only be reached
+  by typing the URL or via a card on the Admin panel. Both are now proper
+  `NavItem`s, which is the actual fix for "I could not find this".
+- Regression tests pinning the split: detection fields on the audio page
+  and absent from Hardware, output wiring the other way round,
+  Acknowledge only on the dashboard, all three pages cross-linking, and
+  both pages present in the navigation registry.
+
 ## [2.172.1] - 2026-08-18 - Fix undefined logger in the dead-air buzzer pin resolver
 
 ### Fixed

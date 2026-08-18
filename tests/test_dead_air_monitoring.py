@@ -383,3 +383,263 @@ def test_missing_dead_air_key_reads_as_not_alarming(monkeypatch):
     )
     state = alert_indicators.read_dead_air_state()
     assert state["active"] is False
+
+
+# --------------------------------------------------------------------------
+# Where the controls live
+# --------------------------------------------------------------------------
+#
+# Dead-air settings were first shipped entirely on the Hardware page,
+# beside the tower-light block. That was placement by implementation
+# adjacency rather than by task: the thresholds are audio quantities, and
+# GPIO is only *today's* output -- an email or SMS notifier added later
+# must be able to share the same detection policy without reading it out
+# of the GPIO page. These pin the split so it does not drift back.
+
+HARDWARE_HTML = ROOT / "templates" / "admin" / "hardware_settings.html"
+AUDIO_HTML = ROOT / "templates" / "admin" / "audio_sources.html"
+HEALTH_HTML = ROOT / "templates" / "audio" / "health_dashboard.html"
+
+_DETECTION_FIELDS = (
+    "deadAirEnabled",
+    "deadAirDuration",
+    "deadAirLevel",
+    "deadAirFlatness",
+    "deadAirOpenCarrier",
+)
+_OUTPUT_FIELDS = (
+    "dead_air_buzzer_gpio_pin",
+    "tower_light_silence_color",
+    "tower_light_silence_enabled",
+)
+
+
+def test_detection_settings_live_with_the_audio_sources():
+    audio = AUDIO_HTML.read_text(encoding="utf-8")
+    for field in _DETECTION_FIELDS:
+        assert field in audio, f"{field} should be on the audio page"
+
+
+def test_detection_settings_are_not_on_the_hardware_page():
+    """The thresholds must not be editable in two places at once."""
+    hardware = HARDWARE_HTML.read_text(encoding="utf-8")
+    for field in ("dead_air_enabled", "dead_air_duration_seconds",
+                  "dead_air_level_threshold_db",
+                  "dead_air_flatness_threshold_pct",
+                  "dead_air_detect_open_carrier"):
+        assert field not in hardware, f"{field} should have moved off Hardware"
+
+
+def test_output_wiring_stays_on_the_hardware_page():
+    """The buzzer pin and light colour are physical wiring, not policy."""
+    hardware = HARDWARE_HTML.read_text(encoding="utf-8")
+    for field in _OUTPUT_FIELDS:
+        assert field in hardware, f"{field} belongs on Hardware"
+
+    audio = AUDIO_HTML.read_text(encoding="utf-8")
+    for field in _OUTPUT_FIELDS:
+        assert field not in audio, f"{field} should remain on Hardware only"
+    assert "deadAirAckBtn" not in audio, (
+        "acknowledging belongs on the health dashboard, not a settings form"
+    )
+
+
+def test_acknowledge_lives_on_the_health_dashboard():
+    """Acknowledging is an operational act, not configuration.
+
+    It belongs where an operator is already looking when the buzzer is
+    sounding, not buried in a settings form.
+    """
+    health = HEALTH_HTML.read_text(encoding="utf-8")
+    assert "deadAirAckBtn" in health
+    assert "dead-air-alarm.js" in health
+
+    hardware = HARDWARE_HTML.read_text(encoding="utf-8")
+    assert "deadAirAckBtn" not in hardware
+
+
+def test_the_three_pages_cross_link():
+    """Splitting a feature across pages only works if they point at each other."""
+    audio = AUDIO_HTML.read_text(encoding="utf-8")
+    assert "/admin/hardware" in audio
+    assert "/audio/health/dashboard" in audio
+
+    hardware = HARDWARE_HTML.read_text(encoding="utf-8")
+    assert "/admin/audio-sources" in hardware
+
+    health = HEALTH_HTML.read_text(encoding="utf-8")
+    assert "/admin/audio-sources" in health
+
+
+def test_both_settings_pages_are_reachable_from_the_navigation():
+    """Regression: neither page was ever a NavItem.
+
+    'Station Hardware' is a NavGroup *label*, not a link -- so the
+    Hardware Settings page could only be reached by typing the URL or via
+    the Admin panel, and /admin/audio-sources was not in the registry at
+    all. Both now have entries.
+    """
+    from webapp.navigation.registry import NAVIGATION
+
+    hrefs, endpoints = set(), set()
+    for section in NAVIGATION:
+        for group in section.groups:
+            for item in group.items:
+                if getattr(item, "href", None):
+                    hrefs.add(item.href)
+                if getattr(item, "endpoint", None):
+                    endpoints.add(item.endpoint)
+
+    assert "/admin/audio-sources" in hrefs
+    assert "hardware.hardware_settings_page" in endpoints
+
+
+# --------------------------------------------------------------------------
+# Fixes from code review on PR #2417
+# --------------------------------------------------------------------------
+
+ALARM_JS = ROOT / "static" / "js" / "admin" / "dead-air-alarm.js"
+SETTINGS_JS = ROOT / "static" / "js" / "admin" / "dead-air-settings.js"
+
+
+def test_operator_supplied_names_are_never_interpolated_into_html():
+    """Source names are free text and reach the browser through Redis.
+
+    ``AudioSource.name`` has no markup validation, so a source named with
+    a tag would execute in another operator's session if these renderers
+    used innerHTML. Both build text nodes instead.
+    """
+    for path in (ALARM_JS, SETTINGS_JS):
+        src = path.read_text(encoding="utf-8")
+        code = "\n".join(
+            line for line in src.splitlines()
+            if not line.strip().startswith(("//", "*", "/*"))
+        )
+        assert "innerHTML" not in code, f"{path.name} must not assign innerHTML"
+        assert "textContent" in code
+
+
+def test_saving_is_blocked_until_settings_load():
+    """A failed load must not let blank inputs overwrite stored thresholds.
+
+    The numeric fields are not server-rendered, so an empty form posts
+    Number('') == 0, which the API clamps to each field's minimum -- a
+    silent rewrite of a 20 s hold-off to 1 s.
+    """
+    src = SETTINGS_JS.read_text(encoding="utf-8")
+    assert "let loaded = false;" in src
+    assert "els.save.disabled = true;" in src
+    assert "if (!loaded) return;" in src
+
+
+def test_status_is_readable_by_the_dashboard_audience():
+    """The API must not be stricter than the page that renders it.
+
+    The navigation registry gates Audio Health on the view-role trio. When
+    the status endpoint required system.configure instead, a radio watcher
+    could open the dashboard while every poll 403'd, so an active alarm
+    was invisible to exactly the people meant to watch for it.
+    """
+    src = (ROOT / "webapp" / "admin" / "audio_ingest"
+           / "routes_dead_air.py").read_text(encoding="utf-8")
+    status = src.split("def audio_dead_air_status", 1)[0]
+    assert "require_any_permission" in status
+    for perm in ("alerts.view", "receivers.view", "logs.view"):
+        assert perm in status, f"{perm} should be able to read dead-air status"
+    # Acknowledging stays privileged, and the response tells the UI so it
+    # can hide the control instead of offering a button that only 403s.
+    assert "can_acknowledge" in src
+    ack_decorators = src.split("def audio_dead_air_acknowledge", 1)[0]
+    ack_decorators = ack_decorators.rsplit("@audio_ingest_bp.route", 1)[1]
+    assert "require_permission('system.configure')" in ack_decorators
+
+
+def test_acknowledgement_is_bound_to_an_episode():
+    """An unbound ack would sit in Redis and mute the *next* outage.
+
+    The publisher mints an episode id when the alarm goes active and drops
+    it on recovery; the ack stores that id, and both the API and the GPIO
+    reader compare against it.
+    """
+    routes = (ROOT / "webapp" / "admin" / "audio_ingest"
+              / "routes_dead_air.py").read_text(encoding="utf-8")
+    ack = routes.split("def audio_dead_air_acknowledge", 1)[1]
+    assert "if not state.get('active')" in ack, (
+        "acknowledging with no active alarm must be refused"
+    )
+    assert "DEAD_AIR_ACK_KEY, 86400, episode" in ack
+
+    service = (ROOT / "eas_monitoring_service.py").read_text(encoding="utf-8")
+    assert '"episode": _dead_air_episode' in service
+    assert "_dead_air_episode = None" in service
+
+    gpio = (ROOT / "services" / "gpio"
+            / "alert_indicators.py").read_text(encoding="utf-8")
+    assert "ack == episode" in gpio, (
+        "the buzzer must only stay silent for the episode that was acknowledged"
+    )
+
+
+# --------------------------------------------------------------------------
+# The retired carrier-squelch feature
+# --------------------------------------------------------------------------
+#
+# "Carrier Squelch" gated on the RMS of the *demodulated audio*, not on
+# carrier presence, so it muted a feed that was already digitally silent
+# (a no-op) and passed full-scale hiss straight through -- the one case its
+# own help text promised to mute. Its "raise alarm on carrier loss" option
+# wrote a log line and a metadata flag behind one status badge, driving no
+# GPIO, tower light or notification, and is superseded by the dead-air
+# monitor above, which detects the open-carrier case properly.
+
+def test_carrier_squelch_is_gone_from_the_runtime():
+    """No squelch gate may sit in the audio path again.
+
+    A gate keyed on audio level cannot distinguish an off-air carrier from
+    programme material -- that is exactly the mistake this codebase already
+    made once, and the reason dead-air detection needs spectral flatness.
+    """
+    sources = (ROOT / "app_core" / "audio" / "sources.py").read_text(encoding="utf-8")
+    for token in ("_apply_squelch", "_update_squelch_metadata",
+                  "_emit_carrier_event", "squelch"):
+        assert token not in sources, f"{token} should be retired from the audio path"
+
+
+def test_carrier_squelch_is_gone_from_the_model_and_api():
+    for rel in (
+        ("app_core", "_models_radio.py"),
+        ("app_core", "radio", "manager.py"),
+        ("app_core", "radio", "schema.py"),
+        ("app_core", "radio", "service_config.py"),
+        ("app_core", "audio", "source_config.py"),
+        ("webapp", "radio_settings", "payload.py"),
+        ("webapp", "radio_settings", "serialization.py"),
+    ):
+        text = ROOT.joinpath(*rel).read_text(encoding="utf-8")
+        assert "squelch" not in text.lower(), f"{'/'.join(rel)} still references squelch"
+
+
+def test_carrier_squelch_is_gone_from_the_receiver_form():
+    """The Edit Receiver panel must not offer a control that does nothing."""
+    radio_html = (ROOT / "templates" / "admin" / "radio.html").read_text(encoding="utf-8")
+    for token in ("Carrier Squelch", "receiverSquelch", "toggleSquelchInputs",
+                  "squelch_", "carrier_present", "carrier_alarm"):
+        assert token not in radio_html, f"{token} should be gone from the receiver form"
+
+
+def test_legacy_silence_thresholds_no_longer_derive_from_squelch():
+    """The instantaneous silence metric keeps working on its own defaults.
+
+    Its thresholds used to be read off the squelch columns, which was a
+    coincidence of naming rather than a real relationship.
+    """
+    from app_core.audio.ingest import AudioSourceConfig
+
+    assert AudioSourceConfig.silence_threshold_db == -60.0
+    assert AudioSourceConfig.silence_duration_seconds == 5.0
+
+    for rel in (("webapp", "admin", "audio_ingest", "radio_sources.py"),
+                ("eas_monitoring_service.py",)):
+        text = ROOT.joinpath(*rel).read_text(encoding="utf-8")
+        assert "AudioSourceConfig.silence_threshold_db" in text
+        assert "receiver.squelch" not in text

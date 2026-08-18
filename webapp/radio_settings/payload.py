@@ -233,51 +233,6 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
     if "enabled" in payload or not partial:
         data["enabled"] = _coerce_bool(payload.get("enabled"), True)
 
-    if not partial or "squelch_enabled" in payload:
-        data["squelch_enabled"] = _coerce_bool(payload.get("squelch_enabled"), False)
-
-    if not partial or "squelch_alarm" in payload:
-        data["squelch_alarm"] = _coerce_bool(payload.get("squelch_alarm"), False)
-
-    if not partial or "squelch_threshold_db" in payload:
-        threshold_val = payload.get("squelch_threshold_db")
-        if threshold_val in (None, "", []):
-            data["squelch_threshold_db"] = -65.0
-        else:
-            try:
-                parsed_threshold = float(threshold_val)
-                if parsed_threshold > 0 or parsed_threshold < -160:
-                    raise ValueError
-                data["squelch_threshold_db"] = parsed_threshold
-            except Exception:
-                return None, "Squelch threshold must be between -160 and 0 dBFS."
-
-    if not partial or "squelch_open_ms" in payload:
-        open_val = payload.get("squelch_open_ms")
-        if open_val in (None, "", []):
-            data["squelch_open_ms"] = 150
-        else:
-            try:
-                parsed_open = int(open_val)
-                if parsed_open < 0 or parsed_open > 60000:
-                    raise ValueError
-                data["squelch_open_ms"] = parsed_open
-            except Exception:
-                return None, "Squelch open delay must be between 0 and 60000 milliseconds."
-
-    if not partial or "squelch_close_ms" in payload:
-        close_val = payload.get("squelch_close_ms")
-        if close_val in (None, "", []):
-            data["squelch_close_ms"] = 750
-        else:
-            try:
-                parsed_close = int(close_val)
-                if parsed_close < 0 or parsed_close > 60000:
-                    raise ValueError
-                data["squelch_close_ms"] = parsed_close
-            except Exception:
-                return None, "Squelch hang time must be between 0 and 60000 milliseconds."
-
     if "notes" in payload:
         notes = payload.get("notes")
         data["notes"] = str(notes).strip() if notes not in (None, "") else None

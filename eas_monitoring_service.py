@@ -46,6 +46,7 @@ import os
 import sys
 import math
 import time
+import uuid
 import signal
 import logging
 import threading
@@ -271,7 +272,7 @@ def sync_radio_receiver_audio_sources(app):
     """
     with app.app_context():
         from app_core.models import RadioReceiver, AudioSourceConfigDB, db
-        from app_core.audio.ingest import AudioSourceType
+        from app_core.audio.ingest import AudioSourceConfig, AudioSourceType
         from app_core.audio.source_config import merge_managed_config_params
 
         logger.info("Syncing audio sources for radio receivers...")
@@ -315,8 +316,11 @@ def sync_radio_receiver_audio_sources(app):
                 logger.debug(f"Auto-detected audio settings for {receiver.identifier}: {sample_rate} Hz, {channels} ch")
             
             buffer_size = 4096 if channels == 1 else 8192
-            silence_threshold = float(receiver.squelch_threshold_db or -60.0)
-            silence_duration = max(float(receiver.squelch_close_ms or 750) / 1000.0, 0.1)
+            # Legacy instantaneous `silence_detected` thresholds. Formerly
+            # derived from the retired squelch columns; the debounced
+            # dead-air alarm uses its own station-wide policy instead.
+            silence_threshold = AudioSourceConfig.silence_threshold_db
+            silence_duration = AudioSourceConfig.silence_duration_seconds
             
             device_params = {
                 'receiver_id': receiver.identifier,
@@ -331,11 +335,6 @@ def sync_radio_receiver_audio_sources(app):
                 'rbds_enabled': bool(receiver.enable_rbds),
                 'stereo_enabled': bool(receiver.stereo_enabled),
                 'deemphasis_us': float(receiver.deemphasis_us or 75.0),  # 75μs for North America
-                'squelch_enabled': bool(receiver.squelch_enabled),
-                'squelch_threshold_db': silence_threshold,
-                'squelch_open_ms': int(receiver.squelch_open_ms or 150),
-                'squelch_close_ms': int(receiver.squelch_close_ms or 750),
-                'carrier_alarm_enabled': bool(receiver.squelch_alarm),
             }
             
             managed_params = {
@@ -346,11 +345,6 @@ def sync_radio_receiver_audio_sources(app):
                 'silence_duration_seconds': silence_duration,
                 'device_params': device_params,
                 'managed_by': 'radio',  # CRITICAL: This flag tells audio-service to use RedisSDRSourceAdapter
-                'squelch_enabled': bool(receiver.squelch_enabled),
-                'squelch_threshold_db': silence_threshold,
-                'squelch_open_ms': int(receiver.squelch_open_ms or 150),
-                'squelch_close_ms': int(receiver.squelch_close_ms or 750),
-                'carrier_alarm_enabled': bool(receiver.squelch_alarm),
             }
             
             freq_display = f"{receiver.frequency_hz/1e6:.3f} MHz" if receiver.frequency_hz else "Unknown"
@@ -1058,6 +1052,11 @@ def _install_dead_air_criteria(app) -> None:
         logger.warning("Could not install dead-air criteria: %s", exc)
 
 
+#: Identifier for the current continuous dead-air episode, or None when no
+#: source is silent. See _publish_dead_air_state().
+_dead_air_episode: Optional[str] = None
+
+
 def _publish_dead_air_state(sources: Dict[str, Any]) -> None:
     """Publish the aggregate dead-air state for the GPIO indicator service.
 
@@ -1071,6 +1070,8 @@ def _publish_dead_air_state(sources: Dict[str, Any]) -> None:
     indication, and audio-service liveness already has its own monitoring.
     """
     from app_core.config.redis_config import RedisChannels
+
+    global _dead_air_episode
 
     silent_sources = {}
     any_enabled = False
@@ -1087,10 +1088,22 @@ def _publish_dead_air_state(sources: Dict[str, Any]) -> None:
                 "duration_seconds": dead_air.get("silence_duration_seconds"),
             }
 
+    # Episode id: a token minted when the alarm goes active and held for
+    # the whole continuous outage. The acknowledgement is stored as this
+    # value, so an ack from an earlier outage cannot mute a later one --
+    # without it a stale ack would sit in Redis for its TTL and silence the
+    # next genuine failure.
+    if silent_sources:
+        if not _dead_air_episode:
+            _dead_air_episode = uuid.uuid4().hex[:12]
+    else:
+        _dead_air_episode = None
+
     payload = {
         "active": bool(silent_sources),
         "enabled": any_enabled,
         "sources": silent_sources,
+        "episode": _dead_air_episode,
         "updated": time.time(),
     }
 

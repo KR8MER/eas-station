@@ -93,7 +93,6 @@ from app_core.system_health import get_system_health, start_health_alert_worker
 from app_core.poller_debug import ensure_poll_debug_table
 from app_core.radio import (
     ensure_radio_tables,
-    ensure_radio_squelch_columns,
     ensure_radio_audio_sample_rate_column,
     ensure_radio_frequency_correction_column,
 )
@@ -1605,28 +1604,21 @@ def initialize_database():
                 )
                 return False
             
-            logger.info("[10/15] Ensuring radio squelch columns...")
-            if not ensure_radio_squelch_columns(logger):
-                _db_initialization_error = RuntimeError(
-                    "Radio squelch columns could not be ensured"
-                )
-                return False
-            
-            logger.info("[11/15] Ensuring radio audio sample rate column...")
+            logger.info("[10/15] Ensuring radio audio sample rate column...")
             if not ensure_radio_audio_sample_rate_column(logger):
                 _db_initialization_error = RuntimeError(
                     "Radio audio_sample_rate column could not be ensured"
                 )
                 return False
             
-            logger.info("[12/15] Ensuring radio frequency correction column...")
+            logger.info("[11/15] Ensuring radio frequency correction column...")
             if not ensure_radio_frequency_correction_column(logger):
                 _db_initialization_error = RuntimeError(
                     "Radio frequency_correction_ppm column could not be ensured"
                 )
                 return False
             
-            logger.info("[13/16] Loading NWS zone catalog (may take time)...")
+            logger.info("[12/15] Loading NWS zone catalog (may take time)...")
             # Zone catalog is optional - app can start without it.
             # delete_scope="public" scopes the orphan-delete pass to
             # public-zone rows only, so the bundled z_*.dbf still
@@ -1638,19 +1630,19 @@ def initialize_database():
             if not ensure_zone_catalog(logger, delete_scope="public"):
                 logger.warning("NWS zone catalog could not be loaded - continuing without it")
 
-            logger.info("[14/16] Loading US county boundaries (may take time on first run)...")
+            logger.info("[13/15] Loading US county boundaries (may take time on first run)...")
             from app_core.county_boundaries import ensure_us_county_boundaries
             if not ensure_us_county_boundaries(logger):
                 logger.info("US county boundaries not loaded - IPAWS coverage maps may be limited")
             
-            logger.info("[15/16] Ensuring storage zone codes column...")
+            logger.info("[14/15] Ensuring storage zone codes column...")
             if not ensure_storage_zone_codes_column(logger):
                 _db_initialization_error = RuntimeError(
                     "Location settings storage_zone_codes column could not be ensured"
                 )
                 return False
             
-            logger.info("[16/16] Backfilling data and initializing services...")
+            logger.info("[15/15] Backfilling data and initializing services...")
             backfill_eas_message_payloads(logger)
             backfill_manual_eas_audio(logger)
             settings = get_location_settings(force_reload=True)

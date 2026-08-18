@@ -10,6 +10,31 @@
 
 <div class="container-fluid">
 
+    <!-- Dead-air alarm. Hidden until a monitored source actually goes
+         silent, then pinned to the top of the dashboard: this is the one
+         condition here that means the station has stopped monitoring, and
+         it is where an operator will be looking when the buzzer sounds.
+         Acknowledging stops the noise but deliberately leaves the tower
+         light lit -- the fault has been noticed, not fixed. -->
+    <div id="deadAirAlarm" class="card border-danger mb-4" style="display:none;">
+        <div class="card-body d-flex flex-column flex-md-row gap-3 align-items-md-center justify-content-between">
+            <div>
+                <h5 class="card-title text-danger mb-1">
+                    <i class="fas fa-volume-mute me-2"></i>Dead air
+                </h5>
+                <div id="deadAirAlarmDetail" class="small text-muted"></div>
+            </div>
+            <div class="d-flex flex-column gap-2">
+                <button type="button" class="btn btn-warning" id="deadAirAckBtn">
+                    <i class="fas fa-bell-slash me-1"></i>Acknowledge / silence buzzer
+                </button>
+                <a href="/admin/audio-sources" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-sliders me-1"></i>Detection settings
+                </a>
+            </div>
+        </div>
+    </div>
+
     <!-- Overall Health Summary -->
     <div class="row mb-4">
         <div class="col-md-12">
@@ -622,4 +647,5 @@ window.addEventListener('theme-changed', () => {
     updateDashboard();
 });
 </script>
+<script src="{{ url_for('static', filename='js/admin/dead-air-alarm.js') }}"></script>
 {% endblock %}
