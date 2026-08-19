@@ -27,7 +27,6 @@ cover the writer added to close that gap.
 
 import sys
 import threading
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional
@@ -101,24 +100,27 @@ def snapshot_app(tmp_path: Path):
 
 
 def _run_writer_and_wait(app, sources, monkeypatch):
-    monkeypatch.setattr(svc, "_audio_controller", _FakeController(sources))
-    trigger = svc._make_audio_metrics_snapshot_writer(app)
+    controller = None if sources is None else _FakeController(sources)
+    monkeypatch.setattr(svc, "_audio_controller", controller)
 
     # The writer dispatches its DB work onto a daemon thread so it can never
-    # stall the caller. Wrap threading.Thread to capture that thread so the
-    # test can join it instead of racing it.
-    started = []
-    real_thread = threading.Thread
+    # stall the caller. Racing a real thread against a join(timeout=...) is
+    # flaky under CI load (a starved thread just makes the assertions run
+    # too early), and cross-thread Flask app-context/session scoping adds
+    # nothing worth testing here -- swap in a synchronous stand-in so
+    # trigger() runs the write inline, deterministically, on this thread.
+    class _SyncThread:
+        def __init__(self, target=None, args=(), kwargs=None, **_ignored):
+            self._target = target
+            self._args = args
+            self._kwargs = kwargs or {}
 
-    def _capturing_thread(*args, **kwargs):
-        t = real_thread(*args, **kwargs)
-        started.append(t)
-        return t
+        def start(self):
+            self._target(*self._args, **self._kwargs)
 
-    monkeypatch.setattr(threading, "Thread", _capturing_thread)
+    monkeypatch.setattr(threading, "Thread", _SyncThread)
+    trigger = svc._make_audio_metrics_snapshot_writer(app)
     trigger()
-    assert started, "writer did not spawn a thread"
-    started[0].join(timeout=5)
 
 
 def test_writes_one_row_per_running_source(snapshot_app, monkeypatch):
@@ -187,10 +189,7 @@ def test_digital_silence_negative_infinity_does_not_crash(snapshot_app, monkeypa
 
 
 def test_no_controller_does_not_raise(snapshot_app, monkeypatch):
-    monkeypatch.setattr(svc, "_audio_controller", None)
-    trigger = svc._make_audio_metrics_snapshot_writer(snapshot_app)
-    trigger()
-    time.sleep(0.2)
+    _run_writer_and_wait(snapshot_app, None, monkeypatch)
 
     with snapshot_app.app_context():
         assert AudioSourceMetrics.query.count() == 0
