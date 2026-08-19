@@ -728,67 +728,76 @@ def _make_audio_alert_log_callback(flask_app):
     return _callback
 
 
+def _snapshot_audio_metrics_once(flask_app) -> None:
+    """Persist one AudioSourceMetrics row per running source, synchronously.
+
+    Split out from _make_audio_metrics_snapshot_writer() below so tests can
+    call it directly on their own thread instead of racing (or mocking) the
+    background thread that wraps it in production.
+    """
+    if not _audio_controller:
+        return
+    try:
+        with flask_app.app_context():
+            from app_core.extensions import db
+            from app_core.models import AudioSourceMetrics
+            from app_core.audio.ingest import AudioSourceStatus
+
+            for name, source in _audio_controller.get_all_sources().items():
+                if source.status != AudioSourceStatus.RUNNING:
+                    continue
+                metrics_obj = getattr(source, "metrics", None)
+                if metrics_obj is None:
+                    continue
+
+                # peak/rms are true dB (can be -inf for digital silence);
+                # 10 ** (-inf / 20) evaluates to 0.0 in Python, no special
+                # case needed. A missing metrics_obj value (None) is the
+                # only case that would break the NOT NULL float columns.
+                peak_db = metrics_obj.peak_level_db if metrics_obj.peak_level_db is not None else -120.0
+                rms_db = metrics_obj.rms_level_db if metrics_obj.rms_level_db is not None else -120.0
+
+                source_type = getattr(getattr(source, "config", None), "source_type", None)
+                source_type_value = source_type.value if hasattr(source_type, "value") else str(source_type or "unknown")
+
+                db.session.add(AudioSourceMetrics(
+                    source_name=name,
+                    source_type=source_type_value,
+                    peak_level_db=peak_db,
+                    rms_level_db=rms_db,
+                    peak_level_linear=10 ** (peak_db / 20.0),
+                    rms_level_linear=10 ** (rms_db / 20.0),
+                    sample_rate=getattr(metrics_obj, "sample_rate", None) or 0,
+                    channels=getattr(metrics_obj, "channels", None) or 0,
+                    frames_captured=getattr(metrics_obj, "frames_captured", None) or 0,
+                    silence_detected=bool(getattr(metrics_obj, "silence_detected", False)),
+                    buffer_utilization=getattr(metrics_obj, "buffer_utilization", None) or 0.0,
+                    source_metadata=_sanitize_value(getattr(metrics_obj, "metadata", None)),
+                ))
+            db.session.commit()
+    except Exception as exc:
+        logger.warning("Failed to snapshot audio metrics to DB: %s", exc)
+
+
 def _make_audio_metrics_snapshot_writer(flask_app):
-    """Return a callable that persists one AudioSourceMetrics row per running
-    source. Intended to be called at ~1 Hz from the main loop.
+    """Return a callable that triggers _snapshot_audio_metrics_once() on a
+    short-lived background thread. Intended to be called at ~1 Hz from the
+    main loop.
 
     The RBDS History API (webapp/admin/audio_ingest/routes_rbds.py) and the
-    audio-health analytics aggregator both read this table on the assumption
-    that it is populated roughly once a second -- but nothing ever wrote to
-    it in production; only tests instantiated AudioSourceMetrics. RBDS
-    History always showed "No stored RBDS snapshots" regardless of how long
-    a station had been running. Each call spawns a short-lived thread so a
-    slow commit can never stall the 4 Hz Redis publish loop that VU meters,
-    RSSI, and RBDS/RDS updates depend on.
+    audio-health analytics aggregator both read the audio_source_metrics
+    table on the assumption that it is populated roughly once a second --
+    but nothing ever wrote to it in production; only tests instantiated
+    AudioSourceMetrics. RBDS History always showed "No stored RBDS
+    snapshots" regardless of how long a station had been running. Dispatch
+    onto a thread here (rather than in _snapshot_audio_metrics_once itself)
+    so a slow commit can never stall the 4 Hz Redis publish loop that VU
+    meters, RSSI, and RBDS/RDS updates depend on.
     """
     import threading
 
-    def _write() -> None:
-        if not _audio_controller:
-            return
-        try:
-            with flask_app.app_context():
-                from app_core.extensions import db
-                from app_core.models import AudioSourceMetrics
-                from app_core.audio.ingest import AudioSourceStatus
-
-                for name, source in _audio_controller.get_all_sources().items():
-                    if source.status != AudioSourceStatus.RUNNING:
-                        continue
-                    metrics_obj = getattr(source, "metrics", None)
-                    if metrics_obj is None:
-                        continue
-
-                    # peak/rms are true dB (can be -inf for digital silence);
-                    # 10 ** (-inf / 20) evaluates to 0.0 in Python, no special
-                    # case needed. A missing metrics_obj value (None) is the
-                    # only case that would break the NOT NULL float columns.
-                    peak_db = metrics_obj.peak_level_db if metrics_obj.peak_level_db is not None else -120.0
-                    rms_db = metrics_obj.rms_level_db if metrics_obj.rms_level_db is not None else -120.0
-
-                    source_type = getattr(getattr(source, "config", None), "source_type", None)
-                    source_type_value = source_type.value if hasattr(source_type, "value") else str(source_type or "unknown")
-
-                    db.session.add(AudioSourceMetrics(
-                        source_name=name,
-                        source_type=source_type_value,
-                        peak_level_db=peak_db,
-                        rms_level_db=rms_db,
-                        peak_level_linear=10 ** (peak_db / 20.0),
-                        rms_level_linear=10 ** (rms_db / 20.0),
-                        sample_rate=getattr(metrics_obj, "sample_rate", None) or 0,
-                        channels=getattr(metrics_obj, "channels", None) or 0,
-                        frames_captured=getattr(metrics_obj, "frames_captured", None) or 0,
-                        silence_detected=bool(getattr(metrics_obj, "silence_detected", False)),
-                        buffer_utilization=getattr(metrics_obj, "buffer_utilization", None) or 0.0,
-                        source_metadata=_sanitize_value(getattr(metrics_obj, "metadata", None)),
-                    ))
-                db.session.commit()
-        except Exception as exc:
-            logger.warning("Failed to snapshot audio metrics to DB: %s", exc)
-
     def _trigger() -> None:
-        threading.Thread(target=_write, daemon=True).start()
+        threading.Thread(target=_snapshot_audio_metrics_once, args=(flask_app,), daemon=True).start()
 
     return _trigger
 

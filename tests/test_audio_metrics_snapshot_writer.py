@@ -17,16 +17,18 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Tests for eas_monitoring_service._make_audio_metrics_snapshot_writer.
+"""Tests for eas_monitoring_service._snapshot_audio_metrics_once.
 
 Nothing in production ever wrote to the audio_source_metrics table -- only
 tests instantiated AudioSourceMetrics directly -- so the RBDS History modal
 always reported "No stored RBDS snapshots" regardless of uptime. These tests
-cover the writer added to close that gap.
+cover the writer added to close that gap. _snapshot_audio_metrics_once() is
+tested directly (synchronously) rather than through the thread-dispatching
+_make_audio_metrics_snapshot_writer() wrapper, so there is nothing to race
+or mock -- production only adds a `threading.Thread(...).start()` around it.
 """
 
 import sys
-import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional
@@ -99,28 +101,10 @@ def snapshot_app(tmp_path: Path):
         AudioSourceMetrics.__table__.drop(bind=db.engine)
 
 
-def _run_writer_and_wait(app, sources, monkeypatch):
+def _run_snapshot(app, sources, monkeypatch):
     controller = None if sources is None else _FakeController(sources)
     monkeypatch.setattr(svc, "_audio_controller", controller)
-
-    # The writer dispatches its DB work onto a daemon thread so it can never
-    # stall the caller. Racing a real thread against a join(timeout=...) is
-    # flaky under CI load (a starved thread just makes the assertions run
-    # too early), and cross-thread Flask app-context/session scoping adds
-    # nothing worth testing here -- swap in a synchronous stand-in so
-    # trigger() runs the write inline, deterministically, on this thread.
-    class _SyncThread:
-        def __init__(self, target=None, args=(), kwargs=None, **_ignored):
-            self._target = target
-            self._args = args
-            self._kwargs = kwargs or {}
-
-        def start(self):
-            self._target(*self._args, **self._kwargs)
-
-    monkeypatch.setattr(threading, "Thread", _SyncThread)
-    trigger = svc._make_audio_metrics_snapshot_writer(app)
-    trigger()
+    svc._snapshot_audio_metrics_once(app)
 
 
 def test_writes_one_row_per_running_source(snapshot_app, monkeypatch):
@@ -136,7 +120,7 @@ def test_writes_one_row_per_running_source(snapshot_app, monkeypatch):
             config=_FakeConfig(source_type=AudioSourceType.STREAM),
         ),
     }
-    _run_writer_and_wait(snapshot_app, sources, monkeypatch)
+    _run_snapshot(snapshot_app, sources, monkeypatch)
 
     with snapshot_app.app_context():
         rows = AudioSourceMetrics.query.order_by(AudioSourceMetrics.source_name).all()
@@ -166,7 +150,7 @@ def test_skips_non_running_and_metrics_less_sources(snapshot_app, monkeypatch):
             config=_FakeConfig(source_type=AudioSourceType.SDR),
         ),
     }
-    _run_writer_and_wait(snapshot_app, sources, monkeypatch)
+    _run_snapshot(snapshot_app, sources, monkeypatch)
 
     with snapshot_app.app_context():
         assert AudioSourceMetrics.query.count() == 0
@@ -180,7 +164,7 @@ def test_digital_silence_negative_infinity_does_not_crash(snapshot_app, monkeypa
             config=_FakeConfig(source_type=AudioSourceType.SDR),
         ),
     }
-    _run_writer_and_wait(snapshot_app, sources, monkeypatch)
+    _run_snapshot(snapshot_app, sources, monkeypatch)
 
     with snapshot_app.app_context():
         row = AudioSourceMetrics.query.one()
@@ -189,7 +173,7 @@ def test_digital_silence_negative_infinity_does_not_crash(snapshot_app, monkeypa
 
 
 def test_no_controller_does_not_raise(snapshot_app, monkeypatch):
-    _run_writer_and_wait(snapshot_app, None, monkeypatch)
+    _run_snapshot(snapshot_app, None, monkeypatch)
 
     with snapshot_app.app_context():
         assert AudioSourceMetrics.query.count() == 0
