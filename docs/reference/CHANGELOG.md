@@ -8,6 +8,30 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.175.3] - 2026-08-19 - Fix RBDS History never having any data, and its unreadable chart labels
+
+### Fixed
+- **RBDS History always showed "No stored RBDS snapshots in this window
+  yet.", no matter how long a station had been running.** The history API
+  (`/api/audio/sources/<name>/rbds/history`) and the audio-health analytics
+  aggregator both read the `audio_source_metrics` table on the documented
+  assumption that the audio service persists a snapshot roughly once a
+  second -- but nothing in production ever wrote to that table; only tests
+  instantiated `AudioSourceMetrics` directly. `eas_monitoring_service.py`'s
+  main loop already publishes live metrics to Redis at 4 Hz for the VU
+  meters/RSSI/RBDS UI; it now also snapshots each running source into
+  `audio_source_metrics` at ~1 Hz, on its own background thread so a slow
+  commit can never stall that 4 Hz loop. Covered by
+  `tests/test_audio_metrics_snapshot_writer.py`.
+- **The RBDS History chart's time-axis labels rendered at a steep diagonal
+  and were hard to read**, especially on a phone. The default
+  `toLocaleTimeString()` label (e.g. "10:09:34 AM") was too wide for
+  Chart.js to keep horizontal at the configured tick count, so it fell back
+  to auto-rotation. Axis labels now drop seconds ("10:09 AM"), the chart
+  requests `maxRotation: 0` so Chart.js skips ticks rather than tilting
+  them, and full-precision timestamps (with seconds) still appear in the
+  hover tooltip title.
+
 ## [2.175.2] - 2026-08-19 - Fix modals with a form wrapper not scrolling on mobile
 
 ### Fixed

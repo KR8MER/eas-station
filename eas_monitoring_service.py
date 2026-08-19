@@ -728,6 +728,71 @@ def _make_audio_alert_log_callback(flask_app):
     return _callback
 
 
+def _make_audio_metrics_snapshot_writer(flask_app):
+    """Return a callable that persists one AudioSourceMetrics row per running
+    source. Intended to be called at ~1 Hz from the main loop.
+
+    The RBDS History API (webapp/admin/audio_ingest/routes_rbds.py) and the
+    audio-health analytics aggregator both read this table on the assumption
+    that it is populated roughly once a second -- but nothing ever wrote to
+    it in production; only tests instantiated AudioSourceMetrics. RBDS
+    History always showed "No stored RBDS snapshots" regardless of how long
+    a station had been running. Each call spawns a short-lived thread so a
+    slow commit can never stall the 4 Hz Redis publish loop that VU meters,
+    RSSI, and RBDS/RDS updates depend on.
+    """
+    import threading
+
+    def _write() -> None:
+        if not _audio_controller:
+            return
+        try:
+            with flask_app.app_context():
+                from app_core.extensions import db
+                from app_core.models import AudioSourceMetrics
+                from app_core.audio.ingest import AudioSourceStatus
+
+                for name, source in _audio_controller.get_all_sources().items():
+                    if source.status != AudioSourceStatus.RUNNING:
+                        continue
+                    metrics_obj = getattr(source, "metrics", None)
+                    if metrics_obj is None:
+                        continue
+
+                    # peak/rms are true dB (can be -inf for digital silence);
+                    # 10 ** (-inf / 20) evaluates to 0.0 in Python, no special
+                    # case needed. A missing metrics_obj value (None) is the
+                    # only case that would break the NOT NULL float columns.
+                    peak_db = metrics_obj.peak_level_db if metrics_obj.peak_level_db is not None else -120.0
+                    rms_db = metrics_obj.rms_level_db if metrics_obj.rms_level_db is not None else -120.0
+
+                    source_type = getattr(getattr(source, "config", None), "source_type", None)
+                    source_type_value = source_type.value if hasattr(source_type, "value") else str(source_type or "unknown")
+
+                    db.session.add(AudioSourceMetrics(
+                        source_name=name,
+                        source_type=source_type_value,
+                        peak_level_db=peak_db,
+                        rms_level_db=rms_db,
+                        peak_level_linear=10 ** (peak_db / 20.0),
+                        rms_level_linear=10 ** (rms_db / 20.0),
+                        sample_rate=getattr(metrics_obj, "sample_rate", None) or 0,
+                        channels=getattr(metrics_obj, "channels", None) or 0,
+                        frames_captured=getattr(metrics_obj, "frames_captured", None) or 0,
+                        silence_detected=bool(getattr(metrics_obj, "silence_detected", False)),
+                        buffer_utilization=getattr(metrics_obj, "buffer_utilization", None) or 0.0,
+                        source_metadata=_sanitize_value(getattr(metrics_obj, "metadata", None)),
+                    ))
+                db.session.commit()
+        except Exception as exc:
+            logger.warning("Failed to snapshot audio metrics to DB: %s", exc)
+
+    def _trigger() -> None:
+        threading.Thread(target=_write, daemon=True).start()
+
+    return _trigger
+
+
 def initialize_archivers(app, audio_controller):
     """Start AudioArchivers for sources that have archiving enabled in their config_params.
 
@@ -1407,6 +1472,12 @@ def main():
         audio_alert_callback = _make_audio_alert_log_callback(app)
         audio_controller.set_source_alert_callback(audio_alert_callback)
         logger.info("Audio alert logging callbacks registered")
+
+        # Build the ~1 Hz AudioSourceMetrics snapshot writer used by the main
+        # loop below (RBDS/BLER history and the audio-health aggregator read
+        # this table; see _make_audio_metrics_snapshot_writer for why it
+        # didn't exist before).
+        snapshot_audio_metrics = _make_audio_metrics_snapshot_writer(app)
 
         # Initialize EAS monitor
         logger.info("Initializing EAS monitor...")
@@ -2239,6 +2310,8 @@ def main():
         # per-source recovery threads.
         last_metrics_time = 0
         metrics_interval = 0.25
+        last_db_snapshot_time = 0
+        db_snapshot_interval = 1.0
 
         while _running:
             try:
@@ -2249,6 +2322,13 @@ def main():
                     metrics = collect_metrics()
                     publish_metrics_to_redis(metrics)
                     last_metrics_time = current_time
+
+                # Snapshot AudioSourceMetrics to the DB at a slower ~1 Hz --
+                # this is history (RBDS/BLER trend, audio-health aggregates),
+                # not the live UI feed, so it doesn't need the 4 Hz rate above.
+                if current_time - last_db_snapshot_time >= db_snapshot_interval:
+                    snapshot_audio_metrics()
+                    last_db_snapshot_time = current_time
 
                     # Log health status
                     if metrics.get("eas_monitor"):
