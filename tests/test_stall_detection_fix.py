@@ -24,6 +24,21 @@ from unittest.mock import MagicMock
 # Stub out heavy web/DB dependencies so we can import audio code in isolation.
 # The stall-detection logic lives entirely in app_core/audio/ingest.py which
 # only needs numpy and its own broadcast_queue sibling — no Flask/DB required.
+#
+# All of this is transient scaffolding for the _load_direct() calls below,
+# not something later test files should ever see: this file's own tests only
+# reference the classes bound to module-level names further down (via direct
+# object references, unaffected by sys.modules afterward). Snapshot every key
+# we are about to touch so it can be restored once those classes are
+# extracted -- previously this left permanent, unconditional damage in
+# sys.modules for the rest of the pytest session: 'app_core' was replaced
+# with an empty stub package (mod.__path__ = []), and 'app_core.audio.ingest'
+# / 'app_core.audio.broadcast_queue' were overwritten with THIS file's
+# privately loaded copies. Any later test doing a fresh
+# `from app_core.audio.ingest import AudioSourceStatus` got a *different*,
+# non-identical AudioSourceStatus class than whatever had already imported
+# the real module, so `some_status == AudioSourceStatus.RUNNING` silently
+# evaluated False forever after -- no exception, just wrong answers.
 _STUBS = [
     'flask', 'flask_sqlalchemy', 'flask_caching', 'flask_login',
     'flask_socketio', 'flask_migrate', 'flask_wtf',
@@ -33,6 +48,11 @@ _STUBS = [
     'redis', 'redis.client', 'redis.exceptions',
     'celery', 'pyaudio', 'alsaaudio', 'requests',
 ]
+_RESTORE_KEYS = _STUBS + [
+    'app_core', 'app_core.audio.broadcast_queue', 'app_core.audio.ingest',
+]
+_sys_modules_before_stubbing = {_key: sys.modules.get(_key) for _key in _RESTORE_KEYS}
+
 for _mod in _STUBS:
     sys.modules.setdefault(_mod, MagicMock())
 
@@ -70,6 +90,16 @@ AudioSourceAdapter    = _ing.AudioSourceAdapter
 AudioSourceConfig     = _ing.AudioSourceConfig
 AudioSourceType       = _ing.AudioSourceType
 AudioSourceStatus     = _ing.AudioSourceStatus
+
+# Everything below this file's own tests needs is now bound to a module-level
+# name above (direct object references survive regardless of sys.modules).
+# Put sys.modules back the way it was so later test files that import
+# app_core.* for real get the real thing, not this file's private copies.
+for _key, _val in _sys_modules_before_stubbing.items():
+    if _val is None:
+        sys.modules.pop(_key, None)
+    else:
+        sys.modules[_key] = _val
 
 
 # ---------------------------------------------------------------------------

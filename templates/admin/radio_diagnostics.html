@@ -959,7 +959,15 @@ sudo systemctl restart eas-station</code></pre>
                 return;
             }
 
+            // Axis labels drop seconds (full HH:MM:SS AM/PM was too wide for
+            // the tick count to stay horizontal, forcing Chart.js to rotate
+            // them into an unreadable diagonal). Full-precision timestamps
+            // are still available in the tooltip title below.
             const labels = points.map(p => {
+                const d = p.t ? new Date(p.t) : null;
+                return d ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—';
+            });
+            const fullLabels = points.map(p => {
                 const d = p.t ? new Date(p.t) : null;
                 return d ? d.toLocaleTimeString() : '—';
             });
@@ -1005,9 +1013,12 @@ sudo systemctl restart eas-station</code></pre>
                         interaction: { mode: 'index', intersect: false },
                         scales: {
                             y: { beginAtZero: true, ticks: { callback: v => v + '%' } },
-                            x: { ticks: { maxTicksLimit: 10, autoSkip: true } },
+                            x: { ticks: { maxTicksLimit: 8, autoSkip: true, maxRotation: 0, minRotation: 0 } },
                         },
-                        plugins: { legend: { labels: { boxWidth: 18 } } },
+                        plugins: {
+                            legend: { labels: { boxWidth: 18 } },
+                            tooltip: { callbacks: { title: items => fullLabels[items[0]?.dataIndex] ?? '' } },
+                        },
                     },
                 });
             }
