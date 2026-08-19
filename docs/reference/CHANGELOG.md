@@ -8,6 +8,29 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.175.1] - 2026-08-18 - Fix waterfall/scope zoom controls going inert after a refresh
+
+### Fixed
+- **The Live Waterfall's and Spectrum Scope's zoom controls looked normal
+  but did nothing when clicked.** `updateReceiverDetails()`'s periodic
+  re-render (WebSocket-driven, roughly every 1s) preserved
+  `.waterfall-container` and `.spectrum-scope-container` across the
+  refresh by capturing their `innerHTML` and restoring it afterward --
+  but `innerHTML` serialization carries neither a `<canvas>`'s rendered
+  bitmap nor any `addEventListener` bindings on cloned elements. The
+  restored zoom buttons and canvas gesture handlers were visually
+  identical but completely inert clones. This is the exact same defect
+  class that made the Historical Trends charts "disappear almost
+  immediately" (fixed for trends in #2414 by watching for DOM
+  replacement and rebuilding instead of innerHTML-restoring), just never
+  generalized to the waterfall/scope panels once they grew live zoom/pan
+  gestures. Removed both from the innerHTML-preserve mechanism entirely
+  -- `.diagnostic-container` (plain text/tables, no canvas, no listeners)
+  is the only panel type that actually needs it. The waterfall and scope
+  already detect their own DOM replacement and rebuild themselves with
+  fresh listeners every 500ms via `liveSpectrumTick()`, so nothing else
+  had to change.
+
 ## [2.175.0] - 2026-08-18 - Make dead-air monitoring per-source
 
 ### Changed
