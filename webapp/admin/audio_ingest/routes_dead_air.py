@@ -18,24 +18,23 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Dead-air (silence) detection policy, and the live alarm state.
+"""Dead-air (silence) alarm status, acknowledgement, and buzzer output.
 
-These endpoints own the *detection* half of dead-air monitoring: what
-counts as silence on a monitored source, and whether a source is silent
-right now. They live under the audio blueprint because every threshold
-here is an audio quantity -- dBFS, spectral flatness, a hold-off in
-seconds -- and because detection must not live inside any one of its
-consumers.
+Detection policy -- what counts as silence on a given source, and whether
+dead-air alarming is even enabled for it -- is per-source now, configured
+through the same create/update routes as every other source setting (see
+``routes_sources_write.py`` and ``AudioSourceConfig.dead_air_*`` in
+``app_core/audio/ingest.py``). A single station-wide policy could not
+express "alarm on silence for this continuous broadcast monitor, but never
+for that state-relay source that's supposed to be silent except when
+relaying an actual alert" -- it was either on for everyone or off for
+everyone.
 
-The *output* half (which GPIO pin sounds the rack buzzer, what colour the
-tower light shows) stays in hardware settings, where the rest of the
-physical wiring is configured. That split matters beyond tidiness: the
-GPIO relay and the tower light are only today's outputs, and an email or
-SMS notifier added later must be able to subscribe to the same detection
-policy without it being buried in the GPIO page.
-
-Storage is still ``HardwareSettings`` -- one settings row, no migration
-needed to move a control between pages.
+What remains here is legitimately station-wide: whether *any* monitored
+source is silent right now (aggregated across all of them), and
+acknowledging the one physical rack buzzer / tower light that fault
+drives. Those outputs don't move -- see ``app_core.hardware_settings``'s
+``get_dead_air_settings()`` for the buzzer GPIO pin.
 """
 
 import logging
@@ -51,96 +50,6 @@ from app_core.auth.roles import (
 from .blueprint import audio_ingest_bp
 
 logger = logging.getLogger(__name__)
-
-#: Bounds applied to every write. A level threshold above roughly -30 dBFS
-#: would alarm on normal programme audio, and a flatness threshold at zero
-#: would alarm on everything, so neither is left to a hand-edited post.
-_BOUNDS = {
-    'dead_air_level_threshold_db': (-120, -30),
-    'dead_air_flatness_threshold_pct': (1, 99),
-    'dead_air_duration_seconds': (1, 3600),
-}
-
-
-def _detection_payload(settings) -> dict:
-    """Shape the detection half of the settings row for the UI."""
-    return {
-        'enabled': bool(getattr(settings, 'dead_air_enabled', False)),
-        'duration_seconds': int(
-            getattr(settings, 'dead_air_duration_seconds', 20) or 20
-        ),
-        'level_threshold_db': int(
-            getattr(settings, 'dead_air_level_threshold_db', -65) or -65
-        ),
-        'detect_open_carrier': bool(
-            getattr(settings, 'dead_air_detect_open_carrier', True)
-        ),
-        'flatness_threshold_pct': int(
-            getattr(settings, 'dead_air_flatness_threshold_pct', 25) or 25
-        ),
-    }
-
-
-@audio_ingest_bp.route('/api/audio/dead-air/settings', methods=['GET'])
-@require_permission('system.configure')
-def audio_dead_air_settings_get():
-    """Return the dead-air detection policy."""
-    try:
-        from app_core.hardware_settings import get_hardware_settings
-
-        return jsonify({'ok': True, **_detection_payload(get_hardware_settings())})
-    except Exception as exc:
-        logger.exception("Dead-air settings read failed")
-        return jsonify({'ok': False, 'error': str(exc)}), 500
-
-
-@audio_ingest_bp.route('/api/audio/dead-air/settings', methods=['POST'])
-@require_permission('system.configure')
-def audio_dead_air_settings_post():
-    """Update the dead-air detection policy.
-
-    Only the detection fields are writable here; the buzzer pin and the
-    tower-light colour are deliberately not, so the two pages cannot
-    fight over the same values.
-    """
-    try:
-        from app_core.hardware_settings import update_hardware_settings
-
-        payload = request.get_json(silent=True) or {}
-        updates = {}
-
-        if 'enabled' in payload:
-            updates['dead_air_enabled'] = _as_bool(payload['enabled'])
-        if 'detect_open_carrier' in payload:
-            updates['dead_air_detect_open_carrier'] = _as_bool(
-                payload['detect_open_carrier']
-            )
-
-        for key, column in (
-            ('duration_seconds', 'dead_air_duration_seconds'),
-            ('level_threshold_db', 'dead_air_level_threshold_db'),
-            ('flatness_threshold_pct', 'dead_air_flatness_threshold_pct'),
-        ):
-            if key not in payload:
-                continue
-            low, high = _BOUNDS[column]
-            try:
-                updates[column] = max(low, min(high, int(payload[key])))
-            except (TypeError, ValueError):
-                return jsonify({
-                    'ok': False,
-                    'error': f"{key} must be a whole number between {low} and {high}",
-                }), 400
-
-        if not updates:
-            return jsonify({'ok': False, 'error': 'No settings supplied'}), 400
-
-        settings = update_hardware_settings(updates)
-        logger.info("Dead-air detection policy updated: %s", sorted(updates))
-        return jsonify({'ok': True, **_detection_payload(settings)})
-    except Exception as exc:
-        logger.exception("Dead-air settings write failed")
-        return jsonify({'ok': False, 'error': str(exc)}), 500
 
 
 def _as_bool(value) -> bool:

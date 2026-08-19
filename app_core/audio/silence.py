@@ -103,6 +103,7 @@ def get_default_criteria() -> "SilenceCriteria":
 __all__ = [
     "set_default_criteria",
     "get_default_criteria",
+    "criteria_from_source_config",
     "SilenceCriteria",
     "SilenceVerdict",
     "SilenceMonitor",
@@ -215,6 +216,41 @@ class SilenceCriteria:
             ),
             duration_seconds=float(max(1.0, self.duration_seconds)),
         )
+
+
+def criteria_from_source_config(config) -> "SilenceCriteria":
+    """Build one source's dead-air criteria from its own config.
+
+    Dead-air is a per-source policy (see the module docstring's "not a
+    per-source knob" note above -- that was true until a station-wide
+    policy proved unworkable for a source that's supposed to be silent
+    except when relaying an actual alert, like a state relay or
+    alert-only feed). ``config`` is anything carrying the ``dead_air_*``
+    attributes -- normally an ``AudioSourceConfig``
+    (``app_core/audio/ingest.py``), but any object or dict-like shim with
+    the same attribute names works, which is what lets both the
+    integrated-mode write routes and the separated-architecture Redis
+    command handlers share this one implementation instead of drifting
+    apart the way ``silence_threshold_db`` handling nearly did across its
+    eight call sites.
+    """
+    return SilenceCriteria(
+        enabled=bool(getattr(config, "dead_air_enabled", False)),
+        level_threshold_db=float(
+            getattr(config, "dead_air_level_threshold_db", -65.0) or -65.0
+        ),
+        detect_open_carrier=bool(
+            getattr(config, "dead_air_detect_open_carrier", True)
+        ),
+        # Stored as whole percent on the config object; the monitor wants
+        # a 0-1 ratio.
+        flatness_threshold=float(
+            getattr(config, "dead_air_flatness_threshold_pct", 25) or 25
+        ) / 100.0,
+        duration_seconds=float(
+            getattr(config, "dead_air_duration_seconds", 20.0) or 20.0
+        ),
+    )
 
 
 @dataclass

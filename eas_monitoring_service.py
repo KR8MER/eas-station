@@ -457,9 +457,14 @@ def initialize_audio_controller(app):
                             buffer_size=config_params.get('buffer_size', 4096),
                             silence_threshold_db=config_params.get('silence_threshold_db', -60.0),
                             silence_duration_seconds=config_params.get('silence_duration_seconds', 5.0),
+                            dead_air_enabled=config_params.get('dead_air_enabled', False),
+                            dead_air_level_threshold_db=config_params.get('dead_air_level_threshold_db', -65.0),
+                            dead_air_detect_open_carrier=config_params.get('dead_air_detect_open_carrier', True),
+                            dead_air_flatness_threshold_pct=config_params.get('dead_air_flatness_threshold_pct', 25),
+                            dead_air_duration_seconds=config_params.get('dead_air_duration_seconds', 20.0),
                             device_params=config_params.get('device_params', {}),
                         )
-                        
+
                         # Create Redis SDR adapter directly (subscribes to IQ samples)
                         adapter = RedisSDRSourceAdapter(runtime_config)
                         _audio_controller.add_source(adapter)
@@ -493,6 +498,11 @@ def initialize_audio_controller(app):
                     buffer_size=config_params.get('buffer_size', 4096),
                     silence_threshold_db=config_params.get('silence_threshold_db', -60.0),
                     silence_duration_seconds=config_params.get('silence_duration_seconds', 5.0),
+                    dead_air_enabled=config_params.get('dead_air_enabled', False),
+                    dead_air_level_threshold_db=config_params.get('dead_air_level_threshold_db', -65.0),
+                    dead_air_detect_open_carrier=config_params.get('dead_air_detect_open_carrier', True),
+                    dead_air_flatness_threshold_pct=config_params.get('dead_air_flatness_threshold_pct', 25),
+                    dead_air_duration_seconds=config_params.get('dead_air_duration_seconds', 20.0),
                     device_params=config_params.get('device_params', {}),
                 )
 
@@ -1007,46 +1017,53 @@ def initialize_eas_monitor(app, audio_controller):
 
 
 def _install_dead_air_criteria(app) -> None:
-    """Load station-wide dead-air criteria from HardwareSettings.
+    """Retune every source's dead-air monitor from its own per-source config.
 
-    Called at startup and whenever the settings change, so every audio
-    source built afterwards picks the thresholds up, and every monitor
-    already running is retuned in place without a restart.
+    Called at startup and on a fixed watchdog interval (see the source
+    watchdog loop above), so an operator's change in the audio source
+    editor takes effect without a service restart -- same as it always
+    did, just per source now instead of one station-wide policy applied
+    to everyone. See AudioSourceConfig.dead_air_* in app_core/audio/ingest.py
+    for why a single shared policy doesn't fit: a source that's supposed
+    to be silent except when relaying an actual alert (a state relay, an
+    alert-only feed) must never alarm on silence, while a continuous
+    broadcast monitor going silent is a real fault -- one shared enabled
+    flag cannot express both at once.
+
+    ``app`` is accepted for signature compatibility with the pre-per-source
+    version; per-source criteria come from each adapter's own in-memory
+    config, so no app context / DB round trip is needed here.
     """
     try:
         from app_core.audio.silence import (
             SilenceCriteria,
+            criteria_from_source_config,
             set_default_criteria,
         )
-        from app_core.hardware_settings import get_dead_air_settings
 
-        with app.app_context():
-            cfg = get_dead_air_settings()
+        # Brand new sources are constructed with SilenceMonitor(name) (no
+        # explicit criteria), which falls back to this module-level
+        # default until this function retunes them below. Keep it
+        # disabled so a source never briefly alarms on a policy it
+        # hasn't actually been given.
+        set_default_criteria(SilenceCriteria(enabled=False))
 
-        criteria = SilenceCriteria(
-            enabled=bool(cfg.get("enabled")),
-            level_threshold_db=float(cfg.get("level_threshold_db", -65.0)),
-            detect_open_carrier=bool(cfg.get("detect_open_carrier", True)),
-            flatness_threshold=float(cfg.get("flatness_threshold", 0.25)),
-            duration_seconds=float(cfg.get("duration_seconds", 20.0)),
-        )
-        set_default_criteria(criteria)
+        if _audio_controller is None:
+            return
 
-        # Retune monitors on sources that already exist.
-        if _audio_controller is not None:
-            for source in _audio_controller.get_all_sources().values():
-                monitor = getattr(source, "_silence_monitor", None)
-                if monitor is not None:
-                    monitor.update_criteria(criteria)
+        enabled_count = 0
+        for source in _audio_controller.get_all_sources().values():
+            monitor = getattr(source, "_silence_monitor", None)
+            if monitor is None:
+                continue
+            criteria = criteria_from_source_config(source.config)
+            monitor.update_criteria(criteria)
+            if criteria.enabled:
+                enabled_count += 1
 
         logger.info(
-            "Dead-air monitoring %s (level %.0f dBFS, flatness %.2f, "
-            "hold-off %.0fs, open-carrier %s)",
-            "enabled" if criteria.enabled else "disabled",
-            criteria.level_threshold_db,
-            criteria.flatness_threshold,
-            criteria.duration_seconds,
-            "on" if criteria.detect_open_carrier else "off",
+            "Dead-air monitoring retuned: %d of %d source(s) have it enabled",
+            enabled_count, len(_audio_controller.get_all_sources()),
         )
     except Exception as exc:
         logger.warning("Could not install dead-air criteria: %s", exc)

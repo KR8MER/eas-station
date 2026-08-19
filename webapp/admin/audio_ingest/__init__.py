@@ -64,6 +64,7 @@ from . import (  # noqa: F401  - imported for their side effect of registering r
     routes_rbds,
     routes_source_control,
     routes_sources,
+    routes_sources_delete,
     routes_sources_write,
     sanitize,
     source_payload,
@@ -126,9 +127,9 @@ from .routes_source_control import (
     api_test_stream_url,
 )
 from .routes_sources import api_get_audio_source, api_get_audio_sources
+from .routes_sources_delete import api_delete_audio_source
 from .routes_sources_write import (
     api_create_audio_source,
-    api_delete_audio_source,
     api_update_audio_source,
 )
 from .sanitize import (
@@ -174,6 +175,7 @@ _LOGGING_MODULES = (
     radio_sources,
     serialization,
     routes_sources,
+    routes_sources_delete,
     routes_sources_write,
     routes_source_control,
     routes_rbds,

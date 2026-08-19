@@ -64,6 +64,11 @@ def _config_block(db_config: AudioSourceConfigDB) -> Dict[str, Any]:
         'buffer_size': config_params.get('buffer_size', 4096),
         'silence_threshold_db': config_params.get('silence_threshold_db', -60.0),
         'silence_duration_seconds': config_params.get('silence_duration_seconds', 5.0),
+        'dead_air_enabled': config_params.get('dead_air_enabled', False),
+        'dead_air_level_threshold_db': config_params.get('dead_air_level_threshold_db', -65.0),
+        'dead_air_detect_open_carrier': config_params.get('dead_air_detect_open_carrier', True),
+        'dead_air_flatness_threshold_pct': config_params.get('dead_air_flatness_threshold_pct', 25),
+        'dead_air_duration_seconds': config_params.get('dead_air_duration_seconds', 20.0),
         'device_params': _redact_device_params(config_params.get('device_params', {})),
     }
 

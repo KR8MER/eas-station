@@ -390,22 +390,35 @@ def test_missing_dead_air_key_reads_as_not_alarming(monkeypatch):
 # --------------------------------------------------------------------------
 #
 # Dead-air settings were first shipped entirely on the Hardware page,
-# beside the tower-light block. That was placement by implementation
-# adjacency rather than by task: the thresholds are audio quantities, and
-# GPIO is only *today's* output -- an email or SMS notifier added later
-# must be able to share the same detection policy without reading it out
-# of the GPIO page. These pin the split so it does not drift back.
+# beside the tower-light block, then moved to one station-wide form on the
+# Audio Sources page. Both were placement/scope mistakes: the thresholds
+# are audio quantities (so GPIO -- only *today's* output -- must not own
+# them), and a single shared policy cannot express "alarm on silence for
+# this continuous broadcast monitor, never for that state-relay source
+# that's supposed to be silent except when relaying an actual alert."
+# Detection is per-source now, configured in that source's own Add/Edit
+# dialog on the Audio Sources page. These pin the split so it does not
+# drift back.
 
 HARDWARE_HTML = ROOT / "templates" / "admin" / "hardware_settings.html"
 AUDIO_HTML = ROOT / "templates" / "admin" / "audio_sources.html"
 HEALTH_HTML = ROOT / "templates" / "audio" / "health_dashboard.html"
 
+# The Add-Source-modal ids; the Edit modal mirrors these with an "edit"
+# prefix (editDeadAirEnabled, etc.) and both are checked below.
 _DETECTION_FIELDS = (
-    "deadAirEnabled",
-    "deadAirDuration",
-    "deadAirLevel",
-    "deadAirFlatness",
-    "deadAirOpenCarrier",
+    "sourceDeadAirEnabled",
+    "sourceDeadAirDuration",
+    "sourceDeadAirLevel",
+    "sourceDeadAirFlatness",
+    "sourceDeadAirOpenCarrier",
+)
+_EDIT_DETECTION_FIELDS = (
+    "editDeadAirEnabled",
+    "editDeadAirDuration",
+    "editDeadAirLevel",
+    "editDeadAirFlatness",
+    "editDeadAirOpenCarrier",
 )
 _OUTPUT_FIELDS = (
     "dead_air_buzzer_gpio_pin",
@@ -415,9 +428,22 @@ _OUTPUT_FIELDS = (
 
 
 def test_detection_settings_live_with_the_audio_sources():
+    """Detection fields must be on the per-source Add/Edit dialog, not a
+    station-wide form -- a single shared policy can't express "alarm for
+    this source, never for that one"."""
     audio = AUDIO_HTML.read_text(encoding="utf-8")
-    for field in _DETECTION_FIELDS:
-        assert field in audio, f"{field} should be on the audio page"
+    for field in _DETECTION_FIELDS + _EDIT_DETECTION_FIELDS:
+        assert field in audio, f"{field} should be on the audio page's source dialog"
+
+
+def test_detection_fields_are_not_a_station_wide_form():
+    """Regression: a single global enabled flag couldn't express per-source
+    policy, which is exactly the false-alarm bug this redesign fixed."""
+    audio = AUDIO_HTML.read_text(encoding="utf-8")
+    assert "deadAirSaveBtn" not in audio, (
+        "there is no longer a single form to save -- each source's dialog "
+        "saves through the normal create/update source flow"
+    )
 
 
 def test_detection_settings_are_not_on_the_hardware_page():
@@ -519,17 +545,21 @@ def test_operator_supplied_names_are_never_interpolated_into_html():
         assert "textContent" in code
 
 
-def test_saving_is_blocked_until_settings_load():
-    """A failed load must not let blank inputs overwrite stored thresholds.
+def test_settings_js_no_longer_owns_a_save_form():
+    """dead-air-settings.js is a status poller now, not a settings form.
 
-    The numeric fields are not server-rendered, so an empty form posts
-    Number('') == 0, which the API clamps to each field's minimum -- a
-    silent rewrite of a 20 s hold-off to 1 s.
+    Detection settings save through the per-source Add/Edit dialog (see
+    audio_monitoring.js's addAudioSource()/saveEditedSource()), which is
+    populated from a fetched source record before it can be submitted, so
+    the old "blank input overwrites stored threshold" failure mode this
+    test used to guard against cannot occur here anymore.
     """
     src = SETTINGS_JS.read_text(encoding="utf-8")
-    assert "let loaded = false;" in src
-    assert "els.save.disabled = true;" in src
-    assert "if (!loaded) return;" in src
+    assert "dead-air/settings" not in src, (
+        "the station-wide settings endpoint was removed; nothing should "
+        "still call it"
+    )
+    assert "pollStatus" in src
 
 
 def test_status_is_readable_by_the_dashboard_audience():
@@ -625,6 +655,189 @@ def test_carrier_squelch_is_gone_from_the_receiver_form():
     for token in ("Carrier Squelch", "receiverSquelch", "toggleSquelchInputs",
                   "squelch_", "carrier_present", "carrier_alarm"):
         assert token not in radio_html, f"{token} should be gone from the receiver form"
+
+
+# --------------------------------------------------------------------------
+# Per-source criteria (the redesign this file's docstring change is about)
+# --------------------------------------------------------------------------
+#
+# A single station-wide dead-air policy shipped, then had to be redesigned
+# per source: an operator with even one source that's supposed to be
+# silent except when relaying an actual alert (a state relay, an
+# alert-only feed) could not enable dead-air alarming for every other
+# source without a permanent false alarm on that one. Confirmed live on
+# this station: a source named "ERN-LUC" sat in a false dead-air alarm for
+# 39 minutes straight under the old station-wide policy.
+
+class _FakeSourceConfig:
+    """Minimal stand-in for AudioSourceConfig's dead_air_* attributes."""
+
+    def __init__(self, **overrides):
+        self.dead_air_enabled = overrides.get("dead_air_enabled", False)
+        self.dead_air_level_threshold_db = overrides.get(
+            "dead_air_level_threshold_db", -65.0
+        )
+        self.dead_air_detect_open_carrier = overrides.get(
+            "dead_air_detect_open_carrier", True
+        )
+        self.dead_air_flatness_threshold_pct = overrides.get(
+            "dead_air_flatness_threshold_pct", 25
+        )
+        self.dead_air_duration_seconds = overrides.get(
+            "dead_air_duration_seconds", 20.0
+        )
+
+
+def test_criteria_from_source_config_disabled_by_default():
+    """A source that never opted in must build disabled criteria.
+
+    This is the state-relay / alert-only case: a brand new source, or one
+    whose config predates this feature, must never alarm on silence.
+    """
+    from app_core.audio.silence import criteria_from_source_config
+
+    criteria = criteria_from_source_config(_FakeSourceConfig())
+    assert criteria.enabled is False
+
+
+def test_criteria_from_source_config_is_independent_per_source():
+    """Two sources with different policies must not bleed into each other.
+
+    This is the actual bug: a single shared SilenceCriteria object applied
+    to every source meant one enabled flag and one threshold set for the
+    whole station.
+    """
+    from app_core.audio.silence import criteria_from_source_config
+
+    relay = criteria_from_source_config(
+        _FakeSourceConfig(dead_air_enabled=False)
+    )
+    broadcast = criteria_from_source_config(
+        _FakeSourceConfig(
+            dead_air_enabled=True,
+            dead_air_level_threshold_db=-70.0,
+            dead_air_duration_seconds=45.0,
+        )
+    )
+
+    assert relay.enabled is False
+    assert broadcast.enabled is True
+    assert broadcast.level_threshold_db == -70.0
+    assert broadcast.duration_seconds == 45.0
+    # The flatness threshold is stored as whole percent on the config but
+    # consumed as a 0-1 ratio by the monitor.
+    assert broadcast.flatness_threshold == pytest.approx(0.25)
+
+
+def test_criteria_from_source_config_accepts_a_dict_shim():
+    """The Redis command handlers apply a config change to a running
+    source via a dict, not a real AudioSourceConfig -- getattr's default
+    must not choke on that."""
+    from app_core.audio.silence import criteria_from_source_config
+
+    class _Shim:
+        dead_air_enabled = True
+
+    criteria = criteria_from_source_config(_Shim())
+    assert criteria.enabled is True
+    assert criteria.level_threshold_db == -65.0  # falls back to the default
+
+
+# --------------------------------------------------------------------------
+# The live false-alarm scenario, as a regression test
+# --------------------------------------------------------------------------
+
+def _fake_metadata(*, dead_air_enabled, silent, reason="level", detail="", duration=0.0):
+    return {
+        "metadata": {
+            "dead_air": {
+                "enabled": dead_air_enabled,
+                "silent": silent,
+                "reason": reason,
+                "detail": detail,
+                "silence_duration_seconds": duration,
+            }
+        }
+    }
+
+
+def test_disabled_source_never_appears_in_the_published_alarm(monkeypatch):
+    """Replays the exact live scenario that motivated the redesign.
+
+    A source with dead-air alarming disabled -- e.g. a state relay that is
+    silent 99% of the time by design -- must never show up as "silent" in
+    the aggregate published to the GPIO service, no matter how far below
+    any threshold its audio level actually sits.
+    """
+    import eas_monitoring_service as ems
+
+    published = {}
+
+    class _FakeRedis:
+        def setex(self, key, ttl, value):
+            published["key"] = key
+            published["value"] = value
+
+        def delete(self, *_a, **_kw):
+            pass
+
+    monkeypatch.setattr(ems, "get_redis_client", lambda: _FakeRedis())
+    monkeypatch.setattr(ems, "_dead_air_episode", None)
+
+    sources = {
+        # A state-relay source: alarming intentionally disabled, sitting
+        # far below any silence threshold (this is the ERN-LUC scenario).
+        "ERN-LUC": _fake_metadata(
+            dead_air_enabled=False, silent=True, detail="no audio (-78.7 dBFS)",
+            duration=2331.6,
+        ),
+        # A continuous broadcast monitor: alarming enabled and currently
+        # fine, so it must not appear either.
+        "WXJ93": _fake_metadata(dead_air_enabled=True, silent=False),
+    }
+
+    ems._publish_dead_air_state(sources)
+
+    import json
+    payload = json.loads(published["value"])
+    assert payload["sources"] == {}
+    assert payload["active"] is False
+    # The station does have at least one source with alarming enabled, so
+    # the aggregate must still report the feature as "on" for the UI.
+    assert payload["enabled"] is True
+
+
+def test_enabled_silent_source_does_appear_in_the_published_alarm(monkeypatch):
+    """The other half of the same guarantee: a source that opted in and is
+    actually silent must still alarm -- the fix must not have gone too far
+    and silenced every source."""
+    import eas_monitoring_service as ems
+
+    published = {}
+
+    class _FakeRedis:
+        def setex(self, key, ttl, value):
+            published["value"] = value
+
+        def delete(self, *_a, **_kw):
+            pass
+
+    monkeypatch.setattr(ems, "get_redis_client", lambda: _FakeRedis())
+    monkeypatch.setattr(ems, "_dead_air_episode", None)
+
+    sources = {
+        "WXJ93": _fake_metadata(
+            dead_air_enabled=True, silent=True, detail="off-air hiss",
+            duration=42.0,
+        ),
+    }
+
+    ems._publish_dead_air_state(sources)
+
+    import json
+    payload = json.loads(published["value"])
+    assert payload["active"] is True
+    assert "WXJ93" in payload["sources"]
 
 
 def test_legacy_silence_thresholds_no_longer_derive_from_squelch():
