@@ -8,6 +8,28 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.175.2] - 2026-08-19 - Fix modals with a form wrapper not scrolling on mobile
+
+### Fixed
+- **The Edit Audio Source modal (and every other scrollable modal that wraps
+  its header/body/footer in a `<form>`, e.g. Add Audio Source, Radio
+  Receiver, Stream Profile) was un-scrollable on mobile, cutting the form
+  off partway through with no way to reach the fields below or the Save
+  button.** Bootstrap's scrollable-modal CSS gives `.modal-body` a bounded,
+  scrollable height via `flex: 1 1 auto` -- but that only works when
+  `.modal-body` is a direct child of the flex container `.modal-content`.
+  These modals put a `<form>` in between so one submit handler can collect
+  every field, and a plain `<form>` is not a flex container, so the flex
+  chain broke silently: `.modal-body`'s `overflow-y: auto` had no bounded
+  height to scroll within, and `.modal-content`'s own `overflow: hidden`
+  just clipped the tail of the form instead. The Radio Receiver modal had
+  been individually patched around this with a hardcoded inline
+  `max-height: calc(90vh - 130px)` rather than the root cause being fixed.
+  `.modal-dialog-scrollable .modal-content > form` is now itself a flex
+  column filling the bounded height, so header/body/footer behave exactly
+  as if there were no form wrapper at all -- fixing every modal with this
+  pattern at once.
+
 ## [2.175.1] - 2026-08-18 - Fix waterfall/scope zoom controls going inert after a refresh
 
 ### Fixed
