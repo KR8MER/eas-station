@@ -31,8 +31,81 @@ from flask import Flask, jsonify, request
 from app_core.config.redis_config import RedisChannels
 
 from app_core.models import RadioReceiver
+from app_core.radio.decimation import early_decimation_factor, effective_sample_rate
 
 from . import deps
+
+
+def _spectrum_axis(payload, receiver) -> dict:
+    """Resolve the frequency axis for a spectrum payload.
+
+    The FFT behind every spectrum view is computed on samples taken from
+    the ring buffer, which sit *after* the early-decimation stage that
+    high-rate SDRs use (see ``app_core.radio.decimation``). The RF span
+    those bins cover is therefore the **effective** sample rate wide, not
+    the hardware rate stored on the ``RadioReceiver`` row.
+
+    Labelling the axis from ``receiver.sample_rate`` overstated the span
+    by the decimation factor -- on a receiver configured for 1.024 MHz
+    (decim 4, effective 256 kHz) a normal ~200 kHz-wide FM broadcast
+    signal was drawn filling a span labelled 1.024 MHz, making it look
+    five times wider than physically possible.
+
+    Prefers the values the SDR service publishes (it knows the live
+    decimation factor); falls back to recomputing them from the receiver
+    row when an older service build omits them.
+
+    Args:
+        payload (dict): Spectrum payload from Redis or the command queue.
+        receiver (RadioReceiver): The receiver row, used for fallbacks.
+
+    Returns:
+        dict: ``sample_rate``, ``hardware_sample_rate``,
+        ``early_decim_factor``, ``center_frequency``, ``freq_min``,
+        ``freq_max``. Frequencies are Hz; ``freq_min``/``freq_max`` are
+        ``None`` when no centre frequency is known.
+    """
+    payload = payload or {}
+    hardware_rate = receiver.sample_rate or 0
+
+    # The service reports the post-decimation rate; recompute it locally
+    # when absent so the axis is right even against an older sdr-service.
+    try:
+        sample_rate = int(payload.get('sample_rate') or 0)
+    except (TypeError, ValueError):
+        sample_rate = 0
+    if sample_rate <= 0:
+        sample_rate = effective_sample_rate(hardware_rate)
+
+    try:
+        decim_factor = int(payload.get('early_decim_factor') or 0)
+    except (TypeError, ValueError):
+        decim_factor = 0
+    if decim_factor <= 0:
+        decim_factor = early_decimation_factor(hardware_rate)
+
+    centre = payload.get('center_frequency')
+    if centre is None:
+        centre = receiver.frequency_hz
+
+    freq_min = payload.get('freq_min')
+    freq_max = payload.get('freq_max')
+    if freq_min is None or freq_max is None:
+        if centre is not None and sample_rate > 0:
+            half_span = sample_rate / 2.0
+            freq_min = centre - half_span
+            freq_max = centre + half_span
+        else:
+            freq_min = freq_max = None
+
+    return {
+        'sample_rate': sample_rate,
+        'hardware_sample_rate': hardware_rate,
+        'early_decim_factor': decim_factor,
+        'center_frequency': centre,
+        'freq_min': freq_min,
+        'freq_max': freq_max,
+    }
 
 
 def register(app: Flask, route_logger) -> None:
@@ -155,6 +228,7 @@ def register(app: Flask, route_logger) -> None:
                         if isinstance(spectrum_raw, bytes):
                             spectrum_raw = spectrum_raw.decode('utf-8')
                         spectrum_payload = json.loads(spectrum_raw)
+                        axis = _spectrum_axis(spectrum_payload, receiver)
 
                         # Check if this is an error status from sdr-service
                         status = spectrum_payload.get('status')
@@ -164,10 +238,10 @@ def register(app: Flask, route_logger) -> None:
                                 "receiver_id": receiver.id,
                                 "identifier": receiver_identifier,
                                 "display_name": receiver.display_name,
-                                "sample_rate": spectrum_payload.get('sample_rate', receiver.sample_rate),
-                                "center_frequency": spectrum_payload.get('center_frequency', receiver.frequency_hz),
-                                "freq_min": spectrum_payload.get('freq_min', receiver.frequency_hz - (receiver.sample_rate / 2) if receiver.sample_rate else 0),
-                                "freq_max": spectrum_payload.get('freq_max', receiver.frequency_hz + (receiver.sample_rate / 2) if receiver.sample_rate else 0),
+                                "sample_rate": axis['sample_rate'],
+                                "center_frequency": axis['center_frequency'],
+                                "freq_min": axis['freq_min'],
+                                "freq_max": axis['freq_max'],
                                 "fft_size": 0,
                                 "spectrum": [],
                                 "timestamp": spectrum_payload.get('timestamp', time.time()),
@@ -181,10 +255,12 @@ def register(app: Flask, route_logger) -> None:
                             "receiver_id": receiver.id,
                             "identifier": receiver_identifier,
                             "display_name": receiver.display_name,
-                            "sample_rate": spectrum_payload.get('sample_rate', receiver.sample_rate),
-                            "center_frequency": spectrum_payload.get('center_frequency', receiver.frequency_hz),
-                            "freq_min": spectrum_payload.get('freq_min', receiver.frequency_hz - (receiver.sample_rate / 2) if receiver.sample_rate else 0),
-                            "freq_max": spectrum_payload.get('freq_max', receiver.frequency_hz + (receiver.sample_rate / 2) if receiver.sample_rate else 0),
+                            "sample_rate": axis['sample_rate'],
+                            "hardware_sample_rate": axis['hardware_sample_rate'],
+                            "early_decim_factor": axis['early_decim_factor'],
+                            "center_frequency": axis['center_frequency'],
+                            "freq_min": axis['freq_min'],
+                            "freq_max": axis['freq_max'],
                             "fft_size": spectrum_payload.get('fft_size', 2048),
                             "spectrum": spectrum_payload.get('spectrum', []),
                             "timestamp": spectrum_payload.get('timestamp', time.time()),
@@ -308,21 +384,44 @@ def register(app: Flask, route_logger) -> None:
                 # Convert to list for JSON
                 spectrum_data = normalized.tolist()
 
-                # Calculate frequency bins - use correct default based on driver
-                if receiver.sample_rate:
-                    sample_rate = receiver.sample_rate
-                else:
+                # Calculate frequency bins. These samples came straight
+                # from the receiver's ring buffer, so they are already
+                # decimated -- the span is the *effective* rate wide.
+                # Using the configured hardware rate here drew the axis
+                # up to 10x too wide (Airspy 2.5 MHz -> 250 kHz actual).
+                if not receiver.sample_rate:
                     driver_lower = (receiver.driver or '').lower()
-                    sample_rate = 2500000 if 'airspy' in driver_lower else 2400000
-                freq_min = receiver.frequency_hz - (sample_rate / 2)
-                freq_max = receiver.frequency_hz + (sample_rate / 2)
+                    fallback_hw_rate = 2500000 if 'airspy' in driver_lower else 2400000
+                else:
+                    fallback_hw_rate = receiver.sample_rate
+                axis = _spectrum_axis(
+                    {
+                        'sample_rate': result.get('sample_rate'),
+                        'early_decim_factor': result.get('early_decim_factor'),
+                        'center_frequency': result.get('center_frequency'),
+                    },
+                    receiver,
+                )
+                sample_rate = axis['sample_rate'] or effective_sample_rate(fallback_hw_rate)
+                centre_hz = axis['center_frequency']
+                if centre_hz is None:
+                    centre_hz = receiver.frequency_hz
+                if centre_hz is None:
+                    # An unconfigured receiver has no axis to draw; the
+                    # spectrum bins are still useful to the caller.
+                    freq_min = freq_max = None
+                else:
+                    freq_min = centre_hz - (sample_rate / 2)
+                    freq_max = centre_hz + (sample_rate / 2)
 
                 return jsonify({
                     "receiver_id": receiver.id,
                     "identifier": receiver_identifier,
                     "display_name": receiver.display_name,
                     "sample_rate": sample_rate,
-                    "center_frequency": receiver.frequency_hz,
+                    "hardware_sample_rate": axis['hardware_sample_rate'] or fallback_hw_rate,
+                    "early_decim_factor": axis['early_decim_factor'],
+                    "center_frequency": centre_hz,
                     "freq_min": freq_min,
                     "freq_max": freq_max,
                     "fft_size": fft_size,

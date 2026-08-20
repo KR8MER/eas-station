@@ -79,11 +79,11 @@ def test_merge_replaces_every_managed_key():
 
 def test_merge_drops_managed_keys_absent_from_a_fresh_sync():
     """A managed key the sync no longer emits must not linger forever."""
-    stored = {"squelch_open_ms": 150, "archive": {"enabled": True}}
+    stored = {"buffer_size": 8192, "archive": {"enabled": True}}
 
     merged = merge_managed_config_params(stored, {"sample_rate": 44100})
 
-    assert "squelch_open_ms" not in merged
+    assert "buffer_size" not in merged
     assert merged["archive"] == {"enabled": True}
 
 

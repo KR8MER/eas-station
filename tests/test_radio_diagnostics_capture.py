@@ -51,6 +51,7 @@ from app_core.extensions import db
 from app_core.models import RadioReceiver
 import webapp.routes_settings_radio as radio_routes
 import webapp.radio_settings.deps as radio_deps
+from app_core.radio.decimation import effective_sample_rate
 
 
 @compiles(JSONB, "sqlite")
@@ -140,11 +141,6 @@ def _add_receiver():
         enable_rbds=True,
         enabled=True,
         auto_start=False,
-        squelch_enabled=False,
-        squelch_threshold_db=-60.0,
-        squelch_open_ms=100,
-        squelch_close_ms=400,
-        squelch_alarm=False,
     )
     db.session.add(receiver)
     db.session.commit()
@@ -395,14 +391,19 @@ def test_capture_iq_long_duration_is_accepted(capture_app, monkeypatch, authenti
         assert resp.status_code == 200, resp.get_json()
 
         # Verify the command queued for the SDR service carries 30 s of
-        # samples at the receiver's configured sample rate, NOT 1 s.
+        # samples at the rate the capture tap actually runs at, NOT 1 s.
         assert "sdr:commands" in fake_redis.lists
         command = json.loads(fake_redis.lists["sdr:commands"][0])
         assert command["action"] == "capture_iq"
-        # receiver.sample_rate is 2.4 MHz in the test fixture so num_samples
-        # is 30 * 2_400_000 = 72_000_000 (passed straight through; the
-        # service-side cap clamps it).
-        assert command["num_samples"] == 30 * 2_400_000
+        # The tap fires after early decimation, so the duration converts at
+        # the *effective* rate. receiver.sample_rate is 2.4 MHz in the
+        # fixture, which decimates by 9 to 266_666 Hz. Converting at the
+        # configured 2.4 MHz instead asked for 9x too many samples, which
+        # would have made this "30 s" capture run for 270 s and blow the
+        # service's wait budget.
+        expected_rate = effective_sample_rate(2_400_000)
+        assert expected_rate == 266_666
+        assert command["num_samples"] == int(30 * expected_rate)
 
 
 def test_capture_iq_clamps_excessive_duration(capture_app, monkeypatch, authenticated_user):
@@ -434,9 +435,10 @@ def test_capture_iq_clamps_excessive_duration(capture_app, monkeypatch, authenti
         )
         assert resp.status_code == 200, resp.get_json()
         command = json.loads(fake_redis.lists["sdr:commands"][0])
-        # Should have been clamped to the max duration * sample rate.
+        # Should have been clamped to the max duration * effective rate.
         assert command["num_samples"] == int(
-            radio_deps.RADIO_CAPTURE_MAX_DURATION_SEC * 2_400_000
+            radio_deps.RADIO_CAPTURE_MAX_DURATION_SEC
+            * effective_sample_rate(2_400_000)
         )
 
 

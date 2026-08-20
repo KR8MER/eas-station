@@ -123,6 +123,13 @@ class TowerLightConfig:
     test_color: str = "cyan"           # Test broadcasts (RWT/RMT/NPT/DMO)
     fault_enabled: bool = True         # Indicate Redis / alert-pipeline loss
     fault_color: str = "magenta"       # System fault
+    # Dead air: a monitored source has gone silent for longer than its
+    # configured hold-off. Ranks with the other faults (above any alert
+    # indication) because a silent monitored source means the station is
+    # not monitoring anything -- the one failure no other indicator shows.
+    silence_enabled: bool = True
+    silence_color: str = "magenta"     # Dead air on a monitored source
+    silence_buzzer: bool = False       # Sound the tower buzzer on dead air
     # Pending Alerts: alerts held in the gated-alerts review queue
     gate_pending_enabled: bool = True  # Indicate alerts awaiting operator review
     gate_pending_color: str = "blue"   # Pending Alerts queue non-empty

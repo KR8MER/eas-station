@@ -241,11 +241,6 @@ def _add_receiver():
         enable_rbds=True,
         enabled=True,
         auto_start=False,
-        squelch_enabled=False,
-        squelch_threshold_db=-60.0,
-        squelch_open_ms=100,
-        squelch_close_ms=400,
-        squelch_alarm=False,
     )
     db.session.add(receiver)
     db.session.commit()

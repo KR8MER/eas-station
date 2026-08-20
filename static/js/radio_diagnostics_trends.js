@@ -191,6 +191,9 @@
     var trendsCharts = {};              // "receiverId:metric" -> Chart instance
     var trendsActiveReceivers = {};     // receiverId -> true
     var trendsCurrentWindow = {};       // receiverId -> window string
+    var trendsRequestGen = {};          // receiverId -> generation counter, guards against
+                                         // a slow fetch resolving after a newer rebuild/window
+                                         // change and painting stale samples over fresh ones
 
     function trendsFindContainer(receiverId) {
         return document.querySelector('.trends-container[data-trends-for="' + CSS.escape(receiverId) + '"]');
@@ -223,10 +226,14 @@
                 '<span class="small text-muted" data-trends-status="' + receiverId + '">Loading…</span>' +
             '</div>' +
             '<div class="row g-2">' +
-                '<div class="col-md-6"><div class="small text-muted mb-1">Signal Strength</div><canvas data-trends-chart="signal" data-receiver-id="' + receiverId + '" height="120"></canvas></div>' +
-                '<div class="col-md-6"><div class="small text-muted mb-1">Lock %</div><canvas data-trends-chart="locked" data-receiver-id="' + receiverId + '" height="120"></canvas></div>' +
-                '<div class="col-md-6"><div class="small text-muted mb-1">Sample Rate Ratio (effective / configured)</div><canvas data-trends-chart="rate" data-receiver-id="' + receiverId + '" height="120"></canvas></div>' +
-                '<div class="col-md-6"><div class="small text-muted mb-1">Buffer Overflow / Underflow</div><canvas data-trends-chart="buffer" data-receiver-id="' + receiverId + '" height="120"></canvas></div>' +
+                '<div class="col-md-6"><div class="small text-muted mb-1">Signal Strength</div>' +
+                    '<div style="position:relative;height:220px;"><canvas data-trends-chart="signal" data-receiver-id="' + receiverId + '"></canvas></div></div>' +
+                '<div class="col-md-6"><div class="small text-muted mb-1">Lock %</div>' +
+                    '<div style="position:relative;height:220px;"><canvas data-trends-chart="locked" data-receiver-id="' + receiverId + '"></canvas></div></div>' +
+                '<div class="col-md-6"><div class="small text-muted mb-1">Sample Rate Ratio (effective / configured)</div>' +
+                    '<div style="position:relative;height:220px;"><canvas data-trends-chart="rate" data-receiver-id="' + receiverId + '"></canvas></div></div>' +
+                '<div class="col-md-6"><div class="small text-muted mb-1">Buffer Overflow / Underflow</div>' +
+                    '<div style="position:relative;height:220px;"><canvas data-trends-chart="buffer" data-receiver-id="' + receiverId + '"></canvas></div></div>' +
             '</div>';
         container.style.display = '';
     }
@@ -288,11 +295,16 @@
         var statusEl = container.querySelector('[data-trends-status="' + receiverId + '"]');
         if (statusEl) statusEl.textContent = 'Loading…';
 
+        var myGen = (trendsRequestGen[receiverId] || 0) + 1;
+        trendsRequestGen[receiverId] = myGen;
+        var isCurrent = function () { return trendsRequestGen[receiverId] === myGen; };
+
         fetch(TRENDS_ENDPOINT + encodeURIComponent(receiverId) + '?window=' + encodeURIComponent(win), { cache: 'no-store' })
             .then(function (resp) {
                 return resp.json().then(function (data) { return { ok: resp.ok, status: resp.status, data: data }; });
             })
             .then(function (result) {
+                if (!isCurrent()) return; // superseded by a newer rebuild/window change
                 if (!result.ok) {
                     if (statusEl) statusEl.textContent = 'Error: ' + (result.data.error || ('HTTP ' + result.status));
                     return;
@@ -323,6 +335,7 @@
                 ], { min: 0 });
             })
             .catch(function (err) {
+                if (!isCurrent()) return; // superseded by a newer rebuild/window change
                 if (statusEl) statusEl.textContent = 'Fetch error: ' + err.message;
             });
     }
@@ -349,6 +362,45 @@
         if (label) label.textContent = 'Historical Trends';
     }
 
+    // -- Survive the receiver cards' WebSocket-driven auto-refresh --------
+    // `renderReceivers()` in radio_diagnostics.html replaces the entire
+    // receiver-card tree (roughly once a second) with freshly-rendered,
+    // empty `.trends-container` placeholders -- server markup has no notion
+    // of "this panel was open". A Chart.js canvas's drawn pixels are never
+    // serialized into HTML, so any attempt to clone-and-restore the old
+    // panel markup across that replacement only ever produces a blank,
+    // disconnected canvas frozen at whatever width it happened to have at
+    // capture time (the "chart disappears almost immediately" / "isn't wide
+    // enough" symptoms). Instead, watch the receivers container for its
+    // children being replaced and, for any receiver whose trends panel was
+    // left open, rebuild it from scratch against the fresh DOM.
+    function trendsRebuildActive() {
+        Object.keys(trendsActiveReceivers).forEach(function (receiverId) {
+            var container = trendsFindContainer(receiverId);
+            if (!container) {
+                // The receiver itself is gone (removed/renamed) -- drop its
+                // state instead of leaving a dangling active flag and
+                // detached Chart.js instances behind.
+                trendsDestroyCharts(receiverId);
+                delete trendsActiveReceivers[receiverId];
+                delete trendsRequestGen[receiverId];
+                return;
+            }
+            if (container.firstChild) return; // not yet clobbered by this refresh
+            trendsBuildPanel(container, receiverId);
+            trendsFetchAndRender(receiverId);
+            var label = trendsFindLabel(receiverId);
+            if (label) label.textContent = 'Hide Historical Trends';
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var receiversContainer = document.getElementById('receiversContainer');
+        if (receiversContainer && window.MutationObserver) {
+            new MutationObserver(trendsRebuildActive).observe(receiversContainer, { childList: true });
+        }
+    });
+
     document.addEventListener('click', function (event) {
         var btn = event.target.closest('button[data-action="historical-trends"]');
         if (!btn) return;
@@ -361,10 +413,10 @@
         }
     });
 
-    // Delegated so it survives the periodic innerHTML-based panel restore
-    // (the "preservedPanels" mechanism in radio_diagnostics.html's inline
-    // script clones panel HTML across re-renders; a directly-attached
-    // listener would not survive that, a document-level delegated one does).
+    // Delegated so it keeps working after trendsRebuildActive() rebuilds the
+    // panel's <select> as a brand-new element every refresh cycle -- a
+    // directly-attached listener would not survive that, a document-level
+    // delegated one does.
     document.addEventListener('change', function (event) {
         var select = event.target.closest('select[data-trends-window]');
         if (!select) return;

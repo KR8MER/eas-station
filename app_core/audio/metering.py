@@ -151,17 +151,36 @@ class SilenceDetector:
         self,
         silence_threshold_db: float = -60.0,
         silence_duration_seconds: float = 5.0,
-        check_interval_seconds: float = 0.1
+        check_interval_seconds: float = 0.1,
+        assume_prior_signal: bool = False,
     ):
+        """
+        Args:
+            silence_threshold_db: RMS below this counts as silence, unless
+                the caller supplies an explicit verdict to
+                :meth:`process_audio_level`.
+            silence_duration_seconds: How long silence must hold before it
+                is reported.
+            check_interval_seconds: Advisory poll interval for callers.
+            assume_prior_signal: Start as though a signal had just been
+                seen. Without this, a detector whose very first chunk is
+                silent reports silence *immediately*, bypassing the
+                duration debounce entirely -- which on a restart means a
+                source that simply has not produced its first audio yet
+                raises a spurious alarm. Alarm consumers (see
+                :class:`app_core.audio.silence.SilenceMonitor`) set this so
+                the duration always applies.
+        """
         self.silence_threshold_db = silence_threshold_db
         self.silence_duration_seconds = silence_duration_seconds
         self.check_interval_seconds = check_interval_seconds
-        
+
         # State tracking
         self._is_silent = False
         self._silence_start_time: Optional[float] = None
         self._last_signal_time = time.time()
-        self._ever_had_signal = False
+        self._assume_prior_signal = bool(assume_prior_signal)
+        self._ever_had_signal = bool(assume_prior_signal)
         
         # Alerting
         self._alerts: List[AudioAlert] = []
@@ -180,13 +199,44 @@ class SilenceDetector:
             if callback in self._alert_callbacks:
                 self._alert_callbacks.remove(callback)
 
-    def process_audio_level(self, level_db: float, source_name: str = "unknown") -> None:
-        """Process audio level and detect silence."""
+    def process_audio_level(
+        self,
+        level_db: float,
+        source_name: str = "unknown",
+        is_silent_override: Optional[bool] = None,
+        detail: Optional[str] = None,
+    ) -> None:
+        """Process audio level and detect silence.
+
+        Args:
+            level_db: RMS level of this chunk in dBFS.
+            source_name: Source label carried on any alert raised.
+            is_silent_override: Supply the silence verdict explicitly
+                instead of deriving it from ``level_db``. This exists for
+                sources where level alone cannot decide -- an SDR tuned to
+                a station that went off the air emits full-scale hiss, so
+                a level test reports "audio present" while the operator
+                hears static. :class:`app_core.audio.silence.SilenceMonitor`
+                classifies on spectral flatness as well and passes the
+                result here, so the duration debounce, the recovery edge
+                and the alert fan-out stay in this one implementation
+                rather than being reinvented alongside it.
+            detail: Human-readable reason used in the alert message in
+                place of the bare level, e.g. "open carrier / no
+                modulation (-6.0 dBFS, flatness 0.56)".
+        """
         with self._lock:
             current_time = time.time()
 
+            has_signal = (
+                level_db > self.silence_threshold_db
+                if is_silent_override is None
+                else not is_silent_override
+            )
+            described = detail or f"{level_db:.1f} dBFS"
+
             # Check if audio is above silence threshold
-            if level_db > self.silence_threshold_db:
+            if has_signal:
                 # We have signal
                 self._last_signal_time = current_time
                 self._ever_had_signal = True
@@ -197,7 +247,7 @@ class SilenceDetector:
                     self._create_alert(
                         AlertLevel.INFO,
                         source_name,
-                        f"Signal restored ({level_db:.1f} dBFS)",
+                        f"Signal restored ({described})",
                         level_db,
                         self.silence_threshold_db
                     )
@@ -213,7 +263,7 @@ class SilenceDetector:
                     self._create_alert(
                         AlertLevel.WARNING,
                         source_name,
-                        f"Silence detected (no prior signal) ({level_db:.1f} dBFS)",
+                        f"Silence detected (no prior signal) ({described})",
                         level_db,
                         self.silence_threshold_db
                     )
@@ -234,7 +284,7 @@ class SilenceDetector:
                         self._create_alert(
                             AlertLevel.WARNING,
                             source_name,
-                            f"Silence detected for {silence_duration:.1f}s ({level_db:.1f} dBFS)",
+                            f"Silence detected for {silence_duration:.1f}s ({described})",
                             level_db,
                             self.silence_threshold_db
                         )
@@ -304,6 +354,7 @@ class SilenceDetector:
             self._is_silent = False
             self._silence_start_time = None
             self._last_signal_time = time.time()
+            self._ever_had_signal = self._assume_prior_signal
             self._alerts.clear()
 
 

@@ -36,7 +36,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from .broadcast_queue import BroadcastQueue
@@ -88,6 +88,28 @@ class AudioSourceConfig:
     buffer_size: int = 4096
     silence_threshold_db: float = -60.0
     silence_duration_seconds: float = 5.0
+    # NOTE: `silence_threshold_db`/`silence_duration_seconds` above are
+    # UNRELATED to dead-air alarming below: they drive the instantaneous
+    # `AudioMetrics.silence_detected` flag, which has no debounce (it flips
+    # on every pause between words) and exists only as a statistic for the
+    # analytics aggregator.
+    #
+    # dead_air_* is the debounced alarm policy (tower light / rack buzzer)
+    # -- per source, not station-wide. It used to be one shared
+    # HardwareSettings row applied identically to every source, which
+    # cannot express "alarm on silence for this source, never for that
+    # one." That doesn't fit every source: a continuous broadcast monitor
+    # going silent is a real fault, but a state-relay or alert-only feed
+    # is *supposed* to be silent except when relaying an actual alert, and
+    # applying the same policy to both means either constant false alarms
+    # or disabling the feature everywhere. See
+    # eas_monitoring_service.py::_install_dead_air_criteria() for where
+    # this turns into a live app_core.audio.silence.SilenceCriteria.
+    dead_air_enabled: bool = False
+    dead_air_level_threshold_db: float = -65.0
+    dead_air_detect_open_carrier: bool = True
+    dead_air_flatness_threshold_pct: int = 25
+    dead_air_duration_seconds: float = 20.0
     device_params: Dict = None
 
     def __post_init__(self):
@@ -193,6 +215,14 @@ class AudioSourceAdapter(ABC):
         
         self._last_metrics_update = 0.0
         self._start_time = 0.0
+
+        # Debounced dead-air monitor. Owns its own thresholds so it can be
+        # reconfigured at runtime from the admin UI without restarting the
+        # source. `silence_detected` on AudioMetrics stays exactly as it
+        # was -- an instantaneous per-chunk flag feeding the analytics
+        # rate -- so nothing downstream of it changes behaviour.
+        from .silence import SilenceMonitor
+        self._silence_monitor = SilenceMonitor(config.name)
         # Optional callback(source_name: str, updates: dict) invoked on each
         # ICY metadata change.  Set by the monitoring service to persist
         # now-playing events to the database.
@@ -587,6 +617,24 @@ class AudioSourceAdapter(ABC):
         current_metadata['source_restart_count'] = self._restart_count
         current_metadata['source_last_error'] = self._last_error
         current_metadata['source_start_time'] = self._start_time
+        try:
+            current_metadata['dead_air'] = self._silence_monitor.snapshot()
+        except Exception:
+            current_metadata['dead_air'] = None
+
+        # Feed the debounced dead-air monitor. It gets the same samples the
+        # levels were measured from, because the spectral axis needs the
+        # waveform -- a level alone cannot tell programme audio from the
+        # full-scale hiss an SDR emits when its station goes off the air.
+        try:
+            self._silence_monitor.process(
+                samples_for_metrics if len(audio_chunk) > 0 else None,
+                rms_db if np.isfinite(rms_db) else -120.0,
+            )
+        except Exception as exc:
+            logger.debug(
+                "Dead-air monitor failed for %s: %s", self.config.name, exc
+            )
 
         # Update metrics
         # Use broadcast queue utilization instead of legacy queue for accurate streaming health
@@ -873,6 +921,61 @@ class AudioIngestController:
         if source is not None:
             source.stop()
             logger.info(f"Removed audio source: {name}")
+
+    def update_source(self, name: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply a live config update to a running source.
+
+        This is the separated-architecture counterpart of the field-by-field
+        application ``webapp/admin/audio_ingest/routes_sources_write.py``'s
+        PATCH route already does for integrated mode -- reached here over
+        Redis via ``redis_commands.py``'s ``source_update`` command instead
+        of a direct in-process attribute set, so a change made through the
+        webapp takes effect on the audio-service's running adapter without a
+        restart.
+        """
+        adapter = self.get_source(name)
+        if adapter is None:
+            return {'success': False, 'message': f'Source {name} not found'}
+
+        cfg = adapter.config
+        dead_air_changed = False
+
+        if 'enabled' in updates:
+            cfg.enabled = bool(updates['enabled'])
+        if 'priority' in updates:
+            cfg.priority = int(updates['priority'])
+        if 'silence_threshold_db' in updates:
+            cfg.silence_threshold_db = float(updates['silence_threshold_db'])
+        if 'silence_duration_seconds' in updates:
+            cfg.silence_duration_seconds = float(updates['silence_duration_seconds'])
+        if 'dead_air_enabled' in updates:
+            cfg.dead_air_enabled = bool(updates['dead_air_enabled'])
+            dead_air_changed = True
+        if 'dead_air_level_threshold_db' in updates:
+            cfg.dead_air_level_threshold_db = float(updates['dead_air_level_threshold_db'])
+            dead_air_changed = True
+        if 'dead_air_detect_open_carrier' in updates:
+            cfg.dead_air_detect_open_carrier = bool(updates['dead_air_detect_open_carrier'])
+            dead_air_changed = True
+        if 'dead_air_flatness_threshold_pct' in updates:
+            cfg.dead_air_flatness_threshold_pct = int(updates['dead_air_flatness_threshold_pct'])
+            dead_air_changed = True
+        if 'dead_air_duration_seconds' in updates:
+            cfg.dead_air_duration_seconds = float(updates['dead_air_duration_seconds'])
+            dead_air_changed = True
+        if 'device_params' in updates and isinstance(updates['device_params'], dict):
+            if cfg.device_params is None:
+                cfg.device_params = {}
+            cfg.device_params.update(updates['device_params'])
+
+        if dead_air_changed:
+            monitor = getattr(adapter, '_silence_monitor', None)
+            if monitor is not None:
+                from app_core.audio.silence import criteria_from_source_config
+                monitor.update_criteria(criteria_from_source_config(cfg))
+
+        logger.info(f"Updated audio source {name} via update_source ({sorted(updates.keys())})")
+        return {'success': True, 'message': f'Updated source {name}'}
 
     def start_source(self, name: str) -> bool:
         """Start a specific audio source (blocking work runs outside the lock)."""

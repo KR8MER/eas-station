@@ -36,16 +36,8 @@ if str(ROOT) not in sys.path:
 
 from app_core.extensions import db
 from app_core.models import AudioSourceConfigDB, RadioReceiver
-from app_core.radio import ensure_radio_squelch_columns
 
 
-_EXPECTED_SQUELCH_COLUMNS: tuple[str, ...] = (
-    "squelch_enabled",
-    "squelch_threshold_db",
-    "squelch_open_ms",
-    "squelch_close_ms",
-    "squelch_alarm",
-)
 from app_core.audio.ingest import AudioSourceStatus
 from webapp.admin import audio_ingest as audio_admin
 from webapp.admin.audio_ingest import controller as audio_controller_mod
@@ -113,58 +105,9 @@ def _create_receiver(**overrides) -> RadioReceiver:
         "stereo_enabled": False,
         "deemphasis_us": 75.0,
         "enable_rbds": False,
-        "squelch_enabled": True,
-        "squelch_threshold_db": -58.5,
-        "squelch_open_ms": 180,
-        "squelch_close_ms": 620,
-        "squelch_alarm": True,
     }
     data.update(overrides)
     return RadioReceiver(**data)
-
-
-def test_ensure_radio_squelch_columns_backfills_missing_columns(audio_app, authenticated_user):
-    with audio_app.app_context():
-        engine = db.engine
-
-        # Replace the automatically created table with a legacy schema lacking squelch fields
-        RadioReceiver.__table__.drop(bind=engine, checkfirst=True)
-        db.session.execute(
-            text(
-                """
-                CREATE TABLE radio_receivers (
-                    id INTEGER PRIMARY KEY,
-                    identifier VARCHAR(64) NOT NULL,
-                    display_name VARCHAR(128) NOT NULL,
-                    driver VARCHAR(64) NOT NULL,
-                    frequency_hz FLOAT NOT NULL,
-                    sample_rate INTEGER NOT NULL,
-                    gain FLOAT,
-                    channel INTEGER,
-                    serial VARCHAR(128),
-                    auto_start BOOLEAN NOT NULL DEFAULT 1,
-                    enabled BOOLEAN NOT NULL DEFAULT 1,
-                    notes TEXT,
-                    modulation_type VARCHAR(16) NOT NULL DEFAULT 'IQ',
-                    audio_output BOOLEAN NOT NULL DEFAULT 0,
-                    stereo_enabled BOOLEAN NOT NULL DEFAULT 1,
-                    deemphasis_us FLOAT NOT NULL DEFAULT 75.0,
-                    enable_rbds BOOLEAN NOT NULL DEFAULT 0,
-                    created_at DATETIME,
-                    updated_at DATETIME
-                )
-                """
-            )
-        )
-        db.session.commit()
-
-        logger = logging.getLogger("radio-test")
-        assert ensure_radio_squelch_columns(logger) is True
-
-        inspector = inspect(engine)
-        column_names = {column["name"] for column in inspector.get_columns("radio_receivers")}
-
-        assert set(_EXPECTED_SQUELCH_COLUMNS).issubset(column_names)
 
 
 def test_ensure_sdr_audio_monitor_source_creates_config(audio_app, authenticated_user):
@@ -188,11 +131,6 @@ def test_ensure_sdr_audio_monitor_source_creates_config(audio_app, authenticated
         assert config.config_params["device_params"]["receiver_id"] == "WX42"
         assert config.config_params["device_params"]["iq_sample_rate"] == 2_400_000
         assert config.description.startswith("SDR monitor for Weather 42")
-        assert config.config_params["squelch_enabled"] is True
-        assert config.config_params["squelch_threshold_db"] == pytest.approx(-58.5)
-        assert config.config_params["squelch_open_ms"] == 180
-        assert config.config_params["squelch_close_ms"] == 620
-        assert config.config_params["carrier_alarm_enabled"] is True
 
         controller = audio_admin._get_audio_controller()
         assert "sdr-wx42" in controller._sources
@@ -200,8 +138,6 @@ def test_ensure_sdr_audio_monitor_source_creates_config(audio_app, authenticated
         assert adapter.config.sample_rate == 32000
         assert adapter.metrics.metadata["receiver_identifier"] == "WX42"
         assert adapter.metrics.metadata["icecast_mount"] == "/sdr-wx42"
-        assert adapter.metrics.metadata["squelch_enabled"] is True
-        assert adapter.metrics.metadata["carrier_alarm_enabled"] is True
 
 
 def test_remove_radio_managed_audio_source_cleans_up(audio_app, authenticated_user):
@@ -465,7 +401,7 @@ def test_ensure_sdr_audio_monitor_source_preserves_archive_settings(audio_app, a
 
         # An upgrade restarts the services, which re-syncs every receiver — and
         # this time the receiver's own settings changed too.
-        receiver.squelch_threshold_db = -42.0
+        receiver.frequency_hz = 99_500_000.0
         db.session.commit()
         audio_admin.ensure_sdr_audio_monitor_source(receiver, start_immediately=False, commit=True)
 
@@ -476,4 +412,6 @@ def test_ensure_sdr_audio_monitor_source_preserves_archive_settings(audio_app, a
         assert config.config_params["archive"]["bitrate"] == 192
 
         # ...while the receiver-derived keys still track the receiver.
-        assert config.config_params["squelch_threshold_db"] == pytest.approx(-42.0)
+        assert config.config_params["device_params"][
+            "receiver_frequency_hz"
+        ] == pytest.approx(99_500_000.0)

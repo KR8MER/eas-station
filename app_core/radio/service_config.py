@@ -64,11 +64,6 @@ def get_service_config(service_type: str, frequency_mhz: float) -> Dict:
             'deemphasis_us': 75.0,  # North America standard
             'enable_rbds': False,  # NOAA doesn't use RBDS
             'bandwidth': 25000,  # 25 kHz bandwidth
-            'squelch_enabled': True,
-            'squelch_threshold_db': -55.0,
-            'squelch_open_ms': 120,
-            'squelch_close_ms': 600,
-            'squelch_alarm': True,
         }
 
     elif service_type == 'FM':
@@ -80,11 +75,6 @@ def get_service_config(service_type: str, frequency_mhz: float) -> Dict:
             'deemphasis_us': 75.0,  # North America (50 for Europe/Asia)
             'enable_rbds': True,  # Enable RBDS decoding
             'bandwidth': 200000,  # 200 kHz bandwidth
-            'squelch_enabled': True,
-            'squelch_threshold_db': -60.0,
-            'squelch_open_ms': 200,
-            'squelch_close_ms': 900,
-            'squelch_alarm': False,
         }
 
     elif service_type == 'AM':
@@ -96,11 +86,6 @@ def get_service_config(service_type: str, frequency_mhz: float) -> Dict:
             'deemphasis_us': 0.0,  # AM doesn't use de-emphasis
             'enable_rbds': False,
             'bandwidth': 10000,  # 10 kHz bandwidth
-            'squelch_enabled': True,
-            'squelch_threshold_db': -65.0,
-            'squelch_open_ms': 180,
-            'squelch_close_ms': 800,
-            'squelch_alarm': True,
         }
 
     else:

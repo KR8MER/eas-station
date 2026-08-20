@@ -8,6 +8,613 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.176.0] - 2026-08-20 - Show originating equipment on the live received-alert page
+
+### Added
+- **The received-alert detail page now shows which ENDEC model produced
+  the SAME transmission.** `app_utils/eas_demod.py`'s `detect_endec_mode()`
+  (a port of EAS-Tools' encoder-fingerprinting method, voting on
+  terminator-byte signatures, a leading-null quirk, and inter-burst gap
+  timing) already computed and stored this for every decoded alert — live
+  and manually uploaded — but the labeled "Originating Equipment" badge
+  only ever rendered on the manual **Audio Decoder** upload tool. On the
+  actual **Received Alerts** detail page the same value sat unlabeled
+  inside a raw JSON dump. The badge is now on both pages, sharing one
+  definition (`templates/components/endec_badge.html`) so the labels can't
+  drift apart the way they would have as two copies.
+- Documented in `templates/help.html`'s Received Alerts section.
+
+## [2.175.4] - 2026-08-20 - Fix update.sh silently un-stamping alembic_version on every run
+
+### Fixed
+- **`scripts/database/recover_split_location_settings.py` was rewinding
+  `alembic_version` back to `20260506_split_location_settings` on every
+  single run of `update.sh`, no matter how far ahead the database actually
+  was.** The script exists to heal one specific historical problem: a
+  database where the May 6th `20260506_split_location_settings` migration
+  got half-applied by an old `db.create_all()` fallback, leaving the old
+  `location_settings` columns dropped but `alembic_version` never advanced.
+  Its detection was "the old columns are gone, and `alembic_version` isn't
+  literally equal to `20260506_split_location_settings`" -- but that
+  condition is *also* true of a database that has moved on dozens of
+  migrations past that point, since those columns were dropped once, by
+  that migration, and stay dropped forever after. Every update stamped the
+  version backward regardless, discovered live on this station: `alembic
+  current` reported `20260506_split_location_settings` immediately after
+  an update that had just correctly carried the database to
+  `20260818_dead_air_per_source`, 47 migrations later.
+- The actual schema was never affected -- confirmed directly against
+  Postgres that every table/column from the 47 "missing" migrations
+  (`gated_alerts`, `admin_users.mfa_last_totp_counter`,
+  `hardware_settings.dead_air_buzzer_enabled`, etc.) was genuinely present.
+  Only the version bookkeeping was wrong, which is still a real hazard: it
+  misleads anyone reading `alembic current`, and an `alembic upgrade head`
+  run while mis-stamped would attempt to replay every migration since May.
+- Fixed by walking the actual Alembic migration graph
+  (`ScriptDirectory.walk_revisions`) to ask "is the current revision this
+  target, or downstream of it" instead of a plain string comparison. Also
+  fixed an adjacent latent bug in the same stamp step: it used a bare
+  `UPDATE alembic_version SET version_num = ...` with no `INSERT` fallback,
+  which silently does nothing on a database whose `alembic_version` table
+  exists but has no row yet.
+- Live database restamped to the correct head (`20260818_dead_air_per_source`).
+
+## [2.175.3] - 2026-08-19 - Fix RBDS History never having any data, and its unreadable chart labels
+
+### Fixed
+- **RBDS History always showed "No stored RBDS snapshots in this window
+  yet.", no matter how long a station had been running.** The history API
+  (`/api/audio/sources/<name>/rbds/history`) and the audio-health analytics
+  aggregator both read the `audio_source_metrics` table on the documented
+  assumption that the audio service persists a snapshot roughly once a
+  second -- but nothing in production ever wrote to that table; only tests
+  instantiated `AudioSourceMetrics` directly. `eas_monitoring_service.py`'s
+  main loop already publishes live metrics to Redis at 4 Hz for the VU
+  meters/RSSI/RBDS UI; it now also snapshots each running source into
+  `audio_source_metrics` at ~1 Hz, on its own background thread so a slow
+  commit can never stall that 4 Hz loop. Covered by
+  `tests/test_audio_metrics_snapshot_writer.py`.
+- **The RBDS History chart's time-axis labels rendered at a steep diagonal
+  and were hard to read**, especially on a phone. The default
+  `toLocaleTimeString()` label (e.g. "10:09:34 AM") was too wide for
+  Chart.js to keep horizontal at the configured tick count, so it fell back
+  to auto-rotation. Axis labels now drop seconds ("10:09 AM"), the chart
+  requests `maxRotation: 0` so Chart.js skips ticks rather than tilting
+  them, and full-precision timestamps (with seconds) still appear in the
+  hover tooltip title.
+
+## [2.175.2] - 2026-08-19 - Fix modals with a form wrapper not scrolling on mobile
+
+### Fixed
+- **The Edit Audio Source modal (and every other scrollable modal that wraps
+  its header/body/footer in a `<form>`, e.g. Add Audio Source, Radio
+  Receiver, Stream Profile) was un-scrollable on mobile, cutting the form
+  off partway through with no way to reach the fields below or the Save
+  button.** Bootstrap's scrollable-modal CSS gives `.modal-body` a bounded,
+  scrollable height via `flex: 1 1 auto` -- but that only works when
+  `.modal-body` is a direct child of the flex container `.modal-content`.
+  These modals put a `<form>` in between so one submit handler can collect
+  every field, and a plain `<form>` is not a flex container, so the flex
+  chain broke silently: `.modal-body`'s `overflow-y: auto` had no bounded
+  height to scroll within, and `.modal-content`'s own `overflow: hidden`
+  just clipped the tail of the form instead. The Radio Receiver modal had
+  been individually patched around this with a hardcoded inline
+  `max-height: calc(90vh - 130px)` rather than the root cause being fixed.
+  `.modal-dialog-scrollable .modal-content > form` is now itself a flex
+  column filling the bounded height, so header/body/footer behave exactly
+  as if there were no form wrapper at all -- fixing every modal with this
+  pattern at once.
+
+## [2.175.1] - 2026-08-18 - Fix waterfall/scope zoom controls going inert after a refresh
+
+### Fixed
+- **The Live Waterfall's and Spectrum Scope's zoom controls looked normal
+  but did nothing when clicked.** `updateReceiverDetails()`'s periodic
+  re-render (WebSocket-driven, roughly every 1s) preserved
+  `.waterfall-container` and `.spectrum-scope-container` across the
+  refresh by capturing their `innerHTML` and restoring it afterward --
+  but `innerHTML` serialization carries neither a `<canvas>`'s rendered
+  bitmap nor any `addEventListener` bindings on cloned elements. The
+  restored zoom buttons and canvas gesture handlers were visually
+  identical but completely inert clones. This is the exact same defect
+  class that made the Historical Trends charts "disappear almost
+  immediately" (fixed for trends in #2414 by watching for DOM
+  replacement and rebuilding instead of innerHTML-restoring), just never
+  generalized to the waterfall/scope panels once they grew live zoom/pan
+  gestures. Removed both from the innerHTML-preserve mechanism entirely
+  -- `.diagnostic-container` (plain text/tables, no canvas, no listeners)
+  is the only panel type that actually needs it. The waterfall and scope
+  already detect their own DOM replacement and rebuild themselves with
+  fresh listeners every 500ms via `liveSpectrumTick()`, so nothing else
+  had to change.
+
+## [2.175.0] - 2026-08-18 - Make dead-air monitoring per-source
+
+### Changed
+- **Dead-air (silence) alarming moved from one station-wide policy to a
+  per-source setting.** Shipped in 2.174.0 as a single enabled flag and
+  threshold set applied identically to every monitored source, it could not
+  express "alarm on silence for this continuous broadcast monitor, but
+  never for that state-relay source that's supposed to be silent except
+  when relaying an actual alert." Confirmed live on this station: a
+  state-relay source (`ERN-LUC`) sat in a false dead-air alarm for 39
+  minutes straight because the station-wide policy had no way to exempt it
+  without also disabling alarming for every source that genuinely needed
+  it.
+- Detection policy (enabled, hold-off, silence level, open-carrier
+  sensitivity) is now configured per source in that source's Add/Edit
+  dialog on the Audio Sources page, stored alongside the source's other
+  settings. The station-wide "Dead Air Monitoring" settings card on that
+  page is now a live status readout only.
+- The physical output side (rack buzzer GPIO pin, tower-light colour) is
+  unchanged: one buzzer and one light for the whole station, configured on
+  the Hardware page, same as before.
+- `/api/audio/dead-air/settings` (GET/POST) is removed; `/api/audio/dead-air/status`
+  and `/api/audio/dead-air/acknowledge` are unchanged.
+- Database: the five station-wide detection columns
+  (`dead_air_enabled`, `dead_air_level_threshold_db`,
+  `dead_air_detect_open_carrier`, `dead_air_flatness_threshold_pct`,
+  `dead_air_duration_seconds`) are dropped from `hardware_settings`; the
+  output columns (`dead_air_buzzer_enabled`, `dead_air_buzzer_gpio_pin`,
+  `tower_light_silence_*`) are untouched.
+- Fixed 7 failing tests in `tests/test_gpio_alert_indicators.py` that read
+  this station's live `eas:dead_air` Redis key instead of a mocked one, so
+  they passed or failed based on whatever this station's real alarm state
+  happened to be at test time.
+
+## [2.174.0] - 2026-08-18 - Retire the carrier-squelch feature
+
+### Removed
+- **"Carrier Squelch" is gone from receivers.** It never did what its name
+  and help text promised. `_apply_squelch()` gated on the RMS of the
+  *demodulated audio*, not on carrier presence, so the gate was inverted
+  against its own purpose. Measured against the real code path at the
+  panel's own defaults (threshold -60 dBFS, open 200 ms, hang 900 ms):
+
+  | Input | Level | Squelch |
+  |---|---|---|
+  | Off air, open-carrier hiss | -6 dBFS | **passed through** |
+  | Off air, hiss | -20 dBFS | **passed through** |
+  | Off air, weak hiss | -40 dBFS | **passed through** |
+  | Truly dead feed (digital silence) | -240 dBFS | muted |
+
+  It muted silence -- a no-op, since muting silence produces silence -- and
+  passed hiss, the only thing worth muting. The panel promised to
+  "automatically mute white noise when the carrier drops", and that is
+  precisely the case it could not handle: an off-air FM receiver emits
+  unsquelched noise tens of dB above any usable threshold. Its only working
+  behaviour was therefore a no-op, so nothing functional is lost by
+  removing it.
+- **"Raise alarm on carrier loss" is gone with it.** It wrote a log line
+  and a metadata flag consumed by a single status badge; it drove no GPIO,
+  no tower light and no notification. Dead-air monitoring (added in
+  2.172.0) supersedes it properly: it detects the open-carrier case via
+  spectral flatness rather than level, debounces it, and drives the tower
+  light and rack alarm buzzer with an operator acknowledgement.
+- Removed across the stack: the audio-path gate, the five
+  `radio_receivers` columns (migration `20260818_retire_carrier_squelch`,
+  with a downgrade that recreates them), the `ensure_radio_squelch_columns`
+  startup backfill, the service-config presets, the API payload validation
+  and serialization, and the Edit Receiver form section with its status
+  badges.
+
+### Changed
+- The legacy instantaneous `silence_detected` metric took its thresholds
+  from the squelch columns, which was a coincidence of naming rather than a
+  real relationship. It now uses `AudioSourceConfig`'s own defaults
+  (-60 dBFS / 5 s), which are the same values the old fallbacks used, so
+  behaviour is unchanged. The debounced dead-air alarm was never affected --
+  it reads its own station-wide policy.
+- Renumbered the database-initialisation log steps in `app.py`, which were
+  already inconsistent before this change (twelve labelled `/15` and four
+  `/16`, against sixteen actual steps). They now read `[N/15]` across the
+  fifteen remaining steps.
+
+## [2.173.1] - 2026-08-18 - Code-review fixes for the dead-air relocation
+
+### Fixed
+- **Operator-supplied source names were interpolated into `innerHTML`.**
+  `AudioSource.name` is free text with no markup validation and reaches the
+  browser through Redis, so a source named with a tag would have executed
+  in another operator's session on both the Audio Health dashboard and the
+  Audio Ingestion page. Both renderers now build text nodes; verified in
+  Chromium with an `<img src=x onerror=...>` payload, which renders
+  literally and does not fire.
+- **An active dead-air alarm was invisible to the people meant to watch for
+  it.** The navigation registry gates the Audio Health dashboard on the
+  view-role trio (`alerts.view` / `receivers.view` / `logs.view`), but the
+  status endpoint required `system.configure` -- so a radio watcher could
+  open the dashboard while every poll returned 403 and the alarm banner
+  silently never appeared. Status is now readable at the dashboard's own
+  level; acknowledging stays restricted, and the response carries
+  `can_acknowledge` so the UI hides that control rather than offering a
+  button that would only fail.
+- **An acknowledgement could mute a later, unrelated outage.** The ack was
+  a bare flag with a 24 h TTL and could be written with no alarm active.
+  The publisher now mints an episode id when the alarm goes active and
+  drops it on recovery; the ack stores that id, the API refuses to
+  acknowledge when nothing is wrong or when the operator's page is showing
+  a stale episode, and the GPIO reader only stays silent for the episode
+  that was actually acknowledged.
+- **A failed settings load could silently rewrite stored thresholds.** The
+  numeric inputs are populated by JavaScript rather than server-rendered,
+  so an empty form posted `Number('') == 0`, which the API clamped to each
+  field's minimum -- turning a 20 s hold-off into 1 s. Saving is now
+  disabled until a load succeeds, with the failure surfaced in a dedicated
+  error line kept separate from the live alarm readout so the two cannot
+  overwrite each other.
+- Completed the page-exclusivity tests, which checked fewer fields than
+  they claimed: `dead_air_detect_open_carrier` was not asserted absent from
+  Hardware, and only the buzzer pin was asserted absent from Audio Sources.
+
+## [2.173.0] - 2026-08-18 - Move dead-air settings to where the operator looks for them
+
+### Changed
+- **Dead-air monitoring is no longer configured entirely on the Hardware
+  page.** It shipped there in 2.172.0 because that is where the tower-light
+  settings already were -- placement by implementation adjacency rather
+  than by task. Every threshold it exposes is an audio quantity (dBFS,
+  spectral flatness, a hold-off in seconds), and GPIO is only *today's*
+  output: an email or SMS notifier added later would have had to read its
+  detection policy out of the GPIO page. The controls now split along the
+  seam that actually matters, detection policy versus output device:
+
+  | Control | Page |
+  |---|---|
+  | Enable, hold-off, silence level, open-carrier sensitivity, detect-unmodulated-carrier | **Audio Ingestion** (`/admin/audio-sources`) |
+  | Rack buzzer enable + GPIO pin, tower-light colour / enable / buzzer | **Hardware Settings** (`/admin/hardware`) |
+  | Live alarm state + Acknowledge | **Audio Health dashboard** (`/audio/health/dashboard`) |
+
+  All three cross-link to each other. This is the same separation the
+  system already makes elsewhere: the alert pipeline decides what
+  constitutes an alert, and hardware settings only decide what colour the
+  light goes.
+- **Acknowledging moved off the settings form entirely.** It is an
+  operational act taken while an alarm is sounding, not configuration, so
+  it now lives on the Audio Health dashboard as a banner that appears only
+  when a source is actually silent -- naming the source, the reason and
+  how long it has been dead. Acknowledging still silences the buzzer while
+  leaving the indication up.
+- No migration: the settings columns are unchanged, only which page edits
+  them. Detection fields are no longer writable from the hardware form, so
+  the two pages cannot fight over the same values.
+
+### Added
+- `webapp/admin/audio_ingest/routes_dead_air.py` -- `GET`/`POST
+  /api/audio/dead-air/settings` for the detection policy, plus
+  `/api/audio/dead-air/status` and `/acknowledge`. The equivalents under
+  `/admin/hardware/dead-air/*` are removed rather than left as duplicates.
+- **Navigation entries for two pages that never had them.** Neither
+  `/admin/hardware` nor `/admin/audio-sources` was in
+  `webapp/navigation/registry.py` -- "Station Hardware" is a NavGroup
+  *label*, not a link, so the hardware settings page could only be reached
+  by typing the URL or via a card on the Admin panel. Both are now proper
+  `NavItem`s, which is the actual fix for "I could not find this".
+- Regression tests pinning the split: detection fields on the audio page
+  and absent from Hardware, output wiring the other way round,
+  Acknowledge only on the dashboard, all three pages cross-linking, and
+  both pages present in the navigation registry.
+
+## [2.172.1] - 2026-08-18 - Fix undefined logger in the dead-air buzzer pin resolver
+
+### Fixed
+- `_dead_air_buzzer_pin()` in `services/gpio/__main__.py` referenced a
+  module-level `logger` that does not exist -- that module resolves its
+  logger inline via `logging.getLogger(__name__)` at each call site. Caught
+  by `ruff` (F821) in CI. Not merely a lint nit: the `NameError` in the
+  `except` clause would have escaped uncaught, so a failure to read the
+  buzzer pin would have taken down GPIO service startup instead of falling
+  back to "no buzzer configured".
+
+## [2.172.0] - 2026-08-18 - Dead-air monitoring with tower light and rack alarm buzzer
+
+### Added
+- **Dead-air (silence) monitoring for monitored audio sources**, wired to
+  the USB tower light and an optional GPIO rack alarm buzzer. Every other
+  health check in the system watches *process* liveness -- service up,
+  Redis reachable, SDR locked, buffers healthy -- and all of those can be
+  green while the audio itself is dead. For an EAS monitoring station a
+  silently dead assigned source means monitoring has stopped, and until now
+  nothing said so.
+- **`app_core/audio/silence.py`** -- the detector. Classifies on two
+  independent axes, because a level threshold alone cannot do this job:
+  - *level*: RMS below a floor (default -65 dBFS) catches true digital
+    silence -- a stopped file, a muted feed, a dead stream.
+  - *flatness*: spectral flatness (Wiener entropy) catches an unmodulated
+    carrier. **This is the axis that matters for an SDR.** When an FM
+    station leaves the air the receiver does not go quiet, it outputs
+    unsquelched noise at full scale -- measured at -6 dBFS in testing,
+    which every level-only detector in this codebase reports as "audio
+    present". Noise spreads energy evenly and scores 0.40-0.57; speech and
+    music concentrate it into harmonics and score below 0.01. The default
+    threshold of 0.25 sits in a two-to-three order of magnitude gap, so it
+    is not a delicate calibration.
+- Timing reuses `SilenceDetector` in `app_core/audio/metering.py` rather
+  than adding a fourth parallel implementation. That class already had
+  duration debouncing, recovery-edge detection and an alert callback
+  fan-out, and had been dead code since it was written -- exported but
+  never instantiated outside tests. It now takes an optional explicit
+  verdict so the flatness axis can drive the same state machine.
+- **Tower light**: a new `silence` state in `resolve_tower_state()`,
+  ranked with the existing fault tier -- above every alert indication,
+  because an alert pipeline can look perfectly healthy while the source
+  feeding it is dead. Deliberately **not** suppressed by quiet hours: an
+  overnight schedule must never hide that monitoring has stopped.
+  Configurable colour, optional tower buzzer, and can be switched off.
+- **Rack alarm buzzer** on a configurable GPIO pin, with an operator
+  acknowledgement. This does not reuse the existing `_key_relay_on_edges`
+  path, which is edge-triggered off the broadcast marker and backed by a
+  300 s watchdog sized for an alert playout; dead air is a *level*
+  condition that can persist for hours, so it gets its own pin held for
+  as long as the condition lasts. Acknowledging silences the buzzer but
+  leaves the tower light lit -- standard alarm-panel behaviour, since an
+  acknowledgement means the fault was noticed, not fixed. The audio
+  service clears the acknowledgement when audio returns, so the next
+  outage sounds again instead of starting pre-silenced.
+- **Admin UI** at Admin -> Hardware (existing "Station Hardware" page):
+  enable toggle, hold-off, silence level, open-carrier sensitivity,
+  buzzer pin, tower-light colour, and a live status readout with an
+  Acknowledge button. Controls live in a new `static/js/admin/dead-air.js`
+  rather than extending `hardware-settings.js`, which is already well past
+  the size guidance.
+- New endpoints `GET /admin/hardware/dead-air/status` and
+  `POST /admin/hardware/dead-air/acknowledge`.
+- Redis key `eas:dead_air` (30 s TTL) carries the aggregate state from the
+  audio service to the GPIO service. A missing key reads as *not*
+  alarming: absence means the feature is off or the publisher is gone, and
+  neither should strand a rack buzzer on -- audio-service liveness already
+  has its own monitoring.
+
+### Fixed
+- `SilenceDetector` reported silence *immediately* when its first observed
+  chunk was silent, bypassing the duration debounce entirely. On a service
+  restart, where a source simply has not produced its first audio yet,
+  that would have sounded the rack buzzer straight away. Alarm consumers
+  now pass `assume_prior_signal=True` so the hold-off always applies.
+
+### Notes
+- Dead-air thresholds are a station-wide policy, installed once via
+  `set_default_criteria()` and re-read every 30 s by the source watchdog,
+  so changes in the admin UI take effect without a service restart.
+- The pre-existing `AudioMetrics.silence_detected` flag is unchanged. It
+  is an instantaneous per-chunk comparison with no debounce -- it flips on
+  every pause between words -- and continues to feed the analytics
+  `silence_detection_rate` only. It is not what drives the alarm.
+
+## [2.171.1] - 2026-08-18 - Code-review fixes for the spectrum zoom
+
+### Fixed
+- **A null frequency axis rendered as `0.00000 MHz` instead of blank.**
+  `build_spectrum_payload()` emits `freq_min`/`freq_max` as `None` when the
+  centre frequency cannot be coerced, which serialises to JSON `null` --
+  and `Number(null)` is `0`, which passes `Number.isFinite`. The guard in
+  `visibleFreqRange()` therefore let it through and labelled both axis
+  edges `0.00000 MHz` across a zero-width span. It now rejects explicit
+  nulls and degenerate (zero or inverted) ranges before converting. Older
+  services that omit the keys entirely were never affected -- `undefined`
+  becomes `NaN`, which the finite check already caught.
+- **The mouse wheel swallowed the page scroll at both zoom limits.**
+  `preventDefault()` ran before the zoom was evaluated, so at 1x every
+  scroll-down and at the 64x cap every scroll-up cancelled the page scroll
+  while doing nothing, leaving the operator unable to scroll past a
+  full-width canvas. The default is now cancelled only when the gesture
+  actually changes the zoom.
+- **The Spectrum Scope's peak-hold trace clipped against the top edge.**
+  The y-axis auto-scale computed its range from the live spectrum only,
+  but `scaleY()` clamps to that range and the peak-hold line retains
+  historical maxima above it. Peaks were pinned flat at `y=0` instead of
+  the axis scaling to show them. Both traces are now included in the range.
+
+### Changed
+- Corrected an overstated claim in the 2.171.0 notes and the template's
+  header comment. Zoom recovers the ~125 Hz bin resolution the unzoomed
+  view discards -- 2048 bins over ~900 CSS pixels is ~2.3 bins per pixel
+  (~5.7 on a phone), dropped rather than averaged by the nearest-neighbour
+  upscale -- so the genuine gain is ~2-6x depending on panel width, not the
+  "~16x" originally claimed. Past one bin per pixel, zoom magnifies for
+  legibility without adding information.
+- Pan repaints are coalesced to one per animation frame. Pointer events can
+  outpace the display and each repaint recolours up to `count x 200` bins,
+  which matters on the Raspberry Pi hardware this runs on.
+- The two status lines are built by shared `waterfallStatusText()` /
+  `scopeStatusText()` helpers instead of being assembled separately in the
+  poll tick and the zoom refresh, so the two paths cannot drift apart.
+- Rebuilt zoom controls seed their readout and reset-button state from live
+  zoom state. The panels rebuild roughly once a second, and a hardcoded
+  `1x` contradicted the already-zoomed canvas until the next poll.
+- `tests/test_spectrum_frequency_axis.py` reads the template with an
+  explicit UTF-8 encoding (the platform default is ASCII under a C/POSIX
+  locale), asserts the two `renderSpectrumAxis` call sites individually
+  rather than by a count that also matched the declaration, and matches the
+  history-buffer invariant with a whitespace-tolerant regex.
+
+## [2.171.0] - 2026-08-18 - Zoom and pan on the live waterfall and spectrum scope
+
+### Added
+- **Zoom and pan on the Live Waterfall and Spectrum Scope**
+  (`/admin/radio_diagnostics`). The SDR service already publishes a
+  2048-bin FFT across the whole effective span -- ~125 Hz per bin at
+  256 kHz -- but both views downsampled that to roughly 900 CSS pixels:
+  ~2.3 bins per pixel (~5.7 on a phone), dropped rather than averaged by
+  the nearest-neighbour upscale, so a one-bin spur could miss the screen
+  entirely. Zoom crops the published bins instead of retuning, so it costs
+  no extra SDR work and no extra requests, and recovers the full ~125 Hz
+  bin resolution the unzoomed view discards -- a genuine ~2-6x, depending
+  on panel width. Past the point where one bin fills one pixel, further
+  zoom magnifies for legibility without adding information; the cap and
+  bin floor bound that so the UI never implies resolution the FFT lacks.
+  Controls:
+  - Zoom in / out / reset buttons in each panel header, with a live
+    magnification readout.
+  - Mouse wheel to zoom about the cursor, holding whatever is under the
+    pointer still.
+  - Click-drag (or touch-drag) to pan; double-click resets to full span.
+  - Capped at 64x with a 32-bin floor, so the UI cannot pretend to
+    resolution the FFT does not have. Going finer needs a narrower
+    capture or a larger FFT server-side.
+  Zoom is shared between the two views -- they render the same payload,
+  so panning one and not the other would only be confusing -- and
+  survives the WebSocket panel re-render that rebuilds the cards roughly
+  once a second.
+- The frequency axis and status line now describe the **visible** window
+  rather than the full span: edge labels gain decimal places as you zoom
+  (up to 5 dp on a few-kHz window), the status line reads e.g.
+  `64.0 kHz of 256.0 kHz · 125 Hz/bin`, and the centre label drops its
+  "(carrier)" annotation and switches to the window centre once panning
+  takes the tuned frequency off screen.
+
+### Changed
+- **The live waterfall's history buffer now stores raw per-bin power
+  instead of finished RGBA pixels.** Cropping a pixel buffer can only
+  stretch what was already rasterised at full-span scale, so zoomed
+  scrollback would have been a blur of upscaled blocks. Keeping the
+  values means every repaint re-renders the entire 200-row history at the
+  current zoom, so scrolling back through history at 16x shows real
+  per-bin detail. The buffer also got smaller (2048 bins x 200 rows =
+  400 KB, a quarter of the RGBA cost), and colour mapping moved to a
+  precomputed 256-entry lookup table so re-colouring the full history
+  each frame stays cheap.
+- The Spectrum Scope's y-axis auto-scale now follows the visible crop
+  rather than the whole span, so zooming in on a weak feature is not
+  defeated by a strong carrier elsewhere keeping ownership of the axis.
+  Its peak-hold trace is indexed by absolute bin, so zooming or panning
+  no longer discards peaks already accumulated off-screen.
+
+## [2.170.5] - 2026-08-18 - Fix live spectrum frequency axis labelled with the pre-decimation rate
+
+### Fixed
+- **The Live Waterfall and Spectrum Scope on `/admin/radio_diagnostics`
+  labelled their frequency axis with the receiver's *configured* sample
+  rate instead of the rate the displayed FFT is actually clocked at,
+  drawing every signal several times wider than it is.** Reported from a
+  receiver tuned to an FM broadcast station at 93.900 MHz: the axis read
+  93.388-94.412 MHz, so a US FM channel -- 200 kHz wide by regulation --
+  appeared to occupy a full megahertz, which is physically impossible.
+  High-rate SDRs are decimated in the USB callback *before* samples reach
+  the ring buffer (Python cannot process multi-megahertz IQ in real time),
+  so the samples every spectrum view FFTs are clocked at the post-decimation
+  *effective* rate. On the reported receiver, 1.024 MHz configured decimates
+  by 4 to 256 kHz, meaning the bins covered 256 kHz of RF while the axis
+  claimed 1.024 MHz -- a 4x overstatement, and up to 10x on an Airspy at
+  2.5 MHz. The root cause was a missing field: `sdr_hardware_service.py`
+  published `sample_rate` (correctly, the effective rate) but never
+  `freq_min`/`freq_max`, so `/api/radio/spectrum/<id>` always hit its
+  fallback of `receiver.frequency_hz ± receiver.sample_rate / 2` -- the
+  hardware rate off the `RadioReceiver` row. The service now publishes the
+  axis explicitly via a new testable `build_spectrum_payload()`, alongside
+  `hardware_sample_rate` and `early_decim_factor`; the route resolves the
+  axis through a new `_spectrum_axis()` helper that prefers the published
+  values and recomputes the effective span locally when an older
+  sdr-service omits them. The same fallback in the command-queue path
+  (which defaulted to 2.5 MHz for Airspy) is fixed identically.
+- **Capture requests asked the SDR service for decimation-factor times more
+  samples than the requested duration.** `/api/radio/diagnostics/capture`,
+  `/analyze` and `/waterfall` each named a local `effective_rate` but
+  assigned `receiver_record.sample_rate` -- the pre-decimation rate -- to
+  it. Because the capture tap fires after early decimation, a 5 s request
+  against an Airspy at 2.5 MHz (decim 10) queued 50 s worth of samples
+  while the client waited only `duration + 20 s`, so longer captures timed
+  out by construction. All three now convert duration at the effective
+  rate.
+
+### Added
+- `app_core/radio/decimation.py` -- the early-decimation threshold, factor
+  and effective-rate math as one dependency-free module (no numpy, SciPy or
+  SoapySDR imports) so the web layer can label a frequency axis with the
+  same numbers the driver decimates by. `app_core/radio/drivers.py` now
+  calls it instead of carrying its own copy, which is what let the two
+  drift apart in the first place.
+- The Live Waterfall and Spectrum Scope status lines now show the RF span
+  the FFT covers, annotated with the decimation when it is active (e.g.
+  `256.0 kHz span (1.024 MHz ÷ 4)`), so an axis that disagrees with the
+  hardware rate is visible on screen rather than silently wrong.
+- `tests/test_spectrum_frequency_axis.py` -- regression coverage pinning
+  the reported case (1.024 MHz configured must render a 256 kHz span, never
+  1.024 MHz), the recompute path for an older sdr-service, the
+  service-payload/route round trip, and the capture duration conversion.
+
+## [2.170.4] - 2026-08-18 - Fix SDR Diagnostics charts vanishing and running narrower than the page
+
+### Fixed
+- **The per-receiver "Historical Trends" charts on `/admin/radio_diagnostics`
+  disappeared almost immediately after being shown, and were never as wide
+  as their container.** The page's WebSocket-driven auto-refresh
+  (`renderReceivers()`, firing roughly once a second) replaces the entire
+  receiver-card tree, and a `preservedPanels` mechanism cloned each open
+  panel's `innerHTML` across that replacement to survive it -- which works
+  for the Run Diagnostic / Waterfall / Spectrum Scope panels, but not for
+  the trends panel's Chart.js line charts: a `<canvas>` element's drawn
+  pixels are never serialized into its HTML, and Chart.js's inline
+  `style="width:...px"` (baked in at whatever moment the clone was taken)
+  froze the chart at a stale size instead of tracking the container. Net
+  effect: the chart flashed onto screen and then went blank on the very
+  next refresh tick, and any width it did retain was a snapshot from
+  whenever it was last captured rather than the current layout.
+  `templates/admin/radio_diagnostics.html` now excludes `.trends-container`
+  from the clone-and-restore list entirely, and
+  `static/js/radio_diagnostics_trends.js` adds a `MutationObserver` on the
+  receivers container (`trendsRebuildActive()`) that rebuilds and refetches
+  any trends panel left open once the WebSocket refresh clobbers it, so the
+  chart is always constructed fresh against the DOM's current width instead
+  of replayed from a frozen snapshot.
+- **The whole SDR Diagnostics page -- including the Live Waterfall and
+  Spectrum Scope canvases -- was narrower than it needed to be on any
+  viewport at or above the 576px Bootstrap breakpoint.** The page wrapped
+  its content in `<div class="container">`, which caps at 540px/720px/
+  960px/1140px/1320px regardless of the actual viewport width, instead of
+  `<div class="container-fluid">`, which the comparable GNSS & Time
+  Dashboard (`templates/admin/gps_dashboard.html`) already uses for the
+  same reason: chart-heavy diagnostics pages should use the full width
+  available rather than being centered in a fixed-width column. Both
+  canvases already sized themselves to 100% of their parent, so this
+  wasn't a canvas bug -- the parent itself was capped.
+
+## [2.170.3] - 2026-08-18 - Fix spectrum saturation behind the "still zoomed in" waterfall/scope
+
+### Fixed
+- **The Live Waterfall and Spectrum Scope both still looked "zoomed in"
+  after 2.170.2's client-side auto-scale fix** -- because the underlying
+  data was actually saturated, not just badly rendered.
+  `sdr_hardware_service.py`'s `compute_spectrum()` converted the raw FFT
+  magnitude to dB without dividing by the window's coherent gain
+  (`sum(window)`) first, so for `FFT_SIZE=2048` with a Hanning window, a
+  full-scale tone's peak bin read around +54 dB raw -- far above the
+  fixed `SPECTRUM_DB_MIN=-80`/`SPECTRUM_DB_MAX=0` window the
+  normalization assumed. Confirmed against a live capture: 1781 of 2048
+  bins (87%) clipped to the normalized maximum of 1.0, flattening both
+  views into a saturated "brick" with no legible spectral shape. A
+  single fixed dB window can't hold across every receiver/gain/antenna
+  combination anyway, so the fix replaces it with per-capture
+  normalization: stretch *this* capture's own dB min/max across 0-1,
+  floored by a new `MIN_SPECTRUM_DB_SPAN` constant so a near-silent
+  capture (no antenna, receiver just started) isn't auto-amplified into
+  apparent noise. Added `tests/test_sdr_spectrum_calibration.py`
+  (7 tests).
+
+## [2.170.2] - 2026-08-18 - Fix Spectrum Scope clipping and Historical Trends chart growth
+
+### Fixed
+- **Spectrum Scope drew directly against a fixed 0-1 range** instead of
+  auto-scaling to the current payload's actual min/max, unlike the
+  sparkline strip on the same page which already did this correctly.
+  Reported live: the trace looked "too zoomed in," with FFT edge-bin
+  DC-offset spikes pegging the top of the canvas with no headroom while
+  the real passband signal collapsed into a thin band near the bottom.
+  `scopeRender()` now computes `lo`/`hi` from the current spectrum array
+  (with an 8% margin) each tick, the same auto-scale approach
+  `drawSparkline()` already uses, and the scope's status line now shows
+  the current auto-scaled y-axis range so operators can see it's
+  adaptive rather than a fixed scale.
+- **Historical Trends charts grew without bound ("kept scrolling").**
+  Chart.js's `responsive: true` + `maintainAspectRatio: false` (used for
+  all four trend charts) requires the canvas's *parent* element to have
+  an explicit, bounded CSS height -- the canvas's own `height="120"` HTML
+  attribute only sets its intrinsic pixel resolution and is ignored once
+  responsive mode takes over. The charts sat directly in unconstrained
+  `.col-md-6` grid cells, so each one could resize upward indefinitely.
+  Wrapped each chart canvas in a `position:relative; height:220px;` div,
+  the pattern Chart.js's own docs require for this configuration.
+
 ## [2.170.1] - 2026-08-18 - Fix a silently dropped IPAWS shelter-in-place alert
 
 ### Fixed

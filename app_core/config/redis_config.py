@@ -134,6 +134,20 @@ class RedisChannels:
     # Spectrum data
     SPECTRUM_PREFIX = "eas:spectrum:"  # + receiver_identifier
 
+    # Dead-air (silence) monitor state, published by the audio service and
+    # read by the GPIO service to drive the tower light and rack buzzer.
+    # Short TTL: a stale key must not keep an alarm asserted after the
+    # publisher dies. Absence is deliberately read as "not alarming" rather
+    # than "alarm", so disabling the feature or restarting the audio
+    # service cannot strand a buzzer on. Audio-service liveness is covered
+    # separately by the existing service health monitoring.
+    DEAD_AIR_KEY = "eas:dead_air"
+    DEAD_AIR_TTL_SECONDS = 30
+    # Operator acknowledgement: silences the buzzer for the current dead-air
+    # episode without clearing the tower light. Cleared automatically when
+    # audio returns, so the next outage sounds again.
+    DEAD_AIR_ACK_KEY = "eas:dead_air:ack"
+
     # Alert forwarding
     ALERT_CHANNEL = "eas:alerts:received"
 

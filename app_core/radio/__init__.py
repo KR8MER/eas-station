@@ -23,7 +23,6 @@ from .drivers import AirspyReceiver, RTLSDRReceiver, register_builtin_drivers
 from .manager import ReceiverInterface, ReceiverConfig, RadioManager, ReceiverStatus
 from .schema import (
     ensure_radio_tables,
-    ensure_radio_squelch_columns,
     ensure_radio_audio_sample_rate_column,
     ensure_radio_frequency_correction_column,
 )
@@ -43,7 +42,6 @@ __all__ = [
     "RadioManager",
     "ReceiverStatus",
     "ensure_radio_tables",
-    "ensure_radio_squelch_columns",
     "ensure_radio_audio_sample_rate_column",
     "ensure_radio_frequency_correction_column",
     "AirspyReceiver",

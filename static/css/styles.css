@@ -4100,6 +4100,27 @@ html:has(.modal.show) {
     overflow: hidden;
 }
 
+/* 4. Modals that wrap .modal-header/.modal-body/.modal-footer in a <form> so
+      one submit handler can collect every field (Add/Edit Audio Source,
+      Radio Receiver, Stream Profile, etc.) break the flex chain Bootstrap's
+      scrollable modal depends on: .modal-body's `flex: 1 1 auto` only does
+      anything when .modal-body is a direct child of the flex container
+      .modal-content. A plain <form> in between is not a flex container, so
+      .modal-body never gets a bounded height, `overflow-y: auto` has
+      nothing to do, and .modal-content's own `overflow: hidden` just clips
+      the tail of the form instead of scrolling it -- the symptom reported
+      as "this page isn't scrollable" on the Edit Audio Source modal. Make
+      the form itself a flex column filling .modal-content's bounded height
+      so the header/body/footer children behave exactly as if there were no
+      form wrapper at all. */
+.modal-dialog-scrollable .modal-content > form {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
 /* Dropdowns - Modern Glass Effect */
 .dropdown-menu {
     background-color: color-mix(in srgb, var(--surface-color) 96%, transparent);

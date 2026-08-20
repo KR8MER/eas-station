@@ -13,7 +13,7 @@
 {% set header_variant = 'gradient' %}
 {% include 'components/page_header.html' %}
 
-<div class="container py-4">
+<div class="container-fluid py-4">
     <div class="d-flex flex-wrap justify-content-end gap-2 mb-4">
         <a href="/admin/radio" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left"></i> Back to Settings
@@ -766,38 +766,43 @@ sudo systemctl restart eas-station</code></pre>
             `;
         }
 
-        // Preserve any in-progress / completed "Run Diagnostic" and "Show
-        // Waterfall" panel content across this re-render. Without this, the
-        // WebSocket-driven auto-refresh (which fires on every ``radio_status_update``,
+        // Preserve any in-progress / completed "Run Diagnostic" panel content
+        // across this re-render. Without this, the WebSocket-driven
+        // auto-refresh (which fires on every ``radio_status_update``,
         // typically every ~1 s, with a 15 s polling fallback) wipes out the
         // spinner placed by the click handler before the 2 s capture+analyze
         // round-trip completes, so the operator sees nothing and the result
         // ends up rendered into a detached DOM node. Capture the existing
         // panel HTML keyed by receiver id, then restore it after the
         // ``container.innerHTML = html`` assignment below.
+        //
+        // NOTE: `.trends-container`, `.waterfall-container` and
+        // `.spectrum-scope-container` are deliberately excluded here.
+        // Cloning innerHTML does not carry a `<canvas>`'s rendered bitmap
+        // (pixel data is never serialized into markup) or any
+        // addEventListener bindings on cloned elements (the zoom buttons'
+        // click handlers, the canvas's wheel/pointer gesture listeners) --
+        // a clone-and-restore swaps in a blank, disconnected canvas and
+        // visually-identical but completely inert buttons. That first broke
+        // the trends charts ("disappeared almost immediately"); the same
+        // defect later made the waterfall/scope zoom controls look like
+        // they did nothing ("buttons visible, clicking does nothing") once
+        // this file grew live zoom/pan gestures on those same canvases.
+        // Neither panel type needs this preservation mechanism at all: both
+        // already detect their own DOM replacement and rebuild themselves
+        // with fresh listeners on their own poll cadence --
+        // radio_diagnostics_trends.js watches the receivers container for
+        // its children being replaced (see trendsRebuildActive()), and
+        // liveSpectrumTick() checks `!state.canvas.isConnected` every
+        // 500 ms. Only `.diagnostic-container` (plain text/table content,
+        // no canvas, no listeners) is safe to innerHTML-preserve.
         const preservedPanels = [];
-        for (const panel of container.querySelectorAll(
-            '.diagnostic-container, .waterfall-container, .spectrum-scope-container, .trends-container'
-        )) {
+        for (const panel of container.querySelectorAll('.diagnostic-container')) {
             // Fast-path: skip empty panels without touching innerHTML.
             if (!panel.firstChild) continue;
-            let kind, recvId;
-            if (panel.classList.contains('diagnostic-container')) {
-                kind = 'diag';
-                recvId = panel.getAttribute('data-diagnostic-for');
-            } else if (panel.classList.contains('spectrum-scope-container')) {
-                kind = 'scope';
-                recvId = panel.getAttribute('data-scope-for');
-            } else if (panel.classList.contains('trends-container')) {
-                kind = 'trends';
-                recvId = panel.getAttribute('data-trends-for');
-            } else {
-                kind = 'wf';
-                recvId = panel.getAttribute('data-waterfall-for');
-            }
+            const recvId = panel.getAttribute('data-diagnostic-for');
             if (!recvId) continue;
             preservedPanels.push({
-                kind,
                 recvId,
                 html: panel.innerHTML,
                 display: panel.style.display,
@@ -806,15 +811,11 @@ sudo systemctl restart eas-station</code></pre>
 
         container.innerHTML = html;
 
-        // Restore any preserved diagnostic / waterfall / scope / trends panels.
-        const selectorFor = {
-            diag: (id) => `.diagnostic-container[data-diagnostic-for="${CSS.escape(id)}"]`,
-            wf: (id) => `.waterfall-container[data-waterfall-for="${CSS.escape(id)}"]`,
-            scope: (id) => `.spectrum-scope-container[data-scope-for="${CSS.escape(id)}"]`,
-            trends: (id) => `.trends-container[data-trends-for="${CSS.escape(id)}"]`,
-        };
+        // Restore any preserved diagnostic panels.
         for (const state of preservedPanels) {
-            const panel = container.querySelector(selectorFor[state.kind](state.recvId));
+            const panel = container.querySelector(
+                `.diagnostic-container[data-diagnostic-for="${CSS.escape(state.recvId)}"]`
+            );
             if (panel) {
                 panel.innerHTML = state.html;
                 if (state.display) panel.style.display = state.display;
@@ -958,7 +959,15 @@ sudo systemctl restart eas-station</code></pre>
                 return;
             }
 
+            // Axis labels drop seconds (full HH:MM:SS AM/PM was too wide for
+            // the tick count to stay horizontal, forcing Chart.js to rotate
+            // them into an unreadable diagonal). Full-precision timestamps
+            // are still available in the tooltip title below.
             const labels = points.map(p => {
+                const d = p.t ? new Date(p.t) : null;
+                return d ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—';
+            });
+            const fullLabels = points.map(p => {
                 const d = p.t ? new Date(p.t) : null;
                 return d ? d.toLocaleTimeString() : '—';
             });
@@ -1004,9 +1013,12 @@ sudo systemctl restart eas-station</code></pre>
                         interaction: { mode: 'index', intersect: false },
                         scales: {
                             y: { beginAtZero: true, ticks: { callback: v => v + '%' } },
-                            x: { ticks: { maxTicksLimit: 10, autoSkip: true } },
+                            x: { ticks: { maxTicksLimit: 8, autoSkip: true, maxRotation: 0, minRotation: 0 } },
                         },
-                        plugins: { legend: { labels: { boxWidth: 18 } } },
+                        plugins: {
+                            legend: { labels: { boxWidth: 18 } },
+                            tooltip: { callbacks: { title: items => fullLabels[items[0]?.dataIndex] ?? '' } },
+                        },
                     },
                 });
             }
@@ -1516,6 +1528,290 @@ sudo systemctl restart eas-station</code></pre>
         ];
     }
 
+    // ---- Zoom / pan -------------------------------------------------------
+    //
+    // The SDR service publishes a fixed 2048-bin FFT across the whole
+    // effective span. At 256 kHz that is ~125 Hz per bin, finer than the
+    // ~900 CSS pixels either canvas gets — 2048 bins over 900 px is ~2.3
+    // bins per pixel (~5.7 on a phone), and because the canvas upscales
+    // with nearest-neighbour the surplus columns are *dropped*, not
+    // averaged, so a one-bin spur can miss the screen entirely.
+    //
+    // Zoom is therefore a *crop* of the published bins, not a retune: no
+    // extra SDR work and no extra requests. It recovers the full 125 Hz
+    // bin resolution the unzoomed view discards — a genuine ~2-6x
+    // depending on panel width. Beyond the point where one bin occupies
+    // one pixel, further zoom magnifies bins for legibility without
+    // adding information; the cap and bin floor below bound that so the
+    // UI never implies resolution the FFT does not have. Going finer
+    // needs a narrower capture or a bigger FFT server-side.
+    const ZOOM_MAX = 64;          // 2048 bins -> 32 visible (~4 kHz @ 256 kHz)
+    const ZOOM_MIN_BINS = 32;     // never crop below this many real bins
+    const ZOOM_STEP = 2;          // per button press / wheel detent
+
+    // 256-entry colour lookup, built once. liveWfPushRow used to call the
+    // ramp per pixel; with zoom the whole history is re-coloured on every
+    // repaint, so a table keeps that at array reads instead of ~400k
+    // interpolations per frame.
+    const LIVE_WF_LUT = (() => {
+        const lut = new Uint8Array(256 * 3);
+        for (let i = 0; i < 256; i++) {
+            const [r, g, b] = liveWfColorMap(i / 255);
+            lut[i * 3] = r;
+            lut[i * 3 + 1] = g;
+            lut[i * 3 + 2] = b;
+        }
+        return lut;
+    })();
+
+    function zoomRange(state, nFreq) {
+        // Resolve zoom + centre into a concrete [start, end) bin window,
+        // clamped so it can never run off either edge of the span.
+        const zoom = Math.max(1, Math.min(ZOOM_MAX, state.zoom || 1));
+        const widthFrac = 1 / zoom;
+        let count = Math.round(widthFrac * nFreq);
+        count = Math.max(Math.min(ZOOM_MIN_BINS, nFreq), Math.min(count, nFreq));
+        let startFrac = (state.centerFrac ?? 0.5) - widthFrac / 2;
+        let start = Math.round(startFrac * nFreq);
+        start = Math.max(0, Math.min(nFreq - count, start));
+        return { start, count, end: start + count, zoom };
+    }
+
+    function zoomIsActive(state) {
+        return (state.zoom || 1) > 1;
+    }
+
+    function zoomSetCentre(state, centerFrac) {
+        const widthFrac = 1 / Math.max(1, state.zoom || 1);
+        state.centerFrac = Math.max(
+            widthFrac / 2, Math.min(1 - widthFrac / 2, centerFrac)
+        );
+    }
+
+    function zoomBy(state, factor, anchorFrac) {
+        // Zoom about `anchorFrac` (a 0-1 position across the FULL span),
+        // holding whatever sits under the cursor still. Buttons pass the
+        // current centre, so they zoom symmetrically.
+        const oldZoom = Math.max(1, state.zoom || 1);
+        const newZoom = Math.max(1, Math.min(ZOOM_MAX, oldZoom * factor));
+        if (newZoom === oldZoom) return false;
+
+        const oldWidth = 1 / oldZoom;
+        const newWidth = 1 / newZoom;
+        const oldStart = (state.centerFrac ?? 0.5) - oldWidth / 2;
+        const anchor = Number.isFinite(anchorFrac)
+            ? Math.max(0, Math.min(1, anchorFrac))
+            : (state.centerFrac ?? 0.5);
+        // Keep the anchor at the same relative position in the window.
+        const rel = oldWidth > 0 ? (anchor - oldStart) / oldWidth : 0.5;
+        state.zoom = newZoom;
+        zoomSetCentre(state, anchor - rel * newWidth + newWidth / 2);
+        return true;
+    }
+
+    function zoomPanByFraction(state, deltaFrac) {
+        zoomSetCentre(state, (state.centerFrac ?? 0.5) + deltaFrac);
+    }
+
+    function zoomReset(state) {
+        state.zoom = 1;
+        state.centerFrac = 0.5;
+    }
+
+    // Repaint everything that depends on zoom, without waiting for the
+    // next poll — a 500 ms lag between pressing + and seeing it would
+    // feel broken.
+    function zoomChanged(state) {
+        if (state.waterfallActive && state.canvas && state.buffer) {
+            liveWfRepaint(state);
+            if (state.lastPayload) liveWfUpdateAxis(state, state.lastPayload);
+        }
+        if (state.scopeActive && state.scopeCanvas && state.lastSpectrum) {
+            scopeRender(state, state.lastSpectrum);
+            if (state.lastPayload) scopeUpdateAxis(state, state.lastPayload);
+        }
+        zoomRefreshControls(state);
+        zoomRefreshStatus(state);
+    }
+
+    function zoomLabelText(state) {
+        return `${Math.round(state.zoom || 1)}\u00d7`;
+    }
+
+    function zoomRefreshControls(state) {
+        const label = zoomLabelText(state);
+        (state.zoomLabels || []).forEach((el) => {
+            if (el && el.isConnected) el.textContent = label;
+        });
+        (state.zoomResetBtns || []).forEach((btn) => {
+            if (btn && btn.isConnected) btn.disabled = !zoomIsActive(state);
+        });
+    }
+
+    // Single source of truth for the two status lines. Both the poll tick
+    // and a zoom/pan refresh render them, so building the strings in one
+    // place stops the two paths drifting apart on any future format change.
+    function waterfallStatusText(state, payload, n, ageMs) {
+        return `${n}-bin FFT \u00b7 ${state.rowCount} rows \u00b7 `
+            + `latency ${Number(ageMs || 0).toFixed(0)} ms`
+            + spectrumSpanLabel(payload, state, n);
+    }
+
+    function scopeStatusText(state, payload, n, ageMs) {
+        const range = state.scopeYRange
+            ? ` \u00b7 y-axis ${state.scopeYRange[0].toFixed(2)}\u2013${state.scopeYRange[1].toFixed(2)} (auto)`
+            : '';
+        return `${n}-bin FFT \u00b7 latency ${Number(ageMs || 0).toFixed(0)} ms`
+            + spectrumSpanLabel(payload, state, n) + range;
+    }
+
+    function zoomRefreshStatus(state) {
+        // Re-run the status lines so the span readout tracks the zoom,
+        // reusing the last frame's latency so the line does not lose a
+        // field between polls.
+        if (!state.lastPayload || !state.lastSpectrum) return;
+        const n = state.lastSpectrum.length;
+        const age = Number(state.lastAgeMs) || 0;
+        if (state.waterfallActive && state.statusEl) {
+            state.statusEl.textContent =
+                waterfallStatusText(state, state.lastPayload, n, age);
+        }
+        if (state.scopeActive && state.scopeStatusEl) {
+            state.scopeStatusEl.textContent =
+                scopeStatusText(state, state.lastPayload, n, age);
+        }
+    }
+
+    function zoomBuildControls(state) {
+        // Compact, touch-sized control cluster. Both panels get their own
+        // copy driving the same shared zoom state, so whichever view you
+        // are looking at has the buttons to hand.
+        const wrap = document.createElement('div');
+        wrap.className = 'btn-group btn-group-sm ms-auto';
+        wrap.setAttribute('role', 'group');
+        wrap.setAttribute('aria-label', 'Spectrum zoom');
+
+        const mk = (html, title, onClick) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'btn btn-outline-secondary py-0 px-2';
+            b.innerHTML = html;
+            b.title = title;
+            b.setAttribute('aria-label', title);
+            b.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                onClick();
+            });
+            return b;
+        };
+
+        const out = mk('<i class="fas fa-search-minus"></i>', 'Zoom out', () => {
+            if (zoomBy(state, 1 / ZOOM_STEP, undefined)) zoomChanged(state);
+        });
+        const inn = mk('<i class="fas fa-search-plus"></i>', 'Zoom in', () => {
+            if (zoomBy(state, ZOOM_STEP, undefined)) zoomChanged(state);
+        });
+        const reset = mk(
+            '<i class="fas fa-compress-arrows-alt"></i>',
+            'Reset zoom to full span',
+            () => { zoomReset(state); zoomChanged(state); }
+        );
+        reset.disabled = !zoomIsActive(state);
+
+        const label = document.createElement('span');
+        label.className = 'btn btn-outline-secondary py-0 px-2 disabled';
+        label.style.minWidth = '3.2em';
+        label.style.opacity = '1';
+        label.style.fontVariantNumeric = 'tabular-nums';
+        // Seed from live state, not a hardcoded 1x. The panels are rebuilt
+        // roughly once a second by the WebSocket refresh, so a hardcoded
+        // label contradicted the already-zoomed canvas until the next poll.
+        label.textContent = zoomLabelText(state);
+
+        wrap.appendChild(out);
+        wrap.appendChild(label);
+        wrap.appendChild(inn);
+        wrap.appendChild(reset);
+
+        state.zoomLabels = (state.zoomLabels || []).filter((el) => el && el.isConnected);
+        state.zoomResetBtns = (state.zoomResetBtns || []).filter((el) => el && el.isConnected);
+        state.zoomLabels.push(label);
+        state.zoomResetBtns.push(reset);
+        return wrap;
+    }
+
+    function zoomAttachGestures(state, canvas) {
+        // Wheel to zoom under the cursor, drag to pan. Pointer Events give
+        // mouse and touch in one path. touch-action stays 'pan-y' so the
+        // page still scrolls vertically on a phone — only horizontal drag
+        // (which is the frequency axis anyway) is claimed for panning.
+        canvas.style.touchAction = 'pan-y';
+        canvas.style.cursor = 'ew-resize';
+
+        canvas.addEventListener('wheel', (ev) => {
+            if (!state.lastSpectrum) return;
+            const rect = canvas.getBoundingClientRect();
+            if (!rect.width) return;
+            const nFreq = state.lastSpectrum.length;
+            const { start, count } = zoomRange(state, nFreq);
+            // Cursor position -> absolute fraction of the FULL span.
+            const relInView = (ev.clientX - rect.left) / rect.width;
+            const anchor = (start + relInView * count) / nFreq;
+            const factor = ev.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
+            // Only swallow the scroll when the gesture actually zoomed.
+            // Cancelling unconditionally trapped the page at both limits:
+            // at 1x every scroll-down, and at ZOOM_MAX every scroll-up,
+            // left the operator unable to scroll past a full-width canvas.
+            if (zoomBy(state, factor, anchor)) {
+                ev.preventDefault();
+                zoomChanged(state);
+            }
+        }, { passive: false });
+
+        let dragging = false;
+        let lastX = 0;
+        // Pointer events can outpace the display, and each repaint recolours
+        // up to count x LIVE_WF_HEIGHT bins. Apply every movement to the pan
+        // state immediately, but coalesce the repaint to one per frame so a
+        // fast drag cannot queue more work than the browser can present —
+        // this box is a Raspberry Pi, not a workstation.
+        let panFrame = 0;
+        canvas.addEventListener('pointerdown', (ev) => {
+            if (!zoomIsActive(state)) return;   // nothing to pan at 1x
+            dragging = true;
+            lastX = ev.clientX;
+            canvas.setPointerCapture(ev.pointerId);
+        });
+        canvas.addEventListener('pointermove', (ev) => {
+            if (!dragging) return;
+            const rect = canvas.getBoundingClientRect();
+            if (!rect.width) return;
+            const dx = ev.clientX - lastX;
+            lastX = ev.clientX;
+            const widthFrac = 1 / Math.max(1, state.zoom || 1);
+            zoomPanByFraction(state, -(dx / rect.width) * widthFrac);
+            if (!panFrame) {
+                panFrame = requestAnimationFrame(() => {
+                    panFrame = 0;
+                    zoomChanged(state);
+                });
+            }
+        });
+        const endDrag = (ev) => {
+            if (!dragging) return;
+            dragging = false;
+            try { canvas.releasePointerCapture(ev.pointerId); } catch (e) { /* already released */ }
+        };
+        canvas.addEventListener('pointerup', endDrag);
+        canvas.addEventListener('pointercancel', endDrag);
+        canvas.addEventListener('dblclick', (ev) => {
+            ev.preventDefault();
+            zoomReset(state);
+            zoomChanged(state);
+        });
+    }
+
     function liveWfBuildPanel(state) {
         // Build the panel DOM (header, canvas, axis labels, status line)
         // from scratch. Called both on first start and when the receiver
@@ -1534,10 +1830,11 @@ sudo systemctl restart eas-station</code></pre>
         state.statusEl.className = 'text-muted';
         state.statusEl.textContent = 'Waiting for spectrum…';
         header.appendChild(state.statusEl);
+        header.appendChild(zoomBuildControls(state));
         container.appendChild(header);
 
         const canvas = document.createElement('canvas');
-        canvas.width = state.nFreq || 1;
+        canvas.width = zoomRange(state, state.nFreq || 1).count || 1;
         canvas.height = LIVE_WF_HEIGHT;
         canvas.style.width = '100%';
         canvas.style.height = `${LIVE_WF_DISPLAY_PX}px`;
@@ -1547,6 +1844,7 @@ sudo systemctl restart eas-station</code></pre>
         container.appendChild(canvas);
         state.canvas = canvas;
         state.ctx = canvas.getContext('2d');
+        zoomAttachGestures(state, canvas);
 
         state.axisEl = document.createElement('div');
         state.axisEl.className = 'd-flex justify-content-between text-muted small mt-1';
@@ -1555,51 +1853,75 @@ sudo systemctl restart eas-station</code></pre>
 
     function liveWfResizeBuffer(state, nFreq) {
         // Allocate (or reallocate, when the FFT size changes mid-stream)
-        // the row-major RGBA buffer. Allocations happen at most once per
-        // sample-rate change so the per-tick cost stays at a single
-        // typed-array set().
+        // the row-major history buffer.
+        //
+        // This stores the raw 0-255 quantised power per bin, NOT finished
+        // RGBA pixels. It used to store pixels, which made zoom impossible
+        // to do honestly: cropping a pixel buffer can only stretch what
+        // was already rasterised at full-span scale, so zoomed history
+        // would be a blur of upscaled blocks. Keeping the values means
+        // every repaint re-renders the whole scrollback at whatever zoom
+        // is current, so scrolling back through history at 16x shows real
+        // per-bin detail. 2048 bins x 200 rows = 400 KB, a quarter of what
+        // the RGBA buffer cost.
         state.nFreq = nFreq;
-        state.buffer = new Uint8ClampedArray(nFreq * LIVE_WF_HEIGHT * 4);
-        // Paint initial frame fully black-blue so the canvas isn't
-        // transparent before the first row arrives.
-        for (let p = 3; p < state.buffer.length; p += 4) {
-            state.buffer[p] = 255;
-        }
-        for (let i = 0; i < nFreq * LIVE_WF_HEIGHT; i++) {
-            state.buffer[i * 4 + 2] = 32;  // dim blue noise floor
-        }
+        state.buffer = new Uint8Array(nFreq * LIVE_WF_HEIGHT);
+        state.wfScratch = null;   // force scratch realloc on next repaint
     }
 
     function liveWfRepaint(state) {
-        // Push the off-DOM buffer onto the canvas wholesale. Called
-        // immediately after a re-create so the operator sees the previous
-        // history instead of an empty canvas flicker.
-        if (!state.canvas || !state.ctx || !state.buffer) return;
-        const img = new ImageData(state.buffer.slice(), state.nFreq, LIVE_WF_HEIGHT);
-        state.ctx.putImageData(img, 0, 0);
+        // Re-render the visible bin window across the full canvas. Called
+        // on every new row, on zoom/pan changes, and after a DOM re-create
+        // so the operator sees history instead of an empty canvas flicker.
+        if (!state.canvas || !state.ctx || !state.buffer || !state.nFreq) return;
+
+        const nFreq = state.nFreq;
+        const { start, count } = zoomRange(state, nFreq);
+
+        // One canvas pixel column per visible bin; the CSS upscale (with
+        // image-rendering: pixelated) does the stretching. Reassigning
+        // width clears the canvas, so only touch it when it really changed.
+        if (state.canvas.width !== count) {
+            state.canvas.width = count;
+        }
+        const need = count * LIVE_WF_HEIGHT * 4;
+        if (!state.wfScratch || state.wfScratch.length !== need) {
+            state.wfScratch = new Uint8ClampedArray(need);
+        }
+
+        const px = state.wfScratch;
+        const buf = state.buffer;
+        let p = 0;
+        for (let row = 0; row < LIVE_WF_HEIGHT; row++) {
+            const rowBase = row * nFreq + start;
+            for (let x = 0; x < count; x++) {
+                const lut = buf[rowBase + x] * 3;
+                px[p] = LIVE_WF_LUT[lut];
+                px[p + 1] = LIVE_WF_LUT[lut + 1];
+                px[p + 2] = LIVE_WF_LUT[lut + 2];
+                px[p + 3] = 255;
+                p += 4;
+            }
+        }
+        state.ctx.putImageData(new ImageData(px, count, LIVE_WF_HEIGHT), 0, 0);
     }
 
     function liveWfPushRow(state, spectrum) {
-        // Scroll all rows up by one and paint the new spectrum onto the
+        // Scroll all rows up by one and store the new spectrum in the
         // bottom row. `spectrum` is a 0..1 normalised power array from
-        // the server (compute_spectrum() in sdr_hardware_service.py).
+        // the server (compute_spectrum() in sdr_hardware_service.py);
+        // it is quantised to 8 bits here, which is exactly the number of
+        // distinct colours the ramp can produce anyway.
         const nFreq = state.nFreq;
         const buf = state.buffer;
-        const rowBytes = nFreq * 4;
         // Slide rows 1..N-1 down into 0..N-2 (this is the scroll-up step
         // in display terms because row 0 is at the top).
-        buf.copyWithin(0, rowBytes, rowBytes * LIVE_WF_HEIGHT);
-        // Paint new row at the bottom.
-        const base = (LIVE_WF_HEIGHT - 1) * rowBytes;
+        buf.copyWithin(0, nFreq, nFreq * LIVE_WF_HEIGHT);
+        const base = (LIVE_WF_HEIGHT - 1) * nFreq;
         const n = Math.min(spectrum.length, nFreq);
         for (let x = 0; x < n; x++) {
             const v = Math.max(0, Math.min(1, Number(spectrum[x]) || 0));
-            const [r, g, b] = liveWfColorMap(v);
-            const p = base + x * 4;
-            buf[p] = r;
-            buf[p + 1] = g;
-            buf[p + 2] = b;
-            buf[p + 3] = 255;
+            buf[base + x] = (v * 255) | 0;
         }
         liveWfRepaint(state);
     }
@@ -1616,30 +1938,116 @@ sudo systemctl restart eas-station</code></pre>
         );
     }
 
-    function liveWfUpdateAxis(state, payload) {
-        if (!state.axisEl) return;
+    // Human-readable RF span covered by the FFT. This is the *effective*
+    // (post-early-decimation) sample rate, which is what the bins really
+    // cover -- for a while the axis was labelled from the configured
+    // hardware rate instead, making a normal ~200 kHz FM signal look like
+    // it was a megahertz wide. Showing the span (and the decimation
+    // factor when it is active) keeps that honest on screen.
+    function fmtSpan(hz) {
+        if (!Number.isFinite(hz) || hz <= 0) return '';
+        if (hz >= 1e6) return `${(hz / 1e6).toFixed(3)} MHz`;
+        if (hz >= 1e3) return `${(hz / 1e3).toFixed(1)} kHz`;
+        return `${Math.round(hz)} Hz`;
+    }
+
+    function spectrumSpanLabel(payload, state, nFreq) {
+        const rate = Number(payload.sample_rate);
+        if (!Number.isFinite(rate) || rate <= 0) return '';
+
+        // Zoomed: lead with the span actually on screen and keep the full
+        // span in parentheses, so the number the operator reads always
+        // matches the picture in front of them.
+        if (state && zoomIsActive(state) && nFreq) {
+            const { count } = zoomRange(state, nFreq);
+            const visible = rate * (count / nFreq);
+            const binHz = rate / nFreq;
+            return ` \u00b7 ${fmtSpan(visible)} of ${fmtSpan(rate)}`
+                + ` \u00b7 ${fmtSpan(binHz)}/bin`;
+        }
+
+        const decim = Number(payload.early_decim_factor);
+        const hw = Number(payload.hardware_sample_rate);
+        let suffix = '';
+        if (Number.isFinite(decim) && decim > 1 && Number.isFinite(hw) && hw > 0) {
+            suffix = ` (${(hw / 1e6).toFixed(3)} MHz \u00f7 ${decim})`;
+        }
+        return ` \u00b7 ${fmtSpan(rate)} span${suffix}`;
+    }
+
+    // Resolve the frequency edges of the *visible* window. At 1x this is
+    // just the payload's own span; zoomed in it is the sub-range the crop
+    // actually covers, which is the whole point of being able to zoom —
+    // you can read the edges off the axis instead of estimating.
+    function visibleFreqRange(state, payload) {
+        // build_spectrum_payload() emits freq_min/freq_max as null when the
+        // centre frequency cannot be coerced, and Number(null) is 0 — which
+        // passes Number.isFinite and would label both edges 0.00000 MHz over
+        // a zero-width span. Reject the explicit-null and degenerate cases
+        // before converting. (Older services omit the keys entirely, giving
+        // undefined -> NaN, which the isFinite guard already caught.)
+        if (payload.freq_min == null || payload.freq_max == null) return null;
         const fMin = Number(payload.freq_min);
         const fMax = Number(payload.freq_max);
-        const fCtr = Number(payload.center_frequency);
-        if (!Number.isFinite(fMin) || !Number.isFinite(fMax)) {
-            state.axisEl.textContent = '';
+        if (!Number.isFinite(fMin) || !Number.isFinite(fMax) || fMax <= fMin) {
+            return null;
+        }
+        const nFreq = (state.lastSpectrum && state.lastSpectrum.length)
+            || state.nFreq || 0;
+        if (!nFreq || !zoomIsActive(state)) {
+            return { fMin, fMax, centre: Number(payload.center_frequency) };
+        }
+        const { start, count } = zoomRange(state, nFreq);
+        const binHz = (fMax - fMin) / nFreq;
+        const lo = fMin + start * binHz;
+        const hi = lo + count * binHz;
+        return { fMin: lo, fMax: hi, centre: (lo + hi) / 2 };
+    }
+
+    // Frequency formatter that gains decimals as you zoom in — 3 dp (kHz
+    // resolution) is useless once the window is only a few kHz wide.
+    function fmtFreqMHz(hz, spanHz) {
+        if (!Number.isFinite(hz)) return '—';
+        let dp = 3;
+        if (Number.isFinite(spanHz)) {
+            if (spanHz < 20e3) dp = 5;
+            else if (spanHz < 200e3) dp = 4;
+        }
+        return `${(hz / 1e6).toFixed(dp)} MHz`;
+    }
+
+    function renderSpectrumAxis(state, payload, axisEl) {
+        if (!axisEl) return;
+        const range = visibleFreqRange(state, payload);
+        if (!range) {
+            axisEl.textContent = '';
             return;
         }
-        // Show MHz at the edges and the carrier in the middle, matching
-        // renderWaterfall()'s axis but in absolute frequency (the live
-        // endpoint returns absolute Hz, not deltas).
-        state.axisEl.innerHTML = '';
-        const fmt = (hz) => Number.isFinite(hz)
-            ? `${(hz / 1e6).toFixed(3)} MHz` : '—';
+        // Show MHz at the edges and the tuned carrier in the middle,
+        // matching renderWaterfall()'s axis but in absolute frequency (the
+        // live endpoint returns absolute Hz, not deltas).
+        const span = range.fMax - range.fMin;
+        const tuned = Number(payload.center_frequency);
+        axisEl.innerHTML = '';
         const left = document.createElement('span');
-        left.textContent = fmt(fMin);
+        left.textContent = fmtFreqMHz(range.fMin, span);
         const centre = document.createElement('span');
-        centre.textContent = Number.isFinite(fCtr) ? `${fmt(fCtr)} (carrier)` : '';
+        if (Number.isFinite(tuned) && tuned >= range.fMin && tuned <= range.fMax) {
+            // The tuned carrier is still on screen — label it as such.
+            centre.textContent = `${fmtFreqMHz(tuned, span)} (carrier)`;
+        } else if (zoomIsActive(state)) {
+            // Panned away from the carrier; show where we actually are.
+            centre.textContent = fmtFreqMHz(range.centre, span);
+        }
         const right = document.createElement('span');
-        right.textContent = fmt(fMax);
-        state.axisEl.appendChild(left);
-        state.axisEl.appendChild(centre);
-        state.axisEl.appendChild(right);
+        right.textContent = fmtFreqMHz(range.fMax, span);
+        axisEl.appendChild(left);
+        axisEl.appendChild(centre);
+        axisEl.appendChild(right);
+    }
+
+    function liveWfUpdateAxis(state, payload) {
+        renderSpectrumAxis(state, payload, state.axisEl);
     }
 
     // ---- Spectrum Scope ---------------------------------------------------
@@ -1678,6 +2086,7 @@ sudo systemctl restart eas-station</code></pre>
         state.scopeStatusEl.className = 'text-muted';
         state.scopeStatusEl.textContent = 'Waiting for spectrum…';
         header.appendChild(state.scopeStatusEl);
+        header.appendChild(zoomBuildControls(state));
         container.appendChild(header);
 
         const canvas = document.createElement('canvas');
@@ -1692,6 +2101,7 @@ sudo systemctl restart eas-station</code></pre>
         state.scopeCanvas = canvas;
         state.scopeCtx = canvas.getContext('2d');
         state.scopePeak = null;
+        zoomAttachGestures(state, canvas);
 
         state.scopeAxisEl = document.createElement('div');
         state.scopeAxisEl.className = 'd-flex justify-content-between text-muted small mt-1';
@@ -1699,25 +2109,7 @@ sudo systemctl restart eas-station</code></pre>
     }
 
     function scopeUpdateAxis(state, payload) {
-        if (!state.scopeAxisEl) return;
-        const fMin = Number(payload.freq_min);
-        const fMax = Number(payload.freq_max);
-        const fCtr = Number(payload.center_frequency);
-        if (!Number.isFinite(fMin) || !Number.isFinite(fMax)) {
-            state.scopeAxisEl.textContent = '';
-            return;
-        }
-        const fmt = (hz) => Number.isFinite(hz) ? `${(hz / 1e6).toFixed(3)} MHz` : '—';
-        state.scopeAxisEl.innerHTML = '';
-        const left = document.createElement('span');
-        left.textContent = fmt(fMin);
-        const centre = document.createElement('span');
-        centre.textContent = Number.isFinite(fCtr) ? `${fmt(fCtr)} (carrier)` : '';
-        const right = document.createElement('span');
-        right.textContent = fmt(fMax);
-        state.scopeAxisEl.appendChild(left);
-        state.scopeAxisEl.appendChild(centre);
-        state.scopeAxisEl.appendChild(right);
+        renderSpectrumAxis(state, payload, state.scopeAxisEl);
     }
 
     function scopeRender(state, spectrum) {
@@ -1732,7 +2124,9 @@ sudo systemctl restart eas-station</code></pre>
         // Peak-hold trace: fast attack / slow release, same idea already
         // used for the VU meters on the audio monitoring page, so a
         // transient (e.g. a brief burst of interference between polls) is
-        // still visible instead of being lost to subsampling.
+        // still visible instead of being lost to subsampling. Indexed by
+        // ABSOLUTE bin over the full span, so zooming or panning does not
+        // discard the peaks already accumulated off-screen.
         if (!state.scopePeak || state.scopePeak.length !== n) {
             state.scopePeak = new Float32Array(spectrum);
         } else {
@@ -1744,8 +2138,48 @@ sudo systemctl restart eas-station</code></pre>
             }
         }
 
+        // Visible bin window. Everything below iterates [start, end) and
+        // maps it across the full canvas width.
+        const { start: binStart, count: binCount } = zoomRange(state, n);
+        const binEnd = binStart + binCount;
+
         ctx.fillStyle = '#04040c';
         ctx.fillRect(0, 0, w, h);
+
+        // Auto-scale the y-axis to this payload's actual min/max, the same
+        // way drawSparkline() (used by the sparkline strip elsewhere on
+        // this page) already does -- rather than assuming the server's 0-1
+        // normalised power spans the full canvas. Real FM passbands only
+        // occupy a fraction of that nominal range, while FFT edge bins
+        // (index 0 / N-1) commonly carry a DC-offset artifact well above
+        // the rest of the spectrum; without auto-scaling, that edge spike
+        // pegs the trace to the very top of the canvas with zero headroom
+        // (looks "clipped") while the real signal collapses into a thin
+        // band at the bottom ("too zoomed in" on the noise floor).
+        // Scale over the VISIBLE bins only. Zooming in on a weak feature
+        // is pointless if a strong carrier elsewhere in the span keeps
+        // owning the y-axis, so the range follows the crop.
+        // Both traces must fit: the peak-hold line retains historical
+        // maxima that can sit above the current spectrum, and scaleY()
+        // clamps to [lo, hi] — so excluding it pinned the amber trace flat
+        // against the top edge instead of scaling to show it.
+        let lo = Infinity, hi = -Infinity;
+        for (let i = binStart; i < binEnd; i++) {
+            const v = Number(spectrum[i]);
+            if (isFinite(v)) {
+                if (v < lo) lo = v;
+                if (v > hi) hi = v;
+            }
+            const pk = state.scopePeak ? Number(state.scopePeak[i]) : NaN;
+            if (isFinite(pk) && pk > hi) hi = pk;
+        }
+        if (!isFinite(lo) || !isFinite(hi)) { lo = 0; hi = 1; }
+        if (lo === hi) { lo -= 0.05; hi += 0.05; }
+        const span = hi - lo;
+        lo = Math.max(0, lo - span * 0.08);
+        hi = hi + span * 0.08;
+        state.scopeYRange = [lo, hi];
+        const scaleY = (v) => h - ((Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * h;
 
         ctx.strokeStyle = 'rgba(128,128,128,0.2)';
         ctx.lineWidth = 1;
@@ -1757,17 +2191,17 @@ sudo systemctl restart eas-station</code></pre>
             ctx.stroke();
         }
 
-        const xStep = w / (n - 1 || 1);
+        const xStep = w / (binCount - 1 || 1);
 
         // Peak-hold trace drawn first (dim amber) so the live trace sits
         // visually on top of it.
         ctx.strokeStyle = 'rgba(255, 176, 0, 0.55)';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        for (let i = 0; i < n; i++) {
-            const x = i * xStep;
-            const y = h - (Math.max(0, Math.min(1, state.scopePeak[i])) * h);
-            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        for (let i = binStart; i < binEnd; i++) {
+            const x = (i - binStart) * xStep;
+            const y = scaleY(state.scopePeak[i]);
+            if (i === binStart) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
 
@@ -1776,11 +2210,10 @@ sudo systemctl restart eas-station</code></pre>
         ctx.strokeStyle = '#39ff8f';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        for (let i = 0; i < n; i++) {
-            const x = i * xStep;
-            const v = Math.max(0, Math.min(1, Number(spectrum[i]) || 0));
-            const y = h - (v * h);
-            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        for (let i = binStart; i < binEnd; i++) {
+            const x = (i - binStart) * xStep;
+            const y = scaleY(Number(spectrum[i]) || 0);
+            if (i === binStart) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
     }
@@ -1798,6 +2231,15 @@ sudo systemctl restart eas-station</code></pre>
             lastTimestamp: 0,
             nFreq: 0,
             buffer: null,
+            // Zoom is shared by the waterfall and the scope: they show the
+            // same signal from the same payload, so panning one and not the
+            // other would just be confusing. `centerFrac` is the centre of
+            // the visible window as a fraction (0-1) of the full span.
+            zoom: 1,
+            centerFrac: 0.5,
+            lastSpectrum: null,
+            lastPayload: null,
+            wfScratch: null,
             canvas: null,
             ctx: null,
             statusEl: null,
@@ -1910,25 +2352,30 @@ sudo systemctl restart eas-station</code></pre>
             state.lastTimestamp = ts;
             const ageMs = ts ? Math.max(0, Date.now() - ts * 1000) : 0;
 
+            // Retained so a zoom/pan can re-render immediately instead of
+            // waiting up to LIVE_WF_POLL_MS for the next frame.
+            state.lastSpectrum = spectrum;
+            state.lastPayload = payload;
+            state.lastAgeMs = ageMs;
+
             if (state.waterfallActive) {
                 if (!state.buffer || state.nFreq !== spectrum.length) {
                     liveWfResizeBuffer(state, spectrum.length);
-                    state.canvas.width = spectrum.length;
                     liveWfRepaint(state);
                 }
                 liveWfPushRow(state, spectrum);
                 state.rowCount = (state.rowCount || 0) + 1;
                 liveWfUpdateAxis(state, payload);
                 state.statusEl.textContent =
-                    `${spectrum.length}-bin FFT · ${state.rowCount} rows · `
-                    + `latency ${ageMs.toFixed(0)} ms`;
+                    waterfallStatusText(state, payload, spectrum.length, ageMs);
             }
             if (state.scopeActive) {
                 scopeRender(state, spectrum);
                 scopeUpdateAxis(state, payload);
                 state.scopeStatusEl.textContent =
-                    `${spectrum.length}-bin FFT · latency ${ageMs.toFixed(0)} ms`;
+                    scopeStatusText(state, payload, spectrum.length, ageMs);
             }
+            zoomRefreshControls(state);
         } catch (err) {
             // Network blip — keep the loop running. The next tick will try
             // again. Show the most recent error in the status line(s).

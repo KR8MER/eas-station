@@ -181,6 +181,30 @@ class HardwareSettings(db.Model):
     tower_light_quiet_end = db.Column(db.String(5), nullable=False, default='07:00')
 
     # ========================================================================
+    # Dead-air (silence) monitoring -- output half only
+    # ------------------------------------------------------------------
+    # Drives the tower light plus an optional rack alarm buzzer when any
+    # monitored source is silent. The *detection* half (whether a given
+    # source alarms on silence, and at what threshold) is per-source
+    # config now, not here -- see AudioSourceConfigDB.config_params's
+    # dead_air_* keys and app_core/audio/silence.py for why a level
+    # threshold alone cannot detect an SDR whose station has gone off the
+    # air (the receiver then emits full-scale hiss, which any level test
+    # reads as "audio present"). This stays station-wide because there is
+    # one tower light and one buzzer, not one per source.
+    # ========================================================================
+    # Rack alarm buzzer on a GPIO pin. Level-triggered for as long as the
+    # condition holds (not the edge/watchdog path the alert relays use),
+    # and silenced by an operator acknowledgement that leaves the tower
+    # light lit until audio actually returns.
+    dead_air_buzzer_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    dead_air_buzzer_gpio_pin = db.Column(db.Integer, nullable=True)
+    # Tower-light indication for dead air.
+    tower_light_silence_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    tower_light_silence_color = db.Column(db.String(20), nullable=False, default='magenta')
+    tower_light_silence_buzzer = db.Column(db.Boolean, nullable=False, default=False)
+
+    # ========================================================================
     # NeoPixel / WS2812B Addressable LED Strip Settings
     # ========================================================================
     neopixel_enabled = db.Column(db.Boolean, nullable=False, default=False)

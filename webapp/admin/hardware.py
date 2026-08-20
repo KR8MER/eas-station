@@ -499,6 +499,8 @@ def update_hardware():
             'tower_light_buzzer_disabled', 'tower_light_fault_enabled',
             'tower_light_gate_pending_enabled',
             'tower_light_severity_colors', 'tower_light_quiet_enabled',
+            'dead_air_buzzer_enabled', 'tower_light_silence_enabled',
+            'tower_light_silence_buzzer',
             'neopixel_enabled', 'neopixel_flash_on_alert',
             'gps_enabled', 'gps_use_for_location', 'gps_use_for_time',
         ]
@@ -524,6 +526,7 @@ def update_hardware():
             'neopixel_flash_interval_ms',
             'gps_baudrate', 'gps_pps_gpio_pin', 'gps_min_satellites',
             'gps_gpsd_port',
+            'dead_air_buzzer_gpio_pin',
         ]
         for field in int_fields:
             if field in data and data[field] is not None:
@@ -580,10 +583,24 @@ def update_hardware():
             ('tower_light_warning_color', 'red'),
             ('tower_light_watch_color', 'yellow'),
             ('tower_light_advisory_color', 'white'),
+            ('tower_light_silence_color', 'magenta'),
         ):
             if color_field in data and data[color_field] is not None:
                 value = str(data[color_field]).strip().lower()
                 data[color_field] = value if value in _tower_colors else fallback
+
+        # The rack-buzzer pin is the only dead-air value this page owns;
+        # the detection thresholds live with the audio sources they watch
+        # (see webapp/admin/audio_ingest/routes_dead_air.py) so a future
+        # email/SMS notifier can share the same policy rather than reading
+        # it out of the GPIO page.
+        if data.get('dead_air_buzzer_gpio_pin') is not None:
+            try:
+                data['dead_air_buzzer_gpio_pin'] = max(
+                    2, min(27, int(data['dead_air_buzzer_gpio_pin']))
+                )
+            except (TypeError, ValueError):
+                data['dead_air_buzzer_gpio_pin'] = None
 
         # Quiet-hours times must be HH:MM; fall back to the defaults rather
         # than storing a value the indicator scheduler cannot parse.

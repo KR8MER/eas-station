@@ -1052,6 +1052,63 @@
                             </div>
 
                             <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-volume-mute"></i>Dead Air Indication</div>
+                                <p class="text-muted small mb-3">
+                                    How this station <em>signals</em> dead air. What counts as dead air &mdash; the
+                                    thresholds and hold-off &mdash; is an audio policy and lives with the sources it
+                                    watches, under
+                                    <a href="/admin/audio-sources"><strong>Audio Ingestion &rarr; Dead Air Monitoring</strong></a>.
+                                </p>
+
+                                <div class="row g-3 align-items-end">
+                                    <div class="col-12 col-md-6">
+                                        <div class="form-check form-switch mb-2">
+                                            <input class="form-check-input" type="checkbox" role="switch" id="dead_air_buzzer_enabled" name="dead_air_buzzer_enabled" value="true" {% if settings.dead_air_buzzer_enabled %}checked{% endif %}>
+                                            <label class="form-check-label" for="dead_air_buzzer_enabled">Sound a rack alarm buzzer on a GPIO pin</label>
+                                        </div>
+                                        <small class="form-text text-muted">
+                                            Held for as long as the condition lasts, not pulsed. An operator can
+                                            acknowledge it from the Audio Health dashboard to stop the noise while
+                                            leaving the light lit.
+                                        </small>
+                                    </div>
+                                    <div class="col-12 col-md-3">
+                                        <label for="dead_air_buzzer_gpio_pin" class="form-label">Buzzer GPIO pin</label>
+                                        <input type="number" class="form-control" id="dead_air_buzzer_gpio_pin" name="dead_air_buzzer_gpio_pin"
+                                               min="2" max="27" placeholder="e.g. 17" value="{{ settings.dead_air_buzzer_gpio_pin if settings.dead_air_buzzer_gpio_pin is not none else '' }}">
+                                        <small class="form-text text-muted">BCM numbering. Takes effect on service restart.</small>
+                                    </div>
+                                </div>
+
+                                <div class="row g-3 mt-1">
+                                    <div class="col-12 col-md-4">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="tower_light_silence_enabled" name="tower_light_silence_enabled" value="true" {% if settings.tower_light_silence_enabled %}checked{% endif %}>
+                                            <label class="form-check-label small" for="tower_light_silence_enabled">Show dead air on the tower light</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <label for="tower_light_silence_color" class="form-label">Dead-air colour</label>
+                                        <select class="form-select tower-color-select" id="tower_light_silence_color" name="tower_light_silence_color">
+                                            {% for value, label in tower_color_options %}
+                                            <option value="{{ value }}" {% if (settings.tower_light_silence_color or 'magenta') == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="tower_light_silence_buzzer" name="tower_light_silence_buzzer" value="true" {% if settings.tower_light_silence_buzzer %}checked{% endif %}>
+                                            <label class="form-check-label small" for="tower_light_silence_buzzer">Also sound the tower light&rsquo;s own buzzer</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <small class="form-text text-muted d-block mt-2">
+                                    Dead air ranks above every alert indication and is <strong>not</strong> suppressed by quiet
+                                    hours &mdash; an overnight schedule must never hide the fact that monitoring has stopped.
+                                </small>
+                            </div>
+
+                            <div class="hw-section">
                                 <div class="hw-section-title"><i class="fas fa-moon"></i>Quiet Hours</div>
                                 <div class="form-check mb-2">
                                     <input class="form-check-input" type="checkbox" id="tower_light_quiet_enabled" name="tower_light_quiet_enabled" value="true" {% if settings.tower_light_quiet_enabled %}checked{% endif %}>

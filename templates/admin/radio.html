@@ -384,42 +384,6 @@
                                 <label class="form-check-label" for="receiverRBDS">Extract RBDS/RDS</label>
                             </div>
                         </div>
-                        <div class="col-12"><hr class="my-2"></div>
-                        <div class="col-12">
-                            <h6 class="text-primary mb-1"><i class="fas fa-waveform"></i> Carrier Squelch</h6>
-                            <p class="text-muted small mb-2">Automatically mute white noise when the carrier drops and raise alarms if desired.</p>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="receiverSquelchEnabled" name="squelch_enabled">
-                                <label class="form-check-label" for="receiverSquelchEnabled"><strong>Enable Squelch</strong></label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="receiverSquelchAlarm" name="squelch_alarm">
-                                <label class="form-check-label" for="receiverSquelchAlarm">Raise alarm on carrier loss</label>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <label for="receiverSquelchThreshold" class="form-label">Threshold (dBFS)</label>
-                            <input type="number" step="0.5" min="-160" max="0" class="form-control" id="receiverSquelchThreshold" name="squelch_threshold_db" value="-65">
-                            <small class="form-text text-muted">Mute when RMS level drops below this value.</small>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="row g-2">
-                                <div class="col-6">
-                                    <label for="receiverSquelchOpen" class="form-label">Open Delay (ms)</label>
-                                    <input type="number" min="0" max="60000" class="form-control" id="receiverSquelchOpen" name="squelch_open_ms" value="150">
-                                </div>
-                                <div class="col-6">
-                                    <label for="receiverSquelchClose" class="form-label">Hang Time (ms)</label>
-                                    <input type="number" min="0" max="60000" class="form-control" id="receiverSquelchClose" name="squelch_close_ms" value="750">
-                                </div>
-                                <div class="col-12">
-                                    <small class="form-text text-muted">Prevents squelch chatter during fades and flutter.</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-12"><hr class="my-2"></div>
                         <div class="col-md-6 d-flex align-items-center">
                             <div class="form-check me-3">
                                 <input class="form-check-input" type="checkbox" id="receiverEnabled" name="enabled" checked>
@@ -1090,9 +1054,6 @@ function initRadioReceiversPage() {
         const label = String(payload?.status || 'UNKNOWN').toUpperCase();
 
         const metadata = payload?.metrics?.metadata || {};
-        const carrierPresent = metadata?.carrier_present;
-        const carrierAlarm = metadata?.carrier_alarm === true;
-        const squelchState = metadata?.squelch_state ? String(metadata.squelch_state).toLowerCase() : null;
         const streamDetails = deriveAudioStreamDetails(payload, sourceName);
 
         let statusHtml = `<span class="badge ${badgeClass} me-2">${escapeHtml(label)}</span>`;
@@ -1104,17 +1065,6 @@ function initRadioReceiversPage() {
             statusHtml += '<span class="text-muted">Audio monitor is starting…</span>';
         } else {
             statusHtml += '<span class="text-muted">Audio monitor is not running.</span>';
-        }
-
-        if (carrierAlarm) {
-            statusHtml += '<span class="badge bg-danger ms-2"><i class="fas fa-triangle-exclamation me-1"></i>Carrier Lost</span>';
-        } else if (carrierPresent === false) {
-            statusHtml += '<span class="badge bg-warning text-dark ms-2"><i class="fas fa-wave-square me-1"></i>Carrier Lost</span>';
-        } else if (carrierPresent === true) {
-            statusHtml += '<span class="badge bg-success-subtle text-success ms-2"><i class="fas fa-signal me-1"></i>Carrier Present</span>';
-        }
-        if (squelchState) {
-            statusHtml += `<span class="badge bg-secondary ms-2 text-uppercase">Squelch ${escapeHtml(squelchState)}</span>`;
         }
 
         statusEl.innerHTML = statusHtml;
@@ -1166,25 +1116,6 @@ function initRadioReceiversPage() {
             metaLines.push(`Stream type: ${escapeHtml(streamDetails.description)}`);
         }
 
-        if (metadata.squelch_enabled) {
-            const threshold = typeof metadata.squelch_threshold_db === 'number'
-                ? `${metadata.squelch_threshold_db.toFixed(1)} dBFS`
-                : 'Configured';
-            const lastRms = typeof metadata.squelch_last_rms_db === 'number'
-                ? `${metadata.squelch_last_rms_db.toFixed(1)} dBFS`
-                : null;
-            const since = typeof metadata.squelch_state_since === 'number'
-                ? new Date(metadata.squelch_state_since * 1000).toLocaleTimeString()
-                : null;
-            let squelchLine = `Squelch threshold: ${threshold}`;
-            if (lastRms !== null) {
-                squelchLine += ` • RMS ${lastRms}`;
-            }
-            if (since) {
-                squelchLine += ` • State since ${since}`;
-            }
-            metaLines.push(squelchLine);
-        }
 
         metaEl.innerHTML = metaLines.join('<br>');
 
@@ -1511,10 +1442,6 @@ function initRadioReceiversPage() {
         }
     });
 
-    document.getElementById('receiverAudioOutput')?.addEventListener('change', (event) => {
-        toggleSquelchInputs(event.target.checked);
-    });
-
     // Handle service type selection
     let currentServiceType = null;
     let currentServiceConfig = null;
@@ -1809,29 +1736,6 @@ function initRadioReceiversPage() {
         }, 500);
     });
 
-    function toggleSquelchInputs(enabled) {
-        const elements = [
-            document.getElementById('receiverSquelchEnabled'),
-            document.getElementById('receiverSquelchAlarm'),
-            document.getElementById('receiverSquelchThreshold'),
-            document.getElementById('receiverSquelchOpen'),
-            document.getElementById('receiverSquelchClose'),
-        ];
-
-        elements.forEach((element) => {
-            if (!element) {
-                return;
-            }
-            element.disabled = !enabled;
-            if (element.type === 'checkbox') {
-                if (enabled) {
-                    element.removeAttribute('aria-disabled');
-                } else {
-                    element.setAttribute('aria-disabled', 'true');
-                }
-            }
-        });
-    }
 
     // Apply service configuration to hidden fields
     function applyServiceConfig() {
@@ -1866,10 +1770,6 @@ function initRadioReceiversPage() {
                     rbdsCheckbox.parentElement?.classList.remove('text-muted');
                 }
             }
-            
-            // Still update squelch input enabled state based on user's audio_output setting
-            const audioOutputEnabled = document.getElementById('receiverAudioOutput').checked;
-            toggleSquelchInputs(audioOutputEnabled);
             return;
         }
 
@@ -1907,19 +1807,7 @@ function initRadioReceiversPage() {
         }
 
         document.getElementById('receiverDeemphasis').value = currentServiceConfig.deemphasis_us;
-        document.getElementById('receiverSquelchEnabled').checked = currentServiceConfig.squelch_enabled === true;
-        document.getElementById('receiverSquelchAlarm').checked = currentServiceConfig.squelch_alarm === true;
-        if (typeof currentServiceConfig.squelch_threshold_db === 'number') {
-            document.getElementById('receiverSquelchThreshold').value = currentServiceConfig.squelch_threshold_db;
-        }
-        if (typeof currentServiceConfig.squelch_open_ms === 'number') {
-            document.getElementById('receiverSquelchOpen').value = currentServiceConfig.squelch_open_ms;
-        }
-        if (typeof currentServiceConfig.squelch_close_ms === 'number') {
-            document.getElementById('receiverSquelchClose').value = currentServiceConfig.squelch_close_ms;
-        }
 
-        toggleSquelchInputs(currentServiceConfig.audio_output === true);
 
         // Show configuration summary
         showConfigSummary();
@@ -1952,7 +1840,6 @@ function initRadioReceiversPage() {
 
     async function openModal(receiver = null) {
         form.reset();
-        toggleSquelchInputs(false);
 
         // Reset service selection
         currentServiceType = null;
@@ -1998,21 +1885,9 @@ function initRadioReceiversPage() {
             document.getElementById('receiverAudioOutput').checked = receiver.audio_output === true;
             document.getElementById('receiverStereo').checked = receiver.stereo_enabled === true;
             document.getElementById('receiverRBDS').checked = receiver.enable_rbds === true;
-            document.getElementById('receiverSquelchEnabled').checked = receiver.squelch_enabled === true;
-            document.getElementById('receiverSquelchAlarm').checked = receiver.squelch_alarm === true;
-            if (typeof receiver.squelch_threshold_db === 'number') {
-                document.getElementById('receiverSquelchThreshold').value = receiver.squelch_threshold_db;
-            }
-            if (typeof receiver.squelch_open_ms === 'number') {
-                document.getElementById('receiverSquelchOpen').value = receiver.squelch_open_ms;
-            }
-            if (typeof receiver.squelch_close_ms === 'number') {
-                document.getElementById('receiverSquelchClose').value = receiver.squelch_close_ms;
-            }
             document.getElementById('receiverEnabled').checked = receiver.enabled !== false;
             document.getElementById('receiverAutoStart').checked = receiver.auto_start !== false;
 
-            toggleSquelchInputs(receiver.audio_output === true);
 
             // Load devices and auto-select - this will set the serial field
             await loadSDRDevices(receiver.serial);
@@ -2323,8 +2198,6 @@ function initRadioReceiversPage() {
         payload.audio_output = formData.get('audio_output') !== null;
         payload.stereo_enabled = formData.get('stereo_enabled') !== null;
         payload.enable_rbds = formData.get('enable_rbds') !== null;
-        payload.squelch_enabled = formData.get('squelch_enabled') !== null;
-        payload.squelch_alarm = formData.get('squelch_alarm') !== null;
         payload.bias_t_enabled = formData.get('bias_t_enabled') !== null;
 
         ['gain', 'channel', 'external_lna_db'].forEach((key) => {
@@ -2333,20 +2206,8 @@ function initRadioReceiversPage() {
             }
         });
 
-        if (payload.squelch_threshold_db !== undefined) {
-            const threshold = Number.parseFloat(payload.squelch_threshold_db);
-            payload.squelch_threshold_db = Number.isFinite(threshold) ? threshold : undefined;
-        }
 
-        if (payload.squelch_open_ms !== undefined) {
-            const openDelay = Number.parseInt(String(payload.squelch_open_ms), 10);
-            payload.squelch_open_ms = Number.isFinite(openDelay) ? openDelay : undefined;
-        }
 
-        if (payload.squelch_close_ms !== undefined) {
-            const closeDelay = Number.parseInt(String(payload.squelch_close_ms), 10);
-            payload.squelch_close_ms = Number.isFinite(closeDelay) ? closeDelay : undefined;
-        }
 
         const receiverId = payload.id;
         delete payload.id;

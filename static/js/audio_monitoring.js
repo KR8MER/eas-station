@@ -1226,6 +1226,11 @@ async function addAudioSource() {
     const channels = parseInt(document.getElementById('channels').value);
     const silenceThreshold = parseFloat(document.getElementById('silenceThreshold').value);
     const silenceDuration = parseFloat(document.getElementById('silenceDuration').value);
+    const deadAirEnabled = document.getElementById('sourceDeadAirEnabled')?.checked || false;
+    const deadAirDuration = parseFloat(document.getElementById('sourceDeadAirDuration').value);
+    const deadAirLevel = parseFloat(document.getElementById('sourceDeadAirLevel').value);
+    const deadAirFlatness = parseInt(document.getElementById('sourceDeadAirFlatness').value);
+    const deadAirOpenCarrier = document.getElementById('sourceDeadAirOpenCarrier')?.checked || false;
 
     if (!sourceType || !sourceName) {
         showError('Please fill in all required fields');
@@ -1291,6 +1296,11 @@ async function addAudioSource() {
         channels: channels,
         silence_threshold_db: silenceThreshold,
         silence_duration_seconds: silenceDuration,
+        dead_air_enabled: deadAirEnabled,
+        dead_air_duration_seconds: deadAirDuration,
+        dead_air_level_threshold_db: deadAirLevel,
+        dead_air_flatness_threshold_pct: deadAirFlatness,
+        dead_air_detect_open_carrier: deadAirOpenCarrier,
         device_params: deviceParams,
         auto_start: document.getElementById('autoStart')?.checked || false,
     };
@@ -1627,6 +1637,19 @@ async function editSource(sourceId) {
         if (thresholdEl) thresholdEl.value = config.silence_threshold_db || -60;
         if (durationEl) durationEl.value = config.silence_duration_seconds || 5;
 
+        // Set dead-air alarm values from config -- per source, unrelated to
+        // the silence_threshold_db/silence_duration_seconds statistic above.
+        const deadAirEnabledEl = document.getElementById('editDeadAirEnabled');
+        const deadAirDurationEl = document.getElementById('editDeadAirDuration');
+        const deadAirLevelEl = document.getElementById('editDeadAirLevel');
+        const deadAirFlatnessEl = document.getElementById('editDeadAirFlatness');
+        const deadAirOpenCarrierEl = document.getElementById('editDeadAirOpenCarrier');
+        if (deadAirEnabledEl) deadAirEnabledEl.checked = config.dead_air_enabled || false;
+        if (deadAirDurationEl) deadAirDurationEl.value = config.dead_air_duration_seconds ?? 20;
+        if (deadAirLevelEl) deadAirLevelEl.value = config.dead_air_level_threshold_db ?? -65;
+        if (deadAirFlatnessEl) deadAirFlatnessEl.value = config.dead_air_flatness_threshold_pct ?? 25;
+        if (deadAirOpenCarrierEl) deadAirOpenCarrierEl.checked = config.dead_air_detect_open_carrier !== false;
+
         // Set database-only fields
         const autoStartEl = document.getElementById('editAutoStart');
         const descEl = document.getElementById('editDescription');
@@ -1658,6 +1681,11 @@ async function saveEditedSource() {
             priority: parseInt(document.getElementById('editPriority').value),
             silence_threshold_db: parseFloat(document.getElementById('editSilenceThreshold').value),
             silence_duration_seconds: parseFloat(document.getElementById('editSilenceDuration').value),
+            dead_air_enabled: document.getElementById('editDeadAirEnabled')?.checked || false,
+            dead_air_duration_seconds: parseFloat(document.getElementById('editDeadAirDuration').value),
+            dead_air_level_threshold_db: parseFloat(document.getElementById('editDeadAirLevel').value),
+            dead_air_flatness_threshold_pct: parseInt(document.getElementById('editDeadAirFlatness').value),
+            dead_air_detect_open_carrier: document.getElementById('editDeadAirOpenCarrier')?.checked || false,
             auto_start: document.getElementById('editAutoStart').checked,
             description: document.getElementById('editDescription').value,
         };

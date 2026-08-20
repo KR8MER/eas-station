@@ -161,8 +161,10 @@ PUBLISHER_SLEEP_MAX_MS = 10  # Maximum sleep when buffer is low
 # Spectrum computation constants
 FFT_SIZE = 2048
 FFT_MIN_MAGNITUDE = 1e-10
-SPECTRUM_DB_MIN = -80.0
-SPECTRUM_DB_MAX = 0.0
+# Floor on the per-capture dB span used to normalize the spectrum to 0-1
+# (see compute_spectrum()) -- prevents a near-silent capture from being
+# auto-amplified into apparent noise.
+MIN_SPECTRUM_DB_SPAN = 10.0
 
 # IQ capture configuration (capture_iq command)
 # Captures are written as complex64 .npy files for use with
@@ -1064,22 +1066,102 @@ def compute_spectrum(samples, numpy_module) -> Optional[list]:
         window = numpy_module.hanning(FFT_SIZE)
         windowed = samples_centered * window
         fft_result = numpy_module.fft.fftshift(numpy_module.fft.fft(windowed))
-        
-        # Convert to magnitude (dB)
-        magnitude = numpy_module.abs(fft_result)
+
+        # Convert to magnitude (dB), referenced to full-scale (dBFS) so a
+        # unit-amplitude input reads ~0 dB at its bin. Without dividing by
+        # the window's coherent gain (sum(window)), a raw FFT bin's
+        # magnitude scales with FFT_SIZE and the window shape -- for
+        # FFT_SIZE=2048 with a Hanning window, a full-scale tone's peak bin
+        # sits around +54 dB raw, far above any reasonable fixed ceiling.
+        magnitude = numpy_module.abs(fft_result) / numpy_module.sum(window)
         magnitude = numpy_module.where(magnitude > 0, magnitude, FFT_MIN_MAGNITUDE)
         magnitude_db = 20 * numpy_module.log10(magnitude)
-        
-        # Normalize to 0-1 range
-        normalized = numpy_module.clip(
-            (magnitude_db - SPECTRUM_DB_MIN) / (SPECTRUM_DB_MAX - SPECTRUM_DB_MIN),
-            0.0, 1.0
-        )
+
+        # Normalize to 0-1 range using THIS capture's own dB span, not a
+        # fixed SPECTRUM_DB_MIN/MAX window. A fixed window can't hold for
+        # every receiver/gain/antenna combination -- the absolute dBFS
+        # level of "the same real signal" varies enormously with gain
+        # settings and cable loss, so any single fixed calibration either
+        # saturates strong signals at 1.0 (clips the useful shape away) or
+        # crushes weak ones to 0.0. Reproduced live: with a fixed -80..0 dB
+        # window, 87% of bins (1781/2048) on a real, moderate-strength FM
+        # signal clipped to 1.0, flattening the waterfall and spectrum
+        # scope into a saturated "brick" instead of a legible spectral
+        # shape. Per-capture normalization always uses the full available
+        # dynamic range instead. MIN_SPECTRUM_DB_SPAN floors the divisor so
+        # a near-silent capture (no antenna, receiver just started) isn't
+        # auto-amplified into apparent noise.
+        db_min = float(numpy_module.min(magnitude_db))
+        db_max = float(numpy_module.max(magnitude_db))
+        span = max(db_max - db_min, MIN_SPECTRUM_DB_SPAN)
+        normalized = numpy_module.clip((magnitude_db - db_min) / span, 0.0, 1.0)
         
         return normalized.tolist()
     except Exception as e:
         logger.debug(f"Spectrum computation error: {e}")
         return None
+
+
+def build_spectrum_payload(
+    identifier,
+    spectrum,
+    effective_rate,
+    center_frequency,
+    hardware_sample_rate=None,
+    early_decim_factor=1,
+    timestamp=None,
+) -> dict:
+    """Build the Redis payload the webapp's spectrum views consume.
+
+    Publishes the frequency axis explicitly. compute_spectrum() runs on
+    samples taken from the ring buffer, which sit *after* early
+    decimation, so the RF span those bins cover is ``effective_rate``
+    wide -- NOT the configured hardware rate.
+
+    This used to omit ``freq_min``/``freq_max`` entirely, leaving the web
+    route to fall back to the RadioReceiver row's configured sample_rate.
+    On a receiver set to 1.024 MHz (decim 4, 256 kHz effective) that drew
+    the Live Waterfall and Spectrum Scope axes 4x too wide, so a normal
+    ~200 kHz FM broadcast signal appeared to span a full megahertz.
+
+    Args:
+        identifier (str): Receiver identifier.
+        spectrum (list): Normalized 0-1 FFT bins from compute_spectrum().
+        effective_rate (int): Post-decimation sample rate in Hz.
+        center_frequency (int): Tuned frequency in Hz.
+        hardware_sample_rate (int): Configured rate before decimation.
+        early_decim_factor (int): Active decimation factor.
+        timestamp (float): Publication time; defaults to now.
+
+    Returns:
+        dict: JSON-serialisable spectrum payload.
+    """
+    half_span = float(effective_rate) / 2.0
+    try:
+        centre = float(center_frequency)
+        freq_min = centre - half_span
+        freq_max = centre + half_span
+    except (TypeError, ValueError):
+        freq_min = freq_max = None
+
+    try:
+        decim = int(early_decim_factor or 1)
+    except (TypeError, ValueError):
+        decim = 1
+
+    return {
+        'identifier': identifier,
+        'spectrum': spectrum,
+        'fft_size': FFT_SIZE,
+        'sample_rate': effective_rate,  # Effective rate for decimated samples
+        'hardware_sample_rate': hardware_sample_rate,
+        'early_decim_factor': max(1, decim),
+        'center_frequency': center_frequency,
+        'freq_min': freq_min,
+        'freq_max': freq_max,
+        'timestamp': timestamp if timestamp is not None else time.time(),
+        'status': 'available',
+    }
 
 
 def publish_samples_and_metrics():
@@ -1188,15 +1270,17 @@ def publish_samples_and_metrics():
                             if current_time - last_time >= spectrum_interval:
                                 spectrum = compute_spectrum(samples, np)
                                 if spectrum is not None:
-                                    spectrum_payload = {
-                                        'identifier': identifier,
-                                        'spectrum': spectrum,
-                                        'fft_size': FFT_SIZE,
-                                        'sample_rate': effective_rate,  # Use effective rate for decimated samples
-                                        'center_frequency': receiver.config.frequency_hz,
-                                        'timestamp': current_time,
-                                        'status': 'available'
-                                    }
+                                    spectrum_payload = build_spectrum_payload(
+                                        identifier=identifier,
+                                        spectrum=spectrum,
+                                        effective_rate=effective_rate,
+                                        center_frequency=receiver.config.frequency_hz,
+                                        hardware_sample_rate=receiver.config.sample_rate,
+                                        early_decim_factor=getattr(
+                                            receiver, '_early_decim_factor', 1
+                                        ),
+                                        timestamp=current_time,
+                                    )
                                     redis_client.setex(
                                         f"{SDR_SPECTRUM_KEY_PREFIX}{identifier}",
                                         5,  # 5 second TTL
@@ -1730,11 +1814,32 @@ def process_commands(redis_client, timeout: int = 2):
                         else:
                             # Convert complex samples to list of [real, imag] pairs
                             samples_list = [[float(s.real), float(s.imag)] for s in iq_samples[:num_samples]]
+                            # Report the rate these samples are actually
+                            # clocked at. get_samples() returns IQ from the
+                            # ring buffer, i.e. post-early-decimation, so
+                            # the caller must not label an FFT of them with
+                            # the configured hardware rate.
+                            if hasattr(receiver, "get_effective_sample_rate"):
+                                sample_rate_hz = int(receiver.get_effective_sample_rate())
+                            else:
+                                sample_rate_hz = int(
+                                    getattr(receiver.config, "sample_rate", 0) or 0
+                                )
                             result = {
                                 "command_id": command_id,
                                 "success": True,
                                 "samples": samples_list,
-                                "num_samples": len(samples_list)
+                                "num_samples": len(samples_list),
+                                "sample_rate": sample_rate_hz,
+                                "hardware_sample_rate": int(
+                                    getattr(receiver.config, "sample_rate", 0) or 0
+                                ),
+                                "early_decim_factor": int(
+                                    getattr(receiver, "_early_decim_factor", 1) or 1
+                                ),
+                                "center_frequency": int(
+                                    getattr(receiver.config, "frequency_hz", 0) or 0
+                                ),
                             }
                     except Exception as e:
                         logger.error(f"Failed to get spectrum for receiver {receiver_id}: {e}")

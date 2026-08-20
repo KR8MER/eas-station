@@ -46,6 +46,7 @@ import os
 import sys
 import math
 import time
+import uuid
 import signal
 import logging
 import threading
@@ -271,7 +272,7 @@ def sync_radio_receiver_audio_sources(app):
     """
     with app.app_context():
         from app_core.models import RadioReceiver, AudioSourceConfigDB, db
-        from app_core.audio.ingest import AudioSourceType
+        from app_core.audio.ingest import AudioSourceConfig, AudioSourceType
         from app_core.audio.source_config import merge_managed_config_params
 
         logger.info("Syncing audio sources for radio receivers...")
@@ -315,8 +316,11 @@ def sync_radio_receiver_audio_sources(app):
                 logger.debug(f"Auto-detected audio settings for {receiver.identifier}: {sample_rate} Hz, {channels} ch")
             
             buffer_size = 4096 if channels == 1 else 8192
-            silence_threshold = float(receiver.squelch_threshold_db or -60.0)
-            silence_duration = max(float(receiver.squelch_close_ms or 750) / 1000.0, 0.1)
+            # Legacy instantaneous `silence_detected` thresholds. Formerly
+            # derived from the retired squelch columns; the debounced
+            # dead-air alarm uses its own station-wide policy instead.
+            silence_threshold = AudioSourceConfig.silence_threshold_db
+            silence_duration = AudioSourceConfig.silence_duration_seconds
             
             device_params = {
                 'receiver_id': receiver.identifier,
@@ -331,11 +335,6 @@ def sync_radio_receiver_audio_sources(app):
                 'rbds_enabled': bool(receiver.enable_rbds),
                 'stereo_enabled': bool(receiver.stereo_enabled),
                 'deemphasis_us': float(receiver.deemphasis_us or 75.0),  # 75μs for North America
-                'squelch_enabled': bool(receiver.squelch_enabled),
-                'squelch_threshold_db': silence_threshold,
-                'squelch_open_ms': int(receiver.squelch_open_ms or 150),
-                'squelch_close_ms': int(receiver.squelch_close_ms or 750),
-                'carrier_alarm_enabled': bool(receiver.squelch_alarm),
             }
             
             managed_params = {
@@ -346,11 +345,6 @@ def sync_radio_receiver_audio_sources(app):
                 'silence_duration_seconds': silence_duration,
                 'device_params': device_params,
                 'managed_by': 'radio',  # CRITICAL: This flag tells audio-service to use RedisSDRSourceAdapter
-                'squelch_enabled': bool(receiver.squelch_enabled),
-                'squelch_threshold_db': silence_threshold,
-                'squelch_open_ms': int(receiver.squelch_open_ms or 150),
-                'squelch_close_ms': int(receiver.squelch_close_ms or 750),
-                'carrier_alarm_enabled': bool(receiver.squelch_alarm),
             }
             
             freq_display = f"{receiver.frequency_hz/1e6:.3f} MHz" if receiver.frequency_hz else "Unknown"
@@ -463,9 +457,14 @@ def initialize_audio_controller(app):
                             buffer_size=config_params.get('buffer_size', 4096),
                             silence_threshold_db=config_params.get('silence_threshold_db', -60.0),
                             silence_duration_seconds=config_params.get('silence_duration_seconds', 5.0),
+                            dead_air_enabled=config_params.get('dead_air_enabled', False),
+                            dead_air_level_threshold_db=config_params.get('dead_air_level_threshold_db', -65.0),
+                            dead_air_detect_open_carrier=config_params.get('dead_air_detect_open_carrier', True),
+                            dead_air_flatness_threshold_pct=config_params.get('dead_air_flatness_threshold_pct', 25),
+                            dead_air_duration_seconds=config_params.get('dead_air_duration_seconds', 20.0),
                             device_params=config_params.get('device_params', {}),
                         )
-                        
+
                         # Create Redis SDR adapter directly (subscribes to IQ samples)
                         adapter = RedisSDRSourceAdapter(runtime_config)
                         _audio_controller.add_source(adapter)
@@ -499,6 +498,11 @@ def initialize_audio_controller(app):
                     buffer_size=config_params.get('buffer_size', 4096),
                     silence_threshold_db=config_params.get('silence_threshold_db', -60.0),
                     silence_duration_seconds=config_params.get('silence_duration_seconds', 5.0),
+                    dead_air_enabled=config_params.get('dead_air_enabled', False),
+                    dead_air_level_threshold_db=config_params.get('dead_air_level_threshold_db', -65.0),
+                    dead_air_detect_open_carrier=config_params.get('dead_air_detect_open_carrier', True),
+                    dead_air_flatness_threshold_pct=config_params.get('dead_air_flatness_threshold_pct', 25),
+                    dead_air_duration_seconds=config_params.get('dead_air_duration_seconds', 20.0),
                     device_params=config_params.get('device_params', {}),
                 )
 
@@ -724,6 +728,80 @@ def _make_audio_alert_log_callback(flask_app):
     return _callback
 
 
+def _snapshot_audio_metrics_once(flask_app) -> None:
+    """Persist one AudioSourceMetrics row per running source, synchronously.
+
+    Split out from _make_audio_metrics_snapshot_writer() below so tests can
+    call it directly on their own thread instead of racing (or mocking) the
+    background thread that wraps it in production.
+    """
+    if not _audio_controller:
+        return
+    try:
+        with flask_app.app_context():
+            from app_core.extensions import db
+            from app_core.models import AudioSourceMetrics
+            from app_core.audio.ingest import AudioSourceStatus
+
+            for name, source in _audio_controller.get_all_sources().items():
+                if source.status != AudioSourceStatus.RUNNING:
+                    continue
+                metrics_obj = getattr(source, "metrics", None)
+                if metrics_obj is None:
+                    continue
+
+                # peak/rms are true dB (can be -inf for digital silence);
+                # 10 ** (-inf / 20) evaluates to 0.0 in Python, no special
+                # case needed. A missing metrics_obj value (None) is the
+                # only case that would break the NOT NULL float columns.
+                peak_db = metrics_obj.peak_level_db if metrics_obj.peak_level_db is not None else -120.0
+                rms_db = metrics_obj.rms_level_db if metrics_obj.rms_level_db is not None else -120.0
+
+                source_type = getattr(getattr(source, "config", None), "source_type", None)
+                source_type_value = source_type.value if hasattr(source_type, "value") else str(source_type or "unknown")
+
+                db.session.add(AudioSourceMetrics(
+                    source_name=name,
+                    source_type=source_type_value,
+                    peak_level_db=peak_db,
+                    rms_level_db=rms_db,
+                    peak_level_linear=10 ** (peak_db / 20.0),
+                    rms_level_linear=10 ** (rms_db / 20.0),
+                    sample_rate=getattr(metrics_obj, "sample_rate", None) or 0,
+                    channels=getattr(metrics_obj, "channels", None) or 0,
+                    frames_captured=getattr(metrics_obj, "frames_captured", None) or 0,
+                    silence_detected=bool(getattr(metrics_obj, "silence_detected", False)),
+                    buffer_utilization=getattr(metrics_obj, "buffer_utilization", None) or 0.0,
+                    source_metadata=_sanitize_value(getattr(metrics_obj, "metadata", None)),
+                ))
+            db.session.commit()
+    except Exception as exc:
+        logger.warning("Failed to snapshot audio metrics to DB: %s", exc)
+
+
+def _make_audio_metrics_snapshot_writer(flask_app):
+    """Return a callable that triggers _snapshot_audio_metrics_once() on a
+    short-lived background thread. Intended to be called at ~1 Hz from the
+    main loop.
+
+    The RBDS History API (webapp/admin/audio_ingest/routes_rbds.py) and the
+    audio-health analytics aggregator both read the audio_source_metrics
+    table on the assumption that it is populated roughly once a second --
+    but nothing ever wrote to it in production; only tests instantiated
+    AudioSourceMetrics. RBDS History always showed "No stored RBDS
+    snapshots" regardless of how long a station had been running. Dispatch
+    onto a thread here (rather than in _snapshot_audio_metrics_once itself)
+    so a slow commit can never stall the 4 Hz Redis publish loop that VU
+    meters, RSSI, and RBDS/RDS updates depend on.
+    """
+    import threading
+
+    def _trigger() -> None:
+        threading.Thread(target=_snapshot_audio_metrics_once, args=(flask_app,), daemon=True).start()
+
+    return _trigger
+
+
 def initialize_archivers(app, audio_controller):
     """Start AudioArchivers for sources that have archiving enabled in their config_params.
 
@@ -822,6 +900,16 @@ def _source_watchdog_loop(app, audio_controller, stop_event, interval_seconds: f
 
     while not stop_event.wait(interval_seconds):
         try:
+            # Re-read dead-air thresholds each cycle so a change in
+            # Admin -> Hardware takes effect without a service restart.
+            # This loop already owns an app context per iteration and runs
+            # on a fixed schedule, unlike the FIPS refresh which only fires
+            # when an alert happens to arrive.
+            _install_dead_air_criteria(app)
+        except Exception as exc:
+            logger.debug("Dead-air criteria refresh failed: %s", exc)
+
+        try:
             # Look up which sources should be running.  This query MUST run
             # inside a Flask app context — the previous inline implementation
             # ran it without one, so Flask-SQLAlchemy raised on every cycle,
@@ -911,6 +999,11 @@ def initialize_eas_monitor(app, audio_controller):
 
         logger.info("Initializing unified EAS monitor service (V3 architecture)...")
 
+        # Install station-wide dead-air criteria before any source starts,
+        # so monitors are built already configured rather than defaulting
+        # to disabled until the first settings refresh.
+        _install_dead_air_criteria(app)
+
         # Load FIPS codes into a mutable list so in-place updates are reflected
         # in the FIPS-filtering callback without rebuilding it.
         _live_fips: list = load_fips_codes_from_config()
@@ -997,6 +1090,129 @@ def initialize_eas_monitor(app, audio_controller):
         return _eas_monitor
 
 
+def _install_dead_air_criteria(app) -> None:
+    """Retune every source's dead-air monitor from its own per-source config.
+
+    Called at startup and on a fixed watchdog interval (see the source
+    watchdog loop above), so an operator's change in the audio source
+    editor takes effect without a service restart -- same as it always
+    did, just per source now instead of one station-wide policy applied
+    to everyone. See AudioSourceConfig.dead_air_* in app_core/audio/ingest.py
+    for why a single shared policy doesn't fit: a source that's supposed
+    to be silent except when relaying an actual alert (a state relay, an
+    alert-only feed) must never alarm on silence, while a continuous
+    broadcast monitor going silent is a real fault -- one shared enabled
+    flag cannot express both at once.
+
+    ``app`` is accepted for signature compatibility with the pre-per-source
+    version; per-source criteria come from each adapter's own in-memory
+    config, so no app context / DB round trip is needed here.
+    """
+    try:
+        from app_core.audio.silence import (
+            SilenceCriteria,
+            criteria_from_source_config,
+            set_default_criteria,
+        )
+
+        # Brand new sources are constructed with SilenceMonitor(name) (no
+        # explicit criteria), which falls back to this module-level
+        # default until this function retunes them below. Keep it
+        # disabled so a source never briefly alarms on a policy it
+        # hasn't actually been given.
+        set_default_criteria(SilenceCriteria(enabled=False))
+
+        if _audio_controller is None:
+            return
+
+        enabled_count = 0
+        for source in _audio_controller.get_all_sources().values():
+            monitor = getattr(source, "_silence_monitor", None)
+            if monitor is None:
+                continue
+            criteria = criteria_from_source_config(source.config)
+            monitor.update_criteria(criteria)
+            if criteria.enabled:
+                enabled_count += 1
+
+        logger.info(
+            "Dead-air monitoring retuned: %d of %d source(s) have it enabled",
+            enabled_count, len(_audio_controller.get_all_sources()),
+        )
+    except Exception as exc:
+        logger.warning("Could not install dead-air criteria: %s", exc)
+
+
+#: Identifier for the current continuous dead-air episode, or None when no
+#: source is silent. See _publish_dead_air_state().
+_dead_air_episode: Optional[str] = None
+
+
+def _publish_dead_air_state(sources: Dict[str, Any]) -> None:
+    """Publish the aggregate dead-air state for the GPIO indicator service.
+
+    Aggregates every source's debounced monitor into one flag plus a
+    per-source breakdown, so the tower light and rack buzzer can be driven
+    without the GPIO process knowing anything about audio internals.
+
+    The key carries a short TTL. If this service dies the key expires and
+    the GPIO side stops asserting the alarm, which is the safe direction:
+    a buzzer stuck on because a publisher vanished is worse than a missed
+    indication, and audio-service liveness already has its own monitoring.
+    """
+    from app_core.config.redis_config import RedisChannels
+
+    global _dead_air_episode
+
+    silent_sources = {}
+    any_enabled = False
+    for name, stats in (sources or {}).items():
+        meta = (stats or {}).get("metadata") or {}
+        dead_air = meta.get("dead_air") or {}
+        if not dead_air.get("enabled"):
+            continue
+        any_enabled = True
+        if dead_air.get("silent"):
+            silent_sources[name] = {
+                "reason": dead_air.get("reason"),
+                "detail": dead_air.get("detail"),
+                "duration_seconds": dead_air.get("silence_duration_seconds"),
+            }
+
+    # Episode id: a token minted when the alarm goes active and held for
+    # the whole continuous outage. The acknowledgement is stored as this
+    # value, so an ack from an earlier outage cannot mute a later one --
+    # without it a stale ack would sit in Redis for its TTL and silence the
+    # next genuine failure.
+    if silent_sources:
+        if not _dead_air_episode:
+            _dead_air_episode = uuid.uuid4().hex[:12]
+    else:
+        _dead_air_episode = None
+
+    payload = {
+        "active": bool(silent_sources),
+        "enabled": any_enabled,
+        "sources": silent_sources,
+        "episode": _dead_air_episode,
+        "updated": time.time(),
+    }
+
+    client = get_redis_client()
+    client.setex(
+        RedisChannels.DEAD_AIR_KEY,
+        RedisChannels.DEAD_AIR_TTL_SECONDS,
+        json.dumps(payload),
+    )
+    # Clear a stale acknowledgement once audio is back, so the next
+    # outage sounds the buzzer instead of starting pre-silenced.
+    if not silent_sources:
+        try:
+            client.delete(RedisChannels.DEAD_AIR_ACK_KEY)
+        except Exception:
+            pass
+
+
 def collect_metrics():
     """Collect metrics from audio controller, radio manager, and EAS monitor."""
     metrics = {
@@ -1064,6 +1280,15 @@ def collect_metrics():
                     logger.error(f"Error getting source stats for '{name}': {e}")
 
             metrics["audio_controller"] = controller_stats
+
+            # Publish a compact dead-air summary for the GPIO service.
+            # Kept separate from the metrics hash because the GPIO process
+            # needs one small, cheap read on every indicator refresh and
+            # should not have to parse the whole flattened metrics blob.
+            try:
+                _publish_dead_air_state(controller_stats.get("sources", {}))
+            except Exception as exc:
+                logger.debug("Failed to publish dead-air state: %s", exc)
 
             # Get broadcast queue stats from all sources
             # Note: Each source has its own broadcast queue (architecture change)
@@ -1256,6 +1481,12 @@ def main():
         audio_alert_callback = _make_audio_alert_log_callback(app)
         audio_controller.set_source_alert_callback(audio_alert_callback)
         logger.info("Audio alert logging callbacks registered")
+
+        # Build the ~1 Hz AudioSourceMetrics snapshot writer used by the main
+        # loop below (RBDS/BLER history and the audio-health aggregator read
+        # this table; see _make_audio_metrics_snapshot_writer for why it
+        # didn't exist before).
+        snapshot_audio_metrics = _make_audio_metrics_snapshot_writer(app)
 
         # Initialize EAS monitor
         logger.info("Initializing EAS monitor...")
@@ -2088,6 +2319,8 @@ def main():
         # per-source recovery threads.
         last_metrics_time = 0
         metrics_interval = 0.25
+        last_db_snapshot_time = 0
+        db_snapshot_interval = 1.0
 
         while _running:
             try:
@@ -2098,6 +2331,13 @@ def main():
                     metrics = collect_metrics()
                     publish_metrics_to_redis(metrics)
                     last_metrics_time = current_time
+
+                # Snapshot AudioSourceMetrics to the DB at a slower ~1 Hz --
+                # this is history (RBDS/BLER trend, audio-health aggregates),
+                # not the live UI feed, so it doesn't need the 4 Hz rate above.
+                if current_time - last_db_snapshot_time >= db_snapshot_interval:
+                    snapshot_audio_metrics()
+                    last_db_snapshot_time = current_time
 
                     # Log health status
                     if metrics.get("eas_monitor"):

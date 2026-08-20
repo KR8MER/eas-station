@@ -57,11 +57,6 @@ MANAGED_CONFIG_KEYS: frozenset[str] = frozenset({
     "silence_duration_seconds",
     "device_params",
     "managed_by",
-    "squelch_enabled",
-    "squelch_threshold_db",
-    "squelch_open_ms",
-    "squelch_close_ms",
-    "carrier_alarm_enabled",
 })
 
 

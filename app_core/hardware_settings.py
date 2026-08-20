@@ -236,6 +236,33 @@ def get_tower_light_settings() -> Dict[str, Any]:
         'quiet_enabled': bool(getattr(settings, 'tower_light_quiet_enabled', False)),
         'quiet_start': getattr(settings, 'tower_light_quiet_start', '22:00') or '22:00',
         'quiet_end': getattr(settings, 'tower_light_quiet_end', '07:00') or '07:00',
+        'silence_enabled': bool(getattr(settings, 'tower_light_silence_enabled', True)),
+        'silence_color': getattr(settings, 'tower_light_silence_color', 'magenta') or 'magenta',
+        'silence_buzzer': bool(getattr(settings, 'tower_light_silence_buzzer', False)),
+    }
+
+
+def get_dead_air_settings() -> Dict[str, Any]:
+    """Get dead-air (silence) alarm *output* settings -- the rack buzzer pin.
+
+    Detection (whether a source alarms on silence, and at what threshold)
+    is per-source now -- see AudioSourceConfigDB.config_params's dead_air_*
+    keys, applied in eas_monitoring_service.py::_install_dead_air_criteria().
+    This function only feeds the GPIO indicator service, which owns the one
+    physical buzzer for the whole station regardless of which source
+    tripped the alarm.
+
+    Returns:
+        Dictionary with ``buzzer_enabled`` and ``buzzer_gpio_pin``.
+        ``buzzer_gpio_pin`` is ``None`` when the rack buzzer is disabled or
+        unconfigured, which the GPIO side reads as "never touch a pin".
+    """
+    settings = get_hardware_settings()
+    buzzer_enabled = bool(getattr(settings, 'dead_air_buzzer_enabled', False))
+    pin = getattr(settings, 'dead_air_buzzer_gpio_pin', None)
+    return {
+        'buzzer_enabled': buzzer_enabled,
+        'buzzer_gpio_pin': int(pin) if (buzzer_enabled and pin) else None,
     }
 
 

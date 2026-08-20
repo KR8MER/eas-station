@@ -581,6 +581,21 @@
 
                                     <hr class="my-3">
 
+                                    <h6><i class="fas fa-microchip me-2"></i>Originating Equipment</h6>
+                                    <p>
+                                        Every received alert's detail page (click into any row from the
+                                        <a href="/audio/received"><strong>Received Alerts</strong></a> list) shows an
+                                        <strong>Originating Equipment</strong> badge in the Reception panel — a
+                                        best-effort guess at which ENDEC model produced the SAME transmission
+                                        (SAGE Digital 3644, NWS BMH, Trilithic EASyPLUS, etc.), fingerprinted from
+                                        transmission characteristics like terminator bytes and inter-burst gap
+                                        timing rather than any field carried in the alert itself. The same
+                                        detection also runs on manually uploaded recordings in the
+                                        <strong>Audio Decoder</strong> tool.
+                                    </p>
+
+                                    <hr class="my-3">
+
                                     <h6><i class="fas fa-trash-alt me-2"></i>Purging Received Alerts &amp; Audio</h6>
                                     <p>
                                         Busy monitoring sources can record thousands of received alerts, and the raw
@@ -703,6 +718,8 @@
                                     <ul>
                                         <li><strong>Live Waterfall:</strong> a continuously scrolling time-vs-frequency-vs-power view, updated roughly twice a second.</li>
                                         <li><strong>Spectrum Scope:</strong> a classic frequency-vs-power line trace with a peak-hold overlay, sharing the waterfall's data feed so running both costs nothing extra.</li>
+                                        <li><strong>Zoom &amp; pan (both views):</strong> use the magnifier buttons in either panel header, the mouse wheel to zoom about the cursor, or drag to pan; double-click resets to the full span. Zoom is shared between the waterfall and the scope, and the axis labels and status line always describe the window actually on screen &mdash; e.g. <code>64.0 kHz of 256.0 kHz &middot; 125 Hz/bin</code>. This crops the published FFT rather than retuning the receiver, so it costs nothing extra and stops at the FFT's real resolution instead of inventing detail.</li>
+                                        <li><strong>Dead-air monitoring:</strong> watches monitored audio for loss of programme content and raises the tower light, optionally sounding a rack alarm buzzer. Configure the thresholds under <em>Monitor &rarr; Audio &amp; Radio &rarr; Audio Ingestion</em>; the tower-light colour and rack-buzzer pin under <em>Monitor &rarr; Station Hardware &rarr; Hardware Settings</em>; and see live state (with the Acknowledge button) on the <em>Audio Health</em> dashboard. It checks the audio rather than the service, so it catches the case every other health check misses: the SDR locked and healthy while the station you are monitoring is off the air. Because an off-air FM receiver outputs full-scale hiss rather than silence, detection uses spectral flatness as well as level &mdash; leave &ldquo;detect an unmodulated carrier&rdquo; on for radio sources. Acknowledging the alarm silences the buzzer but leaves the light lit until audio actually returns.</li>
                                         <li><strong>Historical Trends:</strong> charts of signal strength, lock percentage, sample-rate health, and buffer overflow/underflow over a selectable window (1h/6h/24h/7d), plus an always-on sparkline strip for an at-a-glance read.</li>
                                         <li><strong>Run Full Diagnostics:</strong> a pass/warn/fail checklist covering the SDR service heartbeat, per-receiver health, ring-buffer drops, and spectrum-cache freshness — the same checks available from the command line via <code>scripts/diagnostics/check_sdr_status.py</code>.</li>
                                         <li><strong>Snapshot Waterfall &amp; Run Diagnostic:</strong> capture a short IQ window and get a clipping/front-end-health verdict plus a subcarrier inventory (pilot, stereo, RBDS, SCA).</li>
@@ -878,7 +895,7 @@
                                         If the Received Audio Alerts page shows a lot of low-confidence, blank-header
                                         entries from one source, raising Min Confidence to Log (e.g. to 70%) is usually
                                         the fix — check the source's SNR/signal quality first, since a persistently
-                                        low-confidence source may indicate an antenna or squelch problem worth
+                                        low-confidence source may indicate an antenna or receiver-gain problem worth
                                         addressing at the hardware level.
                                     </div>
                                 </div>
