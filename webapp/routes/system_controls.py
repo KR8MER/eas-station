@@ -149,6 +149,7 @@ def register(app: Flask, logger) -> None:
             get_gps_settings,
             get_neopixel_settings,
             get_oled_settings,
+            get_zigbee_settings,
         )
 
         reservations: dict = {}
@@ -161,6 +162,27 @@ def register(app: Flask, logger) -> None:
             except (TypeError, ValueError):
                 return
             reservations.setdefault(pin, []).append({"source": source, "detail": detail})
+
+        def _is_primary_uart_port(port):
+            """True when *port* names the Pi's primary hardware UART.
+
+            GPS and Zigbee both configure a serial device path rather than a
+            pin number, but that device can be the primary UART -- which is
+            permanently wired to BCM 14 (TXD0) / BCM 15 (RXD0) -- and both
+            features default to it (``/dev/serial0`` for GPS,
+            ``/dev/ttyAMA0`` for Zigbee in HardwareSettings' column
+            defaults). ``/dev/serial0`` is the stable alias documented in
+            docs/hardware/GPS_HAT_SETUP.md; the raw device name varies by Pi
+            model (``ttyAMA0``/``ttyS0`` on Pi 3/4, ``ttyAMA10`` etc. via the
+            RP1 chip on Pi 5), so match the ``ttyAMA*`` family generally
+            rather than a single hardcoded name.
+            """
+            if not port:
+                return False
+            normalized = str(port).strip().lower()
+            if normalized in ("/dev/serial0", "/dev/ttys0"):
+                return True
+            return normalized.startswith("/dev/ttyama")
 
         try:
             dead_air = get_dead_air_settings()
@@ -186,6 +208,13 @@ def register(app: Flask, logger) -> None:
                     "GPS PPS input",
                     "1-pulse-per-second timing signal from the GPS receiver.",
                 )
+                if _is_primary_uart_port(gps.get("serial_port")):
+                    detail = (
+                        f"GPS serial port {gps.get('serial_port')} is the Pi's "
+                        "primary hardware UART -- permanently wired to this pin."
+                    )
+                    _claim(14, "GPS receiver (UART TXD0)", detail)
+                    _claim(15, "GPS receiver (UART RXD0)", detail)
 
             oled = get_oled_settings()
             if oled.get("enabled"):
@@ -194,6 +223,15 @@ def register(app: Flask, logger) -> None:
                     "OLED display button",
                     "Physical button wired to the Argon OLED module.",
                 )
+
+            zigbee = get_zigbee_settings()
+            if zigbee.get("enabled") and _is_primary_uart_port(zigbee.get("port")):
+                detail = (
+                    f"Zigbee serial port {zigbee.get('port')} is the Pi's "
+                    "primary hardware UART -- permanently wired to this pin."
+                )
+                _claim(14, "Zigbee coordinator (UART TXD0)", detail)
+                _claim(15, "Zigbee coordinator (UART RXD0)", detail)
         except Exception as exc:  # pragma: no cover - diagnostic only
             route_logger.debug("Dynamic GPIO reservation lookup skipped: %s", exc)
 
@@ -225,10 +263,15 @@ def register(app: Flask, logger) -> None:
 
             claims = hardware_reservations.get(pin_def.bcm, [])
             entry["hardware_reservations"] = claims
-            # Conflict when two hardware features claim the same pin, or when
-            # a hardware-claimed pin also has a relay behavior assigned to it
-            # -- either way the pin cannot actually do both jobs at once.
-            entry["conflict"] = len(claims) > 1 or (bool(claims) and entry["configured"])
+            # Conflict when two hardware features claim the same pin, when a
+            # hardware-claimed pin also has a relay behavior assigned to it,
+            # or when it collides with a fixed reservation (e.g. the Argon
+            # OLED's wiring) -- either way the pin cannot do both jobs at once.
+            entry["conflict"] = (
+                len(claims) > 1
+                or (bool(claims) and entry["configured"])
+                or (bool(claims) and bool(pin_def.reserved_for))
+            )
 
         return entry
 

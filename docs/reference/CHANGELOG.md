@@ -8,6 +8,27 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.177.1] - 2026-08-20 - Pin Map now catches GPS/Zigbee UART pin conflicts
+
+### Fixed
+- **The GPIO Pin Map's conflict detector (added in 2.177.0) only checked the
+  GPS PPS pin, missing the far more common case: GPS and Zigbee both default
+  to the Pi's primary hardware UART** (`/dev/serial0` for GPS,
+  `/dev/ttyAMA0` for Zigbee in `HardwareSettings`' own column defaults),
+  which is permanently wired to BCM 14 (TXD0) / BCM 15 (RXD0). On this
+  station specifically, GPS is enabled on `/dev/serial0` while GPIO 15 also
+  carries a relay `playout` behavior -- confirmed live with `pinctrl` (both
+  pins reporting alt-function `a4`, the UART) -- meaning every EAS/RWT
+  broadcast very likely interrupted GPS reception (and therefore
+  chrony's GPS time source) for the length of the broadcast.
+- `_dynamic_hardware_reservations()` now recognizes `/dev/serial0`,
+  `/dev/ttyS0`, and the `/dev/ttyAMA*` family (covers the Pi 3/4 PL011 UART
+  naming and the Pi 5 RP1 UART naming alike) as the primary UART and claims
+  BCM 14/15 for whichever of GPS or Zigbee is configured to use it. The
+  conflict check also now folds in the *static* Argon OLED reservations, so
+  a dynamically-claimed pin that collides with fixed hardware wiring (not
+  just another dynamic claim or a relay behavior) is flagged too.
+
 ## [2.177.0] - 2026-08-20 - GPIO Pin Map now shows every pin actually in use
 
 ### Added
