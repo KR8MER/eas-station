@@ -67,6 +67,7 @@ os.environ.setdefault("SKIP_DB_INIT", "1")
 from sqlalchemy import create_engine, inspect, text  # noqa: E402
 
 TARGET_REVISION = "20260506_split_location_settings"
+_ALEMBIC_INI = os.path.join(_REPO_ROOT, "alembic.ini")
 LOCATION_TABLE = "location_settings"
 FILTER_TABLE = "alert_filter_settings"
 HARDWARE_TABLE = "hardware_settings"
@@ -134,6 +135,41 @@ def _alembic_current(connection) -> Optional[str]:
         return None
 
 
+def _is_at_or_past_target(current_rev: Optional[str], target_rev: str) -> bool:
+    """True if ``current_rev`` is ``target_rev`` itself, or downstream of it.
+
+    "Old columns absent" is true both for a database stuck exactly at
+    ``target_rev`` (the trailing-stamp case this script exists to fix) *and*
+    for a database that has moved dozens of migrations past it -- those old
+    columns were dropped once, by ``target_rev``, and stay dropped forever
+    after. Without this check every update conflated the two: it saw
+    ``current_rev != target_rev`` on an already fully-migrated database and
+    stamped ``alembic_version`` backward to ``target_rev``, wiping out the
+    real (later) revision on every single run of ``update.sh``. Walks the
+    actual migration graph via Alembic's ``ScriptDirectory`` rather than
+    comparing strings, since "downstream" is a DAG-ancestry question, not an
+    equality check.
+    """
+    if current_rev is None:
+        return False
+    if current_rev == target_rev:
+        return True
+    try:
+        from alembic.config import Config as AlembicConfig
+        from alembic.script import ScriptDirectory
+
+        script_dir = ScriptDirectory.from_config(AlembicConfig(_ALEMBIC_INI))
+        for rev in script_dir.walk_revisions(base="base", head=current_rev):
+            if rev.revision == target_rev:
+                return True
+        return False
+    except Exception:
+        # Unrecognized/unreadable revision -- don't assume it's past target,
+        # so the caller falls through to its existing conservative handling
+        # rather than silently trusting an unknown state.
+        return False
+
+
 def _has_table(inspector, name: str) -> bool:
     return name in inspector.get_table_names()
 
@@ -177,19 +213,25 @@ def recover(database_url: str, *, dry_run: bool = False, quiet: bool = False) ->
             hardware_has_led = _has_column(inspector, HARDWARE_TABLE, "led_default_lines")
 
             # Healthy state: old columns gone AND alembic at or past target revision.
-            if not old_cols_present and current_rev == TARGET_REVISION:
+            # "At or past" (not just "==") matters -- a database that has
+            # moved on to a much later head also has these columns gone
+            # (target_rev dropped them once, permanently), and must not be
+            # treated as needing a stamp back down to target_rev.
+            if not old_cols_present and _is_at_or_past_target(current_rev, TARGET_REVISION):
                 _log(
                     "[recover] Database already migrated to "
-                    f"{TARGET_REVISION}. Nothing to do.",
+                    f"{TARGET_REVISION} or a later revision "
+                    f"({current_rev!r}). Nothing to do.",
                     quiet=quiet,
                 )
                 return 0
 
             # If the old columns are gone but alembic_version disagrees, just
-            # stamp alembic_version. This is the trailing-stamp-only case.
+            # stamp alembic_version. This is the trailing-stamp-only case:
+            # a genuinely stuck database (current_rev is None, or an
+            # ancestor of target_rev) whose schema reached the target but
+            # whose version row never advanced.
             if not old_cols_present:
-                if current_rev == TARGET_REVISION:
-                    return 0
                 _log(
                     "[recover] Old columns already removed but alembic_version is "
                     f"{current_rev!r}. Stamping alembic_version to {TARGET_REVISION}.",
@@ -198,10 +240,23 @@ def recover(database_url: str, *, dry_run: bool = False, quiet: bool = False) ->
                 if dry_run:
                     _log("[recover] (dry-run) would update alembic_version", quiet=quiet)
                     return 0
-                conn.execute(
-                    text("UPDATE alembic_version SET version_num = :rev"),
-                    {"rev": TARGET_REVISION},
-                )
+                # UPDATE alone is a no-op on a table that exists but has no
+                # row yet (a plain UPDATE ... SET matches zero rows rather
+                # than erroring) -- insert in that case instead of silently
+                # leaving alembic_version empty.
+                row_count = conn.execute(
+                    text("SELECT COUNT(*) FROM alembic_version")
+                ).scalar() or 0
+                if row_count == 0:
+                    conn.execute(
+                        text("INSERT INTO alembic_version (version_num) VALUES (:rev)"),
+                        {"rev": TARGET_REVISION},
+                    )
+                else:
+                    conn.execute(
+                        text("UPDATE alembic_version SET version_num = :rev"),
+                        {"rev": TARGET_REVISION},
+                    )
                 _log("[recover] alembic_version stamped.", quiet=False)
                 return 0
 

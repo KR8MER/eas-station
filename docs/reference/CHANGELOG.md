@@ -8,6 +8,41 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.175.4] - 2026-08-20 - Fix update.sh silently un-stamping alembic_version on every run
+
+### Fixed
+- **`scripts/database/recover_split_location_settings.py` was rewinding
+  `alembic_version` back to `20260506_split_location_settings` on every
+  single run of `update.sh`, no matter how far ahead the database actually
+  was.** The script exists to heal one specific historical problem: a
+  database where the May 6th `20260506_split_location_settings` migration
+  got half-applied by an old `db.create_all()` fallback, leaving the old
+  `location_settings` columns dropped but `alembic_version` never advanced.
+  Its detection was "the old columns are gone, and `alembic_version` isn't
+  literally equal to `20260506_split_location_settings`" -- but that
+  condition is *also* true of a database that has moved on dozens of
+  migrations past that point, since those columns were dropped once, by
+  that migration, and stay dropped forever after. Every update stamped the
+  version backward regardless, discovered live on this station: `alembic
+  current` reported `20260506_split_location_settings` immediately after
+  an update that had just correctly carried the database to
+  `20260818_dead_air_per_source`, 47 migrations later.
+- The actual schema was never affected -- confirmed directly against
+  Postgres that every table/column from the 47 "missing" migrations
+  (`gated_alerts`, `admin_users.mfa_last_totp_counter`,
+  `hardware_settings.dead_air_buzzer_enabled`, etc.) was genuinely present.
+  Only the version bookkeeping was wrong, which is still a real hazard: it
+  misleads anyone reading `alembic current`, and an `alembic upgrade head`
+  run while mis-stamped would attempt to replay every migration since May.
+- Fixed by walking the actual Alembic migration graph
+  (`ScriptDirectory.walk_revisions`) to ask "is the current revision this
+  target, or downstream of it" instead of a plain string comparison. Also
+  fixed an adjacent latent bug in the same stamp step: it used a bare
+  `UPDATE alembic_version SET version_num = ...` with no `INSERT` fallback,
+  which silently does nothing on a database whose `alembic_version` table
+  exists but has no row yet.
+- Live database restamped to the correct head (`20260818_dead_air_per_source`).
+
 ## [2.175.3] - 2026-08-19 - Fix RBDS History never having any data, and its unreadable chart labels
 
 ### Fixed
