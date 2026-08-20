@@ -153,5 +153,36 @@ def _ensure_certbot_directories():
     except Exception as e:
         logger.warning(f"Error configuring certbot directories: {e}")
 
+def clear_stale_locks() -> None:
+    """Remove .certbot.lock files left by a run that died without cleaning up.
+
+    _ensure_certbot_directories() only runs at import time (Flask app
+    startup), so a lock left behind by a killed/crashed/hung certbot
+    invocation blocks every later renew/obtain attempt with "Another
+    instance of Certbot is already running" until the app process is
+    restarted. Call this right before each certbot invocation instead.
+    Skips removal if a certbot process is actually alive, so a genuinely
+    in-progress run isn't clobbered.
+    """
+    try:
+        pgrep_result = subprocess.run(
+            ['pgrep', '-x', 'certbot'],
+            capture_output=True,
+            timeout=5,
+        )
+        if pgrep_result.returncode == 0:
+            return
+
+        subprocess.run(
+            ['sudo', 'find', str(CERTBOT_BASE_DIR), '-name', '.certbot.lock', '-delete'],
+            capture_output=True,
+            timeout=10,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("Timeout while clearing stale certbot locks")
+    except Exception as e:
+        logger.warning(f"Error clearing stale certbot locks: {e}")
+
+
 # Ensure directories exist at module load time
 _ensure_certbot_directories()

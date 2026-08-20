@@ -31,7 +31,7 @@ from app_core.certbot_settings import get_certbot_settings
 from .blueprint import DOMAIN_PATTERN, certbot_bp
 from .failures import _explain_certbot_failure
 from .log import logger
-from .paths import CERTBOT_CONFIG_DIR, CERTBOT_LOGS_DIR, CERTBOT_WORK_DIR
+from .paths import CERTBOT_CONFIG_DIR, CERTBOT_LOGS_DIR, CERTBOT_WORK_DIR, clear_stale_locks
 from .staging import _is_existing_cert_staging
 
 
@@ -221,6 +221,10 @@ def renew_certificate_execute():
                     "the staging certificate will be cleaned up automatically."
                 ),
             }), 400
+
+        # Clear any lock left by a previous run that was killed or crashed
+        # before it could clean up after itself (see clear_stale_locks()).
+        clear_stale_locks()
 
         # Build certbot renew command
         # Note: --staging is intentionally NOT appended here.  certbot renew

@@ -10,9 +10,9 @@ Type=oneshot
 # This is required in containerized/sandboxed environments where
 # /etc/letsencrypt, /var/lib/letsencrypt, and /var/log/letsencrypt are read-only
 ExecStart=/usr/bin/certbot renew --quiet \
-    --config-dir /home/user/eas-station/certbot_data/config \
-    --work-dir /home/user/eas-station/certbot_data/work \
-    --logs-dir /home/user/eas-station/certbot_data/logs \
+    --config-dir /opt/eas-station/certbot_data/config \
+    --work-dir /opt/eas-station/certbot_data/work \
+    --logs-dir /opt/eas-station/certbot_data/logs \
     --deploy-hook "systemctl reload nginx"
 PrivateTmp=yes
 NoNewPrivileges=yes
