@@ -53,5 +53,18 @@ LimitNOFILE=65536
 LimitMEMLOCK=infinity
 MemoryMax=256M
 
+# Scheduling priority - the SDR capture loop must service USB readStream()
+# calls promptly or the driver-side ring buffer overflows (SOAPY_SDR_OVERFLOW,
+# error -4). This service otherwise runs at the same default niceness as
+# every other process on the box (gunicorn, ffmpeg, ...), so it gets no
+# priority advantage despite being the most latency-sensitive one. A modest
+# negative nice value asks the CFS scheduler to favor it without requiring
+# real-time scheduling (which would need elevated capabilities and carries
+# more risk of starving other processes). This is independent of the
+# SoapySDR bufflen/MTU tuning in app_core/radio/drivers.py -- see the
+# comment there on why that buffer was deliberately kept small (a larger
+# one silenced these overflow errors but broke RBDS decoding instead).
+Nice=-5
+
 [Install]
 WantedBy=multi-user.target eas-station.target
