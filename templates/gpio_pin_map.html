@@ -45,6 +45,11 @@
         fill: color-mix(in srgb, var(--text-muted) 12%, var(--bg-card));
         stroke-dasharray: 4 3;
     }
+    .pin-chip.conflict rect.chip-bg {
+        fill: color-mix(in srgb, var(--danger-color) 22%, var(--bg-card));
+        stroke: var(--danger-color);
+        stroke-dasharray: 4 3;
+    }
     .num-circle circle {
         fill: var(--bg-primary);
         stroke: var(--border-color);
@@ -91,6 +96,7 @@
     .swatch.gpio      { background: color-mix(in srgb, var(--primary-color) 14%, var(--bg-card)); }
     .swatch.configured{ background: color-mix(in srgb, var(--success-color) 30%, var(--bg-card)); border-color: var(--success-color); }
     .swatch.reserved  { background: color-mix(in srgb, var(--text-muted) 12%, var(--bg-card)); border-style: dashed; }
+    .swatch.conflict  { background: color-mix(in srgb, var(--danger-color) 22%, var(--bg-card)); border-color: var(--danger-color); border-style: dashed; }
 
     /* ── Configurable GPIO pin cards ── */
     .gpio-config-grid {
@@ -215,16 +221,40 @@
     #}
     {% set gpio_pins = [] %}
     {% set reserved_pins = [] %}
+    {% set pin_conflicts = [] %}
     {% for row in pin_rows %}
         {% for side in ['left', 'right'] %}
             {% set p = row[side] %}
-            {% if p.reserved_for %}
+            {% if p.conflict %}
+                {% set _ = pin_conflicts.append(p) %}
+            {% endif %}
+            {% if p.reserved_for or p.hardware_reservations %}
                 {% set _ = reserved_pins.append(p) %}
             {% elif p.is_gpio and p.bcm is not none %}
                 {% set _ = gpio_pins.append(p) %}
             {% endif %}
         {% endfor %}
     {% endfor %}
+
+    {% if pin_conflicts %}
+    <div class="alert alert-danger" role="alert">
+        <div class="d-flex align-items-start">
+            <i class="fas fa-triangle-exclamation me-2 mt-1"></i>
+            <div>
+                <strong>Pin conflict{{ 's' if pin_conflicts|length > 1 else '' }} detected</strong>
+                <ul class="mb-0 mt-2">
+                    {% for p in pin_conflicts %}
+                    <li>
+                        <strong>BCM {{ p.bcm }}</strong> (physical pin {{ p.physical }}) is claimed by more than one thing:
+                        {% for claim in p.hardware_reservations %}{{ claim.source }}{% if not loop.last %}, {% endif %}{% endfor %}{% if p.configured %}{% if p.hardware_reservations %}, and{% endif %} a relay behavior ({% for b in p.behaviors %}{{ b }}{% if not loop.last %}, {% endif %}{% endfor %}){% endif %}.
+                        Repoint one of them in its settings page before relying on this pin.
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- ───────────────── Visual pinout diagram ───────────────── -->
     <div class="card pinout-card mb-4">
@@ -254,12 +284,14 @@
                     {% else %}
                         {% set chip_x = 444 %}
                     {% endif %}
-                    <g class="pin-chip {{ pin.type }}{% if pin.configured %} configured{% endif %}{% if pin.reserved_for %} reserved{% endif %}"
+                    <g class="pin-chip {{ pin.type }}{% if pin.configured %} configured{% endif %}{% if pin.reserved_for or pin.hardware_reservations %} reserved{% endif %}{% if pin.conflict %} conflict{% endif %}"
                        {% if pin.is_gpio and pin.bcm is not none %}id="diagram-pin-{{ pin.bcm }}" data-bcm="{{ pin.bcm }}"{% endif %}>
-                        <title>Pin {{ pin.physical }} — {{ pin.name }}{% if pin.reserved_for %} (reserved for {{ pin.reserved_for }}){% endif %}</title>
+                        <title>Pin {{ pin.physical }} — {{ pin.name }}{% if pin.reserved_for %} (reserved for {{ pin.reserved_for }}){% endif %}{% for claim in pin.hardware_reservations %} (in use: {{ claim.source }}){% endfor %}{% if pin.conflict %} — CONFLICT{% endif %}</title>
                         <rect class="chip-bg" x="{{ chip_x }}" y="{{ y }}" width="348" height="26" rx="7"></rect>
                         <text class="chip-name" x="{{ chip_x + 12 }}" y="{{ cy + 4 }}" text-anchor="start">{{ pin.name }}</text>
-                        <text class="chip-tag" x="{{ chip_x + 336 }}" y="{{ cy + 4 }}" text-anchor="end">{%- if pin.reserved_for -%}
+                        <text class="chip-tag" x="{{ chip_x + 336 }}" y="{{ cy + 4 }}" text-anchor="end">{%- if pin.conflict -%}
+                                ⚠{% if pin.bcm is not none %} BCM {{ pin.bcm }}{% endif %}
+                            {%- elif pin.reserved_for or pin.hardware_reservations -%}
                                 🔒{% if pin.bcm is not none %} BCM {{ pin.bcm }}{% endif %}
                             {%- elif pin.is_gpio and pin.bcm is not none -%}
                                 BCM {{ pin.bcm }}{% if pin.configured %} ✓{% endif %}
@@ -285,7 +317,8 @@
                 <span><span class="swatch ground"></span>Ground</span>
                 <span><span class="swatch gpio"></span>GPIO &mdash; available</span>
                 <span><span class="swatch configured"></span>GPIO &mdash; configured</span>
-                <span><span class="swatch reserved"></span>Reserved</span>
+                <span><span class="swatch reserved"></span>Reserved / in use</span>
+                <span><span class="swatch conflict"></span>Conflict &mdash; claimed twice</span>
                 <span><i class="fas fa-bolt text-success me-1"></i>Glows green when a pin reads HIGH (live)</span>
             </div>
         </div>
@@ -401,8 +434,11 @@
             <div class="card mt-2">
                 <div class="card-body">
                     <p class="text-muted small mb-2">
-                        These pins are claimed by other hardware (e.g. the Argon OLED module) and
-                        cannot be assigned alert behaviors here.
+                        These pins are already doing a job elsewhere in the system. Pins wired to
+                        fixed hardware (e.g. the Argon OLED module) never move; pins picked in a
+                        settings page (dead-air buzzer, NeoPixel, GPS PPS, OLED button) are shown
+                        as they are configured right now &mdash; change the pin number on that
+                        settings page to free one up for a relay behavior instead.
                     </p>
                     <div class="table-responsive">
                         <table class="table table-sm ref-table align-middle mb-0">
@@ -411,19 +447,34 @@
                                     <th>Pin</th>
                                     <th>Name</th>
                                     <th>BCM</th>
-                                    <th>Reserved for</th>
+                                    <th>In use by</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for pin in reserved_pins %}
-                                <tr>
+                                <tr class="{% if pin.conflict %}table-danger{% endif %}">
                                     <td><span class="badge bg-secondary">{{ pin.physical }}</span></td>
                                     <td>{{ pin.name }}</td>
                                     <td>{% if pin.bcm is not none %}<code>BCM {{ pin.bcm }}</code>{% else %}&mdash;{% endif %}</td>
                                     <td>
-                                        {{ pin.reserved_for }}
+                                        {% if pin.conflict %}
+                                        <span class="badge bg-danger mb-1"><i class="fas fa-triangle-exclamation me-1"></i>Conflict</span><br>
+                                        {% endif %}
+                                        {% if pin.reserved_for %}
+                                        <span class="badge bg-secondary-subtle text-body border me-1 mb-1"><i class="fas fa-lock me-1"></i>{{ pin.reserved_for }}</span>
                                         {% if pin.reserved_detail %}
                                         <span class="text-muted d-block small">{{ pin.reserved_detail }}</span>
+                                        {% endif %}
+                                        {% endif %}
+                                        {% for claim in pin.hardware_reservations %}
+                                        <span class="badge bg-info-subtle text-body border me-1 mb-1"><i class="fas fa-microchip me-1"></i>{{ claim.source }}</span>
+                                        <span class="text-muted d-block small">{{ claim.detail }}</span>
+                                        {% endfor %}
+                                        {% if pin.configured %}
+                                        <span class="text-muted d-block small mt-1">
+                                            Also has a relay behavior configured:
+                                            {% for b in pin.behaviors %}<code>{{ b }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+                                        </span>
                                         {% endif %}
                                     </td>
                                 </tr>

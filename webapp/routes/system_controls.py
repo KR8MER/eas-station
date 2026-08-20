@@ -130,7 +130,76 @@ def register(app: Flask, logger) -> None:
             route_logger.debug("GPIO behavior validation skipped: %s", exc)
             return []
 
-    def _build_pin_entry(pin_def, config_map, behavior_matrix):
+    def _dynamic_hardware_reservations():
+        """Return ``{bcm: [{\'source\', \'detail\'}, ...]}`` for GPIO pins claimed
+        by settings-driven hardware features.
+
+        Unlike the fixed Argon OLED wiring in ``app_utils.pi_pinout`` (soldered
+        to specific pins forever), these four features each store *which* pin
+        they use as an Integer column in ``HardwareSettings`` and an operator
+        can repoint them any time from Admin -> Hardware Settings. A pin map
+        that only knows the static reservations silently shows those pins as
+        "available" even while genuinely in use -- e.g. the GPS PPS input and
+        the NeoPixel strip both default to BCM 18, a real conflict the page
+        previously had no way to surface. Computed fresh on every render (not
+        cached) so a settings change is reflected immediately.
+        """
+        from app_core.hardware_settings import (
+            get_dead_air_settings,
+            get_gps_settings,
+            get_neopixel_settings,
+            get_oled_settings,
+        )
+
+        reservations: dict = {}
+
+        def _claim(pin, source, detail):
+            if pin is None:
+                return
+            try:
+                pin = int(pin)
+            except (TypeError, ValueError):
+                return
+            reservations.setdefault(pin, []).append({"source": source, "detail": detail})
+
+        try:
+            dead_air = get_dead_air_settings()
+            if dead_air.get("buzzer_gpio_pin"):
+                _claim(
+                    dead_air["buzzer_gpio_pin"],
+                    "Dead-air rack buzzer",
+                    "Sounds while station audio is silent and unacknowledged.",
+                )
+
+            neopixel = get_neopixel_settings()
+            if neopixel.get("enabled"):
+                _claim(
+                    neopixel.get("gpio_pin"),
+                    "NeoPixel indicator strip",
+                    "Drives the WS2812B status LEDs.",
+                )
+
+            gps = get_gps_settings()
+            if gps.get("enabled"):
+                _claim(
+                    gps.get("pps_gpio_pin"),
+                    "GPS PPS input",
+                    "1-pulse-per-second timing signal from the GPS receiver.",
+                )
+
+            oled = get_oled_settings()
+            if oled.get("enabled"):
+                _claim(
+                    oled.get("button_gpio"),
+                    "OLED display button",
+                    "Physical button wired to the Argon OLED module.",
+                )
+        except Exception as exc:  # pragma: no cover - diagnostic only
+            route_logger.debug("Dynamic GPIO reservation lookup skipped: %s", exc)
+
+        return reservations
+
+    def _build_pin_entry(pin_def, config_map, behavior_matrix, hardware_reservations):
         entry = {
             "physical": pin_def.physical,
             "name": pin_def.name,
@@ -143,6 +212,8 @@ def register(app: Flask, logger) -> None:
             "configured": False,
             "active_high": None,
             "behaviors": [],
+            "hardware_reservations": [],
+            "conflict": False,
         }
 
         if pin_def.is_gpio and pin_def.bcm is not None:
@@ -152,6 +223,13 @@ def register(app: Flask, logger) -> None:
             behaviors = behavior_matrix.get(pin_def.bcm, set())
             entry["behaviors"] = [behavior.value for behavior in sorted(behaviors, key=lambda b: b.value)]
 
+            claims = hardware_reservations.get(pin_def.bcm, [])
+            entry["hardware_reservations"] = claims
+            # Conflict when two hardware features claim the same pin, or when
+            # a hardware-claimed pin also has a relay behavior assigned to it
+            # -- either way the pin cannot actually do both jobs at once.
+            entry["conflict"] = len(claims) > 1 or (bool(claims) and entry["configured"])
+
         return entry
 
     def _build_pin_rows():
@@ -159,13 +237,14 @@ def register(app: Flask, logger) -> None:
         configs = load_gpio_pin_configs_from_db(route_logger, oled_enabled=oled_enabled)
         behavior_matrix = load_gpio_behavior_matrix_from_db(route_logger, oled_enabled=oled_enabled)
         config_map = {cfg.pin: cfg for cfg in configs}
+        hardware_reservations = _dynamic_hardware_reservations()
 
         rows = []
         for left_pin, right_pin in PIN_ROWS:
             rows.append(
                 {
-                    "left": _build_pin_entry(left_pin, config_map, behavior_matrix),
-                    "right": _build_pin_entry(right_pin, config_map, behavior_matrix),
+                    "left": _build_pin_entry(left_pin, config_map, behavior_matrix, hardware_reservations),
+                    "right": _build_pin_entry(right_pin, config_map, behavior_matrix, hardware_reservations),
                 }
             )
         return rows
