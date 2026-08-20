@@ -8,6 +8,30 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.177.0] - 2026-08-20 - GPIO Pin Map now shows every pin actually in use
+
+### Added
+- **The GPIO Pin Map only knew about relay behaviors and the fixed Argon OLED
+  wiring** -- four real hardware features that claim a GPIO pin through a
+  Hardware Settings field (the dead-air rack buzzer, the NeoPixel indicator
+  strip, the GPS PPS timing input, and the Argon OLED's physical button)
+  were invisible to the page, so their pins showed up as plain "available"
+  GPIO even while genuinely in use. Worse, NeoPixel and GPS PPS both default
+  to BCM 18 with no way for the page to warn about it.
+- `/admin/gpio/pin-map` now computes these reservations live from
+  `HardwareSettings` on every render (not hardcoded), routes claimed pins
+  into the existing "Reserved & system pins" reference table alongside the
+  static Argon reservations, and adds a red conflict banner plus per-pin
+  conflict badges when two features -- or a hardware feature and a relay
+  behavior -- claim the same pin.
+
+### Note
+- This entry was dropped from the changelog when PR #2429 was merged shortly
+  after PR #2428 -- both touched `VERSION`/`CHANGELOG.md`, and the merge
+  conflict resolution kept #2428's `2.176.2` bump but discarded #2429's
+  `2.177.0` entry even though the GPIO Pin Map code itself merged cleanly.
+  This entry restores the record after the fact; no functional change.
+
 ## [2.176.2] - 2026-08-20 - Stop the test suite from keying real GPIO hardware
 
 ### Fixed
