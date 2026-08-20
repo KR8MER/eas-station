@@ -385,7 +385,11 @@ document.getElementById('certbotSettingsForm').addEventListener('submit', async 
 async function checkCertificateStatus() {
     const statusDiv = document.getElementById('certificateStatus');
     const certInfoGrid = document.getElementById('certInfoGrid');
-    
+
+    // This card sits near the top of the page, but the button that triggers
+    // it (e.g. after a renewal result) can be far down. Without this,
+    // clicking "Verify Certificate" appears to do nothing.
+    statusDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
     statusDiv.innerHTML = '<div class="alert alert-info"><span class="spinner-border"></span> Checking certificate status...</div>';
     certInfoGrid.style.display = 'none';
     
@@ -478,7 +482,8 @@ async function checkCertificateStatus() {
             </div>
         `;
         certInfoGrid.style.display = 'grid';
-        
+        showToast('Certificate status updated', 'success');
+
     } catch (error) {
         statusDiv.innerHTML = `
             <div class="alert alert-danger">

@@ -234,7 +234,14 @@ def renew_certificate_execute():
             'sudo', 'certbot', 'renew',
             '--config-dir', str(CERTBOT_CONFIG_DIR),
             '--work-dir', str(CERTBOT_WORK_DIR),
-            '--logs-dir', str(CERTBOT_LOGS_DIR)
+            '--logs-dir', str(CERTBOT_LOGS_DIR),
+            # certbot renew applies a random.uniform(1, 480)s sleep before
+            # renewing whenever stdin isn't a tty (see certbot's renewal.py),
+            # to spread load across Let's Encrypt when many hosts share a
+            # cron schedule. Irrelevant for a single admin clicking a button
+            # here, and a draw over our 120s subprocess timeout below is what
+            # was surfacing as spurious "renewal operation timed out" errors.
+            '--no-random-sleep-on-renew',
         ]
 
         if dry_run:
