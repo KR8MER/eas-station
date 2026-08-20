@@ -8,6 +8,25 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.177.2] - 2026-08-20 - Give the SDR capture service scheduling priority
+
+### Fixed
+- **The WBKS SDR receiver was logging ~1 `SOAPY_SDR_OVERFLOW` (buffer
+  overflow) error every 15 minutes**, around 96/day. Root cause isn't new --
+  `app_core/radio/drivers.py` already documents that doubling the RTL-SDR
+  read buffer eliminated these errors but broke RBDS decoding far worse
+  (sustained RBDS SYNC LOST), so the buffer size was deliberately kept
+  small and the occasional overflow accepted as the lesser regression.
+  What was never tried: `eas-station-sdr.service` ran at default process
+  niceness, identical to gunicorn, ffmpeg, and everything else on the box,
+  despite being the most latency-sensitive process on the system -- it has
+  to service USB `readStream()` calls promptly enough to drain the driver's
+  ring buffer before it overflows.
+- Added `Nice=-5` to `systemd/eas-station-sdr.service` so the CFS scheduler
+  favors the capture loop under load, without touching the buffer/MTU
+  trade-off already tuned for RBDS. No capability elevation required --
+  systemd applies the nice value before dropping to the `eas-station` user.
+
 ## [2.177.1] - 2026-08-20 - Pin Map now catches GPS/Zigbee UART pin conflicts
 
 ### Fixed
