@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'components/endec_badge.html' import endec_badge %}
 
 {% block title %}Received Alert Detail - EAS Station™{% endblock %}
 
@@ -245,6 +246,13 @@
                             <span class="badge bg-secondary ms-1">{{ alert.alert_source }}</span>
                             {% endif %}
                         </dd>
+
+                        <dt class="col-6 text-muted small">
+                            <span title="Fingerprinted from SAME transmission characteristics (terminator bytes, inter-burst gap timing) -- not a field carried in the alert itself.">
+                                Originating Equipment
+                            </span>
+                        </dt>
+                        <dd class="col-6">{{ endec_badge((alert.full_alert_data or {}).get('endec_mode')) }}</dd>
 
                         <dt class="col-6 text-muted small">Received At</dt>
                         <dd class="col-6 small">{{ alert.received_at | localtime('%Y-%m-%d %H:%M:%S %Z', '—') }}</dd>

@@ -1,22 +1,7 @@
 {% extends "base.html" %}
 {% from 'components/confidence_scale.html' import confidence_scale %}
+{% from 'components/endec_badge.html' import endec_badge %}
 {% block title %}Audio Decoder{% endblock %}
-
-{% macro endec_badge(mode) %}
-    {% set endec_labels = {
-        'UNKNOWN':           ('secondary', 'Unknown'),
-        'DEFAULT':           ('secondary', 'DEFAULT / DASDEC / Trilithic'),
-        'NWS':               ('info',      'NWS Legacy / EAS.js'),
-        'NWS_CRS':           ('info',      'NWS CRS (1998–2016)'),
-        'NWS_BMH':           ('info',      'NWS BMH (2016+)'),
-        'SAGE_DIGITAL_3644': ('primary',   'SAGE Digital 3644'),
-        'SAGE_ANALOG_1822':  ('primary',   'SAGE Analog 1822'),
-        'TRILITHIC':         ('secondary', 'Trilithic EASyPLUS'),
-        'EAS_STATION':       ('success',   'KR8MER EAS Station™'),
-    } %}
-    {% set info = endec_labels.get(mode, ('secondary', mode)) %}
-    <span class="badge bg-{{ info[0] }}">{{ info[1] }}</span>
-{% endmacro %}
 
 {% block content %}
 <!-- Progress Overlay -->

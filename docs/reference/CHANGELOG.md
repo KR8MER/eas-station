@@ -8,6 +8,22 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.176.0] - 2026-08-20 - Show originating equipment on the live received-alert page
+
+### Added
+- **The received-alert detail page now shows which ENDEC model produced
+  the SAME transmission.** `app_utils/eas_demod.py`'s `detect_endec_mode()`
+  (a port of EAS-Tools' encoder-fingerprinting method, voting on
+  terminator-byte signatures, a leading-null quirk, and inter-burst gap
+  timing) already computed and stored this for every decoded alert — live
+  and manually uploaded — but the labeled "Originating Equipment" badge
+  only ever rendered on the manual **Audio Decoder** upload tool. On the
+  actual **Received Alerts** detail page the same value sat unlabeled
+  inside a raw JSON dump. The badge is now on both pages, sharing one
+  definition (`templates/components/endec_badge.html`) so the labels can't
+  drift apart the way they would have as two copies.
+- Documented in `templates/help.html`'s Received Alerts section.
+
 ## [2.175.4] - 2026-08-20 - Fix update.sh silently un-stamping alembic_version on every run
 
 ### Fixed
