@@ -49,6 +49,7 @@ from .tts_pronunciation import register_pronunciation_routes
 from .local_authorities import register_local_authority_routes
 from .tailscale import register_tailscale_routes
 from .poller import poller_bp
+from .heartbeat import heartbeat_bp
 from .alert_gating import alert_gating_bp
 from .pending_alerts import pending_alerts_bp
 from .alert_purge import alert_purge_bp
@@ -88,6 +89,8 @@ def register(app, logger):
     register_pronunciation_routes(app, logger)  # TTS pronunciation dictionary
     app.register_blueprint(poller_bp)  # Poller settings management
     logger.info("Poller settings routes registered")
+    app.register_blueprint(heartbeat_bp)  # Outbound dead-man's-switch heartbeat settings
+    logger.info("Heartbeat settings routes registered")
     app.register_blueprint(alert_gating_bp)  # Gated-alerts hold-off timer settings
     logger.info("Alert gating settings routes registered")
     app.register_blueprint(pending_alerts_bp)  # Gated-alerts Pending Alerts queue

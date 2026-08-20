@@ -7,7 +7,9 @@ Wants=network-online.target
 StartLimitIntervalSec=0
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
+WatchdogSec=180
 User=eas-station
 Group=eas-station
 WorkingDirectory=/opt/eas-station

@@ -178,6 +178,13 @@
                                             <input class="form-check-input" type="checkbox" id="auto-backup-volumes">
                                             <label class="form-check-label" for="auto-backup-volumes">System volumes</label>
                                         </div>
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="checkbox" id="auto-backup-verify">
+                                            <label class="form-check-label" for="auto-backup-verify">
+                                                Verify restore after each backup
+                                            </label>
+                                        </div>
+                                        <small class="text-muted">Restores into a throwaway database and checks it. Off by default: adds load.</small>
                                     </div>
                                 </div>
                                 <div class="row mt-3">
@@ -245,6 +252,46 @@
 
                     <!-- Validation Results Display -->
                     <div id="validation-result" class="mt-3" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Restore Verification Section -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-database"></i> Backup Restore Verification</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        A backup that has never been restored is not a proven backup. This restores the
+                        latest backup's database dump into a throwaway scratch database, runs sanity checks
+                        against it, and always drops the scratch database afterward &mdash; distinct from the
+                        structural "are the files present" check on each backup row below.
+                    </p>
+                    <button type="button" class="btn btn-info text-white mb-3" onclick="verifyLatestBackup()">
+                        <i class="fas fa-vial-circle-check"></i> Verify Latest Backup Now
+                    </button>
+                    <div id="verify-restore-result" class="mb-3" style="display: none;"></div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>When</th>
+                                    <th>Backup</th>
+                                    <th>Result</th>
+                                    <th>Duration</th>
+                                    <th>Triggered By</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="verify-restore-history-body">
+                                <tr><td colspan="6" class="text-muted">Loading&hellip;</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -815,6 +862,7 @@ async function loadAutoBackupConfig() {
         document.getElementById('auto-backup-keep').value = cfg.keep_count ?? 7;
         document.getElementById('auto-backup-media').checked = cfg.include_media ?? true;
         document.getElementById('auto-backup-volumes').checked = cfg.include_volumes ?? false;
+        document.getElementById('auto-backup-verify').checked = cfg.verify_after_backup ?? false;
 
         const badge = document.getElementById('auto-backup-status-badge');
         badge.textContent = cfg.enabled ? 'Enabled' : 'Disabled';
@@ -845,6 +893,7 @@ document.getElementById('auto-backup-form').addEventListener('submit', async fun
         keep_count: parseInt(document.getElementById('auto-backup-keep').value, 10),
         include_media: document.getElementById('auto-backup-media').checked,
         include_volumes: document.getElementById('auto-backup-volumes').checked,
+        verify_after_backup: document.getElementById('auto-backup-verify').checked,
     };
     try {
         const resp = await fetch('/api/backups/auto-backup/config', {
@@ -888,5 +937,72 @@ async function triggerAutoBackup() {
 
 // Load auto-backup config on page load
 loadAutoBackupConfig();
+loadVerifyRestoreHistory();
+
+// ── Restore verification ────────────────────────────────────────────────────
+
+function verifyRestoreResultRow(run) {
+    const when = run.started_at ? new Date(run.started_at).toLocaleString() : 'unknown';
+    const badge = run.passed
+        ? '<span class="badge bg-success">Passed</span>'
+        : '<span class="badge bg-danger">Failed</span>';
+    const duration = run.duration_seconds != null ? run.duration_seconds.toFixed(1) + 's' : '-';
+    const detailId = 'verify-run-detail-' + run.id;
+    const detailsJson = escapeHtml(JSON.stringify(run.details || [], null, 2));
+    return `
+        <tr>
+            <td>${escapeHtml(when)}</td>
+            <td><code>${escapeHtml(run.backup_label || '')}</code></td>
+            <td>${badge}</td>
+            <td>${duration}</td>
+            <td>${escapeHtml(run.triggered_by || '')}</td>
+            <td>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        onclick="document.getElementById('${detailId}').classList.toggle('d-none')">
+                    Details
+                </button>
+            </td>
+        </tr>
+        <tr class="d-none" id="${detailId}">
+            <td colspan="6"><pre class="mb-0 small">${detailsJson}${run.error_message ? '\n\nError: ' + escapeHtml(run.error_message) : ''}</pre></td>
+        </tr>
+    `;
+}
+
+async function loadVerifyRestoreHistory() {
+    const body = document.getElementById('verify-restore-history-body');
+    try {
+        const resp = await fetch('/api/backups/verify-restore/history?limit=10');
+        const data = await resp.json();
+        if (!data.success || !data.runs || data.runs.length === 0) {
+            body.innerHTML = '<tr><td colspan="6" class="text-muted">No verification runs yet.</td></tr>';
+            return;
+        }
+        body.innerHTML = data.runs.map(verifyRestoreResultRow).join('');
+    } catch (e) {
+        body.innerHTML = '<tr><td colspan="6" class="text-danger">Failed to load history.</td></tr>';
+    }
+}
+
+async function verifyLatestBackup() {
+    const resultDiv = document.getElementById('verify-restore-result');
+    resultDiv.innerHTML = '<div class="alert alert-info"><div class="spinner-border spinner-border-sm me-2"></div> Restoring latest backup into a scratch database and checking it&hellip; this can take a few minutes.</div>';
+    resultDiv.style.display = 'block';
+    try {
+        const resp = await fetch('/api/backups/verify-restore', {method: 'POST'});
+        const data = await resp.json();
+        if (data.success) {
+            const ok = data.run.passed;
+            resultDiv.innerHTML = ok
+                ? '<div class="alert alert-success"><i class="fas fa-check-circle"></i> Verification passed.</div>'
+                : '<div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> Verification failed &mdash; see history below for details.</div>';
+            await loadVerifyRestoreHistory();
+        } else {
+            resultDiv.innerHTML = `<div class="alert alert-danger">${escapeHtml(data.error?.message || 'Verification failed')}</div>`;
+        }
+    } catch (err) {
+        resultDiv.innerHTML = `<div class="alert alert-danger">${escapeHtml(err.message)}</div>`;
+    }
+}
 </script>
 {% endblock %}

@@ -920,6 +920,18 @@ if not skip_background_services:
     except Exception as _backup_sched_err:
         logger.warning('Auto-backup scheduler could not be started: %s', _backup_sched_err)
 
+# Start outbound dead-man's-switch heartbeat worker (pings an external
+# monitor on a schedule -- catches total box/network failure, which every
+# other inward-facing health check cannot).
+if not skip_background_services:
+    try:
+        from app_core.heartbeat_worker import start_heartbeat_worker
+        if not app.config.get('SETUP_MODE'):
+            start_heartbeat_worker(app)
+            logger.info('Heartbeat worker started')
+    except Exception as _heartbeat_err:
+        logger.warning('Heartbeat worker could not be started: %s', _heartbeat_err)
+
 # Start data-retention scheduler (prunes IQ captures, temp debug audio,
 # and fast-growing audio/metadata tables per the retention_settings policy).
 if not skip_background_services:

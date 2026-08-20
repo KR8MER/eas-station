@@ -2799,6 +2799,22 @@
             </div>
         </div>
 
+        <div class="row mt-4 d-none" id="clock-sync-section">
+            <div class="col-12">
+                <div class="card health-card" id="clock-sync-card">
+                    <div class="card-body" id="clock-sync-card-body"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4 d-none" id="alert-feeds-section">
+            <div class="col-12">
+                <div class="card health-card" id="alert-feeds-card">
+                    <div class="card-body" id="alert-feeds-card-body"></div>
+                </div>
+            </div>
+        </div>
+
         <div class="health-section-head">
             <h2>Temperature Sensors</h2>
             <span class="rule"></span>
@@ -4945,6 +4961,87 @@
         }
         /* ── end RTC helpers ─────────────────────────────────────────── */
 
+        function updateClockSyncCard(clockSync) {
+            const section = document.getElementById('clock-sync-section');
+            const body = document.getElementById('clock-sync-card-body');
+            if (!section || !body) return;
+
+            if (!clockSync || typeof clockSync !== 'object' || !clockSync.available) {
+                section.classList.add('d-none');
+                return;
+            }
+            section.classList.remove('d-none');
+
+            const synced = clockSync.synchronized;
+            const syncBadge = synced === true
+                ? '<span class="badge bg-success">Synchronized</span>'
+                : synced === false
+                    ? '<span class="badge bg-danger">Not Synchronized</span>'
+                    : '<span class="badge bg-secondary">Unknown</span>';
+            const offset = (typeof clockSync.offset_seconds === 'number')
+                ? `<span class="ms-2"><code>${(clockSync.offset_seconds >= 0 ? '+' : '')}${clockSync.offset_seconds.toFixed(3)} s</code></span>`
+                : '';
+            const source = clockSync.source
+                ? `<div class="metric-row"><span class="metric-label">Reference:</span><span class="metric-value"><code>${escapeHtml(clockSync.source)}</code>${clockSync.stratum != null ? ` <span class="text-muted small">(stratum ${clockSync.stratum})</span>` : ''}</span></div>`
+                : '';
+
+            body.innerHTML = `
+                <h5><i class="fas fa-satellite-dish section-icon"></i> Clock Sync (${escapeHtml(clockSync.method || 'unknown')})</h5>
+                <div class="metric-row">
+                    <span class="metric-label">Status:</span>
+                    <span class="metric-value">${syncBadge}${offset}</span>
+                </div>
+                ${source}
+            `;
+        }
+
+        function updateAlertFeedsCard(feeds) {
+            const section = document.getElementById('alert-feeds-section');
+            const body = document.getElementById('alert-feeds-card-body');
+            if (!section || !body) return;
+
+            if (!feeds || typeof feeds !== 'object' || (!feeds.noaa && !feeds.ipaws)) {
+                section.classList.add('d-none');
+                return;
+            }
+            section.classList.remove('d-none');
+
+            const feedBadge = (feed) => {
+                if (!feed) return '<span class="badge bg-secondary">Unknown</span>';
+                if (feed.status === 'ok') return '<span class="badge bg-success">OK</span>';
+                if (feed.status === 'stalled') return '<span class="badge bg-danger">Stalled</span>';
+                return '<span class="badge bg-secondary">Unknown</span>';
+            };
+            const feedRow = (label, feed) => `
+                <div class="col-md-6">
+                    <div class="metric-row">
+                        <span class="metric-label">${label}:</span>
+                        <span class="metric-value">${feedBadge(feed)}
+                            ${feed && feed.age_minutes != null ? `<span class="ms-1 text-muted small">${feed.age_minutes.toFixed(1)} min ago</span>` : ''}
+                        </span>
+                    </div>
+                </div>
+            `;
+
+            const combinedWarning = feeds.combined_stalled
+                ? `<p class="text-muted small mb-0 mt-2">
+                        <i class="fas fa-exclamation-triangle me-1 text-danger"></i>
+                        BOTH NOAA and IPAWS have not polled successfully in over
+                        ${feeds.threshold_minutes} minutes — no new alerts can be ingested.
+                        An email/SNMP alert has been sent if configured.
+                   </p>`
+                : '';
+
+            body.innerHTML = `
+                <h5><i class="fas fa-tower-broadcast section-icon"></i> Alert Feeds</h5>
+                <div class="row">
+                    ${feedRow('NOAA', feeds.noaa)}
+                    ${feedRow('IPAWS', feeds.ipaws)}
+                </div>
+                ${combinedWarning}
+            `;
+        }
+
         let lastHealthSnapshot = null;
         function applyHealthData(data) {
             if (!data || typeof data !== 'object') {
@@ -5051,6 +5148,8 @@
 
             updateGpsCard(data.gps || {});
             updateRtcCard(data.rtc || {});
+            updateClockSyncCard(data.clock_sync || {});
+            updateAlertFeedsCard(data.alert_feeds || {});
 
             // Update the quick-stat tiles (CPU/Memory/Storage numbers + tone)
             try { updateQuickStats(data); } catch (e) { console.error('updateQuickStats failed:', e); }

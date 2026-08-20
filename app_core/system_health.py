@@ -33,8 +33,18 @@ from flask import current_app
 from sqlalchemy import func
 
 from app_core.extensions import db
-from app_core.models import EASMessage, ManualEASActivation, RadioReceiver, RadioReceiverStatus
+from app_core.models import (
+    BackupVerificationRun,
+    EASMessage,
+    ManualEASActivation,
+    PollHistory,
+    PollerSettings,
+    RadioReceiver,
+    RadioReceiverStatus,
+)
 from app_utils import build_system_health_snapshot, utc_now
+from app_utils.alert_sources import ALERT_SOURCE_IPAWS, ALERT_SOURCE_NOAA
+from app_utils.system.clocksync import _collect_clock_sync
 from app_utils.time import UTC_TZ
 
 try:  # pragma: no cover - optional dependency
@@ -103,6 +113,10 @@ def get_system_health(logger=None, force_refresh: bool = False) -> Dict[str, Any
                 return cached
 
         snapshot = build_system_health_snapshot(db, effective_logger)
+        try:
+            snapshot["alert_feeds"] = collect_poller_feed_status(effective_logger)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            effective_logger.error("Failed to attach alert_feeds to health snapshot: %s", exc)
         _HEALTH_SNAPSHOT_CACHE = snapshot
         _HEALTH_SNAPSHOT_TIMESTAMP = _time.time()
         return snapshot
@@ -268,6 +282,128 @@ def collect_audio_path_status(logger=None) -> Dict[str, Any]:
         "heartbeat_minutes": heartbeat_minutes,
         "last_activity": last_activity,
         "issues": issues,
+    }
+
+
+CLOCK_DRIFT_WARN_SECONDS = 1.0
+# Global threshold, not a per-deployment setting -- a system clock more than
+# a second off matters for SAME timing and RWT scheduling regardless of how
+# this box is configured.
+
+FEED_STATUS_STALE_FALLBACK_MINUTES = 15
+
+
+def _feed_last_poll(data_source: str):
+    """Return the most recent PollHistory row for a given feed's data_source."""
+    return (
+        PollHistory.query.filter(PollHistory.data_source.contains(data_source))
+        .order_by(PollHistory.timestamp.desc())
+        .first()
+    )
+
+
+def _feed_status(data_source: str, threshold_minutes: int) -> Dict[str, Any]:
+    last_poll = _feed_last_poll(data_source)
+    if last_poll is None:
+        return {
+            "last_poll_at": None,
+            "age_minutes": None,
+            "stalled": True,
+            "status": "unknown",
+            "message": "No poll history recorded yet",
+        }
+
+    last_ts = _ensure_aware(last_poll.timestamp)
+    age_minutes = max((utc_now() - last_ts).total_seconds() / 60.0, 0.0)
+    stalled = age_minutes > threshold_minutes
+    return {
+        "last_poll_at": last_ts.isoformat() if last_ts else None,
+        "age_minutes": round(age_minutes, 1),
+        "stalled": stalled,
+        "status": "stalled" if stalled else "ok",
+        "message": f"Last successful poll cycle {age_minutes:.1f} min ago",
+    }
+
+
+def collect_poller_feed_status(logger=None) -> Dict[str, Any]:
+    """Per-feed NOAA/IPAWS poll staleness, plus a combined-loss flag.
+
+    The general "CAP Poller Liveness" check in ``/health/dependencies``
+    (webapp/routes_monitoring.py) looks at the single most recent poll
+    across *all* sources, so a live NOAA feed masks a dead IPAWS feed (or
+    vice versa). This is the per-feed breakdown that check was missing --
+    ``combined_stalled`` is only true when BOTH feeds are stalled at once,
+    which is the condition the HealthAlertWorker escalates on.
+    """
+    effective_logger = logger or _resolve_logger()
+
+    try:
+        threshold_minutes = int(
+            (PollerSettings.query.first() or PollerSettings()).feed_stall_alert_minutes
+            or FEED_STATUS_STALE_FALLBACK_MINUTES
+        )
+    except Exception as exc:
+        effective_logger.debug("Could not read feed_stall_alert_minutes, using default: %s", exc)
+        threshold_minutes = FEED_STATUS_STALE_FALLBACK_MINUTES
+
+    try:
+        noaa = _feed_status(ALERT_SOURCE_NOAA, threshold_minutes)
+        ipaws = _feed_status(ALERT_SOURCE_IPAWS, threshold_minutes)
+    except Exception as exc:
+        effective_logger.error("Failed to collect poller feed status: %s", exc)
+        return {
+            "threshold_minutes": threshold_minutes,
+            "noaa": {"status": "unknown", "message": str(exc)},
+            "ipaws": {"status": "unknown", "message": str(exc)},
+            "combined_stalled": False,
+        }
+
+    return {
+        "threshold_minutes": threshold_minutes,
+        "noaa": noaa,
+        "ipaws": ipaws,
+        "combined_stalled": bool(noaa["stalled"] and ipaws["stalled"]),
+    }
+
+
+def collect_backup_verification_status(logger=None) -> Dict[str, Any]:
+    """Status of the most recent automated backup-restore verification run.
+
+    Flags an issue if the latest run failed, or if no run has succeeded
+    within roughly a week -- either means an operator can no longer be
+    confident that the last backup actually restores.
+    """
+    effective_logger = logger or _resolve_logger()
+    STALE_DAYS = 7
+
+    try:
+        latest = BackupVerificationRun.query.order_by(
+            BackupVerificationRun.started_at.desc()
+        ).first()
+    except Exception as exc:
+        effective_logger.error("Failed to read backup verification history: %s", exc)
+        return {"status": "unknown", "issues": [], "latest": None}
+
+    if latest is None:
+        return {"status": "unknown", "issues": [], "latest": None}
+
+    issues: List[str] = []
+    if not latest.passed:
+        issues.append(
+            f"Most recent backup-restore verification ({latest.backup_label}) FAILED"
+        )
+    else:
+        age_days = (utc_now() - _ensure_aware(latest.started_at)).total_seconds() / 86400.0
+        if age_days > STALE_DAYS:
+            issues.append(
+                f"No successful backup-restore verification in {age_days:.1f} days "
+                f"(last success: {latest.backup_label})"
+            )
+
+    return {
+        "status": "ok" if not issues else "degraded",
+        "issues": issues,
+        "latest": latest.to_dict(),
     }
 
 
@@ -621,6 +757,29 @@ class HealthAlertWorker:
         audio_status = collect_audio_path_status(self._logger)
         for message in audio_status.get("issues", []):
             issues.append(f"Audio path: {message}")
+
+        feed_status = collect_poller_feed_status(self._logger)
+        if feed_status.get("combined_stalled"):
+            threshold = feed_status.get("threshold_minutes")
+            issues.append(
+                f"Alert feeds: BOTH NOAA and IPAWS have not polled successfully in "
+                f"over {threshold} minutes -- no new alerts can be ingested"
+            )
+
+        backup_status = collect_backup_verification_status(self._logger)
+        for message in backup_status.get("issues", []):
+            issues.append(f"Backup verification: {message}")
+
+        clock_status = _collect_clock_sync(self._logger)
+        if clock_status.get("available"):
+            if clock_status.get("synchronized") is False:
+                issues.append("System clock is not NTP/chrony synchronized")
+            else:
+                offset = clock_status.get("offset_seconds")
+                if offset is not None and abs(offset) > CLOCK_DRIFT_WARN_SECONDS:
+                    issues.append(
+                        f"System clock offset is {offset:.3f}s (threshold {CLOCK_DRIFT_WARN_SECONDS}s)"
+                    )
 
         return issues
 

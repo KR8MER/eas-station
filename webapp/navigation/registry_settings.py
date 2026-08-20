@@ -99,6 +99,13 @@ SETTINGS_SECTION = NavSection(
                     permissions=(SYSTEM_CONFIGURE,),
                 ),
                 NavItem(
+                    label="Uptime Heartbeat",
+                    icon="fas fa-heart-pulse",
+                    href="/admin/heartbeat/",
+                    description="Outbound dead-man's-switch ping to an external monitor.",
+                    permissions=(SYSTEM_CONFIGURE,),
+                ),
+                NavItem(
                     label="Alert Gating",
                     icon="fas fa-hourglass-half",
                     href="/admin/alert-gating/",
