@@ -55,6 +55,8 @@ import json
 from typing import Optional, Any, Dict
 from dotenv import load_dotenv
 
+from app_utils.system.sd_notify import notify as sd_notify, Watchdog
+
 # Configure logging early
 from app_core.logging_context import (
     LOG_FORMAT_WITH_ALERT,
@@ -2310,6 +2312,12 @@ def main():
             _watchdog_thread.start()
             logger.info("✅ Source watchdog thread started")
 
+        # Tell systemd we're up (Type=notify + WatchdogSec= on this unit) and
+        # start kicking the watchdog from inside the loop below -- a hang
+        # here (not just a crash) now gets systemd to kill + restart us.
+        sd_notify("READY=1")
+        systemd_watchdog = Watchdog()
+
         # Main loop: publish metrics at 4 Hz so VU meters, RSSI and RBDS/RDS
         # updates reach the UI as fast as a car radio refreshes its display.
         # The WebSocket push worker already polls Redis at 4 Hz, so anything
@@ -2363,6 +2371,7 @@ def main():
                 # halves (a 0.5s sleep here previously made the "4 Hz" target
                 # above only achievable at 2 Hz).
                 time.sleep(0.1)
+                systemd_watchdog.kick()
 
             except KeyboardInterrupt:
                 logger.info("Received keyboard interrupt")

@@ -13,7 +13,9 @@ Wants=eas-station-sdr.service
 OnFailure=eas-station-failure-recovery@%N.service
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
+WatchdogSec=60
 User=eas-station
 Group=eas-station
 # Additional group for audio device access

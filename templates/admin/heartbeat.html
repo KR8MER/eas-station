@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}Uptime Heartbeat - EAS Station{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set header_icon = 'fas fa-heart-pulse' %}
+{% set header_title = 'Uptime Heartbeat' %}
+{% set header_subtitle = 'Outbound dead-man\'s-switch ping to an external monitor' %}
+{% include 'components/page_header.html' %}
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="alert alert-info">
+                <i class="fas fa-circle-info"></i>
+                Every other health check on this system is <strong>inward-facing</strong> —
+                it reports status on a page someone has to look at. This one is the opposite:
+                it pings an external monitoring service on a fixed schedule, unconditionally,
+                regardless of what this box thinks of its own health. If the box loses power,
+                loses network, or the OS wedges entirely, the pings simply stop — and the
+                external service (not this appliance) raises the alarm.
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-cog"></i> Heartbeat Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <form id="heartbeatSettingsForm">
+                        <div class="mb-3">
+                            <label for="enabled" class="form-label">
+                                <i class="fas fa-power-off"></i> Heartbeat Status
+                            </label>
+                            <select class="form-select" id="enabled" name="enabled" required>
+                                <option value="true" {% if settings.enabled %}selected{% endif %}>Enabled</option>
+                                <option value="false" {% if not settings.enabled %}selected{% endif %}>Disabled</option>
+                            </select>
+                            <div class="form-text">Disabled by default — an unconfigured ping URL would otherwise fail on every cycle.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="ping_url" class="form-label">
+                                <i class="fas fa-link"></i> Ping URL
+                            </label>
+                            <input type="text" class="form-control font-monospace" id="ping_url"
+                                   name="ping_url" placeholder="https://hc-ping.com/your-check-uuid"
+                                   value="{{ settings.ping_url }}">
+                            <div class="form-text">
+                                Any HTTP(S) endpoint that alerts you when pings stop arriving —
+                                e.g. a free check from <a href="https://healthchecks.io" target="_blank" rel="noopener">healthchecks.io</a>,
+                                or your own uptime monitor / webhook.
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="interval_seconds" class="form-label">
+                                <i class="fas fa-clock"></i> Ping Interval (seconds)
+                            </label>
+                            <input type="number" class="form-control" id="interval_seconds"
+                                   name="interval_seconds" min="60" max="86400"
+                                   value="{{ settings.interval_seconds }}" required>
+                            <div class="form-text">Minimum 60 seconds. Set the external monitor's expected/grace period a little longer than this.</div>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="button" class="btn btn-outline-secondary" id="testPingBtn">
+                                <i class="fas fa-paper-plane"></i> Send Test Ping
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save Settings
+                            </button>
+                        </div>
+                        <div class="small mt-2" id="testPingStatus"></div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-info-circle"></i> Current Status</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2">
+                            <strong>Status:</strong>
+                            <span class="badge bg-{{ 'success' if settings.enabled else 'danger' }}" id="statusBadge">
+                                {{ 'Enabled' if settings.enabled else 'Disabled' }}
+                            </span>
+                        </li>
+                        <li class="mb-2">
+                            <strong>Interval:</strong>
+                            <span id="intervalDisplay">{{ settings.interval_seconds }}</span> s
+                        </li>
+                        <li class="mb-2">
+                            <strong>Last Ping:</strong>
+                            <small class="text-muted" id="lastPingAt">
+                                {{ settings.last_ping_at | localtime('%Y-%m-%d %H:%M:%S %Z', 'Never') }}
+                            </small>
+                        </li>
+                        <li class="mb-0">
+                            <strong>Last Result:</strong>
+                            {% if settings.last_ping_success is none %}
+                            <span class="badge bg-secondary" id="lastResultBadge">Unknown</span>
+                            {% elif settings.last_ping_success %}
+                            <span class="badge bg-success" id="lastResultBadge">Success</span>
+                            {% else %}
+                            <span class="badge bg-danger" id="lastResultBadge" title="{{ settings.last_ping_error or '' }}">Failed</span>
+                            {% endif %}
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('heartbeatSettingsForm');
+    const testBtn = document.getElementById('testPingBtn');
+    const testStatus = document.getElementById('testPingStatus');
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const formData = new FormData(form);
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const originalBtnText = submitBtn.innerHTML;
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+        try {
+            const response = await fetch('/admin/heartbeat/update', {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-CSRF-Token': window.CSRF_TOKEN }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showToast('Heartbeat settings saved successfully', 'success');
+
+                const s = data.settings;
+                document.getElementById('statusBadge').textContent = s.enabled ? 'Enabled' : 'Disabled';
+                document.getElementById('statusBadge').className = 'badge bg-' + (s.enabled ? 'success' : 'danger');
+                document.getElementById('intervalDisplay').textContent = s.interval_seconds;
+            } else {
+                showToast(data.error || 'Failed to save settings', 'danger');
+            }
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            showToast('Error saving settings', 'danger');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalBtnText;
+        }
+    });
+
+    testBtn.addEventListener('click', async function() {
+        const pingUrl = document.getElementById('ping_url').value.trim();
+        if (!pingUrl) {
+            showToast('Enter a ping URL first', 'warning');
+            return;
+        }
+
+        testBtn.disabled = true;
+        testStatus.textContent = 'Sending...';
+
+        try {
+            const response = await fetch('/admin/heartbeat/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN },
+                body: JSON.stringify({ ping_url: pingUrl })
+            });
+            const data = await response.json();
+            if (data.success) {
+                testStatus.innerHTML = '<span class="text-success"><i class="fas fa-check"></i> ' + data.message + '</span>';
+            } else {
+                testStatus.innerHTML = '<span class="text-danger"><i class="fas fa-xmark"></i> ' + (data.error || 'Ping failed') + '</span>';
+            }
+        } catch (error) {
+            testStatus.innerHTML = '<span class="text-danger"><i class="fas fa-xmark"></i> Request failed</span>';
+        } finally {
+            testBtn.disabled = false;
+        }
+    });
+});
+</script>
+{% endblock %}

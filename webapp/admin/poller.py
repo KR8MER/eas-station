@@ -47,6 +47,7 @@ def _get_or_create_settings() -> PollerSettings:
             ipaws_feed_urls=[],
             ipaws_default_lookback_hours=12,
             log_fetched_alerts=False,
+            feed_stall_alert_minutes=15,
         )
         db.session.add(settings)
         db.session.commit()
@@ -113,6 +114,11 @@ def update_poller_settings():
 
         settings.log_fetched_alerts = request.form.get('log_fetched_alerts', 'false').lower() == 'true'
 
+        feed_stall_alert_minutes = int(request.form.get('feed_stall_alert_minutes', 15))
+        if feed_stall_alert_minutes < 5:
+            return jsonify({'success': False, 'error': 'Feed stall alert threshold must be at least 5 minutes'}), 400
+        settings.feed_stall_alert_minutes = feed_stall_alert_minutes
+
         db.session.commit()
         logger.info(
             "Updated poller settings: enabled=%s, interval=%ss, cap_timeout=%ss, "
@@ -133,6 +139,7 @@ def update_poller_settings():
                 'ipaws_feed_url_count': len(settings.ipaws_feed_urls),
                 'ipaws_default_lookback_hours': settings.ipaws_default_lookback_hours,
                 'log_fetched_alerts': settings.log_fetched_alerts,
+                'feed_stall_alert_minutes': settings.feed_stall_alert_minutes,
             },
         )
 

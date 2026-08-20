@@ -113,6 +113,21 @@
                             <div class="form-text">Hours to look back when constructing IPAWS URLs with <code>{timestamp}</code> (1–72).</div>
                         </div>
 
+                        <!-- Feed Stall Alert Threshold -->
+                        <div class="mb-3">
+                            <label for="feed_stall_alert_minutes" class="form-label">
+                                <i class="fas fa-triangle-exclamation"></i> Combined Feed-Loss Alert Threshold (minutes)
+                            </label>
+                            <input type="number" class="form-control" id="feed_stall_alert_minutes"
+                                   name="feed_stall_alert_minutes" min="5" max="1440"
+                                   value="{{ settings.feed_stall_alert_minutes }}" required>
+                            <div class="form-text">
+                                An email/SNMP alert fires only when BOTH NOAA and IPAWS have not
+                                polled successfully for longer than this. A single stalled feed is
+                                still shown on <a href="/system_health">System Health</a> without paging anyone.
+                            </div>
+                        </div>
+
                         <hr>
 
                         <!-- Log Fetched Alerts -->
@@ -195,6 +210,10 @@
                             <span class="badge bg-{{ 'info' if settings.log_fetched_alerts else 'secondary' }}" id="loggingBadge">
                                 {{ 'Enabled' if settings.log_fetched_alerts else 'Disabled' }}
                             </span>
+                        </li>
+                        <li class="mb-2">
+                            <strong>Feed-Loss Threshold:</strong>
+                            <span id="feedStallDisplay">{{ settings.feed_stall_alert_minutes }}</span> min
                         </li>
                         <li class="mb-0">
                             <strong>Last Updated:</strong>
@@ -287,6 +306,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('lookbackDisplay').textContent = s.ipaws_default_lookback_hours;
                 document.getElementById('loggingBadge').textContent = s.log_fetched_alerts ? 'Enabled' : 'Disabled';
                 document.getElementById('loggingBadge').className = 'badge bg-' + (s.log_fetched_alerts ? 'info' : 'secondary');
+                document.getElementById('feedStallDisplay').textContent = s.feed_stall_alert_minutes;
                 if (s.updated_at) {
                     document.getElementById('lastUpdated').textContent = new Date(s.updated_at).toLocaleString();
                 }

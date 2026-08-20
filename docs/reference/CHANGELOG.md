@@ -8,6 +8,35 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.179.0] - 2026-08-20 - Uptime diagnostics pack
+
+### Added
+- **systemd hang watchdog** for `eas-station-audio` and `eas-station-poller` (`Type=notify` +
+  `WatchdogSec=`). Previously `Restart=always` only caught process *crashes* -- a live-but-deadlocked
+  process (e.g. stuck in a blocking call) kept running forever. Both services now send `WATCHDOG=1`
+  heartbeats from their main loops (`app_utils/system/sd_notify.py`); a hang now gets systemd to
+  kill and restart the unit.
+- **Outbound dead-man's-switch heartbeat**: every existing health check was inward-facing (a page
+  someone has to look at). Settings → Uptime Heartbeat (`/admin/heartbeat/`) configures a periodic
+  ping to an external monitor (e.g. healthchecks.io) that fires unconditionally on schedule, so
+  total box/network failure -- not just degraded internal health -- raises an alarm on a channel
+  outside this appliance.
+- **Scheduled backup-restore verification**: Admin → Backups now has a "Backup Restore
+  Verification" panel. `tools/verify_backup_restore.py` restores a backup's database dump into a
+  throwaway scratch database, runs sanity checks, and always drops the scratch database afterward --
+  proving a backup actually restores, not just that it was created. Opt-in "Verify after each
+  backup" toggle on the auto-backup schedule, plus a manual "Verify Latest Backup Now" button and
+  history table.
+- **Clock/NTP drift monitoring**: the system health snapshot (`/system_health`) now has a Clock
+  Sync card, backed by a new consolidated collector (`app_utils/system/clocksync.py`). SAME timing
+  and RWT scheduling both depend on correct system time; drift beyond 1 second or a desynchronized
+  clock now raises a compliance alert.
+- **Combined NOAA+IPAWS feed-loss alarm**: the existing poller-liveness check looked at the single
+  most recent poll across *all* sources, so a live NOAA feed masked a dead IPAWS feed. An Alert
+  Feeds card on `/system_health` now shows each feed's staleness independently, and an email/SNMP
+  alert fires specifically when *both* feeds have stalled past the configurable threshold (Alert
+  Poller settings → "Combined Feed-Loss Alert Threshold").
+
 ## [2.178.0] - 2026-08-20 - Add a System Status strip to the main dashboard
 
 ### Added

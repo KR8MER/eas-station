@@ -28,6 +28,7 @@ backup directory so it survives application restarts.
 
 import json
 import logging
+import re
 import subprocess
 import sys
 import threading
@@ -45,6 +46,7 @@ _DEFAULT_CONFIG: dict = {
     "include_media": True,
     "include_volumes": False,
     "keep_count": 7,
+    "verify_after_backup": False,
     "last_run": None,
     "last_run_success": None,
     "next_run": None,
@@ -64,7 +66,13 @@ class BackupScheduler:
         self._thread: Optional[threading.Thread] = None
         self._running = False
         self._lock = threading.Lock()
+        self._app = None  # set via set_app(); needed for DB writes from the background thread
         self._load_config()
+
+    def set_app(self, app) -> None:
+        """Attach the Flask app so the background thread can open app_context()
+        when it needs to write a BackupVerificationRun row."""
+        self._app = app
 
     # ------------------------------------------------------------------
     # Config helpers
@@ -173,6 +181,12 @@ class BackupScheduler:
             if result.returncode == 0:
                 logger.info("Auto-backup completed successfully")
                 self._prune_old_backups()
+                if self._config.get("verify_after_backup"):
+                    location_match = re.search(r"^Location: (.+)$", result.stdout, re.MULTILINE)
+                    if location_match:
+                        self._verify_backup(Path(location_match.group(1).strip()), triggered_by=label)
+                    else:
+                        logger.warning("verify_after_backup is on, but could not find the new backup's path in create_backup.py output")
                 return True
             else:
                 logger.error("Auto-backup failed (rc=%d): %s", result.returncode, result.stderr)
@@ -183,6 +197,68 @@ class BackupScheduler:
         except Exception as exc:
             logger.error("Auto-backup error: %s", exc)
             return False
+
+    def _verify_backup(self, backup_path: Path, triggered_by: str) -> None:
+        """Run tools/verify_backup_restore.py against *backup_path* and
+        record a BackupVerificationRun row. Best-effort: failures here are
+        logged, never raised (a failed *verification* is a normal,
+        recordable outcome -- an exception here should not take down the
+        backup scheduler thread)."""
+        script = Path(__file__).parent.parent / "tools" / "verify_backup_restore.py"
+        if not script.exists():
+            logger.error("verify_backup_restore.py not found: %s", script)
+            return
+
+        started = datetime.now(timezone.utc)
+        try:
+            result = subprocess.run(
+                [sys.executable, str(script), str(backup_path), "--json"],
+                capture_output=True, text=True, timeout=900,
+            )
+            payload = json.loads(result.stdout) if result.stdout.strip() else {}
+        except subprocess.TimeoutExpired:
+            payload = {"passed": False, "details": [], "error": "Verification timed out after 15 minutes"}
+        except Exception as exc:
+            payload = {"passed": False, "details": [], "error": str(exc)}
+
+        self._record_verification_run(
+            backup_label=backup_path.name,
+            started=started,
+            payload=payload,
+            triggered_by=triggered_by,
+        )
+
+    def _record_verification_run(self, backup_label: str, started: datetime, payload: dict, triggered_by: str) -> None:
+        def _write():
+            from app_core.extensions import db
+            from app_core.models import BackupVerificationRun
+
+            run = BackupVerificationRun(
+                started_at=started,
+                finished_at=datetime.now(timezone.utc),
+                backup_label=backup_label,
+                passed=bool(payload.get("passed")),
+                duration_seconds=payload.get("duration_seconds"),
+                details=payload.get("details") or [],
+                error_message=payload.get("error"),
+                triggered_by="manual" if triggered_by == "auto-manual" else "scheduled",
+            )
+            db.session.add(run)
+            db.session.commit()
+            level = logger.info if run.passed else logger.error
+            level("Backup restore verification for %s: %s", backup_label, "PASSED" if run.passed else "FAILED")
+
+        try:
+            from flask import has_app_context
+            if has_app_context():
+                _write()
+            elif self._app is not None:
+                with self._app.app_context():
+                    _write()
+            else:
+                logger.warning("Cannot record BackupVerificationRun: no Flask app context available")
+        except Exception as exc:
+            logger.error("Failed to record backup verification run: %s", exc)
 
     def _prune_old_backups(self) -> None:
         """Delete oldest auto-backups beyond keep_count."""
@@ -267,6 +343,7 @@ def start_scheduler(app) -> None:
     """Start the global backup scheduler using the Flask app's BACKUP_DIR config."""
     backup_dir = Path(app.config.get("BACKUP_DIR", "/var/backups/eas-station"))
     scheduler = get_scheduler(backup_dir)
+    scheduler.set_app(app)
     scheduler.start()
 
 

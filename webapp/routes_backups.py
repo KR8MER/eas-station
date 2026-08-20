@@ -576,5 +576,62 @@ def register(app: Flask, logger) -> None:
                 "error": stderr,
             })
 
+    @app.route("/api/backups/verify-restore", methods=["POST"])
+    @require_auth
+    @require_role("Admin", "Operator")
+    def api_verify_restore():
+        """Restore the latest backup's database dump into a throwaway scratch
+        database and run sanity checks against it -- proves the backup
+        actually restores, distinct from the structural check in
+        /api/backups/validate/<name>."""
+        backups = list_backups()
+        if not backups:
+            return error_response(HTTPStatus.NOT_FOUND, "No backups available to verify")
+
+        latest = backups[0]
+        route_logger.info("Manual backup-restore verification requested for %s", latest["name"])
+
+        started = datetime.utcnow()
+        success, stdout, stderr = run_script(
+            "verify_backup_restore.py", [latest["path"], "--json"]
+        )
+        try:
+            payload = json.loads(stdout) if stdout.strip() else {}
+        except json.JSONDecodeError:
+            payload = {"passed": False, "details": [], "error": stderr or "Could not parse verification output"}
+
+        from app_core.extensions import db
+        from app_core.models import BackupVerificationRun
+
+        run = BackupVerificationRun(
+            started_at=started,
+            finished_at=datetime.utcnow(),
+            backup_label=latest["name"],
+            passed=bool(payload.get("passed")),
+            duration_seconds=payload.get("duration_seconds"),
+            details=payload.get("details") or [],
+            error_message=payload.get("error"),
+            triggered_by="manual",
+        )
+        db.session.add(run)
+        db.session.commit()
+
+        return jsonify({"success": True, "run": run.to_dict()})
+
+    @app.route("/api/backups/verify-restore/history")
+    @require_auth
+    @require_role("Admin", "Operator", "Analyst")
+    def api_verify_restore_history():
+        """Recent backup-restore verification results, newest first."""
+        from app_core.models import BackupVerificationRun
+
+        limit = min(int(request.args.get("limit", 20)), 100)
+        runs = (
+            BackupVerificationRun.query.order_by(BackupVerificationRun.started_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return jsonify({"success": True, "runs": [r.to_dict() for r in runs]})
+
 
 __all__ = ["register"]

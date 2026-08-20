@@ -349,6 +349,61 @@
                             </div>
                         </div>
 
+                        <!-- Uptime & Reliability Diagnostics -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="uptimeDiagnosticsHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#uptimeDiagnosticsCollapse">
+                                    <i class="fas fa-heart-pulse me-2"></i>Uptime &amp; Reliability Diagnostics
+                                </button>
+                            </h2>
+                            <div id="uptimeDiagnosticsCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p>
+                                        As a life-safety appliance, EAS Station has several checks specifically aimed
+                                        at catching failures that a normal "is the process still running?" check misses.
+                                    </p>
+                                    <ul>
+                                        <li>
+                                            <strong>Hang watchdog:</strong> the audio-processing and alert-poller
+                                            services now send periodic heartbeats to systemd
+                                            (<code>WatchdogSec=</code>). A crashed process was already restarted by
+                                            <code>Restart=always</code>; now a process that's still running but
+                                            <em>deadlocked</em> is killed and restarted too. No configuration needed.
+                                        </li>
+                                        <li>
+                                            <strong>Uptime Heartbeat</strong> (<strong>Settings &rarr; Uptime
+                                            Heartbeat</strong>, <code>/admin/heartbeat/</code>): every other health
+                                            check on this system is inward-facing. This one pings an external
+                                            monitoring service (e.g. healthchecks.io) on a schedule, so total loss of
+                                            power, network, or a wedged OS &mdash; conditions this box cannot report
+                                            on itself &mdash; still raises an alarm, from outside the box.
+                                        </li>
+                                        <li>
+                                            <strong>Backup restore verification</strong> (<strong>Admin &rarr;
+                                            Backups</strong>): a backup that's never been restored isn't a proven
+                                            backup. This restores the latest backup's database into a throwaway
+                                            scratch database, checks it, and always deletes the scratch database
+                                            afterward. Run it manually with "Verify Latest Backup Now", or enable
+                                            "Verify after each backup" on the auto-backup schedule.
+                                        </li>
+                                        <li>
+                                            <strong>Clock sync monitoring</strong> (<strong>System Health</strong>):
+                                            SAME timing and Required Weekly Test scheduling both depend on correct
+                                            system time. The Clock Sync card shows chrony/NTP synchronization status
+                                            and offset, and a compliance alert fires if the clock drifts or loses sync.
+                                        </li>
+                                        <li>
+                                            <strong>Combined feed-loss alarm</strong> (<strong>System Health</strong> +
+                                            <strong>Settings &rarr; Alert Poller</strong>): the Alert Feeds card shows
+                                            NOAA and IPAWS polling staleness independently, so one dead feed is never
+                                            hidden behind the other one still succeeding. An alert fires only when
+                                            <em>both</em> feeds have stalled past the configurable threshold.
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Gated Alerts / Hold-Off Timer -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="gatedAlertsHeading">

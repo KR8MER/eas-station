@@ -114,6 +114,14 @@ class PollerSettings(db.Model):
     # including full ID, event type, sent/effective/expires times, urgency/severity/certainty,
     # area description, and headline. Useful for debugging missing alerts.
 
+    # Alerting
+    feed_stall_alert_minutes = db.Column(db.Integer, nullable=False, default=15)
+    # Minutes without a successful poll before a feed is considered stalled.
+    # The combined-feed-loss alarm only fires when BOTH NOAA and IPAWS have
+    # been stalled longer than this at once (see collect_poller_feed_status
+    # in app_core/system_health.py) -- a single stalled feed is surfaced on
+    # the health snapshot but does not, by itself, page anyone.
+
     # Metadata
     updated_at = db.Column(db.DateTime, nullable=True, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -128,6 +136,7 @@ class PollerSettings(db.Model):
             "ipaws_feed_urls": self.ipaws_feed_urls or [],
             "ipaws_default_lookback_hours": self.ipaws_default_lookback_hours,
             "log_fetched_alerts": self.log_fetched_alerts,
+            "feed_stall_alert_minutes": self.feed_stall_alert_minutes,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 

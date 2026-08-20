@@ -82,6 +82,8 @@ from ._models_alerts import (
 )
 from ._models_admin import AdminSession, AdminUser, SystemLog
 from ._models_gating import AlertGatingSettings, GatedAlert
+from ._models_backup import BackupVerificationRun
+from ._models_heartbeat import HeartbeatSettings
 from ._models_polling import PollDebugRecord, PollHistory, PollerSettings
 from ._models_settings import (
     AlertFilterSettings,
@@ -152,6 +154,7 @@ __all__ = [
     "AudioSourceMetrics",
     "AutoPurgeSettings",
     "AdminUser",
+    "BackupVerificationRun",
     "Boundary",
     "CAPAlert",
     "CertbotSettings",
@@ -161,6 +164,7 @@ __all__ = [
     "Fail2banSettings",
     "GatedAlert",
     "GPIOActivationLog",
+    "HeartbeatSettings",
     "IcecastSettings",
     "Intersection",
     "LEDMessage",

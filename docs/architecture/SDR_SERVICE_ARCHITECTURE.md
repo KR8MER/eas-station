@@ -275,6 +275,18 @@ CONFIG_PATH=/opt/eas-station/.env
 | `systemd/eas-station-sdr.service` | SDR hardware service unit (runs `sdr_hardware_service.py`) |
 | `systemd/eas-station-audio.service` | Audio/EAS monitoring service unit (runs `eas_monitoring_service.py`) |
 
+### Hang Watchdog
+
+`eas-station-audio.service` (and separately, `eas-station-poller.service`) run as
+`Type=notify` units with `WatchdogSec=` set. `Restart=always` already restarts a
+*crashed* process; the watchdog additionally catches a process that is still
+running but deadlocked (e.g. stuck in a blocking call with no exception
+raised). Both services send `WATCHDOG=1` heartbeats from their main loop via
+`app_utils/system/sd_notify.py` — if the loop stops ticking, systemd kills and
+restarts the unit even though the process never crashed. No configuration is
+needed; this is transparent to normal operation and to `journalctl -u
+eas-station-audio.service`.
+
 ## Troubleshooting
 
 ### SDR Service Not Starting

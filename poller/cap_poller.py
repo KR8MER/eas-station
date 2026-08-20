@@ -67,6 +67,8 @@ import certifi
 import redis
 from dotenv import load_dotenv
 from urllib.parse import quote
+
+from app_utils.system.sd_notify import notify as sd_notify, Watchdog
 print("[CAP_POLLER_INIT] pytz, certifi, redis, dotenv, urllib imported", flush=True)
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -4373,6 +4375,17 @@ def build_database_url_from_env() -> str:
     print(f"[CAP_POLLER] Using DATABASE_URL from environment")
     return url
 
+def _sleep_with_watchdog_kicks(seconds: float, watchdog: "Watchdog", chunk: float = 5.0) -> None:
+    """Sleep for ``seconds``, kicking the systemd watchdog every ``chunk``
+    seconds so a long poll interval (or backoff sleep, up to 300s) is never
+    mistaken by systemd for a hang."""
+    remaining = seconds
+    while remaining > 0:
+        time.sleep(min(chunk, remaining))
+        remaining -= chunk
+        watchdog.kick()
+
+
 def main():
     print("[CAP_POLLER] ========================================")
     print("[CAP_POLLER] main() function called - poller starting")
@@ -4442,7 +4455,14 @@ def main():
             consecutive_errors = 0
             max_backoff = 300  # Maximum 5 minutes between retries
             first_iteration = True
-            
+
+            # Tell systemd we're up (Type=notify + WatchdogSec= on this
+            # unit) and start kicking the watchdog from inside the loop --
+            # a hang here (not just a crash) now gets systemd to kill +
+            # restart us.
+            sd_notify("READY=1")
+            watchdog = Watchdog()
+
             while True:
                 try:
                     # Check poller settings from database for dynamic configuration
@@ -4467,11 +4487,11 @@ def main():
                             # Exponential backoff for errors: 60s, 120s, 240s, up to max_backoff
                             backoff_time = min(60 * (2 ** (consecutive_errors - 1)), max_backoff)
                             logger.info(f"Backing off for {backoff_time} seconds after {consecutive_errors} consecutive error(s)...")
-                            time.sleep(backoff_time)
+                            _sleep_with_watchdog_kicks(backoff_time, watchdog)
                         else:
                             # Normal interval for successful polls
                             logger.info(f"Waiting {interval} seconds before next poll...")
-                            time.sleep(interval)
+                            _sleep_with_watchdog_kicks(interval, watchdog)
                     first_iteration = False
                     
                     # Check if poller is enabled before polling
@@ -4480,7 +4500,9 @@ def main():
                         consecutive_errors = 0
                         continue
                     
+                    watchdog.kick()
                     stats = poller.poll_and_process()
+                    watchdog.kick()
                     print(json_dumps(stats, indent=2))
                     logger.info(f"Polling cycle complete.")
                     consecutive_errors = 0  # Reset error counter on success
