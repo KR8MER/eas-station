@@ -48,6 +48,7 @@ from .paths import (
     CERTBOT_WORK_DIR,
     _ensure_certbot_directories,
     _ensure_webroot_directory,
+    clear_stale_locks,
 )
 from .staging import _delete_staging_certs, _is_existing_cert_staging
 
@@ -108,6 +109,10 @@ def obtain_certificate_execute():
                 "success": False,
                 "error": "Invalid method. Must be 'standalone', 'nginx', or 'webroot'"
             }), 400
+
+        # Clear any lock left by a previous run that was killed or crashed
+        # before it could clean up after itself (see clear_stale_locks()).
+        clear_stale_locks()
 
         # Check if certbot is installed
         try:
