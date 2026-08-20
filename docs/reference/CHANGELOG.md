@@ -8,6 +8,31 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.176.1] - 2026-08-20 - Fix certbot renewal: stale systemd path and never-clearing lock
+
+### Fixed
+- **Automatic certificate renewal was silently doing nothing.** The deployed
+  `certbot.service` still pointed at a pre-migration config directory
+  (`/home/user/eas-station/certbot_data/...`) with no certificates in it, so
+  the twice-daily renewal timer ran, always exited successfully, and never
+  touched the real certificate — which then expired. Fixed the path in
+  `systemd/certbot.service` to match where `certbot_data/` actually lives.
+- **Renewal also failed whenever it did target the right certificate**,
+  because the stored renewal config used the `standalone` ACME authenticator
+  (needs port 80), but nginx already holds port 80 in production and
+  `certbot renew` never stops it. The live certificate has been re-obtained
+  via the `webroot` method instead, which nginx already serves via its
+  `/.well-known/acme-challenge/` location block, switching the stored
+  authenticator for future renewals.
+- **A stale `.certbot.lock` left by a crashed run blocked every later
+  renewal attempt**, including manual clicks in the admin UI, with "Another
+  instance of Certbot is already running" — until the app process was
+  restarted. `_ensure_certbot_directories()` only cleared locks at Flask
+  app startup. Added `clear_stale_locks()` in
+  `webapp/admin/certbot/paths.py`, called before each renew/obtain
+  invocation, guarded by a `pgrep` check so a genuinely in-progress run
+  isn't clobbered.
+
 ## [2.176.0] - 2026-08-20 - Show originating equipment on the live received-alert page
 
 ### Added
