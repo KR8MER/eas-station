@@ -8,6 +8,22 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.178.0] - 2026-08-20 - Add a System Status strip to the main dashboard
+
+### Added
+- **The main dashboard (`/`) now shows a live System Status strip** above the
+  map: active alert count, EAS decoder monitor state (running/stopped, audio
+  flowing/silent), overall app health (from `/health`) and the number of
+  configured radio receivers. Previously the "Emergency Alert Dashboard" only
+  showed the map — an operator had to know to navigate to Monitor → EAS
+  Decoder Monitor or Diagnostics → Health Dashboard to see whether the
+  decoder was actually listening. All four values come from endpoints that
+  already existed and are already public (`/api/alerts`, `/api/eas-monitor/status`,
+  `/health`); no new backend code was needed. Each tile links to the
+  relevant detail page. New files: `templates/components/dashboard_status_strip.html`,
+  `static/js/pages/dashboard_status.js` (self-refreshes every 30s,
+  independent of the map's own 5-minute refresh cycle).
+
 ## [2.177.2] - 2026-08-20 - Give the SDR capture service scheduling priority
 
 ### Fixed
