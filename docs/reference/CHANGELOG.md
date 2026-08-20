@@ -8,22 +8,26 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.177.0] - 2026-08-20 - GPIO Pin Map now shows every pin actually in use
+## [2.176.2] - 2026-08-20 - Stop the test suite from keying real GPIO hardware
 
-### Added
-- **The GPIO Pin Map only knew about relay behaviors and the fixed Argon OLED
-  wiring** -- four real hardware features that claim a GPIO pin through a
-  Hardware Settings field (the dead-air rack buzzer, the NeoPixel indicator
-  strip, the GPS PPS timing input, and the Argon OLED's physical button)
-  were invisible to the page, so their pins showed up as plain "available"
-  GPIO even while genuinely in use. Worse, NeoPixel and GPS PPS both default
-  to BCM 18 with no way for the page to warn about it.
-- `/admin/gpio/pin-map` now computes these reservations live from
-  `HardwareSettings` on every render (not hardcoded), routes claimed pins
-  into the existing "Reserved & system pins" reference table alongside the
-  static Argon reservations, and adds a red conflict banner plus per-pin
-  conflict badges when two features -- or a hardware feature and a relay
-  behavior -- claim the same pin.
+### Fixed
+- **Running `pytest` on a box that also hosts the live `eas-station-gpio`
+  service could key a real relay.** `tests/conftest.py` seeded a default
+  `DATABASE_URL` for import-time isolation but never did the same for Redis,
+  so `app_core.config.redis_config` fell back to `localhost:6379` db `0` --
+  identical to production. Tests that exercise the RWT/airchain code path
+  (`test_airchain_fringe_cases.py`, `test_alert_gating.py`,
+  `test_coverage_and_signature.py`, `test_ecig_compliance.py`,
+  `test_forwarded_alert_audio_flow.py`) call `set_broadcast_active()`, which
+  writes the `eas:broadcast_active` marker straight into that shared Redis.
+  The always-running `eas-station-gpio` service watches that exact key to
+  key the physical relay, so it dutifully activated real hardware under fake
+  alert identifiers like `TEST-001` and `TEST-RWT-001` -- dozens of times
+  over several days, logged in the GPIO activation audit trail as genuine
+  automatic broadcasts. `tests/conftest.py` now defaults `REDIS_HOST`,
+  `REDIS_PORT`, and `REDIS_DB` (to a dedicated db `15`) alongside the
+  existing `DATABASE_URL` default, so the test suite can never again share
+  a broadcast-state marker with a live relay-keying service.
 
 ## [2.176.1] - 2026-08-20 - Fix certbot renewal: stale systemd path and never-clearing lock
 
