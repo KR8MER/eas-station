@@ -1,0 +1,44 @@
+<!-- System status strip for the main dashboard: a live, at-a-glance summary
+     of the things an operator actually checks first (active alerts, is the
+     decoder listening, is the app healthy, are receivers online). Pulls from
+     endpoints that already exist and are already public: /api/alerts,
+     /api/eas-monitor/status and /health. -->
+<div class="card dashboard-status-strip mb-4">
+    <div class="card-header d-flex align-items-center gap-2">
+        <i class="fas fa-heart-pulse text-primary"></i>
+        <h6 class="card-title mb-0">System Status</h6>
+        <span class="ms-auto small text-muted" id="dash-status-updated">Checking…</span>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-6 col-md-3">
+                <a href="/alerts" class="dash-status-tile text-decoration-none">
+                    <div class="dash-status-tile-icon"><i class="fas fa-triangle-exclamation"></i></div>
+                    <div class="dash-status-tile-value" id="dash-stat-alerts-value">--</div>
+                    <div class="dash-status-tile-label">Active Alerts</div>
+                </a>
+            </div>
+            <div class="col-6 col-md-3">
+                <a href="/admin/eas_decoder_monitor" class="dash-status-tile text-decoration-none">
+                    <div class="dash-status-tile-icon"><i class="fas fa-satellite-dish"></i></div>
+                    <span class="status-badge secondary" id="dash-stat-monitor-badge">Checking</span>
+                    <div class="dash-status-tile-label" id="dash-stat-monitor-sub">EAS Decoder</div>
+                </a>
+            </div>
+            <div class="col-6 col-md-3">
+                <a href="/system_health" class="dash-status-tile text-decoration-none">
+                    <div class="dash-status-tile-icon"><i class="fas fa-server"></i></div>
+                    <span class="status-badge secondary" id="dash-stat-health-badge">Checking</span>
+                    <div class="dash-status-tile-label" id="dash-stat-health-sub">System Health</div>
+                </a>
+            </div>
+            <div class="col-6 col-md-3">
+                <a href="/admin/radio" class="dash-status-tile text-decoration-none">
+                    <div class="dash-status-tile-icon"><i class="fas fa-walkie-talkie"></i></div>
+                    <div class="dash-status-tile-value" id="dash-stat-receivers-value">--</div>
+                    <div class="dash-status-tile-label">Radio Receivers</div>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
