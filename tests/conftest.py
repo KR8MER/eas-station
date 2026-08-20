@@ -54,6 +54,22 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production-use-only
 os.environ.setdefault("SKIP_DB_INIT", "1")
 os.environ.setdefault("TESTING", "true")
 
+# Redis isolation: app_core.config.redis_config defaults REDIS_HOST/PORT/DB to
+# localhost:6379/0 -- identical to a real deployment. Without this override, a
+# test that calls set_broadcast_active() (directly, or via the RWT/airchain
+# code path) writes the eas:broadcast_active marker into whatever Redis is
+# running on the test host. On a box that is *also* running the production
+# eas-station-gpio service (which watches that exact key to key the physical
+# relay), that means pytest keys real hardware under fake alert identifiers
+# like "TEST-001" -- which is exactly what happened here: days of unrelated
+# GPIO relay activations traced back to the test suite sharing production
+# Redis db 0. Point tests at a dedicated db (Redis ships 16 by default) so no
+# test can ever collide with a real broadcast-state watcher again. setdefault()
+# still lets a CI job that provisions its own isolated Redis override this.
+os.environ.setdefault("REDIS_HOST", "localhost")
+os.environ.setdefault("REDIS_PORT", "6379")
+os.environ.setdefault("REDIS_DB", "15")
+
 
 # ============================================================================
 # Session-level fixtures
