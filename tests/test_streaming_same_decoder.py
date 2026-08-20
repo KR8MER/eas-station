@@ -113,15 +113,21 @@ class TestStreamingSAMEDecoder:
     def test_get_stats_returns_correct_values(self):
         """Test that get_stats returns accurate statistics."""
         decoder = StreamingSAMEDecoder(sample_rate=16000)
-        
+
         # Initial stats
         stats = decoder.get_stats()
         assert stats['samples_processed'] == 0
         assert stats['alerts_detected'] == 0
         assert stats['synced'] is False
-        
-        # After processing audio
-        audio = np.random.randn(16000).astype(np.float32) * 0.1
+
+        # After processing audio. Seeded: this asserts the decoder does NOT
+        # sync on random noise, which is a real but low-probability event
+        # for *some* unseeded draws -- unseeded, this test intermittently
+        # failed in CI (a genuine correlation spike from chance noise, not a
+        # decoder bug). Fixed seed makes the assertion deterministic without
+        # changing what it's testing.
+        rng = np.random.RandomState(42)
+        audio = rng.randn(16000).astype(np.float32) * 0.1
         decoder.process_samples(audio)
         
         stats = decoder.get_stats()
