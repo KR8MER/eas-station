@@ -60,6 +60,7 @@ from .routes import (
     alert_verification,
     eas_compliance,
     global_search,
+    gpio_interlocks,
     system_controls,
 )
 from . import eas
@@ -87,6 +88,7 @@ def iter_route_modules() -> Iterable[RouteModule]:
     yield RouteModule("routes_global_search", global_search.register)
     yield RouteModule("routes_eas_compliance", eas_compliance.register)
     yield RouteModule("routes_system_controls", system_controls.register)
+    yield RouteModule("routes_gpio_interlocks", gpio_interlocks.register)
     yield RouteModule("routes_eas_workflow", eas.register)
     yield RouteModule("routes_rwt_schedule", routes_rwt_schedule.register_routes)
     yield RouteModule("routes_ipaws", routes_ipaws.register)

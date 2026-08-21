@@ -27,9 +27,24 @@ from typing import Dict, Iterable, List, Optional, Set
 
 
 from .pin_types import (
-    GPIO_BEHAVIOR_LABELS, GPIO_BEHAVIOR_PULSE_DEFAULTS, TRANSMIT_CAPABLE_BEHAVIORS, GPIOActivationType, GPIOBehavior, GPIOPinConfig, GPIOState,
+    GPIO_BEHAVIOR_LABELS, GPIO_BEHAVIOR_PULSE_DEFAULTS, TRANSMIT_CAPABLE_BEHAVIORS, GPIOActivationType, GPIOBehavior, GPIOInterlockGroup, GPIOPinConfig, GPIOState,
 )
 from .controller import GPIOController
+
+# Behaviors that hold a relay solid for the duration of a broadcast. Kept in
+# sync with the ``hold_behaviors`` list in ``start_alert()`` (minus the
+# conditional FORWARDING_ALERT) -- these are the behaviors where two pins in
+# the same interlock group assigned the same one would mean only one of them
+# actually keys during a real alert.
+_INTERLOCK_HOLD_BEHAVIORS = frozenset(
+    {
+        GPIOBehavior.DURATION_OF_ALERT,
+        GPIOBehavior.PLAYOUT,
+        GPIOBehavior.TRANSMITTER_PTT,
+        GPIOBehavior.AUDIO_MUTE,
+    }
+)
+
 
 class GPIOBehaviorManager:
     """Coordinate GPIO actions tied to alert lifecycle events."""
@@ -40,6 +55,7 @@ class GPIOBehaviorManager:
         pin_configs: Iterable[GPIOPinConfig],
         behavior_matrix: Optional[Dict[int, Set[GPIOBehavior]]] = None,
         logger=None,
+        interlock_groups: Optional[List[GPIOInterlockGroup]] = None,
     ) -> None:
         self.controller = controller
         self.logger = logger
@@ -47,6 +63,7 @@ class GPIOBehaviorManager:
         self.pin_configs: Dict[int, GPIOPinConfig] = {
             cfg.pin: cfg for cfg in pin_configs
         }
+        self.interlock_groups: List[GPIOInterlockGroup] = list(interlock_groups or [])
 
         self._behavior_to_pins: Dict[GPIOBehavior, Set[int]] = {}
         self._hold_map: Dict[int, Set[GPIOBehavior]] = {}
@@ -303,6 +320,30 @@ class GPIOBehaviorManager:
                     f"GPIO pin {pin} flashes with partner pin {partner}, but pin "
                     f"{partner} is not assigned the Flash Beacon behavior; the "
                     "two-phase alternating pattern will not run."
+                )
+
+        # 4. Two pins in the same interlock group both hold for the same
+        #    broadcast-duration behavior -- during a real alert only one can
+        #    ever actually activate; the interlock will silently refuse the
+        #    other. Warn, don't block: group definition and behavior
+        #    assignment are separate pages, so hard-blocking either save
+        #    creates an awkward save-order dependency.
+        for group in self.interlock_groups:
+            shared = _INTERLOCK_HOLD_BEHAVIORS & assigned
+            holders = {
+                pin: self.behavior_matrix.get(pin, set()) & shared
+                for pin in group.pins
+                if self.behavior_matrix.get(pin, set()) & shared
+            }
+            if len(holders) > 1:
+                detail = ", ".join(
+                    f"pin {pin} ({', '.join(sorted(GPIO_BEHAVIOR_LABELS.get(b, b.value) for b in behs))})"
+                    for pin, behs in sorted(holders.items())
+                )
+                warnings.append(
+                    f"Interlock group '{group.name}': {detail} are all assigned a "
+                    "hold-triggering behavior. During a real alert only one will "
+                    "actually activate -- the interlock will silently refuse the others."
                 )
 
         return warnings

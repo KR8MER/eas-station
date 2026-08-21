@@ -199,6 +199,42 @@ decisions.
 
 ---
 
+### Relay Interlock Groups
+
+**Admin → GPIO → Interlocks** (`/admin/gpio/interlocks`) defines mutual-exclusion
+groups: named sets of two or more relay pins that must never be energized at the
+same time. The motivating case is two PTT (push-to-talk) lines wired to separate
+transmitters — if both keyed simultaneously, they would key into each other.
+
+**How it works:**
+- Pick two or more configured relay pins and name the group.
+- By default, activating a pin while another member of its group is already
+  active is **refused** — the request is logged in the GPIO Activation Log as a
+  failure with an interlock reason, and the already-active relay is left
+  untouched.
+- Enabling **Force-release conflict** on a group instead de-energizes the
+  already-active relay before activating the new one. This is off by default:
+  surprise-deactivating a different relay as a side effect of an unrelated
+  activation is not a safe default for a life-safety appliance.
+- The interlock is enforced inside `GPIOController.activate()` — the single
+  chokepoint every activation passes through, whether triggered manually (a
+  test button) or automatically (an alert's behavior matrix). A pin refused by
+  an interlock is never adopted into an alert's hold state, so it does not
+  trigger the "no pin held anything, key every configured pin" fallback.
+
+**If two grouped pins are both assigned a behavior that holds for the whole
+broadcast** (Transmitter PTT, Audio Playout, Duration of Alert, or Audio Mute),
+only one will ever actually key during a real alert — the interlock will
+silently refuse the other. A warning for this exact case is shown on both the
+Interlocks page and the GPIO Control page's diagnostics whenever it applies.
+
+> **Changes require a service restart.** Like the pin map and behavior matrix,
+> interlock groups are read once when `eas-station-gpio` starts. Saving a new
+> or edited group does not take effect until the service is restarted
+> (**Admin → Services**, or `sudo systemctl restart eas-station-gpio`).
+
+---
+
 ### Testing GPIO Relays
 
 #### Via the Web Interface

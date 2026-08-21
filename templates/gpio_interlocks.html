@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+
+{% block title %}Relay Interlocks - GPIO{% endblock %}
+
+{% block extra_css %}
+<style>
+.interlock-row td { vertical-align: middle; }
+.pin-chip-list .badge { font-size: 0.78em; }
+#addGroupForm .form-label { font-weight: 500; }
+.pin-checkbox-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm, 6px); padding: 0.5rem 0.75rem; }
+.pin-checkbox-list .form-check { margin-bottom: 0.35rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set header_icon = 'fas fa-lock' %}
+{% set header_title = 'Relay Interlock Groups' %}
+{% set header_subtitle %}Mutual exclusion &mdash; guarantee two relays can never be energized at the same time{% endset %}
+{% include 'components/page_header.html' %}
+
+{% with active = 'interlocks' %}{% include "partials/gpio_subnav.html" %}{% endwith %}
+
+<div class="container-fluid">
+
+    <div class="alert alert-info d-flex gap-2 align-items-start mb-4">
+        <i class="fas fa-info-circle mt-1 flex-shrink-0"></i>
+        <div>
+            <strong>What an interlock group does</strong><br>
+            Pick two or more configured GPIO relay pins that must never be active
+            at the same time &mdash; the classic case is two PTT (push-to-talk)
+            lines that would key two transmitters into each other if both fired.
+            By default, activating one pin while another member is already active
+            is <strong>refused</strong> (and logged in the GPIO Activation Log).
+            Enabling <strong>Force-release conflict</strong> on a group instead
+            de-energizes the already-active relay before activating the new one.
+            <strong>Changes here require restarting the GPIO service</strong>
+            (Admin &rarr; Services, or <code>eas-station-gpio</code>) to take effect.
+        </div>
+    </div>
+
+    {% if warnings %}
+    <div class="alert alert-warning d-flex gap-2 align-items-start mb-4">
+        <i class="fas fa-triangle-exclamation mt-1 flex-shrink-0"></i>
+        <div>
+            <strong>Configuration warning{{ 's' if warnings|length > 1 }}</strong>
+            <ul class="mb-0 mt-2">
+                {% for w in warnings %}
+                <li>{{ w }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Groups table -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-list me-2"></i>Interlock Groups</h5>
+            <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#addGroupModal">
+                <i class="fas fa-plus me-1"></i>Add Group
+            </button>
+        </div>
+        <div class="card-body">
+            {% if not groups %}
+            <p class="text-muted mb-0">No interlock groups defined yet. Add one to enforce mutual exclusion between relays.</p>
+            {% else %}
+            <div class="table-responsive">
+                <table class="table eas-table align-middle" id="groupsTable">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Member pins</th>
+                            <th class="text-center">Force-release conflict</th>
+                            <th class="text-center">Enabled</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for group in groups %}
+                    <tr class="interlock-row" data-id="{{ group.id }}"
+                        data-name="{{ group.name }}"
+                        data-pins="{{ group.pins|join(',') }}"
+                        data-force="{{ 'true' if group.force_deactivate_conflict else 'false' }}">
+                        <td data-label="Name">{{ group.name }}</td>
+                        <td data-label="Member pins" class="pin-chip-list text-break-anywhere">
+                            {% for label in group.pin_labels %}
+                            <span class="badge bg-secondary-subtle text-body border me-1 mb-1">{{ label }}</span>
+                            {% endfor %}
+                        </td>
+                        <td data-label="Force-release conflict" class="text-center">
+                            <span class="badge {{ 'bg-warning text-dark' if group.force_deactivate_conflict else 'bg-light text-dark border' }}">
+                                {{ 'Yes' if group.force_deactivate_conflict else 'No' }}
+                            </span>
+                        </td>
+                        <td data-label="Enabled" class="text-center">
+                            <div class="form-check form-switch d-inline-block">
+                                <input class="form-check-input enable-toggle" type="checkbox"
+                                       data-id="{{ group.id }}"
+                                       {{ 'checked' if group.enabled }}>
+                            </div>
+                        </td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary edit-btn me-1" data-id="{{ group.id }}" title="Edit group">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger delete-btn" data-id="{{ group.id }}" data-name="{{ group.name }}" title="Delete group">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+<!-- Add group modal -->
+<div class="modal fade" id="addGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="addGroupForm">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-plus-circle me-2"></i>Add Interlock Group</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="newGroupName">Group name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="newGroupName" maxlength="100" placeholder="e.g. Main / Backup PTT" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Member pins <span class="text-danger">*</span> <span class="text-muted small">(pick 2 or more)</span></label>
+                        {% if available_pins|length < 2 %}
+                        <div class="text-muted small">Fewer than 2 GPIO pins are configured. Assign relay pins on the <a href="{{ url_for('gpio_pin_map') }}">Pin Map</a> page first.</div>
+                        {% else %}
+                        <div class="pin-checkbox-list" id="newGroupPins">
+                            {% for p in available_pins %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="{{ p.pin }}" id="newPin{{ p.pin }}">
+                                <label class="form-check-label" for="newPin{{ p.pin }}">BCM {{ p.pin }} &mdash; {{ p.name }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-1">
+                        <label class="form-label" for="newGroupForce">Force-release conflict?</label>
+                        <select class="form-select" id="newGroupForce">
+                            <option value="false" selected>No (refuse the new activation) &mdash; recommended</option>
+                            <option value="true">Yes (de-energize the active relay first)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Create group</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit group modal -->
+<div class="modal fade" id="editGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Edit Interlock Group</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editGroupId">
+                <div class="mb-3">
+                    <label class="form-label" for="editGroupName">Group name</label>
+                    <input type="text" class="form-control" id="editGroupName" maxlength="100">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Member pins <span class="text-muted small">(pick 2 or more)</span></label>
+                    <div class="pin-checkbox-list" id="editGroupPins">
+                        {% for p in available_pins %}
+                        <div class="form-check">
+                            <input class="form-check-input edit-pin-checkbox" type="checkbox" value="{{ p.pin }}" id="editPin{{ p.pin }}">
+                            <label class="form-check-label" for="editPin{{ p.pin }}">BCM {{ p.pin }} &mdash; {{ p.name }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="mb-1">
+                    <label class="form-label" for="editGroupForce">Force-release conflict?</label>
+                    <select class="form-select" id="editGroupForce">
+                        <option value="false">No (refuse the new activation) &mdash; recommended</option>
+                        <option value="true">Yes (de-energize the active relay first)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveEditGroupBtn">Save changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const INTERLOCK_API = '/api/gpio/interlocks';
+
+function showToastMsg(msg, type) {
+    if (typeof showToast === 'function') { showToast(msg, type); }
+    else { alert(msg); }
+}
+
+function checkedPins(containerId) {
+    return Array.from(document.querySelectorAll('#' + containerId + ' input[type=checkbox]:checked'))
+        .map(function(cb) { return parseInt(cb.value, 10); });
+}
+
+// ── Add group ────────────────────────────────────────────────────────────
+const addGroupForm = document.getElementById('addGroupForm');
+if (addGroupForm) {
+    addGroupForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const pins = checkedPins('newGroupPins');
+        if (pins.length < 2) {
+            showToastMsg('Select at least 2 member pins.', 'danger');
+            return;
+        }
+        const btn = this.querySelector('[type=submit]');
+        btn.disabled = true;
+        try {
+            const resp = await fetch(INTERLOCK_API, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    name: document.getElementById('newGroupName').value.trim(),
+                    pins: pins,
+                    force_deactivate_conflict: document.getElementById('newGroupForce').value === 'true',
+                })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                if (data.warnings && data.warnings.length) {
+                    data.warnings.forEach(function(w) { showToastMsg(w, 'warning'); });
+                }
+                showToastMsg('Interlock group created.', 'success');
+                location.reload();
+            } else {
+                showToastMsg('Error: ' + data.error, 'danger');
+            }
+        } catch (err) {
+            showToastMsg('Request failed: ' + err.message, 'danger');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+}
+
+// ── Enable/disable toggle ───────────────────────────────────────────────
+document.querySelectorAll('.enable-toggle').forEach(function(cb) {
+    cb.addEventListener('change', async function() {
+        const id = this.dataset.id;
+        try {
+            const resp = await fetch(INTERLOCK_API + '/' + id, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({enabled: this.checked})
+            });
+            const data = await resp.json();
+            if (!data.success) {
+                showToastMsg('Error: ' + data.error, 'danger');
+                this.checked = !this.checked;
+            }
+        } catch (err) {
+            showToastMsg('Request failed: ' + err.message, 'danger');
+            this.checked = !this.checked;
+        }
+    });
+});
+
+// ── Edit modal ───────────────────────────────────────────────────────────
+document.querySelectorAll('.edit-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        const row = this.closest('tr');
+        const pins = row.dataset.pins ? row.dataset.pins.split(',').map(Number) : [];
+        document.getElementById('editGroupId').value = row.dataset.id;
+        document.getElementById('editGroupName').value = row.dataset.name;
+        document.getElementById('editGroupForce').value = row.dataset.force;
+        document.querySelectorAll('.edit-pin-checkbox').forEach(function(cb) {
+            cb.checked = pins.includes(parseInt(cb.value, 10));
+        });
+        new bootstrap.Modal(document.getElementById('editGroupModal')).show();
+    });
+});
+
+document.getElementById('saveEditGroupBtn').addEventListener('click', async function() {
+    const id = document.getElementById('editGroupId').value;
+    const pins = checkedPins('editGroupPins');
+    if (pins.length < 2) {
+        showToastMsg('Select at least 2 member pins.', 'danger');
+        return;
+    }
+    try {
+        const resp = await fetch(INTERLOCK_API + '/' + id, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                name: document.getElementById('editGroupName').value.trim(),
+                pins: pins,
+                force_deactivate_conflict: document.getElementById('editGroupForce').value === 'true',
+            })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            if (data.warnings && data.warnings.length) {
+                data.warnings.forEach(function(w) { showToastMsg(w, 'warning'); });
+            }
+            showToastMsg('Interlock group saved.', 'success');
+            location.reload();
+        } else {
+            showToastMsg('Error: ' + data.error, 'danger');
+        }
+    } catch (err) {
+        showToastMsg('Request failed: ' + err.message, 'danger');
+    }
+});
+
+// ── Delete ───────────────────────────────────────────────────────────────
+document.querySelectorAll('.delete-btn').forEach(function(btn) {
+    btn.addEventListener('click', async function() {
+        const id = this.dataset.id;
+        const name = this.dataset.name;
+        if (!confirm('Delete interlock group "' + name + '"?')) return;
+        try {
+            const resp = await fetch(INTERLOCK_API + '/' + id, {method: 'DELETE'});
+            const data = await resp.json();
+            if (data.success) {
+                showToastMsg('Interlock group deleted.', 'success');
+                this.closest('tr').remove();
+            } else {
+                showToastMsg('Error: ' + data.error, 'danger');
+            }
+        } catch (err) {
+            showToastMsg('Request failed: ' + err.message, 'danger');
+        }
+    });
+});
+</script>
+{% endblock %}

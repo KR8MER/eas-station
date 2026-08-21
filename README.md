@@ -2,7 +2,7 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-2.179.1-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.180.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -357,7 +357,8 @@ Typical power draw at the reference Pi 5 build with SDR + GPS HAT: **~12 W**. Se
 | ✅ Done | Settings Hub, web diagnostics, one-button upgrade, journalctl viewer |
 | ✅ Done | Uptime & reliability diagnostics — hang watchdog, outbound dead-man's-switch heartbeat, backup-restore verification, clock/NTP drift monitoring, combined NOAA+IPAWS feed-loss alarm |
 | ✅ Done | Independent multi-receiver monitoring — per-receiver waterfall/spectrum/historical trends, per-source dead-air detection with independent thresholds |
-| 🔄 In Progress | Advanced relay control (grouping, interlocks) and automatic receiver failover |
+| ✅ Done | Relay interlock groups — mutual exclusion between GPIO relays (e.g. two PTT lines that must never key together) |
+| 🔄 In Progress | Automatic receiver failover |
 | 🔄 In Progress | FCC rulemaking engagement — [comments filed](https://www.fcc.gov/ecfs/search/search-filings/filing/1060881335987) in PS Docket No. 25-224 supporting software-defined EAS (a first step toward a possible certification path) |
 | ✅ Done | FCC Part 11 rule-by-rule [compliance traceability matrix](docs/process/FCC_PART11_COMPLIANCE_MATRIX.md) and [certification-grade reliability plan](docs/process/certification_reliability_plan.md) — actual certification is still blocked pending the FCC rulemaking above, not by missing documentation |
 | ⏳ Planned | Cloud sync, mobile app, multi-site coordination |

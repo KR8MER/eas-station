@@ -352,6 +352,23 @@ class GPIOController:
                 if self.logger:
                     self.logger.info(f"Removed GPIO pin {pin}")
 
+    def _check_interlock_conflict(self, pin: int):
+        """Return ``(group, conflicting_pin)`` if activating *pin* would violate
+        a relay interlock group, else ``None``.
+
+        ``self.interlock_groups`` is wired in post-construction (same pattern
+        as ``self.behavior_manager``) -- absent entirely when no groups are
+        configured, so this is a no-op by default.
+        """
+        groups = getattr(self, "interlock_groups", None) or []
+        for group in groups:
+            if pin not in group.pins:
+                continue
+            for sibling in group.pins:
+                if sibling != pin and self._states.get(sibling) == GPIOState.ACTIVE:
+                    return group, sibling
+        return None
+
     def activate(
         self,
         pin: int,
@@ -397,6 +414,37 @@ class GPIOController:
                 if self.logger:
                     self.logger.warning(f"Pin {pin} is already active")
                 return False
+
+            interlock_refusal = self._check_interlock_conflict(pin)
+            if interlock_refusal is not None:
+                group, conflicting_pin = interlock_refusal
+                if group.force_deactivate_conflict:
+                    if self.logger:
+                        self.logger.warning(
+                            f"Interlock group '{group.name}': force-deactivating pin "
+                            f"{conflicting_pin} to activate pin {pin}"
+                        )
+                    self.deactivate(conflicting_pin, force=True)
+                else:
+                    conflicting_name = self._pins[conflicting_pin].name if conflicting_pin in self._pins else str(conflicting_pin)
+                    error_msg = (
+                        f"Blocked by interlock group '{group.name}': pin {conflicting_pin} "
+                        f"({conflicting_name}) is already active"
+                    )
+                    if self.logger:
+                        self.logger.warning(error_msg)
+                    event = GPIOActivationEvent(
+                        pin=pin,
+                        activation_type=activation_type,
+                        activated_at=datetime.now(timezone.utc),
+                        operator=operator,
+                        alert_id=alert_id,
+                        reason=reason,
+                        success=False,
+                        error_message=error_msg,
+                    )
+                    self._save_activation_event(event)
+                    return False
 
             try:
                 # Apply debounce delay

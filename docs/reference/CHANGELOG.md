@@ -8,6 +8,33 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.180.0] - 2026-08-21 - Relay interlock groups (mutual exclusion)
+
+### Added
+- **Relay Interlock Groups** (Admin → GPIO → Interlocks, `/admin/gpio/interlocks`):
+  named groups of 2+ relay pins that must never be energized at the same time —
+  the motivating case is two PTT lines that would key two transmitters into
+  each other if both fired. By default, activating a pin while another group
+  member is already active is refused (and logged as a failure in the GPIO
+  Activation Log); an opt-in per-group "Force-release conflict" setting instead
+  de-energizes the active relay first. Enforcement lives in
+  `GPIOController.activate()` — the single chokepoint every activation passes
+  through, whether manual or alert-driven — so the guarantee holds regardless
+  of trigger path.
+- A save-time warning (surfaced on both the Interlocks page and the GPIO
+  Control page's diagnostics) flags interlock groups whose members share a
+  broadcast-holding behavior (Transmitter PTT, Audio Playout, Duration of
+  Alert, Audio Mute): during a real alert only one would ever actually key,
+  and the interlock would silently refuse the other.
+- New tables `relay_interlock_groups` / `relay_interlock_members`
+  (migration `20260821_add_relay_interlock_groups`). Like the rest of GPIO
+  configuration, group definitions are read once at `eas-station-gpio`
+  startup — changes require restarting the service.
+- New tests in `tests/test_gpio_relay_interlock.py`, including a regression
+  test for the interaction with `GPIOBehaviorManager.start_alert()`'s
+  "key every configured pin" fallback (a refused pin must not spuriously
+  trigger it).
+
 ## [2.179.1] - 2026-08-21 - Fix false-positive GPIO Pin Map conflict on BCM 14
 
 ### Fixed

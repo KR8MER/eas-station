@@ -10,6 +10,14 @@
             </a>
         </li>
         <li class="nav-item" role="presentation">
+            <a class="nav-link {% if active == 'interlocks' %}active{% endif %}"
+               href="{{ url_for('gpio_interlocks_page') }}"
+               aria-current="{{ 'page' if active == 'interlocks' else 'false' }}">
+                <i class="fas fa-lock me-1"></i>Interlocks
+                <span class="d-none d-md-inline text-muted small ms-1">— mutual exclusion</span>
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
             <a class="nav-link {% if active == 'control' %}active{% endif %}"
                href="{{ url_for('gpio_control_panel') }}"
                aria-current="{{ 'page' if active == 'control' else 'false' }}">

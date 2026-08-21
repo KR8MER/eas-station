@@ -419,6 +419,41 @@
                             </div>
                         </div>
 
+                        <!-- Relay Interlock Groups -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="relayInterlockHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#relayInterlockCollapse">
+                                    <i class="fas fa-lock me-2"></i>Relay Interlock Groups
+                                </button>
+                            </h2>
+                            <div id="relayInterlockCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p>
+                                        <strong>Admin &rarr; GPIO &rarr; Interlocks</strong>
+                                        (<code>/admin/gpio/interlocks</code>) defines mutual-exclusion groups: two or
+                                        more relay pins that must never be energized at the same time &mdash; the
+                                        classic case is two PTT lines that would key two transmitters into each
+                                        other if both fired.
+                                    </p>
+                                    <ul>
+                                        <li>By default, activating one pin while another group member is already
+                                            active is <strong>refused</strong> and recorded as a failure in the GPIO
+                                            Activation Log; the already-active relay is left running.</li>
+                                        <li><strong>Force-release conflict</strong> (per group, off by default)
+                                            de-energizes the active relay before activating the new one instead of
+                                            refusing.</li>
+                                        <li>If two grouped pins are both assigned a behavior that holds for the
+                                            whole broadcast (Transmitter PTT, Audio Playout, Duration of Alert, or
+                                            Audio Mute), only one will ever actually key during a real alert &mdash;
+                                            a warning for this appears on the Interlocks page and on
+                                            <strong>GPIO Control</strong>'s diagnostics.</li>
+                                        <li>Like the rest of GPIO configuration, a new or edited group takes effect
+                                            only after restarting the <code>eas-station-gpio</code> service.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Gated Alerts / Hold-Off Timer -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="gatedAlertsHeading">

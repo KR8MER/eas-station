@@ -45,6 +45,7 @@ def initialize_gpio_controller(db_session=None, db_app=None):
             GPIOBehaviorManager,
             load_gpio_pin_configs_from_db,
             load_gpio_behavior_matrix_from_db,
+            load_gpio_interlock_groups_from_db,
         )
 
         # Try to load GPIO enabled flag from database first
@@ -86,6 +87,15 @@ def initialize_gpio_controller(db_session=None, db_app=None):
             except Exception as e:
                 logger.error(f"Failed to add GPIO pin {config.pin}: {e}")
 
+        # Load relay interlock (mutual-exclusion) groups. Wired onto the
+        # controller the same way behavior_manager is below -- a plain
+        # post-construction attribute, absent entirely when no groups are
+        # configured (see GPIOController._check_interlock_conflict).
+        interlock_groups = load_gpio_interlock_groups_from_db(logger)
+        if interlock_groups:
+            controller.interlock_groups = interlock_groups
+            logger.info(f"✅ {len(interlock_groups)} relay interlock group(s) active")
+
         # Load and configure GPIO behavior matrix
         behavior_matrix = load_gpio_behavior_matrix_from_db(logger, oled_enabled=oled_enabled)
         if behavior_matrix:
@@ -94,6 +104,7 @@ def initialize_gpio_controller(db_session=None, db_app=None):
                 pin_configs=gpio_configs,
                 behavior_matrix=behavior_matrix,
                 logger=logger,
+                interlock_groups=interlock_groups,
             )
             controller.behavior_manager = gpio_behavior_manager
             logger.info(f"✅ GPIO controller initialized with {len(gpio_configs)} pin(s) and behavior matrix")
