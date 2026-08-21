@@ -471,14 +471,16 @@ def collect_icecast_status(logger=None) -> Dict[str, Any]:
         # SECURITY: Disable redirects to prevent redirect-based SSRF
         # NOTE: verify=False for internal/localhost connections (Icecast typically on same host)
         # In production with external servers, this should be verify=True
+        from app_core.http_defaults import get_default_user_agent
         response = requests.get(
             stats_url,
             auth=(settings.admin_user, settings.admin_password) if settings.admin_user and settings.admin_password else None,
             timeout=3,
             allow_redirects=False,  # SSRF prevention
-            verify=False  # Internal connection - external servers should use verify=True
+            verify=False,  # Internal connection - external servers should use verify=True
+            headers={'User-Agent': get_default_user_agent()},
         )
-        
+
         if response.status_code == 200:
             # Parse stats from XML response
             content = response.text

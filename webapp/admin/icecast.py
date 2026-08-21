@@ -367,11 +367,13 @@ def test_connection():
         try:
             # Test basic connectivity
             # SECURITY: Set allow_redirects=False to prevent redirect-based SSRF
+            from app_core.http_defaults import get_default_user_agent
             response = requests.get(
                 test_url,
                 auth=(admin_user, admin_password) if admin_user and admin_password else None,
                 timeout=5,
-                allow_redirects=False  # SSRF prevention
+                allow_redirects=False,  # SSRF prevention
+                headers={'User-Agent': get_default_user_agent()},
             )
             
             if response.status_code == 200:
@@ -573,13 +575,15 @@ def get_status():
         
         try:
             # SECURITY: Disable redirects to prevent redirect-based SSRF
+            from app_core.http_defaults import get_default_user_agent
             response = requests.get(
                 stats_url,
                 auth=(settings.admin_user, settings.admin_password) if settings.admin_user and settings.admin_password else None,
                 timeout=3,
-                allow_redirects=False  # SSRF prevention
+                allow_redirects=False,  # SSRF prevention
+                headers={'User-Agent': get_default_user_agent()},
             )
-            
+
             if response.status_code == 200:
                 # Parse stats from XML response
                 content = response.text

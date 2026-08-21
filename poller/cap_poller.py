@@ -798,21 +798,9 @@ class CAPPoller:
         # - Returns application/atom+xml or application/cap+xml
         # - Accepts wildcard or specific XML formats
         self.session = requests.Session()
-        # Prefer DB setting, fall back to env var for backwards compatibility
-        db_user_agent = None
-        try:
-            _ps = PollerSettings.query.first()
-            if _ps and _ps.noaa_user_agent:
-                db_user_agent = _ps.noaa_user_agent
-        except Exception:
-            pass
-        default_user_agent = (
-            db_user_agent
-            or os.getenv('NOAA_USER_AGENT', '')
-            or 'EAS Station/2.12 (+https://github.com/KR8MER/eas-station; support@easstation.com)'
-        )
+        from app_core.http_defaults import get_default_user_agent
         self.session.headers.update({
-            'User-Agent': default_user_agent,
+            'User-Agent': get_default_user_agent(),
             # Accept multiple formats: geo+json (NOAA), atom+xml (IPAWS), cap+xml (generic CAP)
             'Accept': 'application/geo+json, application/atom+xml, application/cap+xml, application/xml, application/json;q=0.9',
         })

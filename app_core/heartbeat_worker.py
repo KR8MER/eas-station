@@ -109,8 +109,12 @@ class HeartbeatWorker:
 
 def send_heartbeat_ping(ping_url: str, timeout: int = 10):
     """Send one heartbeat GET request. Returns (success, error_message)."""
+    from app_core.http_defaults import get_default_user_agent
     try:
-        response = requests.get(ping_url, timeout=timeout)
+        response = requests.get(
+            ping_url, timeout=timeout,
+            headers={'User-Agent': get_default_user_agent()},
+        )
         if 200 <= response.status_code < 300:
             return True, None
         return False, f"HTTP {response.status_code}"

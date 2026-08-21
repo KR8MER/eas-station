@@ -8,6 +8,42 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.185.1] - 2026-08-21 - Outbound health checks now identify the station
+
+### Fixed
+- **Outbound "health check" requests were going out with the bare
+  `python-requests/x.x` default User-Agent** instead of identifying the
+  station, unlike `poller/cap_poller.py` (which NOAA's Weather API terms
+  require to carry a descriptive User-Agent with contact info). Affected:
+  the uptime dead-man's-switch heartbeat ping (`app_core/heartbeat_worker.py`),
+  the Icecast health probe feeding the dashboard/system-health status strip
+  (`app_core/system_health.py::collect_icecast_status()`), and both Icecast
+  admin routes (`webapp/admin/icecast.py`'s `test_connection()` and
+  `get_status()`). All four now send the same User-Agent the CAP poller
+  uses, so a third-party monitor's or an Icecast server's request log shows
+  "EAS Station" instead of an unidentified Python client.
+
+### Added
+- New `app_core/http_defaults.py::get_default_user_agent()` -- single
+  source of truth for the DB -> env-var -> hardcoded-default fallback chain
+  that used to be duplicated inline in `poller/cap_poller.py` (and had
+  already started drifting: five slightly different User-Agent strings
+  were scattered across the codebase before this). `cap_poller.py` itself
+  now calls the shared helper instead of inlining the same logic.
+- New `tests/test_http_defaults.py` (6 tests): the DB/env/hardcoded
+  fallback precedence (including a blank-DB-value edge case), that a DB
+  lookup failure (no app context, DB unreachable) degrades gracefully
+  instead of raising, and that the heartbeat ping actually sends the
+  resolved value as its `User-Agent` header.
+
+### Testing
+- Verified against a real local HTTP server: called the actual
+  `send_heartbeat_ping()` function inside a real Flask app context and
+  confirmed the request it sent carried `User-Agent: EAS Station
+  (+https://github.com/KR8MER/eas-station; support@easstation.com)` --
+  this station's real DB-configured `PollerSettings.noaa_user_agent` value
+  -- rather than the bare `python-requests/2.32.5` reported before the fix.
+
 ## [2.185.0] - 2026-08-21 - Broadcast overlay: phase indicator + web abort button
 
 ### Added
