@@ -166,6 +166,7 @@ sequenceDiagram
 - **Schema Enforcement** validates XML against CAP schema and normalises polygons, circles, and SAME location codes
 - **Deduplication (`app_core/alerts.py`)** compares CAP identifiers, message types, and sent timestamps
 - **Configuration** for runtime settings (polling, EAS broadcast, notifications, application logging) lives in dedicated database tables editable from the admin UI; only boot-time infrastructure (`SECRET_KEY`, `DATABASE_URL`, hostnames, paths) is read from the persistent `/app-config/.env` file
+- **Combined feed-loss alarm** (`app_core/system_health.py`): the two pollers are tracked *independently* — each poller's last-success timestamp is compared against `poller_settings.feed_stall_threshold_sec` — precisely because they run as separate services and can fail independently. A live NOAA feed must never mask a dead IPAWS feed (or vice versa), so the Alert Feeds card on `/system_health` surfaces both staleness values, and the compliance alert only fires when *both* feeds have stalled past the threshold. This is a liveness check on top of the per-message deduplication above, not a replacement for it.
 
 ### 2. Persistence & Spatial Context
 

@@ -122,7 +122,9 @@
                             <li class="mb-2"><i class="fas fa-circle-check text-success me-2"></i>MDC1200 Selective Calling</li>
                             <li class="mb-2"><i class="fas fa-circle-check text-success me-2"></i>Received-Alert Purge &amp; Storage Reclaim</li>
                             <li class="mb-2"><i class="fas fa-circle-check text-success me-2"></i>Security Center — unified Traffic Analytics, malicious-login monitoring, application-wide IP bans (allowlist/blocklist, with country/city geolocation) &amp; fail2ban host-firewall enforcement in one tabbed page</li>
-                            <li class="mb-0"><i class="fas fa-circle-check text-success me-2"></i>Stratum 1 GPS Time Source</li>
+                            <li class="mb-2"><i class="fas fa-circle-check text-success me-2"></i>Stratum 1 GPS Time Source</li>
+                            <li class="mb-2"><i class="fas fa-circle-check text-success me-2"></i>Live Dashboard Status Strip</li>
+                            <li class="mb-0"><i class="fas fa-circle-check text-success me-2"></i>Uptime &amp; Reliability Diagnostics (watchdog, heartbeat, backup verification, clock sync, feed-loss alarm)</li>
                         </ul>
                     </div>
                 </div>
@@ -609,6 +611,57 @@
                     <div>
                         <strong>Why timing is treated as first-class infrastructure.</strong> Every EAS event is timestamped, geofenced, and audited — and every CAP message carries <code>sent</code>, <code>effective</code>, <code>expires</code> and <code>onset</code> fields whose math has to match the wall clock. A station that drifts seconds against NIST is a station whose RWT logs and compliance trail eventually cease to match the real world. EAS Station™ owns its time at the hardware level.
                         See the <a href="/docs/hardware/GPS_HAT_SETUP" class="alert-link">GPS HAT Setup guide</a> for board options, wiring, and the manual configuration steps the admin UI automates.
+                    </div>
+                </div>
+            </section>
+
+            <!-- Uptime & Reliability Diagnostics -->
+            <section class="about-card">
+                <div class="about-section-head">
+                    <span class="about-section-icon ico-danger"><i class="fas fa-heart-pulse"></i></span>
+                    <div>
+                        <h2 class="about-section-title">Uptime &amp; Reliability Diagnostics</h2>
+                        <p class="about-section-sub">Catching the failures a plain "is the process still running?" check misses.</p>
+                    </div>
+                </div>
+
+                <p class="mb-3">A life-safety appliance can't stop at restarting a crashed process. EAS Station™ layers five additional checks on top of standard systemd <code>Restart=always</code> to catch deadlocks, dead feeds, unproven backups, clock drift, and total box failure — reachable from <strong>Settings &rarr; Uptime Heartbeat</strong>, <strong>Admin &rarr; Backups</strong>, and <strong>System Health</strong>.</p>
+
+                <div class="row g-3">
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-blue h-100">
+                            <div class="feature-card-icon"><i class="fas fa-stopwatch"></i></div>
+                            <h5 class="feature-card-title">Hang Watchdog</h5>
+                            <p class="feature-card-text">The audio-processing and alert-poller services send <code>WATCHDOG=1</code> heartbeats to systemd from their main loop. A process that's still running but deadlocked — not just crashed — now gets killed and restarted automatically.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-purple h-100">
+                            <div class="feature-card-icon"><i class="fas fa-tower-broadcast"></i></div>
+                            <h5 class="feature-card-title">Outbound Uptime Heartbeat</h5>
+                            <p class="feature-card-text">Every other health check here is inward-facing — a page someone has to look at. This one pings an external monitor (e.g. healthchecks.io) on a schedule, so total power, network, or OS failure still raises an alarm from outside the box.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-green h-100">
+                            <div class="feature-card-icon"><i class="fas fa-database"></i></div>
+                            <h5 class="feature-card-title">Backup Restore Verification</h5>
+                            <p class="feature-card-text">A backup that's never been restored isn't a proven backup. This restores the latest backup into a throwaway scratch database, sanity-checks it, and always drops it afterward — run on demand or automatically after every backup.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-orange h-100">
+                            <div class="feature-card-icon"><i class="fas fa-clock"></i></div>
+                            <h5 class="feature-card-title">Clock/NTP Drift Monitoring</h5>
+                            <p class="feature-card-text">SAME timing and Required Weekly Test scheduling both depend on correct system time. The Clock Sync card on System Health tracks chrony/NTP offset and raises a compliance alert on drift or loss of sync.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-pink h-100">
+                            <div class="feature-card-icon"><i class="fas fa-satellite-dish"></i></div>
+                            <h5 class="feature-card-title">Combined Feed-Loss Alarm</h5>
+                            <p class="feature-card-text">NOAA and IPAWS polling staleness are tracked independently, so a live feed never masks a dead one. An alert fires only when <em>both</em> feeds have stalled past a configurable threshold.</p>
+                        </div>
                     </div>
                 </div>
             </section>

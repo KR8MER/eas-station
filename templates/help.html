@@ -247,6 +247,21 @@
                                 <div class="accordion-body">
                                     <p>Navigate to <code>http://&lt;host&gt;:5000</code> in a modern browser.</p>
                                     <p>Log in with administrator credentials created during initial setup.</p>
+                                    <p>
+                                        The main dashboard (<code>/</code>) opens with a <strong>System Status
+                                        strip</strong> above the map — four at-a-glance tiles so you don't have
+                                        to navigate away to know whether the station is actually working:
+                                    </p>
+                                    <ul>
+                                        <li><strong>Active Alerts</strong> &mdash; count of currently active CAP products; links to <a href="/alerts">Alerts</a>.</li>
+                                        <li><strong>EAS Decoder</strong> &mdash; whether the decoder monitor is running and audio is flowing or silent; links to <a href="/admin/eas_decoder_monitor">EAS Decoder Monitor</a>.</li>
+                                        <li><strong>System Health</strong> &mdash; overall application health from <code>/health</code>; links to <a href="/system_health">System Health</a>.</li>
+                                        <li><strong>Radio Receivers</strong> &mdash; number of configured SDR receivers; links to <a href="/admin/radio">Radio Receivers</a>.</li>
+                                    </ul>
+                                    <p class="text-muted small mb-0">
+                                        <i class="fas fa-sync-alt me-1"></i>
+                                        The strip refreshes itself every 30 seconds, independent of the map's own refresh cycle.
+                                    </p>
                                     <div class="alert alert-light">
                                         <i class="fas fa-lightbulb me-2"></i>
                                         <strong>Tip:</strong> Bookmark the dashboard for quick access during operations.

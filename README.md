@@ -163,6 +163,10 @@ Every alert insert, encoder action, and operator change is recorded into the exi
 
 **Why it matters institutionally:** This is the difference between "we logged it" and "we can prove the log hasn't been edited." For incident reviews, regulator interaction, training-program documentation, or research integrity, that distinction is the whole point.
 
+### Uptime & Reliability Diagnostics — Beyond "Is the Process Running?"
+
+`Restart=always` only catches a crashed process; it says nothing about one that's still running but **deadlocked**. Both `eas-station-audio` and `eas-station-poller` are systemd `Type=notify` units that send `WATCHDOG=1` heartbeats from their own main loop, so a genuine hang now gets killed and restarted too. An **outbound heartbeat** (Settings → Uptime Heartbeat) pings an external monitor such as healthchecks.io on a schedule — the one check on the box that's designed to fail *outward* when the whole box, its power, or its network goes dark, rather than only reporting inward to a dashboard nobody's watching at 3 a.m. **Backup restore verification** (`tools/verify_backup_restore.py`, Admin → Backups) actually restores the latest backup's database dump into a throwaway scratch database and sanity-checks it — proving a backup restores, not just that a file exists — on demand or automatically after every scheduled backup. A **Clock Sync** card on `/system_health` watches chrony/NTP drift, since SAME timing and RWT scheduling both depend on correct wall-clock time. And a **combined NOAA+IPAWS feed-loss alarm** tracks each poller's staleness independently, so a live feed can never mask a dead one — the alert only fires when both feeds have stalled past a configurable threshold.
+
 ### Hardware Integration — The Things the System Actually Has to Drive
 
 The platform was designed under the assumption that an EAS station is not a pure software product — it has to flip relays and drive signs. The hardware service exposes:
@@ -184,7 +188,7 @@ Day-to-day operations are made survivable by a **whiptail TUI configurator** (`s
 
 ### Web Dashboard & REST API
 
-The UI is a **responsive Bootstrap 5** application with **20 built-in themes** (every page including the Changelog viewer driven by theme CSS custom properties), **live Socket.IO push** for alert / radio / GPS updates, a full alert timeline with search and filter, an **Analytics dashboard** with Chart.js visualizations and one-click client-side PDF export of the full statistics report, an **audio monitoring** view with playback and live receive history, **operator-selectable display units** (coordinate format, altitude, speed, distance) saved per browser, and a **System Health** panel surfacing CPU/memory/disk/temperature.
+The UI is a **responsive Bootstrap 5** application with **20 built-in themes** (every page including the Changelog viewer driven by theme CSS custom properties), **live Socket.IO push** for alert / radio / GPS updates, a full alert timeline with search and filter, an **Analytics dashboard** with Chart.js visualizations and one-click client-side PDF export of the full statistics report, an **audio monitoring** view with playback and live receive history, **operator-selectable display units** (coordinate format, altitude, speed, distance) saved per browser, and a **System Health** panel surfacing CPU/memory/disk/temperature. A self-refreshing **System Status strip** on the main dashboard puts active-alert count, EAS decoder state, overall app health, and configured-receiver count above the map, so the four things an operator checks first are visible without navigating anywhere.
 
 Everything in the UI is reachable from a **REST API** namespaced under `/api/`, authenticated by the same login session as the UI (scoped `X-API-Key` authentication is planned), with a vendored JavaScript client for browser-side integrations.
 
