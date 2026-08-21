@@ -88,3 +88,24 @@ def forward_most_recent_alert(operator: str = "gpio-input") -> None:
         return
 
     logger.info("GPIO-triggered Forward Last Alert: re-transmitting EASMessage #%s", message_id)
+
+
+def acknowledge_dead_air_alarm() -> None:
+    """Acknowledge the current dead-air alarm (silence the rack buzzer).
+
+    Reuses the exact same Redis-backed logic as the web UI's Acknowledge
+    button (``app_core.audio.dead_air_alarm.acknowledge_dead_air``).
+    Station-wide by design -- dead-air acknowledgement is scoped to one
+    alarm episode, not a specific source, so a GPIO input needs no source
+    targeting; it always acknowledges whatever the current episode is.
+    No-ops (logged) when there is nothing to acknowledge; never raises.
+    """
+    from app_core.audio.dead_air_alarm import acknowledge_dead_air
+
+    result = acknowledge_dead_air(acknowledged=True)
+    if result.get("ok"):
+        logger.info(
+            "GPIO-triggered Acknowledge Dead Air: episode %s silenced", result.get("episode")
+        )
+    else:
+        logger.warning("GPIO-triggered Acknowledge Dead Air skipped: %s", result.get("error"))

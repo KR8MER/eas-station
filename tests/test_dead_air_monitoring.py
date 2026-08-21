@@ -590,14 +590,18 @@ def test_acknowledgement_is_bound_to_an_episode():
     The publisher mints an episode id when the alarm goes active and drops
     it on recovery; the ack stores that id, and both the API and the GPIO
     reader compare against it.
+
+    The actual acknowledge logic lives in app_core/audio/dead_air_alarm.py
+    (extracted so the GPIO-triggered "Acknowledge Dead Air" input action can
+    reuse it instead of duplicating the Redis calls) -- the route just
+    delegates to it, which test_route_delegates_to_shared_acknowledge_logic
+    below covers.
     """
-    routes = (ROOT / "webapp" / "admin" / "audio_ingest"
-              / "routes_dead_air.py").read_text(encoding="utf-8")
-    ack = routes.split("def audio_dead_air_acknowledge", 1)[1]
-    assert "if not state.get('active')" in ack, (
+    core = (ROOT / "app_core" / "audio" / "dead_air_alarm.py").read_text(encoding="utf-8")
+    assert "if not state.get(\"active\")" in core, (
         "acknowledging with no active alarm must be refused"
     )
-    assert "DEAD_AIR_ACK_KEY, 86400, episode" in ack
+    assert "DEAD_AIR_ACK_KEY, 86400, episode" in core
 
     service = (ROOT / "eas_monitoring_service.py").read_text(encoding="utf-8")
     assert '"episode": _dead_air_episode' in service
@@ -608,6 +612,17 @@ def test_acknowledgement_is_bound_to_an_episode():
     assert "ack == episode" in gpio, (
         "the buzzer must only stay silent for the episode that was acknowledged"
     )
+
+
+def test_route_delegates_to_shared_acknowledge_logic():
+    """The web route must not re-duplicate the Redis-level acknowledge logic
+    -- it should call the shared core function so the GPIO input action and
+    the web UI can never drift apart."""
+    routes = (ROOT / "webapp" / "admin" / "audio_ingest"
+              / "routes_dead_air.py").read_text(encoding="utf-8")
+    ack = routes.split("def audio_dead_air_acknowledge", 1)[1]
+    assert "from app_core.audio.dead_air_alarm import acknowledge_dead_air" in ack
+    assert "acknowledge_dead_air(" in ack
 
 
 # --------------------------------------------------------------------------

@@ -8,6 +8,34 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.183.0] - 2026-08-21 - GPIO input action: Acknowledge Dead Air
+
+### Added
+- **New GPIO input action: `Acknowledge Dead Air`.** A physical button
+  assigned this action silences the dead-air rack buzzer the same way the
+  Acknowledge button on the Audio Health dashboard does -- the tower light
+  stays lit until audio actually returns, matching standard alarm-panel
+  behavior. Acknowledgement is station-wide (scoped to the current alarm
+  *episode*, not a single source, since dead-air detection is per-source
+  but the buzzer/light output is aggregated), so the input needs no source
+  targeting.
+- **Refactor: the acknowledge logic moved out of the Flask route** into a
+  new shared function, `app_core/audio/dead_air_alarm.py::acknowledge_dead_air()`
+  -- extracted so the GPIO input action and the web UI's Acknowledge
+  button call the exact same Redis-backed logic instead of two copies
+  drifting apart, the same pattern already used for `Run RWT Now`
+  (`trigger_rwt_broadcast()`). `webapp/admin/audio_ingest/routes_dead_air.py`'s
+  `audio_dead_air_acknowledge()` route is now a thin wrapper with no
+  behavior change (same status codes, same Redis keys/TTL).
+- New `app_core/audio/gpio_input_actions.py::acknowledge_dead_air_alarm()`
+  -- the GPIO-side wrapper, logging the outcome; never raises.
+- New tests in `tests/test_gpio_dead_air_ack.py` (8 tests) covering the
+  shared core function directly (active-alarm requirement, episode
+  matching, un-acknowledge, no-Redis case) plus the GPIO wrapper and
+  dispatch wiring. `tests/test_dead_air_monitoring.py`'s existing
+  source-level checks were updated to point at the new location of the
+  extracted logic.
+
 ## [2.182.0] - 2026-08-21 - GPIO input action: Forward Last Alert
 
 ### Added

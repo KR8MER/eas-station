@@ -98,6 +98,7 @@ class GPIOInputAction(Enum):
     NONE = "none"
     RUN_RWT = "run_rwt"
     FORWARD_LAST_ALERT = "forward_last_alert"
+    DEAD_AIR_ACK = "dead_air_ack"
     DUMP_BROADCAST = "dump_broadcast"
 
     @classmethod
@@ -121,7 +122,12 @@ class GPIOInputAction(Enum):
 #: itself so the enum can ship complete (avoiding another JSONB-shape touch
 #: per phase) while the UI/save-path only offers what currently works.
 GPIO_INPUT_ACTION_IMPLEMENTED = frozenset(
-    {GPIOInputAction.NONE, GPIOInputAction.RUN_RWT, GPIOInputAction.FORWARD_LAST_ALERT}
+    {
+        GPIOInputAction.NONE,
+        GPIOInputAction.RUN_RWT,
+        GPIOInputAction.FORWARD_LAST_ALERT,
+        GPIOInputAction.DEAD_AIR_ACK,
+    }
 )
 
 
@@ -129,6 +135,7 @@ GPIO_INPUT_ACTION_LABELS = {
     GPIOInputAction.NONE: "None",
     GPIOInputAction.RUN_RWT: "Run RWT Now",
     GPIOInputAction.FORWARD_LAST_ALERT: "Forward Last Alert",
+    GPIOInputAction.DEAD_AIR_ACK: "Acknowledge Dead Air",
     GPIOInputAction.DUMP_BROADCAST: "Dump / Abort Broadcast",
 }
 
