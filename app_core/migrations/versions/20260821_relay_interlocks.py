@@ -4,9 +4,16 @@ Mutual-exclusion groups of GPIO relay pins: enforcement guarantees no more
 than one pin in a group is ever energized at once (e.g. two PTT relay lines
 that must never key simultaneous transmitters).
 
-Revision ID: 20260821_add_relay_interlock_groups
+Revision ID: 20260821_relay_interlocks
 Revises: 20260820_widen_alembic_version
 Create Date: 2026-08-21
+
+Note: kept short (<=32 chars) deliberately -- CI's fresh-database step runs
+`alembic stamp head`, which creates the `alembic_version` table from
+Alembic's own default VARCHAR(32) schema and inserts the head revision
+directly (it never replays `20260820_widen_alembic_version`'s ALTER COLUMN,
+since stamp doesn't run migration bodies). Only the *current head's* ID needs
+to fit that default width for a fresh CI database to succeed.
 """
 
 from __future__ import annotations
@@ -14,7 +21,7 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "20260821_add_relay_interlock_groups"
+revision = "20260821_relay_interlocks"
 down_revision = "20260820_widen_alembic_version"
 branch_labels = None
 depends_on = None
