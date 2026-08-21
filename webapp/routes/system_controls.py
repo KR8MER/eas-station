@@ -39,7 +39,10 @@ from app_core.extensions import db
 from app_core.models import GPIOActivationLog
 from app_utils.gpio import (
     GPIOBehavior,
+    GPIOInputAction,
     GPIO_BEHAVIOR_LABELS,
+    GPIO_INPUT_ACTION_IMPLEMENTED,
+    GPIO_INPUT_ACTION_LABELS,
     load_gpio_behavior_matrix_from_db,
     load_gpio_interlock_groups_from_db,
     load_gpio_pin_configs_from_db,
@@ -282,12 +285,20 @@ def register(app: Flask, logger) -> None:
             "behaviors": [],
             "hardware_reservations": [],
             "conflict": False,
+            "direction": "output",
+            "input_action": None,
+            "input_bounce_ms": 50.0,
+            "input_hold_confirm_seconds": None,
         }
 
         if pin_def.is_gpio and pin_def.bcm is not None:
             config = config_map.get(pin_def.bcm)
             entry["configured"] = config is not None
             entry["active_high"] = config.active_high if config else None
+            entry["direction"] = config.direction if config else "output"
+            entry["input_action"] = config.input_action if config else None
+            entry["input_bounce_ms"] = config.input_bounce_ms if config else 50.0
+            entry["input_hold_confirm_seconds"] = config.input_hold_confirm_seconds if config else None
             behaviors = behavior_matrix.get(pin_def.bcm, set())
             entry["behaviors"] = [behavior.value for behavior in sorted(behaviors, key=lambda b: b.value)]
 
@@ -883,15 +894,30 @@ def register(app: Flask, logger) -> None:
                     "flash_enabled": config.flash_enabled,
                     "flash_interval_ms": config.flash_interval_ms,
                     "flash_partner_pin": config.flash_partner_pin,
+                    "direction": config.direction,
+                    "input_action": config.input_action,
+                    "input_bounce_ms": config.input_bounce_ms,
+                    "input_hold_confirm_seconds": config.input_hold_confirm_seconds,
                 }
                 for config in configured_pins
             }
+
+            # Only actions implemented end-to-end are offered -- the enum
+            # ships complete (Forward/Dump exist as values) so later phases
+            # don't need another JSONB-shape touch, but the UI only offers
+            # what currently does something.
+            input_action_options = [
+                {"value": action.value, "label": GPIO_INPUT_ACTION_LABELS[action]}
+                for action in GPIO_INPUT_ACTION_IMPLEMENTED
+                if action != GPIOInputAction.NONE
+            ]
 
             return render_template(
                 "gpio_pin_map.html",
                 pin_rows=pin_rows,
                 behavior_options=behavior_options,
                 pin_config_map=pin_config_map,
+                input_action_options=input_action_options,
             )
         except Exception as exc:  # pragma: no cover - rendering safety
             route_logger.error(f"Failed to render GPIO pin map: {exc}")

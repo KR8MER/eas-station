@@ -75,6 +75,9 @@ def register(app: Flask, logger) -> None:
         oled_enabled = _get_oled_enabled_status()
         configured_pins = load_gpio_pin_configs_from_db(route_logger, oled_enabled=oled_enabled)
         pin_names = {cfg.pin: cfg.name for cfg in configured_pins}
+        # Interlocks are an output-relay concept -- input pins (read, not
+        # driven) don't belong in the membership picker.
+        output_pins = [cfg for cfg in configured_pins if cfg.direction == "output"]
 
         groups = RelayInterlockGroup.query.order_by(RelayInterlockGroup.name.asc()).all()
         warnings = _interlock_cross_check_warnings(configured_pins, groups, route_logger)
@@ -82,7 +85,7 @@ def register(app: Flask, logger) -> None:
         return render_template(
             "gpio_interlocks.html",
             groups=[_group_to_dict_with_pin_names(g, pin_names) for g in groups],
-            available_pins=[{"pin": cfg.pin, "name": cfg.name} for cfg in configured_pins],
+            available_pins=[{"pin": cfg.pin, "name": cfg.name} for cfg in output_pins],
             warnings=warnings,
         )
 

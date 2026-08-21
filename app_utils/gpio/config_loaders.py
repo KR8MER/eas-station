@@ -28,7 +28,7 @@ from app_utils.pi_pinout import ARGON_OLED_RESERVED_BCM, ARGON_OLED_RESERVED_PHY
 
 from .pin_types import (
     MAX_FLASH_INTERVAL_MS,
-    MIN_FLASH_INTERVAL_MS, GPIOBehavior, GPIOInterlockGroup, GPIOPinConfig,
+    MIN_FLASH_INTERVAL_MS, GPIOBehavior, GPIOInputAction, GPIOInterlockGroup, GPIOPinConfig,
 )
 from .neopixel import (
     NeopixelConfig,
@@ -113,6 +113,10 @@ def load_gpio_pin_configs_from_db(logger=None, oled_enabled: bool = False) -> Li
         flash_enabled: bool = False,
         flash_interval_ms: int = 500,
         flash_partner_pin: Optional[int] = None,
+        direction: str = "output",
+        input_action: Optional[str] = None,
+        input_bounce_ms: float = 50.0,
+        input_hold_confirm_seconds: Optional[float] = None,
     ) -> None:
         if pin in seen:
             _log("warning", f"Duplicate GPIO pin {pin} ignored")
@@ -145,6 +149,10 @@ def load_gpio_pin_configs_from_db(logger=None, oled_enabled: bool = False) -> Li
                 flash_enabled=flash_enabled,
                 flash_interval_ms=max(MIN_FLASH_INTERVAL_MS, min(MAX_FLASH_INTERVAL_MS, flash_interval_ms)),
                 flash_partner_pin=flash_partner_pin,
+                direction=direction,
+                input_action=input_action,
+                input_bounce_ms=max(0.0, input_bounce_ms or 0.0),
+                input_hold_confirm_seconds=input_hold_confirm_seconds,
             )
         )
         seen.add(pin)
@@ -202,6 +210,29 @@ def load_gpio_pin_configs_from_db(logger=None, oled_enabled: bool = False) -> Li
             except (TypeError, ValueError):
                 _log("warning", f"Invalid flash_partner_pin '{flash_partner_pin_value}' for GPIO pin {pin_number}")
 
+        # Direction / input-action configuration. Back-compat default is
+        # "output" -- every pin configured before this field existed is
+        # implicitly an output, exactly like flash_partner_pin's addition.
+        direction = str(pin_config.get("direction") or "output").strip().lower()
+        if direction not in ("output", "input"):
+            _log("warning", f"Unknown direction '{direction}' for GPIO pin {pin_number}; defaulting to output")
+            direction = "output"
+
+        input_action_value = pin_config.get("input_action")
+        input_action = None
+        if direction == "input" and input_action_value:
+            parsed_action = GPIOInputAction.from_value(input_action_value)
+            if parsed_action is None:
+                _log("warning", f"Unknown input_action '{input_action_value}' for GPIO pin {pin_number}; treating as none")
+            else:
+                input_action = parsed_action.value
+
+        input_bounce_ms = _parse_float(pin_config.get("input_bounce_ms"), 50.0)
+        input_hold_confirm_seconds_value = pin_config.get("input_hold_confirm_seconds")
+        input_hold_confirm_seconds = None
+        if input_hold_confirm_seconds_value not in (None, ""):
+            input_hold_confirm_seconds = _parse_float(input_hold_confirm_seconds_value, 3.0)
+
         _add_config(
             configs,
             seen_pins,
@@ -213,6 +244,10 @@ def load_gpio_pin_configs_from_db(logger=None, oled_enabled: bool = False) -> Li
             flash_enabled,
             flash_interval_ms,
             flash_partner_pin,
+            direction,
+            input_action,
+            input_bounce_ms,
+            input_hold_confirm_seconds,
         )
 
     return configs

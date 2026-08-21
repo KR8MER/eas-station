@@ -58,6 +58,7 @@ from services.common import (
 from services.gpio import (
     AlertIndicatorMonitor,
     initialize_gpio_controller,
+    initialize_gpio_input_watcher,
     initialize_neopixel_controller,
     initialize_tower_light_controller,
 )
@@ -68,6 +69,7 @@ HEARTBEAT_INTERVAL_S = 5
 
 _running = True
 _gpio_controller: Optional[Any] = None
+_gpio_input_watcher: Optional[Any] = None
 _neopixel_controller: Optional[Any] = None
 _tower_light_controller: Optional[Any] = None
 _cleaned_up = False
@@ -95,6 +97,11 @@ def _cleanup_controllers() -> None:
                 _gpio_controller.cleanup()
         except Exception as exc:
             log.error(f"Error cleaning up GPIO: {exc}")
+    if _gpio_input_watcher is not None:
+        try:
+            _gpio_input_watcher.stop()
+        except Exception as exc:
+            log.error(f"Error stopping GPIO input watcher: {exc}")
     if _neopixel_controller is not None:
         try:
             _neopixel_controller.cleanup()
@@ -125,6 +132,9 @@ def _build_app() -> Flask:
             "service": f"eas-station-{SUBSYSTEM}",
             "port": PORT,
             "gpio_controller_available": _gpio_controller is not None,
+            "gpio_input_watcher_active_pins": (
+                _gpio_input_watcher.active_pin_count if _gpio_input_watcher is not None else 0
+            ),
             "neopixel_available": _neopixel_controller is not None,
             "tower_light_available": (
                 _tower_light_controller is not None
@@ -361,7 +371,7 @@ def _run_command_listener(flask_app) -> None:
 
 
 def main() -> None:
-    global _gpio_controller, _neopixel_controller, _tower_light_controller
+    global _gpio_controller, _gpio_input_watcher, _neopixel_controller, _tower_light_controller
 
     configure_logging()
     logger = logging.getLogger(__name__)
@@ -390,6 +400,8 @@ def main() -> None:
             _gpio_controller = initialize_gpio_controller(
                 db_session=db.session, db_app=flask_app
             )
+            logger.info("Initializing GPIO input watcher...")
+            _gpio_input_watcher = initialize_gpio_input_watcher()
             logger.info("Initializing NeoPixel controller...")
             _neopixel_controller = initialize_neopixel_controller()
             logger.info("Initializing USB tower light controller...")

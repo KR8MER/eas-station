@@ -68,9 +68,14 @@ def initialize_gpio_controller(db_session=None, db_app=None):
 
         # Load GPIO pin configurations (from database with env fallback)
         # Pass oled_enabled to ensure reserved pins are only blocked when OLED is actually enabled
-        gpio_configs = load_gpio_pin_configs_from_db(logger, oled_enabled=oled_enabled)
+        all_configs = load_gpio_pin_configs_from_db(logger, oled_enabled=oled_enabled)
+        # Only OUTPUT-direction pins are relays this controller drives; INPUT
+        # pins are read by GPIOInputWatcher instead (see
+        # initialize_gpio_input_watcher below) -- a different concern with no
+        # behavior/flash/watchdog semantics.
+        gpio_configs = [c for c in all_configs if c.direction == "output"]
         if not gpio_configs:
-            logger.info("No GPIO pins configured (configure in Admin > Hardware Settings)")
+            logger.info("No GPIO output pins configured (configure in Admin > Hardware Settings)")
             return None
 
         # Create GPIO controller with database session for audit logging
@@ -116,6 +121,50 @@ def initialize_gpio_controller(db_session=None, db_app=None):
     except Exception as e:
         logger.warning(f"⚠️  GPIO controller not available: {e}")
         logger.info("Continuing without GPIO support")
+        return None
+
+
+def initialize_gpio_input_watcher():
+    """Initialize the GPIO input watcher (physical buttons/contact closures).
+
+    Independently loads its own pin configuration (same pattern as
+    ``initialize_tower_light_controller``/``initialize_neopixel_controller``
+    below) rather than sharing state with ``initialize_gpio_controller`` --
+    input reading and output driving are different concerns.
+
+    Returns the started ``GPIOInputWatcher``, or ``None`` when GPIO is
+    disabled, no input pins are configured, or the underlying package isn't
+    available.
+    """
+    try:
+        from app_utils.gpio import GPIOInputWatcher, load_gpio_pin_configs_from_db
+
+        try:
+            from app_core.hardware_settings import get_gpio_settings, get_oled_settings
+            gpio_enabled = get_gpio_settings().get('enabled', False)
+            oled_enabled = get_oled_settings().get('enabled', False)
+        except Exception:
+            gpio_enabled = False
+            oled_enabled = False
+
+        if not gpio_enabled:
+            return None
+
+        all_configs = load_gpio_pin_configs_from_db(logger, oled_enabled=oled_enabled)
+        input_configs = [c for c in all_configs if c.direction == "input"]
+        if not input_configs:
+            return None
+
+        watcher = GPIOInputWatcher(input_configs, logger=logger)
+        watcher.start()
+        if watcher.active_pin_count:
+            logger.info(f"✅ GPIO input watcher active: {watcher.active_pin_count} pin(s)")
+            return watcher
+        return None
+
+    except Exception as e:
+        logger.warning(f"⚠️  GPIO input watcher not available: {e}")
+        logger.info("Continuing without GPIO input support")
         return None
 
 
