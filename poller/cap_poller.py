@@ -249,6 +249,24 @@ try:
     if project_root.endswith('/poller'):
         project_root = os.path.dirname(project_root)
     sys.path.insert(0, project_root)
+    # `from app import ...` below doesn't just grab a few SQLAlchemy model
+    # classes -- it forces Python to execute app.py's ENTIRE module-level
+    # body (first import wins), which is also where the web app starts
+    # every one of its background workers (heartbeat ping, backup/retention/
+    # auto-purge schedulers, fail2ban sync, RWT scheduler, GPIO input
+    # listener, system metrics sampler, traffic recorder -- see app.py's
+    # `skip_background_services` block). Without this, cap_poller.py ends up
+    # running a second, independent copy of every one of those alongside its
+    # own polling loop and gated-alert scheduler -- duplicate backups,
+    # duplicate retention/purge races, and a heartbeat ping that (being a
+    # long-running --continuous process, unlike a request-scoped web worker)
+    # can keep executing stale pre-restart bytecode for hours after a fix
+    # ships, since this process is never restarted by a `systemctl restart
+    # eas-station-web`. SKIP_DB_INIT is the same flag alembic/env.py already
+    # uses for exactly this "import app.py for its models, not its side
+    # effects" situation -- setdefault so an already-set value (e.g. this
+    # script itself running under a migration context) is never clobbered.
+    os.environ.setdefault('SKIP_DB_INIT', '1')
     from app import (
         db,
         CAPAlert,

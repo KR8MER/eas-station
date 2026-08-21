@@ -859,8 +859,15 @@ register_routes(app, logger)
 logger.info("✓ Route modules registered")
 print(f"[PID {os.getpid()}] Route modules registered successfully", file=sys.stderr, flush=True)
 
-# Check if we're running in migration mode (SKIP_DB_INIT is set by alembic/env.py)
-# to prevent background services from starting and causing migrations to hang
+# SKIP_DB_INIT suppresses every background worker started below. Originally
+# set only by alembic/env.py (so migrations don't hang waiting on a
+# scheduler thread), it's also the flag any other script must set before
+# `from app import ...` if it only wants app.py's models/db object -- that
+# import executes this entire module, side effects included, regardless of
+# whether the caller ever calls create_app(). See poller/cap_poller.py's own
+# `from app import (...)` for the case that motivated this comment: it used
+# to leave a second, independent copy of every one of these workers running
+# for as long as the poller process did.
 skip_background_services = bool(os.environ.get('SKIP_DB_INIT'))
 
 # Start background health monitoring alerts
