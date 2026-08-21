@@ -8,6 +8,59 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.184.0] - 2026-08-21 - GPIO input action: Dump / Abort Broadcast
+
+### Added
+- **New GPIO input action: `Dump / Abort Broadcast`** — the fourth and
+  final input action, completing the GPIO input framework. A physical
+  button assigned this action forcibly stops whatever is currently on
+  air: sends `SIGTERM` (escalating to `SIGKILL` after a 2s grace period
+  if needed) to the playback subprocess, releases the transmitter relay
+  via the same `clear_broadcast_active()` path a normal broadcast
+  completion already uses, and writes an entry to the tamper-evident
+  Ed25519-signed audit ledger (`AuditAction.EAS_CANCELLATION`) — an
+  operator-forced abort of a life-safety broadcast is exactly the class
+  of event that ledger exists for. No-ops (logged) when nothing is
+  currently playing.
+- **Safety default: requires a sustained 3-second hold, not a tap**
+  (`gpiozero`'s `when_held`, admin-configurable 1–10s per pin) — a
+  momentary bump or contact bounce must never be able to abort a live
+  EAS broadcast. This is the one input action that arms differently
+  from the other three, which fire on a plain press.
+- `app_utils/eas.py::_run_command()` — the single chokepoint every
+  broadcast path (RWT, resend, live/forwarded alerts) already funnels
+  through — now publishes its playback subprocess's PID to Redis
+  (`eas:broadcast_pid`) for the duration of the call and clears it on
+  completion (success, launch failure, or exception mid-wait, via a
+  `finally`). Behaviourally unchanged for every existing caller: still
+  blocks until the command exits, still swallows and logs rather than
+  raises. `subprocess.Popen(...).wait()` replaces the previous bare
+  `subprocess.run(...)` — functionally identical, with the PID
+  observable mid-flight by another process.
+- New `app_core/audio/gpio_input_actions.py::abort_current_broadcast()`
+  — reads the published PID, drives the terminate/kill sequence, and
+  writes the audit entry; never raises (runs inside the GPIO
+  input-event dispatch loop).
+- New Pin Map UI control: "Hold time to confirm (seconds)", shown only
+  when Dump / Abort Broadcast is selected, wired through the existing
+  `input_hold_confirm_seconds` field.
+- New tests in `tests/test_gpio_dump_broadcast.py` (11 tests) — the
+  heaviest coverage of the four input-action phases per the original
+  design plan, given this is the one that touches the shared playback
+  call path: `_run_command()` regression (still blocks, still swallows
+  exceptions, PID published/cleared correctly including on failure),
+  the SIGTERM→SIGKILL escalation, the no-op-when-idle case, the
+  already-exited-process case, the audit entry's fields, and dispatch
+  wiring. `tests/test_gpio_input_watcher.py`'s hold-vs-press test no
+  longer needs to temporarily unlock the action (it's genuinely
+  implemented now), and its "not yet implemented" test was rewritten to
+  validate the `GPIO_INPUT_ACTION_IMPLEMENTED` filter mechanism
+  generically, since all four real actions are implemented as of this
+  release.
+- `docs/architecture/THEORY_OF_OPERATION.md`'s Broadcast Orchestration
+  section documents the abort path, per this project's standing rule
+  that touching broadcast/verification logic keeps that doc in sync.
+
 ## [2.183.0] - 2026-08-21 - GPIO input action: Acknowledge Dead Air
 
 ### Added

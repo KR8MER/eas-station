@@ -299,6 +299,8 @@ Audio / text rendering also follows the guide: `_fetch_embedded_audio` enforces 
 - **SAME Generator (`app_utils/eas.py`, `app_utils/eas_fsk.py`)** creates FCC-compliant 520⅔ baud FSK audio
 - **Hardware Integration** via isolated `hardware-service` systemd service for GPIO relay control
 
+**Aborting a broadcast in progress:** every playback path (RWT, resend, live/forwarded alerts) funnels through one function, `_run_command()` in `app_utils/eas.py`, which now publishes the playback subprocess's PID to Redis (`eas:broadcast_pid`) for the duration of the call and clears it on completion. `app_core/audio/gpio_input_actions.py::abort_current_broadcast()` — reachable from the web UI's GPIO input framework via the `Dump / Abort Broadcast` input action (a physical button requiring a sustained 3-second hold, so a momentary bump can never abort a live broadcast) — reads that PID, sends `SIGTERM` (escalating to `SIGKILL` after a grace period if needed), then calls the same `clear_broadcast_active()` a normal broadcast completion already uses, which is what causes the GPIO subprocess to drop the transmitter relay on its next poll. An operator-forced abort writes an entry to the tamper-evident audit ledger (`AuditAction.EAS_CANCELLATION`) — the same class of event a normal broadcast completion does not need to record, since nothing was cut short.
+
 ### 5. Audio Processing & SDR Monitoring
 
 The `sdr-service` systemd service handles all SDR hardware and audio processing:

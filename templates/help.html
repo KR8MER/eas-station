@@ -484,8 +484,14 @@
                                             Station-wide &mdash; acknowledgement is scoped to the current alarm
                                             episode, not a single source, so no source selection is needed. Skipped
                                             (and logged) if no dead-air alarm is currently active.</li>
-                                        <li><em>Dump / Abort Broadcast</em> is reserved for a future release and
-                                            does nothing yet if selected.</li>
+                                        <li><strong>Dump / Abort Broadcast</strong> &mdash; forcibly stops whatever
+                                            is currently on air: terminates the playback process, releases the
+                                            transmitter relay the same way a broadcast ending normally does, and
+                                            writes an entry to the tamper-evident audit ledger. No-ops (and logged)
+                                            if nothing is currently playing.
+                                            <strong>Requires a sustained 3-second hold, not a tap</strong>
+                                            (configurable 1&ndash;10s per pin) &mdash; a momentary bump must never be
+                                            able to abort a live broadcast.</li>
                                         <li>Each action may only be assigned to <strong>one</strong> pin &mdash;
                                             assigning the same action to two pins is rejected when you save.</li>
                                         <li>Like the rest of GPIO configuration, a new or edited input pin takes

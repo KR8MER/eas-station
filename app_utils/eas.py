@@ -2464,12 +2464,83 @@ def truncate_wav_to_max_seconds(
     return output.getvalue()
 
 
-def _run_command(command: Sequence[str], logger) -> None:
+#: Redis key holding the PID of the currently-running playback subprocess,
+#: published by ``_run_command()`` while it's blocked in ``.wait()`` and read
+#: by ``app_core.audio.gpio_input_actions.abort_current_broadcast()`` to
+#: signal it. Not the same key/lifecycle as ``_BROADCAST_STATE_KEY`` -- that
+#: one describes the broadcast (label, duration, identifier) for the UI/GPIO
+#: relay-keying; this one is purely "which OS process is playing audio right
+#: now", scoped to the lifetime of a single subprocess call.
+_BROADCAST_PID_KEY = 'eas:broadcast_pid'
+
+#: Safety-expiry TTL, well beyond any plausible single broadcast's duration --
+#: a crash between setting this key and the `finally` clearing it must not
+#: leave a stale PID pointing at a long-dead (or worse, reused) process id
+#: forever.
+_BROADCAST_PID_TTL = 1800
+
+
+def _publish_broadcast_pid(pid: int) -> None:
+    """Best-effort: a Redis hiccup here must never interrupt playback."""
     try:
-        subprocess.run(list(command), check=False)
+        from app_core.redis_client import get_redis_client
+        client = get_redis_client()
+        if client is not None:
+            client.set(_BROADCAST_PID_KEY, str(pid), ex=_BROADCAST_PID_TTL)
+    except Exception:
+        pass
+
+
+def _clear_broadcast_pid() -> None:
+    try:
+        from app_core.redis_client import get_redis_client
+        client = get_redis_client()
+        if client is not None:
+            client.delete(_BROADCAST_PID_KEY)
+    except Exception:
+        pass
+
+
+def get_broadcast_pid() -> Optional[int]:
+    """Return the PID of the currently-running playback subprocess, or
+    ``None`` if nothing is playing (or the marker expired/was never set)."""
+    try:
+        from app_core.redis_client import get_redis_client
+        client = get_redis_client()
+        if client is None:
+            return None
+        raw = client.get(_BROADCAST_PID_KEY)
+        if not raw:
+            return None
+        if isinstance(raw, bytes):
+            raw = raw.decode('utf-8')
+        return int(raw)
+    except Exception:
+        return None
+
+
+def _run_command(command: Sequence[str], logger) -> None:
+    """Run *command* to completion, publishing its PID while it runs.
+
+    Was a bare ``subprocess.run(...)`` until the GPIO "Dump/Abort Broadcast"
+    input action needed a way to signal a running playback process from a
+    different process. Behaviourally unchanged for every existing caller:
+    still blocks until the command exits, still swallows and logs any
+    exception rather than raising -- ``subprocess.Popen(...).wait()`` is
+    functionally ``subprocess.run(...)`` with the PID observable in between.
+    The PID marker is always cleared in ``finally``, so a normal completion
+    (or a launch failure, or an exception mid-wait) never leaves a stale
+    entry for a later abort attempt to act on.
+    """
+    try:
+        process = subprocess.Popen(list(command))
+        _publish_broadcast_pid(process.pid)
+        process.wait()
     except Exception as exc:  # pragma: no cover - subprocess errors are logged
         if logger:
             logger.warning(f"Failed to run command {' '.join(command)}: {exc}")
+    finally:
+        _clear_broadcast_pid()
 
 
 #: ECIG §3.5.1 — recorded-audio download timeout cap (2 minutes).

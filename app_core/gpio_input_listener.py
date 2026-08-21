@@ -118,7 +118,9 @@ def _dispatch_input_action(event: dict) -> None:
         from app_core.audio.gpio_input_actions import acknowledge_dead_air_alarm
         acknowledge_dead_air_alarm()
     elif action == GPIOInputAction.DUMP_BROADCAST:
-        logger.info("GPIO input pin %s triggered Dump Broadcast (not yet implemented)", pin)
+        logger.warning("GPIO input pin %s triggered: Dump/Abort Broadcast", pin)
+        from app_core.audio.gpio_input_actions import abort_current_broadcast
+        abort_current_broadcast()
     else:
         logger.warning("Ignoring GPIO input event with unknown action %r (pin %s)", action_value, pin)
 

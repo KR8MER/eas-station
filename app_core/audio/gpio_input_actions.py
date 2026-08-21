@@ -109,3 +109,93 @@ def acknowledge_dead_air_alarm() -> None:
         )
     else:
         logger.warning("GPIO-triggered Acknowledge Dead Air skipped: %s", result.get("error"))
+
+
+#: Grace period between SIGTERM and SIGKILL when aborting playback -- long
+#: enough for a well-behaved audio player to release its device/file handles
+#: cleanly, short enough that a physical abort input still feels immediate.
+_ABORT_GRACE_SECONDS = 2.0
+
+
+def abort_current_broadcast(
+    reason: str = "GPIO dump input triggered", operator: str = "gpio-input",
+) -> None:
+    """Forcibly stop an in-flight broadcast.
+
+    Signals the PID ``app_utils.eas._run_command()`` published while its
+    audio-player subprocess is running (SIGTERM, then SIGKILL if it hasn't
+    exited after a grace period), then releases the broadcast-active marker
+    so the GPIO subprocess drops the transmitter relay on its next poll --
+    reusing the same falling-edge release path a broadcast ending normally
+    already uses, rather than a second relay-release mechanism. Writes an
+    entry to the tamper-evident audit ledger: an operator-forced abort of a
+    life-safety broadcast is exactly the class of event that ledger exists
+    for. No-ops (logged) when nothing is currently playing. Never raises --
+    this runs inside the GPIO input-event dispatch loop, which must stay
+    alive regardless of outcome.
+    """
+    import os
+    import signal
+    import time
+
+    from app_utils.eas import clear_broadcast_active, get_broadcast_pid, get_broadcast_state
+
+    pid = get_broadcast_pid()
+    if pid is None:
+        logger.info("GPIO-triggered Dump/Abort Broadcast: nothing is currently playing")
+        return
+
+    state = get_broadcast_state()
+    label = state.get("label") or state.get("event_code") or "unknown broadcast"
+    identifier = state.get("identifier") or None
+
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        logger.info("GPIO-triggered Dump/Abort Broadcast: process %s already exited", pid)
+        clear_broadcast_active()
+        return
+    except Exception as exc:
+        logger.warning(
+            "GPIO-triggered Dump/Abort Broadcast: could not check process %s: %s", pid, exc
+        )
+        return
+
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except Exception as exc:
+        logger.warning("GPIO-triggered Dump/Abort Broadcast: SIGTERM to %s failed: %s", pid, exc)
+
+    deadline = time.monotonic() + _ABORT_GRACE_SECONDS
+    exited = False
+    while time.monotonic() < deadline:
+        time.sleep(0.1)
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            exited = True
+            break
+
+    if not exited:
+        try:
+            os.kill(pid, signal.SIGKILL)
+            logger.warning(
+                "GPIO-triggered Dump/Abort Broadcast: SIGKILL sent to %s after grace period", pid
+            )
+        except ProcessLookupError:
+            pass  # exited between the last poll and here
+        except Exception as exc:
+            logger.error("GPIO-triggered Dump/Abort Broadcast: SIGKILL to %s failed: %s", pid, exc)
+
+    clear_broadcast_active()
+
+    from app_core.auth.audit import AuditAction, AuditLogger
+    AuditLogger.log(
+        action=AuditAction.EAS_CANCELLATION,
+        username=operator,
+        resource_type="eas_broadcast",
+        resource_id=identifier,
+        details={"reason": reason, "label": label, "pid": pid},
+    )
+
+    logger.warning("GPIO-triggered Dump/Abort Broadcast: aborted '%s' (pid %s)", label, pid)

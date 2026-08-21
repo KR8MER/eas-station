@@ -443,8 +443,18 @@ pressed, rather than something the system energizes.
      acknowledgement is scoped to the current alarm episode, not a single
      source, so the button needs no source selection. Skipped (logged) if
      no dead-air alarm is currently active.
-   - *Dump / Abort Broadcast* is reserved for a future release and not yet
-     functional if selected.
+   - **Dump / Abort Broadcast** — forcibly stops whatever is currently on
+     air: sends a graceful-then-forceful terminate signal to the playback
+     process, releases the transmitter relay the same way a broadcast
+     ending normally does, and writes an entry to the tamper-evident audit
+     ledger (who/what/when — an operator-forced abort of a live broadcast
+     is exactly the class of event that ledger exists for). No-ops
+     (logged) if nothing is currently playing.
+     > **This is the one action that requires a sustained press, not a
+     > tap.** A momentary bump or contact bounce must never be able to
+     > abort a live EAS broadcast, so this pin must be **held for 3
+     > seconds** (configurable 1–10s per pin on this page) before it
+     > fires — a quick press does nothing.
 3. Save and restart `eas-station-gpio` for the change to take effect (same
    "edit then restart" rule as every other GPIO setting on this page).
 
