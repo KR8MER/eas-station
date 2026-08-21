@@ -485,10 +485,14 @@
                                             episode, not a single source, so no source selection is needed. Skipped
                                             (and logged) if no dead-air alarm is currently active.</li>
                                         <li><strong>Dump / Abort Broadcast</strong> &mdash; forcibly stops whatever
-                                            is currently on air: terminates the playback process, releases the
-                                            transmitter relay the same way a broadcast ending normally does, and
-                                            writes an entry to the tamper-evident audit ledger. No-ops (and logged)
-                                            if nothing is currently playing.
+                                            is currently on air: terminates the playback process to cut the
+                                            in-progress message, then <strong>always plays the required
+                                            End-Of-Message tone burst before releasing the relay</strong>
+                                            (47 CFR 11.61(a) &mdash; an EAS message must never simply go silent).
+                                            Only after that EOM attempt completes does it release the transmitter
+                                            relay the same way a broadcast ending normally does, and write an entry
+                                            to the tamper-evident audit ledger (including whether the EOM burst
+                                            actually sent). No-ops (and logged) if nothing is currently playing.
                                             <strong>Requires a sustained 3-second hold, not a tap</strong>
                                             (configurable 1&ndash;10s per pin) &mdash; a momentary bump must never be
                                             able to abort a live broadcast.</li>

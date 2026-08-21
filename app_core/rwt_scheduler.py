@@ -28,7 +28,6 @@ RWT broadcasts according to configured schedules.
 import logging
 import os
 import random
-import subprocess
 import tempfile
 import threading
 import time
@@ -46,6 +45,7 @@ from app_utils.eas import (
     clear_broadcast_active,
     load_eas_config,
     manual_default_same_codes,
+    play_broadcast_audio,
     samples_to_wav_bytes,
     set_broadcast_active,
     truncate_wav_to_max_seconds,
@@ -288,11 +288,16 @@ def _drive_rwt_airchain(
                 # global max.  A hung player (busy/blocked audio device,
                 # stalled network sink) must never keep this worker — and
                 # therefore the on-air overlay — blocked past the broadcast.
-                subprocess.run(
-                    command, check=False, timeout=float(playback_duration) + 30,
+                # play_broadcast_audio() (not a bare subprocess.run()) so a
+                # GPIO-triggered Dump/Abort can find this process's PID and
+                # the isolated EOM burst (already embedded at the end of
+                # this composite, but needed separately in case abort kills
+                # playback before reaching it) -- see
+                # app_core.audio.gpio_input_actions.abort_current_broadcast.
+                play_broadcast_audio(
+                    command, logger=log, eom_wav=eom_wav,
+                    timeout=float(playback_duration) + 30,
                 )
-            except subprocess.TimeoutExpired:
-                log.warning("Audio playback timed out for RWT %s", alert_id)
             except Exception as exc:
                 log.warning("Audio playback failed for RWT %s: %s",
                             alert_id, exc)

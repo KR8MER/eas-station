@@ -8,6 +8,67 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.184.1] - 2026-08-21 - Dump / Abort Broadcast: real-hardware fixes
+
+Real-hardware verification of 2.184.0's Dump/Abort Broadcast action (triggering
+a genuine RWT and aborting it against real GPIO/audio hardware, per the
+project's "test on real hardware before merge" standard) surfaced two gaps
+that mocked unit tests couldn't have caught. Both are fixed here, in the same
+still-open PR, before merge.
+
+### Fixed
+- **`_run_command()`'s PID tracking only ever covered the live/auto-forwarded
+  alert path** (`app_utils.eas.EASBroadcaster._play_audio()`) — RWT
+  broadcasts (`app_core/rwt_scheduler.py::_drive_rwt_airchain()`), manually
+  "Sent" activations (`webapp/eas/workflow.py`), and resends
+  (`scripts/resend_eas_broadcast.py`) each launched their own separate,
+  untracked `subprocess.run(...)`. A physical Dump/Abort press against any of
+  those three — RWT is the most routinely-tested broadcast on the
+  station — silently no-op'd: `get_broadcast_pid()` returned `None` even
+  while `aplay` was audibly running. All three now call the same
+  `app_utils.eas.play_broadcast_audio()` entry point `_run_command()` grew for
+  this, so every broadcast, regardless of trigger, is abortable.
+- **A GPIO-forced abort could end a broadcast without ever sending the
+  required End-Of-Message burst** (47 CFR 11.61(a)) — the original
+  implementation just killed the player process. `abort_current_broadcast()`
+  now reads the isolated EOM tone-burst audio (published to Redis alongside
+  the PID by the same `play_broadcast_audio()`/`_run_command()`) and plays it
+  synchronously — via the same `audio_player_cmd` — before releasing the
+  transmitter relay or writing the audit entry. The audit ledger's
+  `EAS_CANCELLATION` entry now records `eom_sent: true/false` so an abort
+  that genuinely could not send one (no audio player configured, playback
+  failure) is visible in the compliance trail rather than silently missing.
+  The relay is still always eventually released — a broadcast stuck on-air
+  forever is its own violation — but only after the EOM attempt completes.
+- **The EOM audio Redis key needed base64 encoding.** `get_redis_client()`
+  returns a client configured with `decode_responses=True` (every other key
+  this module publishes is text); raw WAV bytes are not valid UTF-8, so the
+  first hardware test run showed the PID publishing correctly but
+  `get_broadcast_eom_audio()` silently returning `None` on every read — the
+  UTF-8 decode failure was swallowed by that function's own best-effort
+  `except Exception: return None`. `_publish_broadcast_pid()` now
+  base64-encodes the EOM payload; `get_broadcast_eom_audio()` decodes it back.
+- Corrected an inaccurate claim in the 2.184.0 entry below: `_run_command()`
+  was **not** already the chokepoint every broadcast path funneled through —
+  see the first fix above.
+
+### Testing
+- `tests/test_gpio_dump_broadcast.py` grew from 11 to 20 tests: EOM
+  publish/clear round-trip through `_run_command()`, `play_broadcast_audio()`
+  delegating correctly (including its new `timeout` param, replacing the
+  three call sites' own `subprocess.TimeoutExpired` handling),
+  `abort_current_broadcast()` always attempting the EOM burst before
+  `clear_broadcast_active()`/the audit write (asserted via ordering checks
+  inside the mocked EOM-play callback), and the fail-safe cases (no EOM audio
+  published, EOM playback failure) still completing and flagging `eom_sent:
+  false` rather than hanging the relay forever.
+- Verified against real hardware in the lab: triggered a genuine RWT
+  (audible, keyed GPIO pin 17, real `aplay` PID published), called
+  `abort_current_broadcast()` against it mid-playback, and confirmed:
+  message audio cut by `SIGTERM`, the isolated EOM burst audibly played
+  from a second `aplay` invocation, the relay released only after that
+  finished, and an `audit_logs` row written with `eom_sent: true`.
+
 ## [2.184.0] - 2026-08-21 - GPIO input action: Dump / Abort Broadcast
 
 ### Added
@@ -27,16 +88,19 @@ tracks releases under the 2.x series.
   momentary bump or contact bounce must never be able to abort a live
   EAS broadcast. This is the one input action that arms differently
   from the other three, which fire on a plain press.
-- `app_utils/eas.py::_run_command()` — the single chokepoint every
-  broadcast path (RWT, resend, live/forwarded alerts) already funnels
-  through — now publishes its playback subprocess's PID to Redis
-  (`eas:broadcast_pid`) for the duration of the call and clears it on
-  completion (success, launch failure, or exception mid-wait, via a
+- `app_utils/eas.py::_run_command()` — used by the live/auto-forwarded
+  alert broadcast path — now publishes its playback subprocess's PID to
+  Redis (`eas:broadcast_pid`) for the duration of the call and clears it
+  on completion (success, launch failure, or exception mid-wait, via a
   `finally`). Behaviourally unchanged for every existing caller: still
   blocks until the command exits, still swallows and logs rather than
   raises. `subprocess.Popen(...).wait()` replaces the previous bare
   `subprocess.run(...)` — functionally identical, with the PID
-  observable mid-flight by another process.
+  observable mid-flight by another process. **Correction (2.184.1):** at
+  the time this entry was written, RWT/manual-Send/resend were believed
+  to already funnel through this same function — real-hardware testing
+  showed they did not, each running its own untracked `subprocess.run()`.
+  See the 2.184.1 entry above for the fix.
 - New `app_core/audio/gpio_input_actions.py::abort_current_broadcast()`
   — reads the published PID, drives the terminate/kill sequence, and
   writes the audit entry; never raises (runs inside the GPIO

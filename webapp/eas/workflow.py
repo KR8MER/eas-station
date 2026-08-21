@@ -26,7 +26,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import tempfile
 import time
 from datetime import datetime, timedelta, timezone
@@ -63,6 +62,7 @@ from app_utils.eas import (
     clear_broadcast_active,
     describe_same_header,
     manual_default_same_codes,
+    play_broadcast_audio,
     samples_to_wav_bytes,
     set_broadcast_active,
     truncate_wav_to_max_seconds,
@@ -1284,8 +1284,11 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
         max_activation_seconds = int(fresh_config.get('max_activation_seconds', 300) or 300)
         original_duration = _wav_duration_seconds(audio_data)
         was_truncated = False
+        # Needed unconditionally (not just when truncating) so a
+        # GPIO-triggered Dump/Abort mid-broadcast can still send a compliant
+        # EOM burst -- see the play_broadcast_audio() call below.
+        eom_wav = activation.eom_audio_data
         if original_duration > max_activation_seconds:
-            eom_wav = activation.eom_audio_data
             audio_data = truncate_wav_to_max_seconds(audio_data, eom_wav, max_activation_seconds)
             was_truncated = True
             workflow_logger.info(
@@ -1361,12 +1364,15 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                     # stalled network sink) must never keep this worker — and
                     # therefore the asserted air chain and the on-air overlay —
                     # blocked past the broadcast itself.
-                    subprocess.run(command, check=False, timeout=float(playback_duration) + 30)
-                    send_result['audio_played'] = True
-                except subprocess.TimeoutExpired:
-                    workflow_logger.warning(
-                        'Audio playback timed out for activation %s', event_id,
+                    # play_broadcast_audio() (not a bare subprocess.run()) so a
+                    # GPIO-triggered Dump/Abort can find this process's PID and
+                    # the isolated EOM burst -- see
+                    # app_core.audio.gpio_input_actions.abort_current_broadcast.
+                    play_broadcast_audio(
+                        command, logger=workflow_logger, eom_wav=eom_wav,
+                        timeout=float(playback_duration) + 30,
                     )
+                    send_result['audio_played'] = True
                 except Exception as exc:
                     workflow_logger.warning(
                         'Audio playback failed: %s', exc,

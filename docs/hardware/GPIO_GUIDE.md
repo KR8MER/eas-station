@@ -445,11 +445,16 @@ pressed, rather than something the system energizes.
      no dead-air alarm is currently active.
    - **Dump / Abort Broadcast** — forcibly stops whatever is currently on
      air: sends a graceful-then-forceful terminate signal to the playback
-     process, releases the transmitter relay the same way a broadcast
-     ending normally does, and writes an entry to the tamper-evident audit
-     ledger (who/what/when — an operator-forced abort of a live broadcast
-     is exactly the class of event that ledger exists for). No-ops
-     (logged) if nothing is currently playing.
+     process to cut the in-progress *message*, then **always plays the
+     required End-Of-Message tone burst before releasing the relay** — per
+     47 CFR 11.61(a), an EAS message must never simply go silent, so abort
+     is not "kill and done." Only once that EOM attempt has completed does
+     it release the transmitter relay the same way a broadcast ending
+     normally does, and write an entry to the tamper-evident audit ledger
+     (who/what/when, plus whether the EOM burst actually sent — an
+     operator-forced abort of a live broadcast is exactly the class of
+     event that ledger exists for). No-ops (logged) if nothing is
+     currently playing.
      > **This is the one action that requires a sustained press, not a
      > tap.** A momentary bump or contact bounce must never be able to
      > abort a live EAS broadcast, so this pin must be **held for 3
