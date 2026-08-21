@@ -27,7 +27,7 @@ tracks releases under the 2.x series.
   Alert, Audio Mute): during a real alert only one would ever actually key,
   and the interlock would silently refuse the other.
 - New tables `relay_interlock_groups` / `relay_interlock_members`
-  (migration `20260821_add_relay_interlock_groups`). Like the rest of GPIO
+  (migration `20260821_relay_interlocks`). Like the rest of GPIO
   configuration, group definitions are read once at `eas-station-gpio`
   startup — changes require restarting the service.
 - New tests in `tests/test_gpio_relay_interlock.py`, including a regression
