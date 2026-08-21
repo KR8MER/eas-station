@@ -8,6 +8,26 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.182.0] - 2026-08-21 - GPIO input action: Forward Last Alert
+
+### Added
+- **The `Forward Last Alert` GPIO input action is now implemented** (was a
+  placeholder enum value since v2.181.0). A physical button assigned this
+  action re-broadcasts whichever EAS message was most recently generated,
+  the same way a message's "Resend" button does: same live-broadcast
+  guard, same detached-subprocess launch
+  (`scripts/resend_eas_broadcast.py`) so GPIO is never keyed from inside
+  the web process.
+- New `app_core/audio/gpio_input_actions.py` (`forward_most_recent_alert()`)
+  -- finds the most recent `EASMessage` with stored audio via the
+  blob-deferred query pattern already used elsewhere on that model, so
+  the lookup never pulls a multi-megabyte audio blob into memory just to
+  find an ID. No-ops (logged, never raises) when nothing broadcastable
+  exists yet.
+- New tests in `tests/test_gpio_forward_last_alert.py` (4 tests): correct
+  message picked by recency, the broadcast-in-progress skip, the
+  no-broadcastable-message no-op, and the dispatch wiring.
+
 ## [2.181.0] - 2026-08-21 - GPIO input pins: framework + Run RWT Now
 
 ### Added

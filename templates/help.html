@@ -474,8 +474,12 @@
                                         <li><strong>Run RWT Now</strong> &mdash; the same action as the manual
                                             "Run Test Now" button on the RWT Schedule page. Skipped (and logged) if
                                             a broadcast is already in progress.</li>
-                                        <li><em>Forward Last Alert</em> and <em>Dump / Abort Broadcast</em> are
-                                            reserved for a future release and do nothing yet if selected.</li>
+                                        <li><strong>Forward Last Alert</strong> &mdash; re-broadcasts whichever EAS
+                                            message was most recently generated, the same way a message's "Resend"
+                                            button does. Skipped (and logged) if nothing broadcastable exists yet,
+                                            or if a broadcast is already in progress.</li>
+                                        <li><em>Dump / Abort Broadcast</em> is reserved for a future release and
+                                            does nothing yet if selected.</li>
                                         <li>Each action may only be assigned to <strong>one</strong> pin &mdash;
                                             assigning the same action to two pins is rejected when you save.</li>
                                         <li>Like the rest of GPIO configuration, a new or edited input pin takes

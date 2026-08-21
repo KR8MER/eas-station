@@ -432,8 +432,13 @@ pressed, rather than something the system energizes.
    - **Run RWT Now** — the same action as the manual "Run Test Now" button
      on the RWT Schedule page. Refused (logged, not run) if a broadcast is
      already in progress, the same guard the manual button uses.
-   - *Forward Last Alert* and *Dump / Abort Broadcast* are reserved for a
-     future release and not yet functional if selected.
+   - **Forward Last Alert** — re-broadcasts whichever EAS message was most
+     recently generated (by generation time, not by when it aired), the
+     same way the "Resend" button on a message's detail page does. Skipped
+     (logged) if nothing broadcastable has ever been generated, or if a
+     broadcast is already in progress.
+   - *Dump / Abort Broadcast* is reserved for a future release and not yet
+     functional if selected.
 3. Save and restart `eas-station-gpio` for the change to take effect (same
    "edit then restart" rule as every other GPIO setting on this page).
 
