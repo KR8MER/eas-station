@@ -8,6 +8,51 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.185.2] - 2026-08-21 - Poller no longer runs a duplicate copy of the web app's background workers
+
+### Fixed
+- **`eas-station-poller.service` was accidentally running a second,
+  independent copy of every one of the web app's background workers** --
+  the uptime heartbeat ping, backup/retention/auto-purge schedulers,
+  fail2ban sync, RWT scheduler, GPIO input listener, system metrics
+  sampler, and web-traffic recorder. Root cause: `poller/cap_poller.py`
+  does `from app import (db, CAPAlert, ...)` to reuse the web app's
+  SQLAlchemy models instead of maintaining a second copy -- but that import
+  executes `app.py`'s *entire* module body as a side effect (first import
+  wins), which is also where all of those workers get started, regardless
+  of whether `create_app()` is ever called. Confirmed live with a `py-spy`
+  stack dump on the running poller process: a thread literally named
+  `"HeartbeatWorker"` inside `cap_poller.py --continuous`, sending a
+  duplicate ping every 5 minutes alongside the two the web app's gunicorn
+  workers already send. Since the poller is a long-running `--continuous`
+  process that a `systemctl restart eas-station-web` never touches, this
+  duplicate could also keep executing stale, pre-deploy bytecode for hours
+  after a real fix shipped -- which is what made the 2.185.1 health-check
+  User-Agent fix (see below) initially look incomplete: the two gunicorn
+  workers were correctly fixed immediately, but the poller's duplicate kept
+  sending the unfixed `python-requests/2.32.5` default until it was
+  separately restarted.
+  `poller/cap_poller.py` now sets `SKIP_DB_INIT=1` (the same flag
+  `alembic/env.py` already uses for exactly this "import app.py for its
+  models, not its side effects" situation) immediately before importing
+  from `app`, so none of `app.py`'s `skip_background_services`-gated
+  workers start a second time. The poller's own dedicated schedulers (its
+  polling loop, its gated-alert scheduler) are untouched -- verified via a
+  fresh `py-spy` dump post-fix showing only the poller's own threads, and a
+  live polling cycle completing normally immediately after restart.
+- `app.py`'s `SKIP_DB_INIT` comment updated to document that it's a
+  general-purpose "don't start background services" flag for any script
+  importing `app.py` for its models, not just an Alembic-specific one.
+
+### Added
+- New `tests/test_cap_poller_skip_db_init.py` -- a structural regression
+  test asserting the `SKIP_DB_INIT` setdefault appears in the source
+  *before* the `from app import (...)` line that triggers `app.py`'s
+  execution, so a future edit can't silently reorder them back into the bug
+  (a live-import test isn't used here deliberately: even in the fixed
+  state, importing `cap_poller.py` has real side effects -- DB/Redis
+  connections, thread pool creation -- unsuitable for a fast unit test).
+
 ## [2.185.1] - 2026-08-21 - Outbound health checks now identify the station
 
 ### Fixed
