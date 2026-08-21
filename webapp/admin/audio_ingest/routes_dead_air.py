@@ -121,56 +121,17 @@ def audio_dead_air_acknowledge():
     pre-silenced.
     """
     try:
-        from app_core.config.redis_config import RedisChannels
-        from app_core.redis_client import get_redis_client
-
-        import json as _json
+        from app_core.audio.dead_air_alarm import acknowledge_dead_air
 
         payload = request.get_json(silent=True) or {}
         acknowledged = _as_bool(payload.get('acknowledged', True))
+        requested_episode = payload.get('episode')
 
-        client = get_redis_client()
-        if client is None:
-            return jsonify({'ok': False, 'error': 'Redis unavailable'}), 503
-
-        if not acknowledged:
-            client.delete(RedisChannels.DEAD_AIR_ACK_KEY)
-            logger.info("Dead-air acknowledgement cleared by operator")
-            return jsonify({'ok': True, 'acknowledged': False})
-
-        # An acknowledgement is only meaningful against a live alarm, and it
-        # is stored as that episode's id rather than a bare flag. Writing an
-        # unbound ack while nothing was wrong would sit in Redis for its
-        # whole TTL and silently mute the *next* outage -- the failure mode
-        # an alarm panel must never have.
-        raw = client.get(RedisChannels.DEAD_AIR_KEY)
-        if isinstance(raw, bytes):
-            raw = raw.decode('utf-8')
-        state = _json.loads(raw) if raw else {}
-        if not state.get('active'):
-            return jsonify({
-                'ok': False,
-                'error': 'No dead-air alarm is currently active',
-            }), 409
-
-        episode = state.get('episode')
-        if not episode:
-            return jsonify({
-                'ok': False,
-                'error': 'Alarm state carries no episode id; cannot acknowledge',
-            }), 409
-
-        requested = payload.get('episode')
-        if requested and requested != episode:
-            # The operator's page was showing an older outage.
-            return jsonify({
-                'ok': False,
-                'error': 'That alarm has already cleared; refresh to see current state',
-            }), 409
-
-        client.setex(RedisChannels.DEAD_AIR_ACK_KEY, 86400, episode)
-        logger.warning("Dead-air alarm acknowledged by operator (episode %s)", episode)
-        return jsonify({'ok': True, 'acknowledged': True, 'episode': episode})
+        result = acknowledge_dead_air(
+            acknowledged=acknowledged, requested_episode=requested_episode,
+        )
+        status = result.pop('status', 200 if result.get('ok') else 500)
+        return jsonify(result), status
     except Exception as exc:
         logger.exception("Dead-air acknowledge failed")
         return jsonify({'ok': False, 'error': str(exc)}), 500

@@ -437,6 +437,12 @@ pressed, rather than something the system energizes.
      same way the "Resend" button on a message's detail page does. Skipped
      (logged) if nothing broadcastable has ever been generated, or if a
      broadcast is already in progress.
+   - **Acknowledge Dead Air** — silences the dead-air rack buzzer, the same
+     way the Acknowledge button on the Audio Health dashboard does (the
+     tower light stays lit until audio actually returns). Station-wide:
+     acknowledgement is scoped to the current alarm episode, not a single
+     source, so the button needs no source selection. Skipped (logged) if
+     no dead-air alarm is currently active.
    - *Dump / Abort Broadcast* is reserved for a future release and not yet
      functional if selected.
 3. Save and restart `eas-station-gpio` for the change to take effect (same

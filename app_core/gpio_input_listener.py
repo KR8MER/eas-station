@@ -113,6 +113,10 @@ def _dispatch_input_action(event: dict) -> None:
         logger.info("GPIO input pin %s triggered: Forward Last Alert", pin)
         from app_core.audio.gpio_input_actions import forward_most_recent_alert
         forward_most_recent_alert()
+    elif action == GPIOInputAction.DEAD_AIR_ACK:
+        logger.info("GPIO input pin %s triggered: Acknowledge Dead Air", pin)
+        from app_core.audio.gpio_input_actions import acknowledge_dead_air_alarm
+        acknowledge_dead_air_alarm()
     elif action == GPIOInputAction.DUMP_BROADCAST:
         logger.info("GPIO input pin %s triggered Dump Broadcast (not yet implemented)", pin)
     else:

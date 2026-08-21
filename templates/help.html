@@ -478,6 +478,12 @@
                                             message was most recently generated, the same way a message's "Resend"
                                             button does. Skipped (and logged) if nothing broadcastable exists yet,
                                             or if a broadcast is already in progress.</li>
+                                        <li><strong>Acknowledge Dead Air</strong> &mdash; silences the dead-air rack
+                                            buzzer, the same way the Acknowledge button on the Audio Health dashboard
+                                            does (the tower light stays lit until audio actually returns).
+                                            Station-wide &mdash; acknowledgement is scoped to the current alarm
+                                            episode, not a single source, so no source selection is needed. Skipped
+                                            (and logged) if no dead-air alarm is currently active.</li>
                                         <li><em>Dump / Abort Broadcast</em> is reserved for a future release and
                                             does nothing yet if selected.</li>
                                         <li>Each action may only be assigned to <strong>one</strong> pin &mdash;
