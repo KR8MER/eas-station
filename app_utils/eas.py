@@ -161,6 +161,8 @@ def set_broadcast_active(
     duration_seconds: float,
     source: str = 'manual',
     identifier: str = '',
+    header_seconds: float = 0.0,
+    eom_seconds: float = 0.0,
 ) -> bool:
     """Record in Redis that an EAS broadcast is in progress.
 
@@ -171,6 +173,16 @@ def set_broadcast_active(
     It is carried in the marker so the GPIO subprocess — which now keys the
     relay off this marker rather than each producer keying its own controller —
     can record the originating alert in the GPIO activation audit log.
+
+    *header_seconds* / *eom_seconds* are elapsed-time thresholds (from the
+    start of the composite audio) marking the end of the SAME header burst
+    and the start of the EOM burst, respectively -- everything in between is
+    the narration/attention-tone phase. Each caller folds any pre-alert or
+    post-alert chime duration into these (chimes play immediately before the
+    header / after the EOM, so they read as part of those phases). Zero
+    means "unknown" -- the countdown overlay falls back to a plain,
+    phase-less countdown when either is 0, so older/partial callers degrade
+    gracefully rather than showing a wrong phase.
 
     Returns ``True`` when the marker was actually written to Redis, so callers
     can report whether the airchain was really signalled rather than assuming
@@ -189,6 +201,8 @@ def set_broadcast_active(
             'label': label or event_code or 'EAS Alert',
             'source': source,
             'identifier': identifier or '',
+            'header_seconds': float(header_seconds or 0.0),
+            'eom_seconds': float(eom_seconds or 0.0),
         })
         # TTL = duration + 60 s safety margin so stale entries self-expire
         ttl = max(60, int(duration_seconds) + 60)
@@ -3984,12 +3998,20 @@ class EASBroadcaster:
             _event_info.get('name', event_code) if isinstance(_event_info, dict) else event_code
         ) or 'EAS Alert'
         _bcast_source = 'forwarded' if is_forwarded else 'auto'
+        # Phase breakpoints for the countdown overlay -- see
+        # set_broadcast_active()'s docstring. This path has no chime
+        # support, so these are just the header/EOM burst durations.
+        _same_bytes = (segment_payload.get('same') or {}).get('wav_bytes')
+        _header_seconds = _wav_duration_seconds(_same_bytes) if _same_bytes else 0.0
+        _eom_seconds = _wav_duration_seconds(eom_bytes) if eom_bytes else 0.0
         set_broadcast_active(
             event_code=event_code or '',
             label=_event_label,
             duration_seconds=_duration_hint,
             source=_bcast_source,
             identifier=str(alert_identifier) if alert_identifier else '',
+            header_seconds=_header_seconds,
+            eom_seconds=_eom_seconds,
         )
 
         playout_start = time.monotonic()

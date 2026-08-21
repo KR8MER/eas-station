@@ -1288,6 +1288,18 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
         # GPIO-triggered Dump/Abort mid-broadcast can still send a compliant
         # EOM burst -- see the play_broadcast_audio() call below.
         eom_wav = activation.eom_audio_data
+        # Phase breakpoints for the countdown overlay -- see
+        # set_broadcast_active()'s docstring. Chime audio (when configured)
+        # plays immediately before the header / after the EOM, so its
+        # duration folds into those same two phases.
+        header_seconds = (
+            _wav_duration_seconds(activation.pre_chime_audio_data or b'')
+            + _wav_duration_seconds(activation.same_audio_data or b'')
+        )
+        eom_seconds = (
+            _wav_duration_seconds(eom_wav or b'')
+            + _wav_duration_seconds(activation.post_chime_audio_data or b'')
+        )
         if original_duration > max_activation_seconds:
             audio_data = truncate_wav_to_max_seconds(audio_data, eom_wav, max_activation_seconds)
             was_truncated = True
@@ -1345,6 +1357,8 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                 duration_seconds=playback_duration,
                 source='manual',
                 identifier=alert_id or '',
+                header_seconds=header_seconds,
+                eom_seconds=eom_seconds,
             )
 
             # Play audio via configured player command. The broadcast marker must

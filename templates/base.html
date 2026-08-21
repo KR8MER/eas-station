@@ -327,7 +327,10 @@
             <span style="width:18px;height:18px;border-radius:50%;background:#ff4d4d;box-shadow:0 0 18px #ff4d4d;animation:gbcPulse 1s infinite;"></span>
         </div>
         <div id="gboSource" style="font-size:.78rem;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:rgba(255,255,255,.55);margin-bottom:.75rem;">On Air</div>
-        <div id="gboEventName" style="font-size:1.6rem;font-weight:600;color:#fff;max-width:80vw;overflow:hidden;text-overflow:ellipsis;margin-bottom:1.5rem;"></div>
+        <div id="gboEventName" style="font-size:1.6rem;font-weight:600;color:#fff;max-width:80vw;overflow:hidden;text-overflow:ellipsis;margin-bottom:.5rem;"></div>
+        <div id="gboPhase" style="display:none;font-size:.85rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#ffc247;margin-bottom:1rem;">
+            <i class="fas fa-broadcast-tower me-2"></i><span id="gboPhaseText"></span>
+        </div>
         <div id="gboRemaining" style="font-size:5.5rem;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.03em;line-height:1;color:#fff;">—</div>
         <div style="margin-top:1rem;width:min(420px,80vw);background:rgba(255,255,255,.12);border-radius:6px;height:8px;overflow:hidden;">
             <div id="gboBar" style="height:100%;background:#ff4d4d;border-radius:6px;width:100%;transition:width 1s linear;"></div>
@@ -341,6 +344,14 @@
         </div>
         <div style="margin-top:1.5rem;font-size:.75rem;color:rgba(255,255,255,.45);max-width:560px;">
             Air-chain is under EAS Station™ control.  Do not initiate another alert until this transmission completes.
+        </div>
+        <button type="button" id="gboAbortBtn"
+                style="margin-top:1.75rem;position:relative;overflow:hidden;background:rgba(220,53,69,.15);border:2px solid #dc3545;color:#fff;border-radius:8px;padding:.85rem 2.25rem;font-size:.9rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none;">
+            <span id="gboAbortFill" style="position:absolute;inset:0;background:#dc3545;width:0%;z-index:0;"></span>
+            <span style="position:relative;z-index:1;"><i class="fas fa-hand-paper me-2"></i><span id="gboAbortLabel">Hold to Abort Broadcast</span></span>
+        </button>
+        <div style="margin-top:.6rem;font-size:.72rem;color:rgba(255,255,255,.45);max-width:420px;">
+            Press and hold for 3 seconds to forcibly stop this broadcast. The required End-of-Message tone is still sent.
         </div>
     </div>
 
@@ -420,6 +431,8 @@
         var _gbcInterval = null;
         var _gbcStart    = null;
         var _gbcDuration = 0;
+        var _gbcHeaderSeconds = 0;
+        var _gbcEomSeconds    = 0;
 
         function _fmt(s) {
             var m = Math.floor(s / 60);
@@ -434,6 +447,18 @@
                 case 'resend':    return 'Re-Transmission';
                 default:          return 'On Air';
             }
+        }
+
+        // Returns the current broadcast phase label for the given elapsed
+        // time, or null if this broadcast didn't publish phase breakpoints
+        // (header_seconds / eom_seconds are both 0 -- an older/partial
+        // caller), in which case the overlay falls back to a plain
+        // phase-less countdown rather than showing a wrong phase.
+        function _phaseLabel(elapsed) {
+            if (_gbcHeaderSeconds <= 0 && _gbcEomSeconds <= 0) return null;
+            if (elapsed < _gbcHeaderSeconds) return 'Sending Header';
+            if (_gbcEomSeconds > 0 && elapsed >= (_gbcDuration - _gbcEomSeconds)) return 'Sending EOM';
+            return 'Narration';
         }
 
         function _startGbc(state) {
@@ -456,11 +481,18 @@
             var modElap   = document.getElementById('gboElapsed');
             var modTot    = document.getElementById('gboTotal');
             var modEom    = document.getElementById('gboEom');
+            var modPhase     = document.getElementById('gboPhase');
+            var modPhaseText = document.getElementById('gboPhaseText');
 
             if (!overlay && !modal) return;
 
             _gbcStart    = state.start_ts * 1000;   // server gives Unix seconds
             _gbcDuration = state.duration_seconds || 0;
+            // 0 means "unknown" (an older/partial caller didn't send phase
+            // data) -- _phaseLabel() below returns null in that case and the
+            // phase row simply stays hidden, degrading to the plain countdown.
+            _gbcHeaderSeconds = state.header_seconds || 0;
+            _gbcEomSeconds    = state.eom_seconds || 0;
 
             var labelText = state.label || state.event_code || 'EAS Alert';
             var srcText   = _sourceLabel(state.source);
@@ -480,6 +512,7 @@
                 modTot.textContent    = _fmt(_gbcDuration);
                 modEom.style.display  = 'none';
                 modBar.style.background = '#ff4d4d';
+                if (modPhase) modPhase.style.display = 'none';
                 modal.style.display   = 'flex';
             }
 
@@ -500,6 +533,16 @@
                     modRem.textContent  = _fmt(remaining);
                     modBar.style.width  = pct + '%';
                     modRem.style.color  = remaining <= 10 ? '#ff4d4d' : '#fff';
+
+                    if (modPhase && modPhaseText) {
+                        var phase = _phaseLabel(elapsed);
+                        if (phase) {
+                            modPhaseText.textContent = phase;
+                            modPhase.style.display = 'block';
+                        } else {
+                            modPhase.style.display = 'none';
+                        }
+                    }
                 }
 
                 if (remaining <= 0) {
@@ -511,6 +554,9 @@
                     if (modal) {
                         modEom.style.display = 'block';
                         modBar.style.background = '#28a745';
+                        // The terminal banner above already says "End of
+                        // Message" -- redundant with the phase row.
+                        if (modPhase) modPhase.style.display = 'none';
                     }
                     clearInterval(_gbcInterval);
                     _gbcInterval = null;
@@ -525,7 +571,100 @@
             var modal = document.getElementById('globalBroadcastingOverlay');
             if (modal) modal.style.display = 'none';
             _gbcStart = null;
+            _gbcHeaderSeconds = 0;
+            _gbcEomSeconds    = 0;
+            _cancelAbortHold();
         }
+
+        // --- Web abort button: press-and-hold for 3 seconds -----------------
+        // Mirrors the physical GPIO Dump/Abort Broadcast input's 3-second
+        // hold safety requirement (a momentary bump/click must never be able
+        // to kill a live broadcast) with an on-screen equivalent: the fill
+        // bar only reaches 100% -- and only then does the abort fire -- after
+        // a continuous 3-second press. Releasing early resets it with no
+        // effect, same as releasing a physical button early.
+        var ABORT_HOLD_MS = 3000;
+        var _abortHoldTimer = null;
+        var _abortHoldStart = null;
+        var _abortInFlight  = false;
+
+        function _abortBtnEls() {
+            return {
+                btn:   document.getElementById('gboAbortBtn'),
+                fill:  document.getElementById('gboAbortFill'),
+                label: document.getElementById('gboAbortLabel'),
+            };
+        }
+
+        function _cancelAbortHold() {
+            if (_abortHoldTimer) { clearInterval(_abortHoldTimer); _abortHoldTimer = null; }
+            _abortHoldStart = null;
+            var els = _abortBtnEls();
+            if (els.fill) els.fill.style.width = '0%';
+            if (els.label && !_abortInFlight) els.label.textContent = 'Hold to Abort Broadcast';
+        }
+
+        function _startAbortHold() {
+            if (_abortInFlight || _abortHoldTimer) return;
+            var els = _abortBtnEls();
+            _abortHoldStart = Date.now();
+            _abortHoldTimer = setInterval(function () {
+                var heldMs = Date.now() - _abortHoldStart;
+                var pct = Math.min(100, (heldMs / ABORT_HOLD_MS) * 100);
+                if (els.fill) els.fill.style.width = pct + '%';
+                if (els.label) {
+                    els.label.textContent = 'Hold to Abort… ' + Math.ceil((ABORT_HOLD_MS - heldMs) / 1000) + 's';
+                }
+                if (heldMs >= ABORT_HOLD_MS) {
+                    clearInterval(_abortHoldTimer);
+                    _abortHoldTimer = null;
+                    _fireAbort();
+                }
+            }, 50);
+        }
+
+        function _fireAbort() {
+            _abortInFlight = true;
+            var els = _abortBtnEls();
+            if (els.label) els.label.textContent = 'Aborting…';
+            if (els.btn) els.btn.disabled = true;
+
+            fetch('/api/broadcast/abort', { method: 'POST' })
+                .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+                .then(function (result) {
+                    if (result.ok && result.data && result.data.success) {
+                        if (window.showToast) window.showToast('Broadcast aborted.', 'warning');
+                        // The state poll/WebSocket push will hide the overlay
+                        // once the marker clears -- no need to force it here.
+                    } else {
+                        var msg = (result.data && result.data.error) || 'Failed to abort broadcast.';
+                        if (window.showToast) window.showToast(msg, 'danger');
+                    }
+                })
+                .catch(function () {
+                    if (window.showToast) window.showToast('Failed to reach the server to abort the broadcast.', 'danger');
+                })
+                .finally(function () {
+                    _abortInFlight = false;
+                    if (els.btn) els.btn.disabled = false;
+                    _cancelAbortHold();
+                });
+        }
+
+        (function () {
+            var btn = document.getElementById('gboAbortBtn');
+            if (!btn) return;
+            btn.addEventListener('pointerdown', function (e) { e.preventDefault(); _startAbortHold(); });
+            btn.addEventListener('pointerup', _cancelAbortHold);
+            btn.addEventListener('pointerleave', _cancelAbortHold);
+            btn.addEventListener('pointercancel', _cancelAbortHold);
+            btn.addEventListener('keydown', function (e) {
+                if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); _startAbortHold(); }
+            });
+            btn.addEventListener('keyup', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') _cancelAbortHold();
+            });
+        })();
 
         // Subscribe to broadcast_state_update via the shared WebSocket module.
         // EASWebSocket is guaranteed to exist here because websocket.js loads

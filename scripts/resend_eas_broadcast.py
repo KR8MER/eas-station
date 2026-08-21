@@ -73,6 +73,12 @@ def _run(message_id: int, operator: str | None) -> int:
         # Needed so a GPIO-triggered Dump/Abort mid-resend can still send a
         # compliant EOM burst -- see play_broadcast_audio() below.
         eom_wav = message.eom_audio_data
+        # Phase breakpoints for the countdown overlay -- see
+        # set_broadcast_active()'s docstring. EASMessage has no chime
+        # columns (chimes are a ManualEASActivation/RWT-only feature), so
+        # these are just the header/EOM burst durations themselves.
+        header_seconds = _wav_duration_seconds(message.same_audio_data or b'')
+        eom_seconds = _wav_duration_seconds(eom_wav or b'')
 
         metadata = message.metadata_payload or {}
         event_code = metadata.get('event_code') or ''
@@ -123,6 +129,8 @@ def _run(message_id: int, operator: str | None) -> int:
                 duration_seconds=playback_duration,
                 source='resend',
                 identifier=str(message_id),
+                header_seconds=header_seconds,
+                eom_seconds=eom_seconds,
             )
 
             # Re-inject the stored composite audio into the live Icecast

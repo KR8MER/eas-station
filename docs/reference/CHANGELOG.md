@@ -8,6 +8,56 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.185.0] - 2026-08-21 - Broadcast overlay: phase indicator + web abort button
+
+### Added
+- **Broadcast phase indicator on the full-screen countdown overlay.** The
+  overlay now shows which phase a broadcast is in — *Sending Header*,
+  *Narration*, or *Sending EOM* — instead of just a flat countdown.
+  `app_utils/eas.py::set_broadcast_active()` gained two new optional
+  parameters, `header_seconds` and `eom_seconds` (elapsed-time thresholds
+  marking the end of the SAME header burst and the start of the EOM burst),
+  which all four broadcast paths (RWT, manual Send, resend, live/forwarded
+  alerts) now compute from the WAV segment durations they already have on
+  hand and pass through. Pre-/post-alert chime duration (where configured)
+  folds into the adjacent phase rather than getting a phase of its own,
+  since chimes play immediately before the header or after the EOM. Both
+  default to `0.0` ("unknown"), so a caller that doesn't supply them shows
+  the old plain countdown rather than a wrong phase — no breaking change for
+  any code that isn't touched by this release.
+- **"Hold to Abort Broadcast" button on the countdown overlay.** The
+  browser-side equivalent of holding a physical GPIO Dump/Abort Broadcast
+  input for 3 seconds: a press-and-hold gesture on the on-screen button
+  (fill-bar animation showing progress, releasing early cancels with no
+  effect) calls the new `POST /api/broadcast/abort` route
+  (`webapp/routes/broadcast_control.py`, gated on the `eas.cancel`
+  permission — Admin and Operator roles have it by default), which calls
+  the exact same `abort_current_broadcast()` the GPIO input dispatch loop
+  uses: interrupts the in-progress message but always attempts the required
+  EOM burst (47 CFR 11.61(a)) before releasing the relay, and writes an
+  audit ledger entry with the *logged-in operator's username* (rather than
+  the generic `gpio-input` operator a physical button records), so a
+  compliance review can see who ended the broadcast from the web UI.
+- New `tests/test_broadcast_phase_and_web_abort.py` (9 tests): phase
+  breakpoints round-trip through `set_broadcast_active()`/
+  `get_broadcast_state()` (including the `None`-vs-omitted-kwarg edge case),
+  and the abort route's permission gate, 409-when-idle case, 409-when-no-
+  trackable-PID case (the state marker said "active" but nothing was
+  published yet — a narrow timing window), 500-on-internal-failure case,
+  and that the audit-facing operator identity comes from the session.
+
+### Testing
+- Verified against real hardware in the lab: triggered a genuine RWT,
+  confirmed `header_seconds`/`eom_seconds` appear correctly in
+  `/api/broadcast/state` during playback (SAME burst ≈7.2s, EOM burst
+  ≈3.2s for a 14.4s RWT, matching its no-narration FCC-mandated shape), then
+  called the real `POST /api/broadcast/abort` route (via Flask's test
+  client with a genuine authenticated admin session, not a direct function
+  call) against the live broadcast and confirmed: the message was cut, the
+  EOM burst audibly played from a second `aplay` invocation, the relay
+  released only after that finished, and the audit ledger recorded
+  `username: 'admin'` with `eom_sent: true`.
+
 ## [2.184.1] - 2026-08-21 - Dump / Abort Broadcast: real-hardware fixes
 
 Real-hardware verification of 2.184.0's Dump/Abort Broadcast action (triggering
