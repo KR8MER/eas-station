@@ -244,9 +244,13 @@
                 <strong>Pin conflict{{ 's' if pin_conflicts|length > 1 else '' }} detected</strong>
                 <ul class="mb-0 mt-2">
                     {% for p in pin_conflicts %}
+                    {% set claim_names = [] %}
+                    {% for claim in p.hardware_reservations %}{% set _ = claim_names.append(claim.source) %}{% endfor %}
+                    {% if p.configured %}{% set _ = claim_names.append('a relay behavior (' ~ p.behaviors|join(', ') ~ ')') %}{% endif %}
+                    {% if p.reserved_active %}{% set _ = claim_names.append(p.reserved_for) %}{% endif %}
                     <li>
                         <strong>BCM {{ p.bcm }}</strong> (physical pin {{ p.physical }}) is claimed by more than one thing:
-                        {% for claim in p.hardware_reservations %}{{ claim.source }}{% if not loop.last %}, {% endif %}{% endfor %}{% if p.configured %}{% if p.hardware_reservations %}, and{% endif %} a relay behavior ({% for b in p.behaviors %}{{ b }}{% if not loop.last %}, {% endif %}{% endfor %}){% endif %}.
+                        {{ claim_names|join(', ') }}.
                         Repoint one of them in its settings page before relying on this pin.
                     </li>
                     {% endfor %}
@@ -462,8 +466,11 @@
                                         {% endif %}
                                         {% if pin.reserved_for %}
                                         <span class="badge bg-secondary-subtle text-body border me-1 mb-1"><i class="fas fa-lock me-1"></i>{{ pin.reserved_for }}</span>
+                                        {% if not pin.reserved_active %}
+                                        <span class="badge bg-light text-muted border me-1 mb-1">not active</span>
+                                        {% endif %}
                                         {% if pin.reserved_detail %}
-                                        <span class="text-muted d-block small">{{ pin.reserved_detail }}</span>
+                                        <span class="text-muted d-block small">{{ pin.reserved_detail }}{% if not pin.reserved_active %} &mdash; feature is currently disabled, so this wiring reservation doesn't block other uses of the pin.{% endif %}</span>
                                         {% endif %}
                                         {% endif %}
                                         {% for claim in pin.hardware_reservations %}

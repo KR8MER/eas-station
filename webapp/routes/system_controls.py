@@ -57,6 +57,24 @@ def _get_oled_enabled_status():
         return False
 
 
+def pin_reservation_is_active(reserved_for, oled_enabled):
+    """Whether a *fixed* physical-wiring reservation actually competes for its pin.
+
+    ``reserved_for`` (from ``app_utils.pi_pinout.PinDefinition``) is a static
+    label describing what a pin is soldered to on the Argon case -- it is
+    set whether or not that hardware feature is installed/enabled. Treating
+    it as an active claimant unconditionally causes a false-positive
+    conflict: e.g. BCM 14 is reserved for "Argon OLED module", so enabling
+    GPS or Zigbee on the Pi's default primary UART (which also lives on BCM
+    14) used to flag a conflict even with the OLED completely disabled.
+    """
+    if not reserved_for:
+        return False
+    if reserved_for == "Argon OLED module":
+        return bool(oled_enabled)
+    return True
+
+
 def register(app: Flask, logger) -> None:
     """Register system control routes on the Flask application."""
 
@@ -237,7 +255,7 @@ def register(app: Flask, logger) -> None:
 
         return reservations
 
-    def _build_pin_entry(pin_def, config_map, behavior_matrix, hardware_reservations):
+    def _build_pin_entry(pin_def, config_map, behavior_matrix, hardware_reservations, oled_enabled):
         entry = {
             "physical": pin_def.physical,
             "name": pin_def.name,
@@ -263,6 +281,8 @@ def register(app: Flask, logger) -> None:
 
             claims = hardware_reservations.get(pin_def.bcm, [])
             entry["hardware_reservations"] = claims
+            reserved_and_active = pin_reservation_is_active(pin_def.reserved_for, oled_enabled)
+            entry["reserved_active"] = reserved_and_active
             # Conflict when two hardware features claim the same pin, when a
             # hardware-claimed pin also has a relay behavior assigned to it,
             # or when it collides with a fixed reservation (e.g. the Argon
@@ -270,7 +290,7 @@ def register(app: Flask, logger) -> None:
             entry["conflict"] = (
                 len(claims) > 1
                 or (bool(claims) and entry["configured"])
-                or (bool(claims) and bool(pin_def.reserved_for))
+                or (bool(claims) and reserved_and_active)
             )
 
         return entry
@@ -286,8 +306,8 @@ def register(app: Flask, logger) -> None:
         for left_pin, right_pin in PIN_ROWS:
             rows.append(
                 {
-                    "left": _build_pin_entry(left_pin, config_map, behavior_matrix, hardware_reservations),
-                    "right": _build_pin_entry(right_pin, config_map, behavior_matrix, hardware_reservations),
+                    "left": _build_pin_entry(left_pin, config_map, behavior_matrix, hardware_reservations, oled_enabled),
+                    "right": _build_pin_entry(right_pin, config_map, behavior_matrix, hardware_reservations, oled_enabled),
                 }
             )
         return rows

@@ -8,6 +8,33 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.179.1] - 2026-08-21 - Fix false-positive GPIO Pin Map conflict on BCM 14
+
+### Fixed
+- **The GPIO Pin Map showed a conflict on BCM 14 whenever GPS or Zigbee was
+  enabled on the Pi's default primary UART, even with the Argon OLED
+  completely disabled and nothing else configured on the pin.** BCM 14 is
+  statically reserved for the Argon OLED module's wiring in
+  `app_utils/pi_pinout.py` -- true regardless of whether the OLED feature is
+  actually enabled -- but the pin map's conflict formula
+  (`_build_pin_entry()` in `webapp/routes/system_controls.py`) treated that
+  static label as a live claimant unconditionally. The equivalent
+  `oled_enabled` gate already existed on the relay-config validation side
+  (`app_utils/gpio/config_loaders.py`) but was never carried over to the
+  pin map. The conflict-detection formula now only counts the Argon OLED
+  reservation when `oled_enabled` is actually true, via a new standalone
+  `pin_reservation_is_active()` helper (with regression coverage in
+  `tests/test_gpio_pin_map_reservations.py`).
+- **The conflict banner also under-explained itself**: it enumerated the
+  dynamic hardware claims but never mentioned a fixed reservation (like the
+  Argon OLED wiring) even when that reservation was the second claimant
+  causing the conflict, so the message could say "claimed by more than one
+  thing" while naming only one. The banner and the "Reserved & system pins"
+  reference table now both surface the fixed reservation when it's part of
+  the conflict, and the reference table marks an inactive reservation as
+  "not active" so it's clear why a statically-reserved pin isn't blocking
+  anything.
+
 ## [2.179.0] - 2026-08-20 - Uptime diagnostics pack
 
 ### Added
