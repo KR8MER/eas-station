@@ -53,8 +53,8 @@ from their own globals.
 
 
 from .pin_types import (  # noqa: F401
-    GPIOActivationEvent, GPIOActivationType, GPIOBehavior, GPIOPinConfig,
-    GPIOState, GPIO_BEHAVIOR_LABELS, GPIO_BEHAVIOR_PULSE_DEFAULTS,
+    GPIOActivationEvent, GPIOActivationType, GPIOBehavior, GPIOInterlockGroup,
+    GPIOPinConfig, GPIOState, GPIO_BEHAVIOR_LABELS, GPIO_BEHAVIOR_PULSE_DEFAULTS,
     MAX_FLASH_INTERVAL_MS, MIN_FLASH_INTERVAL_MS,
     TRANSMIT_CAPABLE_BEHAVIORS,
 )
@@ -74,6 +74,7 @@ from .controller import (  # noqa: F401
 from .config_loaders import (  # noqa: F401
     _GPIO_SETTINGS_AVAILABLE, _stringify_behavior_matrix,
     get_gpio_settings, load_gpio_behavior_matrix_from_db,
+    load_gpio_interlock_groups_from_db,
     load_gpio_pin_configs_from_db, load_neopixel_config_from_db,
     load_tower_light_config_from_db, serialize_gpio_behavior_matrix,
 )

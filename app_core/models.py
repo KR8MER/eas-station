@@ -83,6 +83,7 @@ from ._models_alerts import (
 from ._models_admin import AdminSession, AdminUser, SystemLog
 from ._models_gating import AlertGatingSettings, GatedAlert
 from ._models_backup import BackupVerificationRun
+from ._models_gpio_interlocks import RelayInterlockGroup, RelayInterlockMember
 from ._models_heartbeat import HeartbeatSettings
 from ._models_polling import PollDebugRecord, PollHistory, PollerSettings
 from ._models_settings import (
@@ -180,6 +181,8 @@ __all__ = [
     "RadioReceiver",
     "RadioReceiverStatus",
     "ReceivedEASAlert",
+    "RelayInterlockGroup",
+    "RelayInterlockMember",
     "Role",
     "RWTScheduleConfig",
     "ScreenRotation",

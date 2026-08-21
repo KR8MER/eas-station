@@ -28,7 +28,7 @@ from app_utils.pi_pinout import ARGON_OLED_RESERVED_BCM, ARGON_OLED_RESERVED_PHY
 
 from .pin_types import (
     MAX_FLASH_INTERVAL_MS,
-    MIN_FLASH_INTERVAL_MS, GPIOBehavior, GPIOPinConfig,
+    MIN_FLASH_INTERVAL_MS, GPIOBehavior, GPIOInterlockGroup, GPIOPinConfig,
 )
 from .neopixel import (
     NeopixelConfig,
@@ -314,6 +314,55 @@ def load_gpio_behavior_matrix_from_db(logger=None, oled_enabled: bool = False) -
             matrix[pin] = behaviors
 
     return matrix
+
+
+def load_gpio_interlock_groups_from_db(logger=None) -> List[GPIOInterlockGroup]:
+    """Load relay interlock (mutual-exclusion) group definitions from the database.
+
+    Like the pin map and behavior matrix, this is read once at
+    ``GPIOController`` construction -- a group added or edited via the web UI
+    only takes effect after the ``eas-station-gpio`` service is restarted.
+
+    Returns an empty list (never raises) if the interlock tables aren't
+    available yet -- e.g. on a station that hasn't been migrated, or when
+    called outside an application context.
+    """
+    try:
+        from app_core.relay_interlocks import get_relay_interlock_groups
+    except ImportError:
+        if logger is not None:
+            logger.debug("Relay interlock module unavailable; skipping")
+        return []
+
+    try:
+        raw_groups = get_relay_interlock_groups(enabled_only=True)
+    except Exception as exc:
+        if logger is not None:
+            logger.warning("Failed to load relay interlock groups from database: %s", exc)
+        return []
+
+    groups: List["GPIOInterlockGroup"] = []
+    for raw in raw_groups:
+        pins = frozenset(int(p) for p in raw.get("pins", []) if p is not None)
+        if len(pins) < 2:
+            if logger is not None:
+                logger.warning(
+                    "Ignoring relay interlock group %r: needs 2+ member pins, has %d",
+                    raw.get("name"), len(pins),
+                )
+            continue
+        groups.append(
+            GPIOInterlockGroup(
+                name=raw.get("name") or "Unnamed group",
+                pins=pins,
+                force_deactivate_conflict=bool(raw.get("force_deactivate_conflict", False)),
+            )
+        )
+
+    if groups and logger is not None:
+        logger.info("Loaded %d relay interlock group(s) from database", len(groups))
+
+    return groups
 
 def load_tower_light_config_from_db(logger=None) -> Optional[TowerLightConfig]:
     """Load USB tower light configuration from the database.

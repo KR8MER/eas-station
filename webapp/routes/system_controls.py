@@ -41,6 +41,7 @@ from app_utils.gpio import (
     GPIOBehavior,
     GPIO_BEHAVIOR_LABELS,
     load_gpio_behavior_matrix_from_db,
+    load_gpio_interlock_groups_from_db,
     load_gpio_pin_configs_from_db,
 )
 from app_utils.pi_pinout import PIN_ROWS
@@ -55,6 +56,39 @@ def _get_oled_enabled_status():
         return oled_settings.get('enabled', False)
     except Exception:
         return False
+
+
+def _gpio_config_warnings(configured_pins, logger, interlock_groups=None):
+    """Return operator-readable warnings about the GPIO behavior matrix and
+    any relay interlock groups whose members share a hold-triggering behavior.
+
+    Reuses ``GPIOBehaviorManager.validate_configuration()`` -- the same
+    checks the GPIO subprocess runs at startup -- but without a controller,
+    so nothing here can touch the physical lines. Purely diagnostic; any
+    failure is swallowed so the caller's page still renders. Module-level
+    (not nested in ``register()``) so both the GPIO Control page and the
+    Relay Interlock Groups page can share it.
+    """
+    try:
+        from app_utils.gpio import GPIOBehaviorManager
+
+        oled_enabled = _get_oled_enabled_status()
+        matrix = load_gpio_behavior_matrix_from_db(logger, oled_enabled=oled_enabled)
+        interlock_groups = interlock_groups or []
+        if not matrix and not interlock_groups:
+            return []
+        manager = GPIOBehaviorManager(
+            controller=None,
+            pin_configs=configured_pins,
+            behavior_matrix=matrix,
+            logger=None,
+            interlock_groups=interlock_groups,
+        )
+        return list(manager.validate_configuration())
+    except Exception as exc:  # pragma: no cover - diagnostic only
+        if logger:
+            logger.debug("GPIO behavior/interlock validation skipped: %s", exc)
+        return []
 
 
 def pin_reservation_is_active(reserved_for, oled_enabled):
@@ -121,32 +155,10 @@ def register(app: Flask, logger) -> None:
         return pins, False
 
     def _behavior_matrix_warnings(configured_pins):
-        """Return operator-readable warnings about the GPIO behavior matrix.
-
-        Reuses ``GPIOBehaviorManager.validate_configuration()`` — the same
-        checks the GPIO subprocess runs at startup — but without a controller,
-        so nothing here can touch the physical lines.  Purely diagnostic; any
-        failure is swallowed so the control panel still renders.
-        """
-        try:
-            from app_utils.gpio import GPIOBehaviorManager
-
-            oled_enabled = _get_oled_enabled_status()
-            matrix = load_gpio_behavior_matrix_from_db(
-                route_logger, oled_enabled=oled_enabled
-            )
-            if not matrix:
-                return []
-            manager = GPIOBehaviorManager(
-                controller=None,
-                pin_configs=configured_pins,
-                behavior_matrix=matrix,
-                logger=None,
-            )
-            return list(manager.validate_configuration())
-        except Exception as exc:  # pragma: no cover - diagnostic only
-            route_logger.debug("GPIO behavior validation skipped: %s", exc)
-            return []
+        """Return operator-readable GPIO behavior/interlock warnings for the
+        control panel. Thin wrapper over the shared module-level helper."""
+        interlock_groups = load_gpio_interlock_groups_from_db(route_logger)
+        return _gpio_config_warnings(configured_pins, route_logger, interlock_groups)
 
     def _dynamic_hardware_reservations():
         """Return ``{bcm: [{\'source\', \'detail\'}, ...]}`` for GPIO pins claimed
@@ -472,12 +484,48 @@ def register(app: Flask, logger) -> None:
             }
         """
         try:
-            from app_core.gpio_commands import publish_gpio_command
+            from app_core.gpio_commands import get_pin_states, publish_gpio_command
 
             data = request.get_json(silent=True) or {}
             reason = data.get("reason", "Manual activation via web UI")
             activation_type = data.get("activation_type", "manual")
             operator = _get_current_user()
+
+            # Best-effort fast-fail: check the pin's interlock group membership
+            # against the last-published live-state snapshot so an obviously
+            # conflicting request gets an immediate, specific error instead of
+            # a silent no-op once the subprocess refuses it. This is racy by
+            # nature (the snapshot can be a moment stale) -- the authoritative,
+            # race-free guarantee is GPIOController.activate()'s own check
+            # under its lock; this only improves the UX for the common case.
+            interlock_groups = load_gpio_interlock_groups_from_db(route_logger)
+            conflicting_group = next((g for g in interlock_groups if pin in g.pins), None)
+            if conflicting_group is not None:
+                snapshot = get_pin_states()
+                active_by_pin = {
+                    p.get("pin"): p.get("is_active")
+                    for p in snapshot.get("pins", [])
+                }
+                conflicting_pin = next(
+                    (
+                        sibling for sibling in conflicting_group.pins
+                        if sibling != pin and active_by_pin.get(sibling)
+                    ),
+                    None,
+                )
+                if conflicting_pin is not None:
+                    return (
+                        jsonify(
+                            {
+                                "success": False,
+                                "error": (
+                                    f"Pin {pin} is interlocked with pin {conflicting_pin} "
+                                    f"(group '{conflicting_group.name}'), which is currently active."
+                                ),
+                            }
+                        ),
+                        409,
+                    )
 
             # The web process can't drive the pins directly — hand the command
             # to the eas-station-gpio subprocess that owns them.

@@ -24,7 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Optional
+from typing import Dict, FrozenSet, Optional
 
 
 
@@ -171,3 +171,17 @@ class GPIOPinConfig:
     flash_enabled: bool = False  # Enable flash/alternating pattern
     flash_interval_ms: int = 500  # Flash interval in milliseconds (default 500ms = 2Hz)
     flash_partner_pin: Optional[int] = None  # Partner pin for two-phase alternating pattern
+
+
+@dataclass(frozen=True)
+class GPIOInterlockGroup:
+    """A named mutual-exclusion group: at most one member pin may be active.
+
+    Loaded once at ``GPIOController`` construction from
+    ``app_core.relay_interlocks.get_relay_interlock_groups()`` -- like the
+    rest of GPIO config, group definitions require a service restart to take
+    effect (see ``load_gpio_interlock_groups_from_db``).
+    """
+    name: str
+    pins: FrozenSet[int]
+    force_deactivate_conflict: bool = False
