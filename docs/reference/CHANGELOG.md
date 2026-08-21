@@ -8,6 +8,38 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.181.0] - 2026-08-21 - GPIO input pins: framework + Run RWT Now
+
+### Added
+- **GPIO pins can now be configured as INPUTs**, not just relay outputs
+  (Admin → GPIO → Pin Map: select Input, then choose an action). The
+  entire `app_utils/gpio` stack was output-only before this; a pin is read
+  via `gpiozero.Button` (same library and debounce mechanism as the Argon
+  OLED's front-panel button) by a new `GPIOInputWatcher`, running inside
+  the `eas-station-gpio` subprocess. A press publishes an event on a new
+  Redis channel (`eas:gpio_input_events`); the main web app subscribes and
+  runs the actual action, since it — not the GPIO subprocess — owns things
+  like the RWT scheduler.
+- **First implemented action: Run RWT Now** — a physical button wired to
+  an input pin triggers the same `trigger_rwt_broadcast()` call, with the
+  same live-broadcast guard, as the existing manual "Run Test Now" button
+  on the RWT Schedule page.
+- The action enum ships complete (`Forward Last Alert`, `Dump / Abort
+  Broadcast` are defined values) so later phases don't need another
+  `gpio_pin_map` JSONB shape change, but only `Run RWT Now` is offered in
+  the UI and does anything today — the others are inert placeholders.
+- Validation at save time: an input pin cannot also carry an output
+  behavior, and each action may only be assigned to one pin — both
+  hard-blocked (`webapp/admin/hardware.py`'s new
+  `validate_gpio_input_pin_config()`), not just warned about.
+- No migration required — `direction`/`input_action`/`input_bounce_ms`
+  fields were added to the existing `gpio_pin_map` JSONB shape, the same
+  way `flash_partner_pin` was added previously.
+- New tests in `tests/test_gpio_input_watcher.py` (14 tests): button/queue
+  wiring, debounce pass-through, the publish/subscribe event round trip,
+  RWT dispatch (including the live-broadcast skip), config-loader parsing
+  with back-compat defaults, and the save-time validation.
+
 ## [2.180.0] - 2026-08-21 - Relay interlock groups (mutual exclusion)
 
 ### Added

@@ -29,7 +29,7 @@ Importing lgpio inside the gunicorn gevent web workers also stalls the event
 loop.  For both reasons the web app, the poller, the RWT scheduler, and the
 resend helper must **not** drive GPIO directly.
 
-Two flows replace direct keying:
+Three flows replace direct keying:
 
 * **Broadcast relay keying** happens automatically in the subprocess off the
   ``eas:broadcast_active`` marker every producer already publishes
@@ -38,6 +38,12 @@ Two flows replace direct keying:
 * **Operator-initiated manual control** (the GPIO Control page "test" buttons)
   publishes a command on :data:`GPIO_COMMAND_CHANNEL`; the subprocess consumes
   it and acts on its single owned controller.
+
+* **GPIO INPUT pins** (physical buttons/contact closures, read by
+  ``app_utils.gpio.input_watcher.GPIOInputWatcher``) run the reverse
+  direction: the subprocess publishes on :data:`GPIO_INPUT_EVENT_CHANNEL`
+  when a pin is triggered, and the web app (which owns the actions an input
+  can invoke -- e.g. running an RWT) subscribes and dispatches.
 
 The subprocess also publishes a snapshot of live pin states to
 :data:`GPIO_PIN_STATE_KEY` so the web UI can render current state without ever
@@ -56,6 +62,13 @@ GPIO_COMMAND_CHANNEL = "eas:gpio_commands"
 
 #: Redis key holding the latest pin-state snapshot published by the subprocess.
 GPIO_PIN_STATE_KEY = "eas:gpio_pin_states"
+
+#: Pub/sub channel the GPIO subprocess publishes on when a configured INPUT
+#: pin (a physical button/contact closure) is triggered. The web app
+#: subscribes and dispatches the named action (e.g. run an RWT). This is the
+#: reverse direction of GPIO_COMMAND_CHANNEL -- subprocess to web app,
+#: "something happened" rather than "do this".
+GPIO_INPUT_EVENT_CHANNEL = "eas:gpio_input_events"
 
 #: TTL (seconds) for the pin-state snapshot.  Longer than the subprocess
 #: heartbeat so a single missed publish doesn't blank the UI, short enough that
@@ -171,6 +184,31 @@ def dispatch_gpio_command(controller, command: Dict[str, Any], logger=None) -> b
     return False
 
 
+def publish_gpio_input_event(pin: int, action: str, timestamp: Optional[float] = None) -> int:
+    """Publish a GPIO input-pin trigger event for the web app to act on.
+
+    Mirrors :func:`publish_gpio_command`'s shape and error handling exactly,
+    just travelling in the opposite direction (subprocess -> web app).
+    Returns the number of subscribers that received the event.
+    """
+    try:
+        from app_core.redis_client import get_redis_client
+
+        client = get_redis_client()
+        if client is None:
+            return 0
+        payload = json.dumps(
+            {
+                "pin": pin,
+                "action": action,
+                "ts": timestamp if timestamp is not None else time.time(),
+            }
+        )
+        return int(client.publish(GPIO_INPUT_EVENT_CHANNEL, payload) or 0)
+    except Exception:
+        return 0
+
+
 def publish_pin_states(redis_client, states: List[Dict[str, Any]]) -> None:
     """Publish a snapshot of GPIO pin states for the web UI to read."""
     if redis_client is None:
@@ -215,11 +253,13 @@ def get_pin_states() -> Dict[str, Any]:
 
 __all__ = [
     "GPIO_COMMAND_CHANNEL",
+    "GPIO_INPUT_EVENT_CHANNEL",
     "GPIO_PIN_STATE_KEY",
     "GPIO_PIN_STATE_TTL",
     "VALID_ACTIONS",
     "publish_gpio_command",
     "dispatch_gpio_command",
+    "publish_gpio_input_event",
     "publish_pin_states",
     "get_pin_states",
 ]

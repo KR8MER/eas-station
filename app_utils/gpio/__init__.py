@@ -53,9 +53,10 @@ from their own globals.
 
 
 from .pin_types import (  # noqa: F401
-    GPIOActivationEvent, GPIOActivationType, GPIOBehavior, GPIOInterlockGroup,
-    GPIOPinConfig, GPIOState, GPIO_BEHAVIOR_LABELS, GPIO_BEHAVIOR_PULSE_DEFAULTS,
-    MAX_FLASH_INTERVAL_MS, MIN_FLASH_INTERVAL_MS,
+    GPIOActivationEvent, GPIOActivationType, GPIOBehavior, GPIOInputAction,
+    GPIOInterlockGroup, GPIOPinConfig, GPIOState, GPIO_BEHAVIOR_LABELS,
+    GPIO_BEHAVIOR_PULSE_DEFAULTS, GPIO_INPUT_ACTION_IMPLEMENTED,
+    GPIO_INPUT_ACTION_LABELS, MAX_FLASH_INTERVAL_MS, MIN_FLASH_INTERVAL_MS,
     TRANSMIT_CAPABLE_BEHAVIORS,
 )
 
@@ -69,6 +70,10 @@ from .backends import (  # noqa: F401
 
 from .controller import (  # noqa: F401
     GPIOController,
+)
+
+from .input_watcher import (  # noqa: F401
+    GPIOInputWatcher,
 )
 
 from .config_loaders import (  # noqa: F401

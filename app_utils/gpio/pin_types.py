@@ -88,6 +88,49 @@ class GPIOBehavior(Enum):
         return None
 
 
+class GPIOInputAction(Enum):
+    """Actions a GPIO INPUT pin (a physical button/contact closure) can trigger.
+
+    Unlike :class:`GPIOBehavior` (which drives an OUTPUT relay's lifecycle),
+    an input action is a one-shot trigger: the pin is read, not driven.
+    """
+
+    NONE = "none"
+    RUN_RWT = "run_rwt"
+    FORWARD_LAST_ALERT = "forward_last_alert"
+    DUMP_BROADCAST = "dump_broadcast"
+
+    @classmethod
+    def from_value(cls, value: str) -> Optional["GPIOInputAction"]:
+        """Convert a raw string into a :class:`GPIOInputAction` member."""
+
+        if not value:
+            return None
+
+        try:
+            return cls(value)
+        except ValueError:
+            normalized = str(value).strip().lower()
+            for member in cls:
+                if member.value == normalized:
+                    return member
+        return None
+
+
+#: Input actions actually implemented end-to-end. Kept separate from the enum
+#: itself so the enum can ship complete (avoiding another JSONB-shape touch
+#: per phase) while the UI/save-path only offers what currently works.
+GPIO_INPUT_ACTION_IMPLEMENTED = frozenset({GPIOInputAction.NONE, GPIOInputAction.RUN_RWT})
+
+
+GPIO_INPUT_ACTION_LABELS = {
+    GPIOInputAction.NONE: "None",
+    GPIOInputAction.RUN_RWT: "Run RWT Now",
+    GPIOInputAction.FORWARD_LAST_ALERT: "Forward Last Alert",
+    GPIOInputAction.DUMP_BROADCAST: "Dump / Abort Broadcast",
+}
+
+
 GPIO_BEHAVIOR_LABELS = {
     GPIOBehavior.DURATION_OF_ALERT: "Duration of Alert",
     GPIOBehavior.PLAYOUT: "Audio Playout",
@@ -171,6 +214,16 @@ class GPIOPinConfig:
     flash_enabled: bool = False  # Enable flash/alternating pattern
     flash_interval_ms: int = 500  # Flash interval in milliseconds (default 500ms = 2Hz)
     flash_partner_pin: Optional[int] = None  # Partner pin for two-phase alternating pattern
+    # Input-pin fields. A pin is an OUTPUT (relay, the default) unless
+    # direction == "input", in which case it is read (via GPIOInputWatcher)
+    # rather than driven, and the behavior/flash/watchdog fields above do not
+    # apply. Kept on the same dataclass rather than a parallel one so a single
+    # gpio_pin_map JSONB entry (and the same Pin Map UI row) can describe
+    # either kind -- mirrors how flash_partner_pin was added incrementally.
+    direction: str = "output"  # "output" or "input"
+    input_action: Optional[str] = None  # GPIOInputAction value; only meaningful when direction == "input"
+    input_bounce_ms: float = 50.0  # gpiozero Button bounce_time source, in ms
+    input_hold_confirm_seconds: Optional[float] = None  # only meaningful for DUMP_BROADCAST (Phase D)
 
 
 @dataclass(frozen=True)

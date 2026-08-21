@@ -31,12 +31,14 @@ from services.gpio.alert_indicators import (
 )
 from services.gpio.init import (
     initialize_gpio_controller,
+    initialize_gpio_input_watcher,
     initialize_neopixel_controller,
     initialize_tower_light_controller,
 )
 
 __all__ = [
     "initialize_gpio_controller",
+    "initialize_gpio_input_watcher",
     "initialize_neopixel_controller",
     "initialize_tower_light_controller",
     "update_alert_indicators",

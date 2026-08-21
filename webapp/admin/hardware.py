@@ -463,6 +463,57 @@ def gps_hat_config_txt_overlay():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+def validate_gpio_input_pin_config(pin_map: Dict[str, Any], behavior_matrix: Any) -> str:
+    """Validate GPIO INPUT pin configuration ahead of a hardware-settings save.
+
+    Two ways an input pin's configuration can be unambiguously wrong (not
+    just questionable, per the interlock cross-check's warn-don't-block
+    stance): it also carries an output behavior, or it duplicates an input
+    action already claimed by another pin. Returns a human-readable error
+    message if either is found, or an empty string if the config is clean.
+
+    A plain function (not a route) so it can be unit-tested without a Flask
+    request/app context.
+    """
+    if not isinstance(behavior_matrix, dict):
+        behavior_matrix = {}
+
+    input_pins_with_behaviors = [
+        pin_key for pin_key, cfg in pin_map.items()
+        if isinstance(cfg, dict)
+        and str(cfg.get('direction') or 'output').strip().lower() == 'input'
+        and behavior_matrix.get(pin_key)
+    ]
+    if input_pins_with_behaviors:
+        return (
+            "GPIO pin(s) "
+            f"{', '.join(sorted(input_pins_with_behaviors))} are configured as "
+            "INPUT but also have a behavior assigned. Behaviors only apply to "
+            "output relays -- remove the behavior or switch the pin to Output."
+        )
+
+    action_to_pins: Dict[str, list] = {}
+    for pin_key, cfg in pin_map.items():
+        if not isinstance(cfg, dict):
+            continue
+        if str(cfg.get('direction') or 'output').strip().lower() != 'input':
+            continue
+        action = str(cfg.get('input_action') or 'none').strip().lower()
+        if action and action != 'none':
+            action_to_pins.setdefault(action, []).append(pin_key)
+    duplicate_actions = {
+        action: pins for action, pins in action_to_pins.items() if len(pins) > 1
+    }
+    if duplicate_actions:
+        details = "; ".join(
+            f"'{action}' assigned to pins {', '.join(sorted(pins))}"
+            for action, pins in duplicate_actions.items()
+        )
+        return f"Each GPIO input action may only be assigned to one pin: {details}."
+
+    return ""
+
+
 @hardware_bp.route('/hardware/update', methods=['POST'])
 @require_permission('system.configure')
 def update_hardware():
@@ -635,6 +686,17 @@ def update_hardware():
             if not (1 <= p <= 65535):
                 p = 2947
             data['gps_gpsd_port'] = p
+
+        # GPIO input-pin validation. Input pins are a different axis from
+        # output relays (behaviors, interlock groups) -- catch the two ways
+        # they can be misconfigured before saving, rather than silently
+        # ignoring the mistake at runtime.
+        if 'gpio_pin_map' in data and isinstance(data['gpio_pin_map'], dict):
+            error = validate_gpio_input_pin_config(
+                data['gpio_pin_map'], data.get('gpio_behavior_matrix')
+            )
+            if error:
+                raise BadRequest(error)
 
         # Update settings
         settings = update_hardware_settings(data)

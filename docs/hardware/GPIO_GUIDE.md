@@ -417,6 +417,40 @@ sudo systemctl restart eas-station-gpio
 
 ---
 
+### GPIO Input Pins
+
+Most GPIO pins on this page are configured as **outputs** (relays the system
+drives). A pin can instead be configured as an **input** — a physical
+button or contact closure wired into the Pi that triggers an action when
+pressed, rather than something the system energizes.
+
+**Configuring an input pin** (**Admin → GPIO → Pin Map**):
+
+1. Select **Input** instead of **Output** for the pin (the behavior list is
+   replaced with an action list).
+2. Choose the action the pin should trigger. Currently implemented:
+   - **Run RWT Now** — the same action as the manual "Run Test Now" button
+     on the RWT Schedule page. Refused (logged, not run) if a broadcast is
+     already in progress, the same guard the manual button uses.
+   - *Forward Last Alert* and *Dump / Abort Broadcast* are reserved for a
+     future release and not yet functional if selected.
+3. Save and restart `eas-station-gpio` for the change to take effect (same
+   "edit then restart" rule as every other GPIO setting on this page).
+
+**How it works:** the `eas-station-gpio` subprocess reads the pin via
+`gpiozero.Button` (the same library and debounce mechanism the Argon OLED's
+front-panel button already uses) and publishes an event over Redis when
+pressed. The main web application — which owns the actions an input can
+invoke — subscribes and runs the action. Each input pin may only be assigned
+to **one** action; assigning the same action to two pins is rejected at save
+time.
+
+**Wiring:** an input pin needs a momentary switch or contact closure between
+the GPIO pin and ground (or 3.3V, depending on the `active_high` setting for
+that pin) — the same wiring pattern as any generic GPIO button.
+
+---
+
 ## 3. OLED Status Display
 
 The EAS Station™ now includes a dedicated OLED screen that displays real-time GPIO status information. This screen provides at-a-glance monitoring of GPIO pin activations, making it easy to verify that GPIO relays are functioning correctly.

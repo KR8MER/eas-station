@@ -454,6 +454,38 @@
                             </div>
                         </div>
 
+                        <!-- GPIO Input Pins -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="gpioInputHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#gpioInputCollapse">
+                                    <i class="fas fa-hand-pointer me-2"></i>GPIO Input Pins
+                                </button>
+                            </h2>
+                            <div id="gpioInputCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p>
+                                        A GPIO pin can be configured as an <strong>Input</strong> instead of an
+                                        Output relay &mdash; a physical button or contact closure wired into the
+                                        Pi that triggers an action when pressed. Configure this on
+                                        <strong>Admin &rarr; GPIO &rarr; Pin Map</strong>: select
+                                        <strong>Input</strong> for the pin, then choose its action.
+                                    </p>
+                                    <ul>
+                                        <li><strong>Run RWT Now</strong> &mdash; the same action as the manual
+                                            "Run Test Now" button on the RWT Schedule page. Skipped (and logged) if
+                                            a broadcast is already in progress.</li>
+                                        <li><em>Forward Last Alert</em> and <em>Dump / Abort Broadcast</em> are
+                                            reserved for a future release and do nothing yet if selected.</li>
+                                        <li>Each action may only be assigned to <strong>one</strong> pin &mdash;
+                                            assigning the same action to two pins is rejected when you save.</li>
+                                        <li>Like the rest of GPIO configuration, a new or edited input pin takes
+                                            effect only after restarting the <code>eas-station-gpio</code>
+                                            service.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Gated Alerts / Hold-Off Timer -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="gatedAlertsHeading">

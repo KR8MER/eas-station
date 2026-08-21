@@ -910,6 +910,18 @@ if not skip_background_services:
         logger.warning('RWT scheduler could not be started: %s', rwt_scheduler_error)
         print(f"[PID {os.getpid()}] RWT scheduler failed: {rwt_scheduler_error}", file=sys.stderr, flush=True)
 
+# Start GPIO input event listener (physical buttons/contact closures wired
+# to a GPIO input pin -- e.g. "Run RWT Now"). Started alongside the RWT
+# scheduler above since it dispatches straight into that same module.
+if not skip_background_services:
+    try:
+        from app_core.gpio_input_listener import start_gpio_input_listener
+        if not app.config.get('SETUP_MODE'):
+            start_gpio_input_listener(app)
+            logger.info('GPIO input event listener started')
+    except Exception as gpio_input_listener_error:
+        logger.warning('GPIO input event listener could not be started: %s', gpio_input_listener_error)
+
 # Start auto-backup scheduler
 if not skip_background_services:
     try:

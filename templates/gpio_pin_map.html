@@ -379,7 +379,33 @@
                     {% endif %}
                 </div>
 
-                <div class="behavior-grid mt-auto" aria-label="Behaviors for GPIO {{ pin.bcm }}">
+                <div class="direction-toggle mb-2" role="group" aria-label="Direction for GPIO {{ pin.bcm }}">
+                    <div class="btn-group btn-group-sm w-100" role="group">
+                        <input type="radio" class="btn-check direction-radio" autocomplete="off"
+                               name="pin{{ pin.bcm }}-direction"
+                               id="pin{{ pin.bcm }}-dir-output"
+                               data-bcm="{{ pin.bcm }}"
+                               value="output"
+                               {% if pin.direction != 'input' %}checked{% endif %}>
+                        <label class="btn btn-outline-secondary" for="pin{{ pin.bcm }}-dir-output">
+                            <i class="fas fa-upload me-1"></i>Output
+                        </label>
+
+                        <input type="radio" class="btn-check direction-radio" autocomplete="off"
+                               name="pin{{ pin.bcm }}-direction"
+                               id="pin{{ pin.bcm }}-dir-input"
+                               data-bcm="{{ pin.bcm }}"
+                               value="input"
+                               {% if pin.direction == 'input' %}checked{% endif %}>
+                        <label class="btn btn-outline-secondary" for="pin{{ pin.bcm }}-dir-input">
+                            <i class="fas fa-download me-1"></i>Input
+                        </label>
+                    </div>
+                </div>
+
+                <div class="behavior-grid mt-auto" data-bcm="{{ pin.bcm }}"
+                     aria-label="Behaviors for GPIO {{ pin.bcm }}"
+                     {% if pin.direction == 'input' %}style="display:none"{% endif %}>
                     <div class="form-check">
                         <input class="form-check-input behavior-radio" type="radio"
                                name="pin{{ pin.bcm }}-behavior"
@@ -407,6 +433,38 @@
                             {% if behavior.description %}
                             <small>{{ behavior.description }}</small>
                             {% endif %}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="behavior-grid input-action-grid mt-auto" data-bcm="{{ pin.bcm }}"
+                     aria-label="Input action for GPIO {{ pin.bcm }}"
+                     {% if pin.direction != 'input' %}style="display:none"{% endif %}>
+                    <div class="form-check">
+                        <input class="form-check-input input-action-radio" type="radio"
+                               name="pin{{ pin.bcm }}-input-action"
+                               id="pin{{ pin.bcm }}-action-none"
+                               data-bcm="{{ pin.bcm }}"
+                               data-action=""
+                               value=""
+                               {% if not pin.input_action or pin.input_action == 'none' %}checked{% endif %}>
+                        <label class="form-check-label behavior-label" for="pin{{ pin.bcm }}-action-none">
+                            <span>None</span>
+                            <small>Pin is read but triggers nothing</small>
+                        </label>
+                    </div>
+                    {% for action in input_action_options %}
+                    <div class="form-check">
+                        <input class="form-check-input input-action-radio" type="radio"
+                               name="pin{{ pin.bcm }}-input-action"
+                               id="pin{{ pin.bcm }}-action-{{ action.value }}"
+                               data-bcm="{{ pin.bcm }}"
+                               data-action="{{ action.value }}"
+                               value="{{ action.value }}"
+                               {% if pin.input_action == action.value %}checked{% endif %}>
+                        <label class="form-check-label behavior-label" for="pin{{ pin.bcm }}-action-{{ action.value }}">
+                            <span>{{ action.label }}</span>
                         </label>
                     </div>
                     {% endfor %}
@@ -590,7 +648,54 @@
         return matrix;
     }
 
-    function buildPinConfigMap(matrix) {
+    function collectInputPins() {
+        const inputPins = new Set();
+        document.querySelectorAll('.direction-radio:checked').forEach((radio) => {
+            if (radio.value === 'input' && radio.dataset.bcm) {
+                inputPins.add(radio.dataset.bcm);
+            }
+        });
+        return inputPins;
+    }
+
+    function collectInputActions() {
+        const actions = {};
+        document.querySelectorAll('.input-action-radio:checked').forEach((radio) => {
+            if (radio.dataset.bcm && radio.dataset.action) {
+                actions[radio.dataset.bcm] = radio.dataset.action;
+            }
+        });
+        return actions;
+    }
+
+    function updatePinDirectionUI(bcm) {
+        const selected = document.querySelector(`input[name="pin${bcm}-direction"]:checked`);
+        const isInput = !!selected && selected.value === 'input';
+        const behaviorGrid = document.querySelector(`.behavior-grid[data-bcm="${bcm}"]`);
+        const inputGrid = document.querySelector(`.input-action-grid[data-bcm="${bcm}"]`);
+        if (behaviorGrid) {
+            behaviorGrid.style.display = isInput ? 'none' : '';
+            if (isInput) {
+                // Switching to Input: clear any (now hidden) behavior selection
+                // so a stale checked radio doesn't leak into the saved matrix.
+                const noneRadio = document.getElementById(`pin${bcm}-none`);
+                if (noneRadio) { noneRadio.checked = true; }
+            }
+        }
+        if (inputGrid) {
+            inputGrid.style.display = isInput ? '' : 'none';
+            if (!isInput) {
+                const noneRadio = document.getElementById(`pin${bcm}-action-none`);
+                if (noneRadio) { noneRadio.checked = true; }
+            }
+        }
+    }
+
+    document.querySelectorAll('.direction-radio').forEach((radio) => {
+        radio.addEventListener('change', () => updatePinDirectionUI(radio.dataset.bcm));
+    });
+
+    function buildPinConfigMap(matrix, inputPins, inputActions) {
         const pinMap = { ...existingPinConfigMap };
 
         Object.keys(matrix).forEach((bcm) => {
@@ -605,13 +710,39 @@
                 flash_enabled: false,
                 flash_interval_ms: 500,
                 flash_partner_pin: null,
+                direction: 'output',
+                input_action: null,
+                input_bounce_ms: 50.0,
+                input_hold_confirm_seconds: null,
             };
         });
 
-        Object.keys(pinMap).forEach((bcm) => {
-            if (!matrix[bcm] && !existingPinConfigMap[bcm]) {
-                delete pinMap[bcm];
+        inputPins.forEach((bcm) => {
+            if (!pinMap[bcm]) {
+                pinMap[bcm] = {
+                    name: `GPIO Pin ${bcm}`,
+                    active_high: true,
+                    hold_seconds: 5.0,
+                    watchdog_seconds: 300.0,
+                    flash_enabled: false,
+                    flash_interval_ms: 500,
+                    flash_partner_pin: null,
+                    direction: 'input',
+                    input_action: null,
+                    input_bounce_ms: 50.0,
+                    input_hold_confirm_seconds: null,
+                };
             }
+        });
+
+        Object.keys(pinMap).forEach((bcm) => {
+            const keep = matrix[bcm] || inputPins.has(bcm) || existingPinConfigMap[bcm];
+            if (!keep) {
+                delete pinMap[bcm];
+                return;
+            }
+            pinMap[bcm].direction = inputPins.has(bcm) ? 'input' : 'output';
+            pinMap[bcm].input_action = inputPins.has(bcm) ? (inputActions[bcm] || null) : null;
         });
 
         return pinMap;
@@ -624,7 +755,9 @@
         saveButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving';
 
         const matrix = buildBehaviorMatrix();
-        const pinConfigMap = buildPinConfigMap(matrix);
+        const inputPins = collectInputPins();
+        const inputActions = collectInputActions();
+        const pinConfigMap = buildPinConfigMap(matrix, inputPins, inputActions);
 
         const payload = {
             gpio_behavior_matrix: Object.keys(matrix).length ? JSON.stringify(matrix) : '{}',
