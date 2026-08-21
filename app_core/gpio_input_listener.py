@@ -110,7 +110,9 @@ def _dispatch_input_action(event: dict) -> None:
         logger.info("GPIO input pin %s triggered: Run RWT Now", pin)
         _trigger_rwt_from_input()
     elif action == GPIOInputAction.FORWARD_LAST_ALERT:
-        logger.info("GPIO input pin %s triggered Forward Last Alert (not yet implemented)", pin)
+        logger.info("GPIO input pin %s triggered: Forward Last Alert", pin)
+        from app_core.audio.gpio_input_actions import forward_most_recent_alert
+        forward_most_recent_alert()
     elif action == GPIOInputAction.DUMP_BROADCAST:
         logger.info("GPIO input pin %s triggered Dump Broadcast (not yet implemented)", pin)
     else:

@@ -139,14 +139,14 @@ def test_none_action_pin_is_not_watched(patched_gpiozero):
 
 def test_not_yet_implemented_action_is_skipped(patched_gpiozero):
     config = GPIOPinConfig(
-        pin=24, name="Forward Button", direction="input",
-        input_action=GPIOInputAction.FORWARD_LAST_ALERT.value,
+        pin=24, name="Dump Button", direction="input",
+        input_action=GPIOInputAction.DUMP_BROADCAST.value,
     )
     watcher = GPIOInputWatcher([config], logger=None)
     watcher.start()
 
-    # FORWARD_LAST_ALERT is a real enum value but not in
-    # GPIO_INPUT_ACTION_IMPLEMENTED yet (Phase C) -- must not be wired up.
+    # DUMP_BROADCAST is a real enum value but not in
+    # GPIO_INPUT_ACTION_IMPLEMENTED yet (Phase D) -- must not be wired up.
     assert watcher.active_pin_count == 0
 
 

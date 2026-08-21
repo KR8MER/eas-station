@@ -120,7 +120,9 @@ class GPIOInputAction(Enum):
 #: Input actions actually implemented end-to-end. Kept separate from the enum
 #: itself so the enum can ship complete (avoiding another JSONB-shape touch
 #: per phase) while the UI/save-path only offers what currently works.
-GPIO_INPUT_ACTION_IMPLEMENTED = frozenset({GPIOInputAction.NONE, GPIOInputAction.RUN_RWT})
+GPIO_INPUT_ACTION_IMPLEMENTED = frozenset(
+    {GPIOInputAction.NONE, GPIOInputAction.RUN_RWT, GPIOInputAction.FORWARD_LAST_ALERT}
+)
 
 
 GPIO_INPUT_ACTION_LABELS = {
