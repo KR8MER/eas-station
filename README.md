@@ -348,17 +348,18 @@ Typical power draw at the reference Pi 5 build with SDR + GPS HAT: **~12 W**. Se
 | ✅ Done | SDR off-air verification with live waterfall and one-click IQ capture |
 | ✅ Done | RBDS / RDS decoder with full Group 1A / 7A / 13A / 15B parsing |
 | ✅ Done | MDC1200 / Quick-Call II / DTMF pre/post-alert signaling for LMR forwarding |
-| ✅ Done | Stratum 1 GPS-disciplined time source + dedicated GPS & Time Dashboard |
+| ✅ Done | Stratum 1 GPS-disciplined time source + dedicated GPS & Time Dashboard with historical trend charts (clock discipline, PPS jitter, satellites, SoC temperature) |
 | ✅ Done | Tamper-evident Ed25519-signed audit ledger with chain verification |
 | ✅ Done | RBAC, TOTP MFA, rate limiting, CSRF, HTTPS |
 | ⏳ Planned | Scoped API keys for external automation |
 | ✅ Done | Automated RWT/RMT scheduling and EAS Compliance dashboard |
-| ✅ Done | LED / OLED / VFD / NeoPixel / GPIO / Zigbee hardware integration |
+| ✅ Done | LED / OLED / VFD / NeoPixel / GPIO / Zigbee hardware integration, with a GPIO Pin Map that live-detects wiring conflicts |
 | ✅ Done | Settings Hub, web diagnostics, one-button upgrade, journalctl viewer |
-| 🔄 In Progress | Advanced relay control, multi-receiver coordination |
+| ✅ Done | Uptime & reliability diagnostics — hang watchdog, outbound dead-man's-switch heartbeat, backup-restore verification, clock/NTP drift monitoring, combined NOAA+IPAWS feed-loss alarm |
+| ✅ Done | Independent multi-receiver monitoring — per-receiver waterfall/spectrum/historical trends, per-source dead-air detection with independent thresholds |
+| 🔄 In Progress | Advanced relay control (grouping, interlocks) and automatic receiver failover |
 | 🔄 In Progress | FCC rulemaking engagement — [comments filed](https://www.fcc.gov/ecfs/search/search-filings/filing/1060881335987) in PS Docket No. 25-224 supporting software-defined EAS (a first step toward a possible certification path) |
-| ⏳ Planned | FCC Part 11 certification documentation track |
-| ⏳ Planned | Time-series performance graphs on the GPS & Time dashboard |
+| ✅ Done | FCC Part 11 rule-by-rule [compliance traceability matrix](docs/process/FCC_PART11_COMPLIANCE_MATRIX.md) and [certification-grade reliability plan](docs/process/certification_reliability_plan.md) — actual certification is still blocked pending the FCC rulemaking above, not by missing documentation |
 | ⏳ Planned | Cloud sync, mobile app, multi-site coordination |
 
 See the [Changelog](docs/reference/CHANGELOG.md) for details.
