@@ -37,7 +37,6 @@ window without any other process claiming the pins.
 
 import argparse
 import os
-import subprocess
 import sys
 import tempfile
 import time
@@ -55,6 +54,7 @@ def _run(message_id: int, operator: str | None) -> int:
     from app_utils.eas import (
         set_broadcast_active,
         clear_broadcast_active,
+        play_broadcast_audio,
         _wav_duration_seconds,
     )
     from app_utils.event_codes import EVENT_CODE_REGISTRY
@@ -69,6 +69,16 @@ def _run(message_id: int, operator: str | None) -> int:
         if not message.audio_data:
             logger.error('Resend aborted: EASMessage #%s has no stored audio', message_id)
             return 3
+
+        # Needed so a GPIO-triggered Dump/Abort mid-resend can still send a
+        # compliant EOM burst -- see play_broadcast_audio() below.
+        eom_wav = message.eom_audio_data
+        # Phase breakpoints for the countdown overlay -- see
+        # set_broadcast_active()'s docstring. EASMessage has no chime
+        # columns (chimes are a ManualEASActivation/RWT-only feature), so
+        # these are just the header/EOM burst durations themselves.
+        header_seconds = _wav_duration_seconds(message.same_audio_data or b'')
+        eom_seconds = _wav_duration_seconds(eom_wav or b'')
 
         metadata = message.metadata_payload or {}
         event_code = metadata.get('event_code') or ''
@@ -119,6 +129,8 @@ def _run(message_id: int, operator: str | None) -> int:
                 duration_seconds=playback_duration,
                 source='resend',
                 identifier=str(message_id),
+                header_seconds=header_seconds,
+                eom_seconds=eom_seconds,
             )
 
             # Re-inject the stored composite audio into the live Icecast
@@ -153,10 +165,15 @@ def _run(message_id: int, operator: str | None) -> int:
             if audio_player_cmd:
                 try:
                     command = list(audio_player_cmd) + [tmp_path]
-                    subprocess.run(command, check=False, timeout=float(playback_duration) + 30)
+                    # play_broadcast_audio() (not a bare subprocess.run()) so
+                    # a GPIO-triggered Dump/Abort can find this process's PID
+                    # and the isolated EOM burst -- see
+                    # app_core.audio.gpio_input_actions.abort_current_broadcast.
+                    play_broadcast_audio(
+                        command, logger=logger, eom_wav=eom_wav,
+                        timeout=float(playback_duration) + 30,
+                    )
                     audio_played = True
-                except subprocess.TimeoutExpired:
-                    logger.warning('Resend audio playback timed out for message %s', message_id)
                 except Exception as exc:
                     logger.warning('Resend audio playback failed: %s', exc)
 

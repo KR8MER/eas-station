@@ -28,7 +28,6 @@ RWT broadcasts according to configured schedules.
 import logging
 import os
 import random
-import subprocess
 import tempfile
 import threading
 import time
@@ -46,6 +45,7 @@ from app_utils.eas import (
     clear_broadcast_active,
     load_eas_config,
     manual_default_same_codes,
+    play_broadcast_audio,
     samples_to_wav_bytes,
     set_broadcast_active,
     truncate_wav_to_max_seconds,
@@ -226,6 +226,8 @@ def _drive_rwt_airchain(
     activation_record: ManualEASActivation,
     composite_wav: Optional[bytes],
     eom_wav: Optional[bytes],
+    header_seconds: float,
+    eom_seconds: float,
     eas_config: Dict[str, Any],
     log: logging.Logger,
 ) -> bool:
@@ -270,6 +272,8 @@ def _drive_rwt_airchain(
             duration_seconds=playback_duration,
             source='automated_rwt',
             identifier=alert_id,
+            header_seconds=header_seconds,
+            eom_seconds=eom_seconds,
         )
 
         audio_player_cmd = eas_config.get('audio_player_cmd')
@@ -288,11 +292,16 @@ def _drive_rwt_airchain(
                 # global max.  A hung player (busy/blocked audio device,
                 # stalled network sink) must never keep this worker — and
                 # therefore the on-air overlay — blocked past the broadcast.
-                subprocess.run(
-                    command, check=False, timeout=float(playback_duration) + 30,
+                # play_broadcast_audio() (not a bare subprocess.run()) so a
+                # GPIO-triggered Dump/Abort can find this process's PID and
+                # the isolated EOM burst (already embedded at the end of
+                # this composite, but needed separately in case abort kills
+                # playback before reaching it) -- see
+                # app_core.audio.gpio_input_actions.abort_current_broadcast.
+                play_broadcast_audio(
+                    command, logger=log, eom_wav=eom_wav,
+                    timeout=float(playback_duration) + 30,
                 )
-            except subprocess.TimeoutExpired:
-                log.warning("Audio playback timed out for RWT %s", alert_id)
             except Exception as exc:
                 log.warning("Audio playback failed for RWT %s: %s",
                             alert_id, exc)
@@ -329,6 +338,8 @@ def _dispatch_rwt_airchain(
     activation_id: int,
     composite_wav: Optional[bytes],
     eom_wav: Optional[bytes],
+    header_seconds: float,
+    eom_seconds: float,
     eas_config: Dict[str, Any],
     log: logging.Logger,
 ) -> threading.Thread:
@@ -365,6 +376,8 @@ def _dispatch_rwt_airchain(
                     activation_record=record,
                     composite_wav=composite_wav,
                     eom_wav=eom_wav,
+                    header_seconds=header_seconds,
+                    eom_seconds=eom_seconds,
                     eas_config=eas_config,
                     log=log,
                 )
@@ -497,6 +510,20 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
         pre_chime_wav = _wav('pre_chime_samples')
         post_chime_wav = _wav('post_chime_samples')
 
+        # Phase breakpoints for the countdown overlay -- see
+        # set_broadcast_active()'s docstring. Chime audio (when configured)
+        # plays immediately before the header / after the EOM, so its
+        # duration folds into those same two phases rather than needing a
+        # phase of its own.
+        header_seconds = (
+            _wav_duration_seconds(pre_chime_wav or b'')
+            + _wav_duration_seconds(same_wav or b'')
+        )
+        eom_seconds = (
+            _wav_duration_seconds(eom_wav or b'')
+            + _wav_duration_seconds(post_chime_wav or b'')
+        )
+
         components_payload: Dict[str, Any] = {}
         for component_key, sample_key, suffix, wav in (
             ('same', 'same_samples', 'same', same_wav),
@@ -608,6 +635,8 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
                 duration_seconds=broadcast_duration,
                 source='automated_rwt',
                 identifier=identifier,
+                header_seconds=header_seconds,
+                eom_seconds=eom_seconds,
             )
 
         # Drive the airchain: hold GPIO and play the composite WAV for the
@@ -630,6 +659,8 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
             activation_id=activation_id,
             composite_wav=composite_wav,
             eom_wav=eom_wav,
+            header_seconds=header_seconds,
+            eom_seconds=eom_seconds,
             eas_config=eas_config,
             log=log,
         )

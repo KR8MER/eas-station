@@ -468,6 +468,18 @@
                         </label>
                     </div>
                     {% endfor %}
+                    <div class="hold-confirm-field mt-1" data-bcm="{{ pin.bcm }}"
+                         {% if pin.input_action != 'dump_broadcast' %}style="display:none"{% endif %}>
+                        <label class="form-label small mb-1" for="pin{{ pin.bcm }}-hold-seconds">
+                            Hold time to confirm (seconds)
+                        </label>
+                        <input type="number" class="form-control form-control-sm hold-confirm-input"
+                               id="pin{{ pin.bcm }}-hold-seconds"
+                               data-bcm="{{ pin.bcm }}"
+                               min="1" max="10" step="0.5"
+                               value="{{ pin.input_hold_confirm_seconds or 3.0 }}">
+                        <div class="form-text">A momentary bump or contact bounce must not abort a live broadcast &mdash; the pin must be held this long before Dump/Abort fires.</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -668,6 +680,30 @@
         return actions;
     }
 
+    function collectHoldConfirmSeconds() {
+        const seconds = {};
+        document.querySelectorAll('.hold-confirm-input').forEach((input) => {
+            if (input.dataset.bcm) {
+                const value = parseFloat(input.value);
+                seconds[input.dataset.bcm] = Number.isFinite(value) ? value : 3.0;
+            }
+        });
+        return seconds;
+    }
+
+    function updateHoldConfirmVisibility(bcm) {
+        const selected = document.querySelector(`input[name="pin${bcm}-input-action"]:checked`);
+        const isDump = !!selected && selected.dataset.action === 'dump_broadcast';
+        const field = document.querySelector(`.hold-confirm-field[data-bcm="${bcm}"]`);
+        if (field) {
+            field.style.display = isDump ? '' : 'none';
+        }
+    }
+
+    document.querySelectorAll('.input-action-radio').forEach((radio) => {
+        radio.addEventListener('change', () => updateHoldConfirmVisibility(radio.dataset.bcm));
+    });
+
     function updatePinDirectionUI(bcm) {
         const selected = document.querySelector(`input[name="pin${bcm}-direction"]:checked`);
         const isInput = !!selected && selected.value === 'input';
@@ -689,13 +725,17 @@
                 if (noneRadio) { noneRadio.checked = true; }
             }
         }
+        // Programmatically checking a radio above doesn't fire 'change', so
+        // the hold-confirm field's own visibility needs an explicit re-sync
+        // or it can be left showing after a direction round-trip.
+        updateHoldConfirmVisibility(bcm);
     }
 
     document.querySelectorAll('.direction-radio').forEach((radio) => {
         radio.addEventListener('change', () => updatePinDirectionUI(radio.dataset.bcm));
     });
 
-    function buildPinConfigMap(matrix, inputPins, inputActions) {
+    function buildPinConfigMap(matrix, inputPins, inputActions, holdConfirmSeconds) {
         const pinMap = { ...existingPinConfigMap };
 
         Object.keys(matrix).forEach((bcm) => {
@@ -742,7 +782,10 @@
                 return;
             }
             pinMap[bcm].direction = inputPins.has(bcm) ? 'input' : 'output';
-            pinMap[bcm].input_action = inputPins.has(bcm) ? (inputActions[bcm] || null) : null;
+            const action = inputPins.has(bcm) ? (inputActions[bcm] || null) : null;
+            pinMap[bcm].input_action = action;
+            pinMap[bcm].input_hold_confirm_seconds =
+                action === 'dump_broadcast' ? (holdConfirmSeconds[bcm] ?? 3.0) : null;
         });
 
         return pinMap;
@@ -757,7 +800,8 @@
         const matrix = buildBehaviorMatrix();
         const inputPins = collectInputPins();
         const inputActions = collectInputActions();
-        const pinConfigMap = buildPinConfigMap(matrix, inputPins, inputActions);
+        const holdConfirmSeconds = collectHoldConfirmSeconds();
+        const pinConfigMap = buildPinConfigMap(matrix, inputPins, inputActions, holdConfirmSeconds);
 
         const payload = {
             gpio_behavior_matrix: Object.keys(matrix).length ? JSON.stringify(matrix) : '{}',

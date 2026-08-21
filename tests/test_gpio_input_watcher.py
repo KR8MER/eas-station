@@ -102,18 +102,10 @@ def test_press_enqueues_pin_and_action(patched_gpiozero):
     assert button.closed is True
 
 
-def test_dump_broadcast_uses_hold_not_press(patched_gpiozero, monkeypatch):
-    """DUMP_BROADCAST (Phase D, not yet implemented -- excluded from
-    GPIO_INPUT_ACTION_IMPLEMENTED so it's inert today) must arm via
-    when_held with a real hold_time, never when_pressed, once enabled --
-    a momentary bump must not trigger an abort. Temporarily allow it
-    through the implemented-action filter to exercise that wiring now,
-    ahead of Phase D actually shipping the action."""
-    monkeypatch.setattr(
-        input_watcher_module,
-        "GPIO_INPUT_ACTION_IMPLEMENTED",
-        frozenset({GPIOInputAction.NONE, GPIOInputAction.RUN_RWT, GPIOInputAction.DUMP_BROADCAST}),
-    )
+def test_dump_broadcast_uses_hold_not_press(patched_gpiozero):
+    """DUMP_BROADCAST must arm via when_held with a real hold_time, never
+    when_pressed -- a momentary bump or contact bounce must not be able to
+    abort a live broadcast."""
     config = GPIOPinConfig(
         pin=22, name="Dump Button", direction="input",
         input_action=GPIOInputAction.DUMP_BROADCAST.value,
@@ -137,16 +129,25 @@ def test_none_action_pin_is_not_watched(patched_gpiozero):
     assert _FakeButton.instances == []
 
 
-def test_not_yet_implemented_action_is_skipped(patched_gpiozero):
+def test_not_yet_implemented_action_is_skipped(patched_gpiozero, monkeypatch):
+    """Every real GPIOInputAction is implemented as of this test, so there's
+    no naturally-unimplemented action to exercise this with -- validate the
+    GPIO_INPUT_ACTION_IMPLEMENTED filter mechanism itself instead, by
+    temporarily excluding one, proving the watcher always respects whatever
+    that set contains rather than hardcoding assumptions about which
+    actions exist."""
+    monkeypatch.setattr(
+        input_watcher_module,
+        "GPIO_INPUT_ACTION_IMPLEMENTED",
+        frozenset({GPIOInputAction.NONE, GPIOInputAction.RUN_RWT}),
+    )
     config = GPIOPinConfig(
-        pin=24, name="Dump Button", direction="input",
-        input_action=GPIOInputAction.DUMP_BROADCAST.value,
+        pin=24, name="Forward Button", direction="input",
+        input_action=GPIOInputAction.FORWARD_LAST_ALERT.value,
     )
     watcher = GPIOInputWatcher([config], logger=None)
     watcher.start()
 
-    # DUMP_BROADCAST is a real enum value but not in
-    # GPIO_INPUT_ACTION_IMPLEMENTED yet (Phase D) -- must not be wired up.
     assert watcher.active_pin_count == 0
 
 

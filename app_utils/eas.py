@@ -21,6 +21,7 @@ from __future__ import annotations
 
 """Helpers for generating and broadcasting EAS-compatible audio output."""
 
+import base64
 import io
 import json
 import math
@@ -160,6 +161,8 @@ def set_broadcast_active(
     duration_seconds: float,
     source: str = 'manual',
     identifier: str = '',
+    header_seconds: float = 0.0,
+    eom_seconds: float = 0.0,
 ) -> bool:
     """Record in Redis that an EAS broadcast is in progress.
 
@@ -170,6 +173,16 @@ def set_broadcast_active(
     It is carried in the marker so the GPIO subprocess — which now keys the
     relay off this marker rather than each producer keying its own controller —
     can record the originating alert in the GPIO activation audit log.
+
+    *header_seconds* / *eom_seconds* are elapsed-time thresholds (from the
+    start of the composite audio) marking the end of the SAME header burst
+    and the start of the EOM burst, respectively -- everything in between is
+    the narration/attention-tone phase. Each caller folds any pre-alert or
+    post-alert chime duration into these (chimes play immediately before the
+    header / after the EOM, so they read as part of those phases). Zero
+    means "unknown" -- the countdown overlay falls back to a plain,
+    phase-less countdown when either is 0, so older/partial callers degrade
+    gracefully rather than showing a wrong phase.
 
     Returns ``True`` when the marker was actually written to Redis, so callers
     can report whether the airchain was really signalled rather than assuming
@@ -188,6 +201,8 @@ def set_broadcast_active(
             'label': label or event_code or 'EAS Alert',
             'source': source,
             'identifier': identifier or '',
+            'header_seconds': float(header_seconds or 0.0),
+            'eom_seconds': float(eom_seconds or 0.0),
         })
         # TTL = duration + 60 s safety margin so stale entries self-expire
         ttl = max(60, int(duration_seconds) + 60)
@@ -2464,12 +2479,175 @@ def truncate_wav_to_max_seconds(
     return output.getvalue()
 
 
-def _run_command(command: Sequence[str], logger) -> None:
+#: Redis key holding the PID of the currently-running playback subprocess,
+#: published by ``_run_command()`` while it's blocked in ``.wait()`` and read
+#: by ``app_core.audio.gpio_input_actions.abort_current_broadcast()`` to
+#: signal it. Not the same key/lifecycle as ``_BROADCAST_STATE_KEY`` -- that
+#: one describes the broadcast (label, duration, identifier) for the UI/GPIO
+#: relay-keying; this one is purely "which OS process is playing audio right
+#: now", scoped to the lifetime of a single subprocess call.
+_BROADCAST_PID_KEY = 'eas:broadcast_pid'
+
+#: Redis key holding the isolated EOM tone-burst WAV for whatever broadcast
+#: is currently in flight, published alongside the PID above. A GPIO-
+#: triggered abort kills the in-progress player but must still end with a
+#: compliant End-Of-Message burst per 47 CFR 11.61(a) -- this is how
+#: ``abort_current_broadcast()`` gets audio to play for that burst without
+#: reaching back into whichever caller (RWT scheduler, manual Send workflow,
+#: resend script, or the live/auto-forward path) happened to trigger it.
+_BROADCAST_EOM_KEY = 'eas:broadcast_eom_wav'
+
+#: Safety-expiry TTL, well beyond any plausible single broadcast's duration --
+#: a crash between setting this key and the `finally` clearing it must not
+#: leave a stale PID pointing at a long-dead (or worse, reused) process id
+#: forever.
+_BROADCAST_PID_TTL = 1800
+
+
+def _publish_broadcast_pid(pid: int, eom_wav: Optional[bytes] = None) -> None:
+    """Best-effort: a Redis hiccup here must never interrupt playback.
+
+    *eom_wav* is base64-encoded before storage: ``get_redis_client()``
+    returns a client configured with ``decode_responses=True`` (every other
+    key this module publishes is text), which UTF-8-decodes every value on
+    read -- raw WAV bytes are not valid UTF-8 and that decode raises,
+    silently discarded by ``get_broadcast_eom_audio()``'s own best-effort
+    ``except Exception: return None``. Base64 keeps the payload text-safe
+    for that same client.
+    """
     try:
-        subprocess.run(list(command), check=False)
+        from app_core.redis_client import get_redis_client
+        client = get_redis_client()
+        if client is not None:
+            client.set(_BROADCAST_PID_KEY, str(pid), ex=_BROADCAST_PID_TTL)
+            if eom_wav:
+                encoded = base64.b64encode(eom_wav).decode('ascii')
+                client.set(_BROADCAST_EOM_KEY, encoded, ex=_BROADCAST_PID_TTL)
+            else:
+                client.delete(_BROADCAST_EOM_KEY)
+    except Exception:
+        pass
+
+
+def _clear_broadcast_pid() -> None:
+    try:
+        from app_core.redis_client import get_redis_client
+        client = get_redis_client()
+        if client is not None:
+            client.delete(_BROADCAST_PID_KEY)
+            client.delete(_BROADCAST_EOM_KEY)
+    except Exception:
+        pass
+
+
+def get_broadcast_pid() -> Optional[int]:
+    """Return the PID of the currently-running playback subprocess, or
+    ``None`` if nothing is playing (or the marker expired/was never set)."""
+    try:
+        from app_core.redis_client import get_redis_client
+        client = get_redis_client()
+        if client is None:
+            return None
+        raw = client.get(_BROADCAST_PID_KEY)
+        if not raw:
+            return None
+        if isinstance(raw, bytes):
+            raw = raw.decode('utf-8')
+        return int(raw)
+    except Exception:
+        return None
+
+
+def get_broadcast_eom_audio() -> Optional[bytes]:
+    """Return the isolated EOM tone-burst WAV bytes for the broadcast
+    currently in flight, or ``None`` if nothing is playing / no EOM audio
+    was published for it. Read by
+    ``app_core.audio.gpio_input_actions.abort_current_broadcast()`` so a
+    GPIO-forced abort can still send a compliant EOM burst.
+
+    ``_publish_broadcast_pid()`` stores this base64-encoded (see its
+    docstring) -- decode back to raw WAV bytes here.
+    """
+    try:
+        from app_core.redis_client import get_redis_client
+        client = get_redis_client()
+        if client is None:
+            return None
+        raw = client.get(_BROADCAST_EOM_KEY)
+        if not raw:
+            return None
+        return base64.b64decode(raw)
+    except Exception:
+        return None
+
+
+def _run_command(
+    command: Sequence[str],
+    logger,
+    eom_wav: Optional[bytes] = None,
+    timeout: Optional[float] = None,
+) -> None:
+    """Run *command* to completion, publishing its PID (and, if given, the
+    isolated EOM tone-burst audio) while it runs.
+
+    Was a bare ``subprocess.run(...)`` until the GPIO "Dump/Abort Broadcast"
+    input action needed a way to signal a running playback process from a
+    different process. Behaviourally unchanged for every existing caller when
+    *timeout* is omitted: still blocks until the command exits, still
+    swallows and logs any exception rather than raising --
+    ``subprocess.Popen(...).wait()`` is functionally ``subprocess.run(...)``
+    with the PID observable in between. *timeout* additionally lets the three
+    other broadcast-playback call sites (RWT airchain, manual Send workflow,
+    resend script) route through here too -- on expiry the process is killed
+    and the timeout swallowed/logged, matching their prior
+    ``subprocess.run(..., timeout=...)`` + ``except TimeoutExpired`` handling.
+    The PID/EOM markers are always cleared in ``finally``, so a normal
+    completion (or a launch failure, or an exception mid-wait) never leaves a
+    stale entry for a later abort attempt to act on.
+    """
+    try:
+        process = subprocess.Popen(list(command))
     except Exception as exc:  # pragma: no cover - subprocess errors are logged
         if logger:
             logger.warning(f"Failed to run command {' '.join(command)}: {exc}")
+        return
+
+    _publish_broadcast_pid(process.pid, eom_wav=eom_wav)
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        if logger:
+            logger.warning(f"Command timed out after {timeout}s: {' '.join(command)}")
+        try:
+            process.kill()
+            process.wait()
+        except Exception:
+            pass
+    except Exception as exc:  # pragma: no cover - subprocess errors are logged
+        if logger:
+            logger.warning(f"Failed to run command {' '.join(command)}: {exc}")
+    finally:
+        _clear_broadcast_pid()
+
+
+def play_broadcast_audio(
+    command: Sequence[str],
+    logger=None,
+    eom_wav: Optional[bytes] = None,
+    timeout: Optional[float] = None,
+) -> None:
+    """Public entry point for launching a broadcast audio player while
+    tracking it for GPIO-triggered abort.
+
+    ``EASBroadcaster._play_audio()`` (the live/auto-forwarded alert path)
+    calls ``_run_command()`` directly since it lives in this module; the
+    other three playback call sites -- ``app_core.rwt_scheduler``
+    (RWT airchain), ``webapp.eas.workflow`` (manual Send), and
+    ``scripts/resend_eas_broadcast.py`` (resend/forward) -- call this
+    instead of their own inline ``subprocess.run(...)`` so every broadcast,
+    regardless of trigger, publishes its PID and EOM audio the same way.
+    """
+    _run_command(command, logger, eom_wav=eom_wav, timeout=timeout)
 
 
 #: ECIG §3.5.1 — recorded-audio download timeout cap (2 minutes).
@@ -3561,22 +3739,33 @@ class EASBroadcaster:
                 self.audio_generator.output_dir,
             )
 
-    def _play_audio(self, audio_path: str) -> None:
+    def _play_audio(self, audio_path: str, eom_wav: Optional[bytes] = None) -> None:
         cmd = self.config.get('audio_player_cmd')
         if not cmd:
             self.logger.debug('No audio player configured; skipping playback.')
             return
         command = list(cmd) + [audio_path]
         self.logger.info('Playing alert audio using %s', ' '.join(command))
-        _run_command(command, self.logger)
+        _run_command(command, self.logger, eom_wav=eom_wav)
 
     def _play_audio_or_bytes(
-        self, audio_path: Optional[str], fallback_bytes: Optional[bytes]
+        self,
+        audio_path: Optional[str],
+        fallback_bytes: Optional[bytes],
+        eom_wav: Optional[bytes] = None,
     ) -> None:
         """Play audio from ``audio_path`` if it exists, otherwise write
-        ``fallback_bytes`` to a temporary file and play from there."""
+        ``fallback_bytes`` to a temporary file and play from there.
+
+        *eom_wav* is the isolated EOM tone-burst for this broadcast (already
+        embedded at the end of the composite audio being played here) --
+        published alongside the player's PID so a GPIO-triggered
+        Dump/Abort can still send a compliant EOM burst per 47 CFR 11.61(a)
+        if it kills this process mid-message, before the composite reaches
+        its own embedded EOM segment.
+        """
         if audio_path and os.path.exists(audio_path):
-            self._play_audio(audio_path)
+            self._play_audio(audio_path, eom_wav=eom_wav)
             return
         if fallback_bytes:
             if audio_path:
@@ -3587,7 +3776,7 @@ class EASBroadcaster:
             try:
                 os.write(fd, fallback_bytes)
                 os.close(fd)
-                self._play_audio(tmp_path)
+                self._play_audio(tmp_path, eom_wav=eom_wav)
             finally:
                 try:
                     os.unlink(tmp_path)
@@ -3809,12 +3998,20 @@ class EASBroadcaster:
             _event_info.get('name', event_code) if isinstance(_event_info, dict) else event_code
         ) or 'EAS Alert'
         _bcast_source = 'forwarded' if is_forwarded else 'auto'
+        # Phase breakpoints for the countdown overlay -- see
+        # set_broadcast_active()'s docstring. This path has no chime
+        # support, so these are just the header/EOM burst durations.
+        _same_bytes = (segment_payload.get('same') or {}).get('wav_bytes')
+        _header_seconds = _wav_duration_seconds(_same_bytes) if _same_bytes else 0.0
+        _eom_seconds = _wav_duration_seconds(eom_bytes) if eom_bytes else 0.0
         set_broadcast_active(
             event_code=event_code or '',
             label=_event_label,
             duration_seconds=_duration_hint,
             source=_bcast_source,
             identifier=str(alert_identifier) if alert_identifier else '',
+            header_seconds=_header_seconds,
+            eom_seconds=_eom_seconds,
         )
 
         playout_start = time.monotonic()
@@ -3841,7 +4038,7 @@ class EASBroadcaster:
             # SAME header (3x) → attention tone → TTS narration → EOM.
             # All segments are in a single uninterrupted audio file, so no
             # gap can appear between the narration and the EOM burst.
-            self._play_audio_or_bytes(audio_path, audio_bytes)
+            self._play_audio_or_bytes(audio_path, audio_bytes, eom_wav=eom_bytes)
 
             # Hold the broadcast marker for the full composite duration even if
             # playback returned early.  The marker's rising and falling edges are
@@ -3900,5 +4097,8 @@ __all__ = [
     'set_broadcast_active',
     'clear_broadcast_active',
     'get_broadcast_state',
+    'get_broadcast_pid',
+    'get_broadcast_eom_audio',
+    'play_broadcast_audio',
 ]
 

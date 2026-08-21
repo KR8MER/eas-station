@@ -127,6 +127,7 @@ GPIO_INPUT_ACTION_IMPLEMENTED = frozenset(
         GPIOInputAction.RUN_RWT,
         GPIOInputAction.FORWARD_LAST_ALERT,
         GPIOInputAction.DEAD_AIR_ACK,
+        GPIOInputAction.DUMP_BROADCAST,
     }
 )
 

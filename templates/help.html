@@ -484,8 +484,18 @@
                                             Station-wide &mdash; acknowledgement is scoped to the current alarm
                                             episode, not a single source, so no source selection is needed. Skipped
                                             (and logged) if no dead-air alarm is currently active.</li>
-                                        <li><em>Dump / Abort Broadcast</em> is reserved for a future release and
-                                            does nothing yet if selected.</li>
+                                        <li><strong>Dump / Abort Broadcast</strong> &mdash; forcibly stops whatever
+                                            is currently on air: terminates the playback process to cut the
+                                            in-progress message, then <strong>always plays the required
+                                            End-Of-Message tone burst before releasing the relay</strong>
+                                            (47 CFR 11.61(a) &mdash; an EAS message must never simply go silent).
+                                            Only after that EOM attempt completes does it release the transmitter
+                                            relay the same way a broadcast ending normally does, and write an entry
+                                            to the tamper-evident audit ledger (including whether the EOM burst
+                                            actually sent). No-ops (and logged) if nothing is currently playing.
+                                            <strong>Requires a sustained 3-second hold, not a tap</strong>
+                                            (configurable 1&ndash;10s per pin) &mdash; a momentary bump must never be
+                                            able to abort a live broadcast.</li>
                                         <li>Each action may only be assigned to <strong>one</strong> pin &mdash;
                                             assigning the same action to two pins is rejected when you save.</li>
                                         <li>Like the rest of GPIO configuration, a new or edited input pin takes
@@ -1199,6 +1209,38 @@
                                     <div class="alert alert-info">
                                         <i class="fas fa-map-marker-alt me-2"></i>
                                         <strong>Default Counties:</strong> Systems ship with Allen, Defiance, Hancock, Henry, Paulding, Van Wert, and Wood Counties in Ohio (FIPS codes 039003, 039039, 039063, 039069, 039125, 039161, 039173). Update the <em>Default RWT Counties</em> manager to write your own list into Location Settings—Quick RWT, the Broadcast Builder defaults, and the scheduler will all use it automatically.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Broadcast Countdown Overlay -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="broadcastOverlayHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#broadcastOverlayCollapse">
+                                    <i class="fas fa-tv me-2"></i>The Broadcast Countdown Screen
+                                </button>
+                            </h2>
+                            <div id="broadcastOverlayCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p>Whenever the station is on air &mdash; a manual send, an RWT, a resend, or an auto-forwarded alert &mdash; a full-screen overlay takes over every open browser tab so no one accidentally starts a second broadcast on top of the first. It shows the event name, a live countdown, and a progress bar.</p>
+
+                                    <h6><i class="fas fa-list-ol me-2"></i>Phase Indicator</h6>
+                                    <p>A small label above the countdown shows where the broadcast currently is:</p>
+                                    <ul>
+                                        <li><strong>Sending Header</strong> &mdash; the SAME data burst (repeated three times) is transmitting.</li>
+                                        <li><strong>Narration</strong> &mdash; the attention tone and/or spoken message (if any) is playing. RWTs skip this phase almost entirely, since 47 CFR &sect;11.61(a)(1)(ii) forbids a narration on a Required Weekly Test.</li>
+                                        <li><strong>Sending EOM</strong> &mdash; the End-Of-Message tone burst is transmitting.</li>
+                                    </ul>
+                                    <p class="text-muted small">The phase label only appears when the broadcast published its phase timing (every current broadcast path does); it stays hidden rather than showing a wrong phase if that data is ever missing.</p>
+
+                                    <h6 class="mt-3"><i class="fas fa-hand-paper me-2"></i>Aborting a Broadcast from the Screen</h6>
+                                    <p>A <strong>Hold to Abort Broadcast</strong> button sits below the countdown. Press and hold it for <strong>3 continuous seconds</strong> &mdash; the same sustained-hold safety requirement as the physical GPIO Dump/Abort input button, so a stray click or tap can never end a live broadcast. Releasing early cancels the hold with no effect.</p>
+                                    <p>Aborting cuts the in-progress message but always plays the required End-Of-Message tone burst (47 CFR &sect;11.61(a)) before releasing the transmitter relay, and writes an entry to the tamper-evident audit ledger recording who aborted it and whether the EOM burst actually sent. Requires the <strong>Cancel EAS Broadcasts</strong> permission (Admin and Operator roles have it by default).</p>
+
+                                    <div class="alert alert-light">
+                                        <i class="fas fa-microchip me-2"></i>
+                                        <strong>Same underlying action:</strong> This button calls the identical abort logic as a physically-held GPIO Dump/Abort Broadcast input pin &mdash; see <a href="{{ url_for('help_page') }}#gpioInputHeading">GPIO Input Triggers</a> for the hardware equivalent.
                                     </div>
                                 </div>
                             </div>
