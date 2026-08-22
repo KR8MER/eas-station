@@ -776,26 +776,52 @@ sudo systemctl restart eas-station</code></pre>
         // panel HTML keyed by receiver id, then restore it after the
         // ``container.innerHTML = html`` assignment below.
         //
-        // NOTE: `.trends-container`, `.waterfall-container` and
-        // `.spectrum-scope-container` are deliberately excluded here.
-        // Cloning innerHTML does not carry a `<canvas>`'s rendered bitmap
-        // (pixel data is never serialized into markup) or any
-        // addEventListener bindings on cloned elements (the zoom buttons'
-        // click handlers, the canvas's wheel/pointer gesture listeners) --
-        // a clone-and-restore swaps in a blank, disconnected canvas and
-        // visually-identical but completely inert buttons. That first broke
-        // the trends charts ("disappeared almost immediately"); the same
-        // defect later made the waterfall/scope zoom controls look like
-        // they did nothing ("buttons visible, clicking does nothing") once
-        // this file grew live zoom/pan gestures on those same canvases.
-        // Neither panel type needs this preservation mechanism at all: both
-        // already detect their own DOM replacement and rebuild themselves
-        // with fresh listeners on their own poll cadence --
-        // radio_diagnostics_trends.js watches the receivers container for
-        // its children being replaced (see trendsRebuildActive()), and
-        // liveSpectrumTick() checks `!state.canvas.isConnected` every
-        // 500 ms. Only `.diagnostic-container` (plain text/table content,
-        // no canvas, no listeners) is safe to innerHTML-preserve.
+        // NOTE: `.trends-container` is deliberately excluded here. Cloning
+        // innerHTML does not carry a `<canvas>`'s rendered bitmap (pixel
+        // data is never serialized into markup) or any addEventListener
+        // bindings on cloned elements -- a clone-and-restore swaps in a
+        // blank, disconnected canvas and visually-identical but completely
+        // inert controls. That is exactly what first broke the trends
+        // charts ("disappeared almost immediately") back when this
+        // function tried to innerHTML-preserve them too. Only
+        // `.diagnostic-container` (plain text/table content, no canvas, no
+        // listeners) is safe to innerHTML-preserve; radio_diagnostics_trends.js
+        // instead watches the receivers container for its children being
+        // replaced (see trendsRebuildActive()) and rebuilds itself.
+        //
+        // `.waterfall-container` / `.spectrum-scope-container` need a third
+        // strategy, handled further down: neither innerHTML-cloning
+        // (breaks the canvas/listeners, as above) nor "just let
+        // liveSpectrumTick() notice and rebuild from scratch" is enough on
+        // its own. liveSpectrumTick() *does* repaint a torn-down panel
+        // within one 500 ms poll tick, but paying that teardown/rebuild
+        // cost on every single ~1 s auto-refresh (not just the rare case it
+        // was written for) has two visible costs:
+        //   1. The toggle button's label span (`data-live-wf-label` /
+        //      `data-scope-label`) lives in the action-button row, OUTSIDE
+        //      `.waterfall-container` -- it is baked into ``html`` above as
+        //      the static "off" text ("Live Waterfall" / "Spectrum Scope")
+        //      with no notion of the client-only `liveWaterfallState` Map.
+        //      liveSpectrumTick() rebuilds the canvas but never touches
+        //      this span, so on every refresh the button silently reverts
+        //      to looking stopped while the feed keeps running underneath
+        //      it -- operators see "Live Waterfall" (the off label) on a
+        //      waterfall that is actively updating, and re-clicking it
+        //      actually stops the still-running view.
+        //   2. Rebuilding hands the canvas a brand-new DOM node, so any
+        //      in-progress `pointerdown`-captured drag/pan gesture
+        //      (`zoomAttachGestures()`) is silently abandoned mid-drag --
+        //      the capture was taken on a node that is now gone. A
+        //      click-drag pan lasting longer than the ~1 s refresh cadence
+        //      (i.e. almost any deliberate pan) got cut short, which reads
+        //      as "zoom/pan doesn't work."
+        // The fix is the same idea as the diagnostic-panel preservation
+        // above, but moving the real node instead of cloning its markup:
+        // detach it before the innerHTML swap, drop it back into the
+        // freshly-rendered placeholder afterward. No clone, so the bitmap,
+        // the zoom/pan listeners and the history buffer all survive
+        // untouched; only the label span (not part of the moved node)
+        // needs an explicit re-sync.
         const preservedPanels = [];
         for (const panel of container.querySelectorAll('.diagnostic-container')) {
             // Fast-path: skip empty panels without touching innerHTML.
@@ -809,6 +835,19 @@ sudo systemctl restart eas-station</code></pre>
             });
         }
 
+        // Grab the real (listening, already-painted) waterfall/scope nodes
+        // for any receiver currently running one, before they get torn
+        // down by the innerHTML replace below.
+        const preservedLive = [];
+        for (const [recvId, liveState] of liveWaterfallState) {
+            if (liveState.waterfallActive && liveState.container && liveState.container.isConnected) {
+                preservedLive.push({ kind: 'waterfall', recvId, node: liveState.container });
+            }
+            if (liveState.scopeActive && liveState.scopeContainer && liveState.scopeContainer.isConnected) {
+                preservedLive.push({ kind: 'scope', recvId, node: liveState.scopeContainer });
+            }
+        }
+
         container.innerHTML = html;
 
         // Restore any preserved diagnostic panels.
@@ -819,6 +858,28 @@ sudo systemctl restart eas-station</code></pre>
             if (panel) {
                 panel.innerHTML = state.html;
                 if (state.display) panel.style.display = state.display;
+            }
+        }
+
+        // Drop the preserved waterfall/scope nodes into the freshly-built
+        // placeholders in their place, and re-sync the toggle button labels
+        // (see the NOTE above) so the button never lies about whether the
+        // view it controls is actually running.
+        for (const item of preservedLive) {
+            const selector = item.kind === 'waterfall'
+                ? `.waterfall-container[data-waterfall-for="${CSS.escape(item.recvId)}"]`
+                : `.spectrum-scope-container[data-scope-for="${CSS.escape(item.recvId)}"]`;
+            const placeholder = container.querySelector(selector);
+            if (placeholder) placeholder.replaceWith(item.node);
+        }
+        for (const [recvId, liveState] of liveWaterfallState) {
+            if (liveState.waterfallActive) {
+                const label = liveWfFindLabel(recvId);
+                if (label) label.textContent = 'Stop Live Waterfall';
+            }
+            if (liveState.scopeActive) {
+                const label = scopeFindLabel(recvId);
+                if (label) label.textContent = 'Stop Spectrum Scope';
             }
         }
     }
@@ -1476,17 +1537,21 @@ sudo systemctl restart eas-station</code></pre>
     // State management notes:
     //   * The receiver-detail panel is re-rendered roughly once a second
     //     by the WebSocket-driven `radio_status_update` listener (with a
-    //     15 s polling fallback). updateReceiverDetails() preserves
-    //     `.waterfall-container` innerHTML across re-renders, but that
-    //     only restores the *pixels* — the JS interval handle and ImageData
-    //     buffer live in this closure-scoped Map and survive the DOM swap.
-    //     On each tick we look up the live canvas by selector and, if the
-    //     DOM node was replaced, the resurrected one is empty so we
-    //     re-paint our entire history buffer onto it before drawing the
-    //     new row.
-    //   * History is stored as a single Uint8ClampedArray rather than a
-    //     list of rows so we can `set()` whole slices for the scroll-up
-    //     step (which is the hot path at 2 Hz).
+    //     15 s polling fallback). updateReceiverDetails() moves the real
+    //     `.waterfall-container` / `.spectrum-scope-container` DOM node
+    //     (canvas bitmap, zoom/pan listeners and all) out before that
+    //     re-render and back into the freshly-built placeholder afterward
+    //     — see the NOTE in updateReceiverDetails() for why cloning
+    //     innerHTML instead is not an option. The JS interval handle and
+    //     history buffer live in this closure-scoped Map regardless, and
+    //     always survive the DOM swap either way. liveSpectrumTick() below
+    //     still separately re-checks `!state.canvas.isConnected` on every
+    //     poll as a fallback for cases updateReceiverDetails() can't cover
+    //     (e.g. the very first tick after Start, before any DOM node has
+    //     been preserved) — if the node it finds was already replaced, it
+    //     re-paints the whole history buffer onto the resurrected canvas.
+    //   * History is stored as raw quantised per-bin values, not finished
+    //     pixels — see the comment on `liveWfResizeBuffer()`.
     //
     // Spectrum Scope shares this same state Map and polling loop (see
     // "Spectrum Scope" section below) — each entry tracks independent

@@ -591,7 +591,7 @@ function showRoleDetails(role) {
     const data = details[role];
     let html = `
         <div class="modal fade" id="roleModal" tabindex="-1">
-            <div class="modal-dialog modal-lg">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
                 <div class="modal-content">
                     <div class="modal-header bg-${data.color} text-white">
                         <h5 class="modal-title"><i class="fas fa-${data.icon}"></i> ${data.title}</h5>

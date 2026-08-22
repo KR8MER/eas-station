@@ -8,6 +8,44 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.185.3] - 2026-08-22 - Fix live waterfall/scope zoom desync and unscrollable modals
+
+### Fixed
+- **The Live Waterfall / Spectrum Scope toggle buttons on Radio Diagnostics
+  silently reverted to their "off" label ("Live Waterfall") every ~1s while
+  the feed was still actively running**, and any click-drag pan gesture on
+  the waterfall/scope canvas longer than ~1s was silently cut short. Root
+  cause: the receiver detail panel is fully re-rendered from scratch on
+  every WebSocket `radio_status_update` push (roughly once a second), which
+  re-emitted the toggle button with its static off-label (the server-side
+  markup has no notion of the client-only `liveWaterfallState`) and handed
+  the canvas a brand-new DOM node each time, silently abandoning any
+  in-progress pointer-captured drag. `updateReceiverDetails()` in
+  `templates/admin/radio_diagnostics.html` now moves the real
+  `.waterfall-container` / `.spectrum-scope-container` DOM node (canvas
+  bitmap, zoom/pan listeners and all) out before the re-render and back
+  into the freshly-rendered placeholder afterward, and explicitly re-syncs
+  the toggle labels to the actual running state. Verified live against a
+  running SDR receiver: the toggle label now stays correct across dozens of
+  refresh cycles, and a deliberate multi-second drag-to-pan now completes
+  without the canvas being replaced mid-gesture.
+- **Modals with content taller than the viewport had no internal scrollbar**
+  and simply clipped off-screen, cutting off the Save/Cancel buttons in the
+  footer (reported via the Security Center's Traffic Collection Settings
+  modal, but the same gap existed repo-wide: 23 of the site's 35
+  `.modal-dialog` instances were missing Bootstrap's
+  `modal-dialog-scrollable` modifier, which the project's own
+  `static/css/styles.css` already has full, tested support for). Added
+  `modal-dialog-scrollable` to every modal missing it across
+  `templates/base.html`, `templates/admin.html`,
+  `templates/security_settings.html`, `templates/security/security_center.html`,
+  `templates/security/_traffic_content.html`, `templates/screens.html`,
+  `templates/screen_editor.html`, `templates/audio_history.html`,
+  `templates/gpio_control.html`, `templates/docs/rbac_visual.html`, and
+  `templates/admin/{local_authorities,tts_pronunciation,rbac_management,certbot,audio_archives,backups,network}.html`.
+  Header and footer now stay pinned in place with only the body scrolling
+  internally, matching Bootstrap's intended behavior for tall modal content.
+
 ## [2.185.2] - 2026-08-21 - Poller no longer runs a duplicate copy of the web app's background workers
 
 ### Fixed
