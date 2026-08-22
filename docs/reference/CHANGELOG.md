@@ -8,6 +8,40 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.185.6] - 2026-08-22 - Fix modals trapped below the backdrop (unclickable, unscrollable)
+
+### Fixed
+- **Four modals rendered completely unusable** -- visible, even appearing
+  to scroll, but every click landed on the backdrop instead of the
+  modal's own buttons, with no way to dismiss short of reloading the
+  page: `#trafficSettingsModal` (Security Center's Traffic Collection
+  Settings, reported live after the previous scrollable-modal fix still
+  didn't resolve it), `#envEditorModal` and `#editAlertModal` (Admin
+  Panel), and `#purgeModal` (Audio Archive). Root cause:
+  `static/css/styles.css`'s `.page-shell > *:not(.orb):not(.modal)` rule
+  gives every direct child of `<main class="page-shell">` its own
+  stacking context (`z-index: 1`) so page content can't bleed through the
+  sticky navbar; a `.modal` is excluded from that rule *only when it is
+  itself a direct child* of `.page-shell`. All four were instead nested
+  inside the page's `.container-fluid` wrapper (in `#trafficSettingsModal`'s
+  case, inside an `{% include %}`ed partial), inheriting that wrapper's
+  stacking context and rendering trapped below Bootstrap's body-level
+  backdrop (`z-index: 1040`) -- a pattern this codebase had already hit
+  and fixed once before, on `templates/admin/certbot.html`'s `#logModal`.
+  Moved each modal's markup to be a direct child of `{% block content %}`,
+  matching that existing fix. Verified live with real Playwright clicks
+  (not just computed-style checks, which is how this shipped unnoticed
+  the first time) confirming the actual close/cancel button -- not the
+  backdrop -- receives the click at its real screen position while the
+  modal is open.
+- Added `tests/test_modal_stacking.py`: a static, `{% include %}`-resolving
+  check over every page template that flags a `.modal` nested inside a
+  non-modal, non-`.orb` wrapper within `{% block content %}`, with a
+  documented allowlist for the one legitimate exception
+  (`#confirmationModal`, relocated to `<body>` at runtime by
+  `static/js/admin/core.js` before it can ever be shown). Catches this
+  exact bug class in CI for any modal added or moved in the future.
+
 ## [2.185.5] - 2026-08-22 - Theme readability audit: badges, invisible SAME codes, blank icons, off-screen dropdown
 
 ### Fixed
