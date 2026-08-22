@@ -54,7 +54,7 @@ The project's long-term goal is to be a credible, auditable, drop-in alternative
 
 ## 📸 Screenshot Tour
 
-A few of the web dashboards, captured from a running instance with sample alert data (Cosmo light theme — 19 other built-in themes ship in the box).
+A few of the web dashboards, captured from a running instance with sample alert data (Lightning theme — 19 other built-in themes ship in the box).
 
 | Operational Dashboard | Live Alert Timeline |
 |---|---|
