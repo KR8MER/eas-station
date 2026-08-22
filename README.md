@@ -54,7 +54,7 @@ The project's long-term goal is to be a credible, auditable, drop-in alternative
 
 ## 📸 Screenshot Tour
 
-A few of the web dashboards, captured from a running instance with sample alert data (Cosmo light theme — 19 other built-in themes ship in the box).
+A few of the web dashboards, captured from a running instance with sample alert data (Lightning theme — 19 other built-in themes ship in the box).
 
 | Operational Dashboard | Live Alert Timeline |
 |---|---|
@@ -76,10 +76,15 @@ A few of the web dashboards, captured from a running instance with sample alert 
 | [![GPS dashboard with polar sky plot and chrony tracking](docs/screenshots/gps-dashboard.jpg)](docs/screenshots/gps-dashboard.jpg) | [![System health dashboard with CPU, memory, disk and temperature](docs/screenshots/system-health.jpg)](docs/screenshots/system-health.jpg) |
 | **GPS & Time** — polar sky plot, `chronyc` tracking and per-PRN signal levels for stratum-1 NTP. | **System Health** — CPU / memory / disk / temperature with historical trends. |
 
-| Broadcast Builder | |
+| Security Center | Role-Based Access Control |
 |---|---|
-| [![Broadcast Builder console for composing manual SAME activations](docs/screenshots/broadcast-builder.jpg)](docs/screenshots/broadcast-builder.jpg) | |
-| **Broadcast Builder** — compose manual SAME activations, generate the audio package and review recent transmissions, with the station's originator / station ID / attention-tone settings shown inline. | |
+| [![Security Center showing traffic analytics, anomaly alerts and the global ban list](docs/screenshots/security-center.jpg)](docs/screenshots/security-center.jpg) | [![Role-based access control page showing Admin, Operator and Viewer role cards with permission counts](docs/screenshots/rbac.jpg)](docs/screenshots/rbac.jpg) |
+| **Security Center** — traffic analytics, anomaly detection (scanners, login brute-force, error spikes) and one global ban list enforced across every layer. | **RBAC** — Admin / Operator / Viewer roles with per-permission scoping, editable from the UI. |
+
+| Broadcast Builder | Theme Selector |
+|---|---|
+| [![Broadcast Builder console for composing manual SAME activations](docs/screenshots/broadcast-builder.jpg)](docs/screenshots/broadcast-builder.jpg) | [![Theme selector modal showing a grid of the 20 built-in themes with light/dark labels](docs/screenshots/theme-gallery.jpg)](docs/screenshots/theme-gallery.jpg) |
+| **Broadcast Builder** — compose manual SAME activations, generate the audio package and review recent transmissions, with the station's originator / station ID / attention-tone settings shown inline. | **Themes** — 20 built-in themes (11 light, 9 dark), each WCAG-AA audited; import/export custom themes as JSON. |
 
 ### Physical Displays
 
