@@ -8,6 +8,38 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.185.4] - 2026-08-22 - Fix OLED-absent memory leak that repeatedly OOM-killed services
+
+### Fixed
+- **`eas-station-displays.service` leaked memory at ~17 MB/s whenever the
+  Argon OLED panel was enabled in settings but not physically present (no
+  ACK from I2C address `0x3C`), triggering the kernel OOM-killer three
+  times in under an hour** (confirmed live: `13:02`, `13:26`, `13:51`,
+  each time after the process's RSS reached ~13 GB) and taking down
+  whatever else the kernel picked alongside it. Root cause:
+  `scripts/screen_manager.py`'s main loop runs at 60 FPS, and several
+  render paths (notably the scroll-animation tick,
+  `_update_active_oled_scroll()`) fall back to
+  `oled_module.oled_controller or initialise_oled_display(logger)` with no
+  throttle of their own -- when the controller is absent, that calls
+  `initialise_oled_display()` fresh on every single frame. Building the
+  display driver allocates a `width*height`-sized pixel offset/bitmask
+  table (`luma.oled`'s `ssd1306.__init__`, ~100-300 KB for a typical
+  128x64+ panel) *before* it ever reaches the I2C handshake that fails, so
+  each doomed attempt costs a real allocation, not a cheap syscall -- at
+  ~60/s this outpaced glibc/pymalloc ever trimming freed memory back to
+  the OS. (`_ensure_oled_button_listener()` in the same file already
+  throttles its own retries to every 5s for exactly this "loop runs at 60
+  FPS" hazard -- the scroll/render paths just never got the same
+  treatment.)
+  `initialise_oled_display()` in `app_core/oled.py` now caches a failed
+  probe for 5 seconds (module-level cooldown) before it will attempt the
+  hardware handshake again, protecting every caller uniformly instead of
+  requiring each call site to remember its own throttle. Verified live:
+  retry frequency dropped from ~60/s to 1/5s and RSS stayed flat (~270-281
+  MB, stable) over a monitored 30s window after the fix, versus climbing
+  ~52 MB every 3s before it.
+
 ## [2.185.3] - 2026-08-22 - Fix live waterfall/scope zoom desync and unscrollable modals
 
 ### Fixed

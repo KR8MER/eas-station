@@ -26,6 +26,7 @@ import math
 import os
 import threading
 import textwrap
+import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional
@@ -1451,6 +1452,27 @@ oled_button_device: Optional[Button] = None
 
 _oled_lock = threading.Lock()
 
+# Every caller that wants to render to the OLED falls back to
+# ``oled_module.oled_controller or initialise_oled_display(logger)`` -- if
+# the controller isn't up yet (or a prior attempt failed), it just calls
+# this function again. `screen_manager.py`'s main loop runs at 60 FPS and
+# several of those call sites (notably the scroll-animation tick) are on
+# the hot path with no throttle of their own -- when the OLED hardware is
+# genuinely absent, that hammered ArgonOLEDController's constructor up to
+# ~60x/second forever. Building the display driver on that path allocates
+# a `width*height`-sized pixel-offset/bitmask table (luma.oled's
+# ssd1306.__init__) *before* it ever reaches the I2C handshake that fails,
+# so each doomed attempt costs a real allocation, not a cheap syscall --
+# at 60/s this outpaced glibc/pymalloc ever trimming the freed memory back
+# to the OS and grew RSS by ~17 MB/s, OOM-killing the service (and
+# whatever else the kernel picked) three times in under an hour before
+# this was caught. Cache the failure here, once, so every caller is
+# protected -- not just the ones that remember to throttle themselves
+# (`_ensure_oled_button_listener()` already does its own 5s throttle for
+# the same reason; this makes that the default instead of an opt-in).
+_OLED_INIT_RETRY_INTERVAL_S = 5.0
+_oled_init_failed_until = 0.0
+
 
 def ensure_oled_button(log: Optional[logging.Logger] = None):
     """Initialise and return the OLED front-panel button if available.
@@ -1545,9 +1567,17 @@ def ensure_oled_button(log: Optional[logging.Logger] = None):
 def initialise_oled_display(log: Optional[logging.Logger] = None) -> Optional[ArgonOLEDController]:
     """Initialise the OLED controller if configuration permits."""
 
-    global OLED_AVAILABLE, oled_controller
+    global OLED_AVAILABLE, oled_controller, _oled_init_failed_until
 
     logger_ref = log or logger
+
+    # See the comment on `_oled_init_failed_until` above: callers on the
+    # 60 FPS screen-manager loop retry this every frame with no throttle of
+    # their own, so a hardware probe that is currently failing must be
+    # capped here rather than trusted to back off upstream.
+    now = time.monotonic()
+    if now < _oled_init_failed_until:
+        return None
 
     # Check if OLED is enabled in database settings
     oled_settings = {}
@@ -1601,6 +1631,7 @@ def initialise_oled_display(log: Optional[logging.Logger] = None) -> Optional[Ar
             logger_ref.error("Failed to initialise OLED display: %s", exc)
             OLED_AVAILABLE = False
             oled_controller = None
+            _oled_init_failed_until = time.monotonic() + _OLED_INIT_RETRY_INTERVAL_S
             return None
 
         oled_controller = controller
