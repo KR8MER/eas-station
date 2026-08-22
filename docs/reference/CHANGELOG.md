@@ -8,6 +8,23 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.186.0] - 2026-08-22 - Add Tickstem uptime-monitor integration
+
+### Added
+- **New Admin -> Tickstem Uptime Monitor page.** Manages an inbound Tickstem
+  uptime monitor (polling this box's public `/health` endpoint) directly
+  from the admin UI via Tickstem's bearer-token Monitors API -- create,
+  pause, resume, and delete the monitor, and view its recent check history,
+  without leaving EAS Station. Distinct from the existing outbound
+  dead-man's-switch Heartbeat page: that one pings *out* on a schedule
+  (works with any healthchecks.io-style receiver, no API key); this one is
+  Tickstem polling *in*, authenticated with an account API key
+  (`app_core/tickstem_client.py`, `TickstemSettings` model/
+  `tickstem_settings` table). The account API key is never returned to the
+  browser after being saved. Both the Heartbeat and new Tickstem pages were
+  also added to the navigation registry (System Health group) -- the
+  Heartbeat page previously had no menu entry at all.
+
 ## [2.185.8] - 2026-08-22 - Widen img-src CSP and fix heartbeat ping method
 
 ### Fixed
