@@ -1843,6 +1843,26 @@
         </div>
     </div>
 
+    {% endif %}
+
+    {% if not setup_mode %}
+    <!-- Keyboard Shortcuts Info -->
+    <div class="keyboard-shortcuts">
+        <i class="fas fa-keyboard"></i> Alt+1-8: Switch Tabs | Alt+R: Refresh | Alt+H: Help
+    </div>
+    {% endif %}
+</div><!-- /.container-fluid -->
+
+{% if not setup_mode %}
+<!-- Placed outside .container-fluid so these are direct children of
+     .page-shell -- the .page-shell > *:not(.orb):not(.modal) rule in
+     styles.css creates a stacking context (z-index: 1) on every direct
+     child except modals; nesting them inside .container-fluid trapped
+     both below the modal-backdrop (which Bootstrap appends to <body>
+     at z-index 1040) -- visible but unclickable and unscrollable, with
+     no way to dismiss short of reloading. See the identical fix on
+     templates/admin/certbot.html's #logModal and
+     templates/security/security_center.html's #trafficSettingsModal. -->
     <!-- Environment Config Editor Modal -->
     <div class="modal fade" id="envEditorModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
@@ -2001,15 +2021,7 @@
             </div>
         </div>
     </div>
-    {% endif %}
-
-    {% if not setup_mode %}
-    <!-- Keyboard Shortcuts Info -->
-    <div class="keyboard-shortcuts">
-        <i class="fas fa-keyboard"></i> Alt+1-8: Switch Tabs | Alt+R: Refresh | Alt+H: Help
-    </div>
-    {% endif %}
-</div><!-- /.container-fluid -->
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

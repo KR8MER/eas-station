@@ -330,8 +330,16 @@
                 </ul>
             </nav>
             {% endif %}
+</div>
 
-    <!-- Purge Modal -->
+<!-- Placed outside .container-fluid so it is a direct child of
+     .page-shell. The .page-shell > *:not(.orb):not(.modal) rule in
+     styles.css creates a stacking context (z-index: 1) on every direct
+     child except modals; nesting this modal inside .container-fluid
+     trapped it below the modal-backdrop (which Bootstrap appends to
+     <body> at z-index 1040) -- visible but unclickable and
+     unscrollable, with no way to dismiss short of reloading. See the
+     identical fix on templates/admin/certbot.html's #logModal. -->
     <div class="modal fade" id="purgeModal" tabindex="-1" aria-labelledby="purgeModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-scrollable">
             <div class="modal-content">
@@ -377,7 +385,6 @@
             </div>
         </div>
     </div>
-</div>
 
 <script>
 async function resendEASMessage(messageId, btn) {
