@@ -8,6 +8,55 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.185.5] - 2026-08-22 - Theme readability audit: badges, invisible SAME codes, blank icons, off-screen dropdown
+
+### Fixed
+- **`.status-badge.success/danger/warning/info` rendered under WCAG AA (as low as
+  ~2.1:1) on every theme** because `color:` read straight from `--success-color`
+  etc. instead of the AA-tuned `--*-ink` split `.text-success` and friends
+  already use. Switched to the `-ink` variables and reduced each variant's
+  background tint (20% down to 1-2%, depending on how much headroom that
+  variant's `-ink` colour has) until all four variants clear 4.5:1 pixel-sampled
+  across all 20 themes. Added `.status-badge.*` probes to
+  `scripts/diagnostics/check_theme_contrast.py` so this can't silently
+  regress again.
+- **SAME/FIPS code chips on the EAS broadcast workflow page
+  (`.same-chip code`, e.g. "039003") were completely invisible on 7 dark
+  themes (aurora, charcoal, lightning, midnight, nebula, obsidian,
+  slate)** -- measured at a 1.00 contrast ratio (text and background the
+  literal same colour). Root cause: `.same-chip`'s own dark-text override
+  (added specifically for this "near-white chip on a dark theme" pattern)
+  sets `color` on the chip container hoping to cascade to children, but
+  the global `code { color: var(--text-color) }` rule is a direct
+  declaration on the `<code>` element itself, and inheritance always loses
+  to an explicit rule on the descendant regardless of the ancestor
+  selector's specificity. Added a `code`-specific override alongside the
+  existing `.text-muted` one in the same block, following the exact same
+  pattern.
+- **Inactive tabs in the admin panel's tab bar (`.nav-tabs .nav-link`) read
+  in a hard-to-see muted grey** on several dark themes. `static/css/admin.css`
+  had its own `.nav-tabs .nav-link { color: var(--text-secondary) }` rule
+  that -- at identical specificity to `static/css/styles.css`'s
+  `color: var(--text-color)` rule for the same selector, added specifically
+  "to ensure readability on all themes" -- won the cascade tie by loading
+  second on admin pages, silently re-introducing the exact problem the
+  other rule was written to fix. Removed the redundant, regressive
+  declaration.
+- **The navbar's Help/Reports/Settings dropdown menus opened off the right
+  edge of the viewport** (confirmed clipped ~140px past a 1400px-wide
+  viewport), because the shared nav-section dropdown template never got
+  Bootstrap's `dropdown-menu-end` modifier -- already used correctly for
+  the user-avatar dropdown at the far right, just missing here. Added it.
+- **~150 icons across 6 pages (Security Center, Certbot/SSL admin, TTS
+  settings, Audio Health Dashboard, both audio error pages) rendered as
+  nothing at all** -- `bi bi-*` (Bootstrap Icons) classes, but the project
+  only ever loads Font Awesome (`vendor/fontawesome`); Bootstrap Icons'
+  font was never included, so every `bi-*` class drew an empty glyph.
+  Mapped all 37 distinct icon names used to their closest Font Awesome
+  equivalent (e.g. `bi-shield-lock` -> `fa-shield-halved`,
+  `bi-arrow-clockwise` -> `fa-sync-alt`) and replaced every occurrence,
+  including ones built dynamically in inline JS template strings.
+
 ## [2.185.4] - 2026-08-22 - Fix OLED-absent memory leak that repeatedly OOM-killed services
 
 ### Fixed

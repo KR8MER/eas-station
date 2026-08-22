@@ -83,7 +83,17 @@
 }
 
 .nav-tabs .nav-link {
-    color: var(--text-secondary);
+    /* No `color` here -- static/css/styles.css's `.nav-tabs .nav-link` rule
+       already sets `color: var(--text-color)` specifically "to ensure
+       readability on all themes"; that rule has the exact same
+       specificity (one class + one class) as this one, so whichever
+       stylesheet loads second wins the tie for admin pages (which link
+       both). This used to redeclare `color: var(--text-secondary)`,
+       silently undoing that fix and leaving inactive tabs (confirmed on
+       /admin: "System", "Broadcast", "Services"...) rendering in the
+       muted secondary colour, which several dark themes don't have
+       enough headroom for against this tab bar's own
+       color-mix()-tinted background. */
     border: none;
     padding: 0.875rem 1.25rem;
     transition: all 0.2s ease;

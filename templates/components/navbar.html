@@ -118,7 +118,7 @@
                             <i class="{{ section.icon }}"></i>
                             <span>{{ section.label }}</span>
                         </a>
-                        <ul class="dropdown-menu{% if section.item_count > 10 %} dropdown-menu-scrollable{% endif %}"
+                        <ul class="dropdown-menu dropdown-menu-end{% if section.item_count > 10 %} dropdown-menu-scrollable{% endif %}"
                             aria-labelledby="nav-{{ section.key }}-dropdown">
                             {% for group in section.groups %}
                                 {% if not loop.first %}

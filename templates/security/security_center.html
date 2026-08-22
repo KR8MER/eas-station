@@ -102,7 +102,7 @@
 {% endblock %}
 
 {% block content %}
-{% set header_icon = 'bi bi-shield-lock' %}
+{% set header_icon = 'fas fa-shield-halved' %}
 {% set header_title = 'Security Center' %}
 {% set header_subtitle = 'One Global Ban List, enforced by multiple security layers' %}
 {% include 'components/page_header.html' %}
@@ -119,19 +119,19 @@
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="malicious-tab" data-bs-toggle="tab"
                     data-bs-target="#malicious-pane" type="button" role="tab">
-                <i class="bi bi-shield-exclamation"></i> Malicious Logins
+                <i class="fas fa-shield-exclamation"></i> Malicious Logins
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="bans-tab" data-bs-toggle="tab"
                     data-bs-target="#bans-pane" type="button" role="tab">
-                <i class="bi bi-ban"></i> Global Ban List
+                <i class="fas fa-ban"></i> Global Ban List
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="fail2ban-tab" data-bs-toggle="tab"
                     data-bs-target="#fail2ban-pane" type="button" role="tab">
-                <i class="bi bi-hdd-network"></i> Host Firewall
+                <i class="fas fa-network-wired"></i> Host Firewall
             </button>
         </li>
     </ul>
@@ -146,7 +146,7 @@
         <div class="tab-pane fade" id="malicious-pane" role="tabpanel" aria-labelledby="malicious-tab">
             <div class="container">
                 <div class="alert-danger-custom">
-                    <h5><i class="bi bi-exclamation-triangle-fill"></i> Security Alert</h5>
+                    <h5><i class="fas fa-triangle-exclamation"></i> Security Alert</h5>
                     <p class="mb-0">These login attempts were automatically flagged as malicious due to SQL injection or command injection patterns. Attacking IPs are auto-banned and logged for fail2ban integration.</p>
                 </div>
 
@@ -189,14 +189,14 @@
                         </div>
                         <div class="col-md-4 d-flex align-items-end">
                             <button class="btn btn-primary w-100" onclick="SC.loadAttempts()">
-                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                                <i class="fas fa-sync-alt"></i> Refresh
                             </button>
                         </div>
                     </div>
                 </div>
 
                 <div class="admin-accent-card accent-danger mb-3">
-                    <h4 class="mb-3"><i class="bi bi-globe"></i> Top Attacking IP Addresses</h4>
+                    <h4 class="mb-3"><i class="fas fa-globe"></i> Top Attacking IP Addresses</h4>
                     <div id="ip-statistics">
                         <p class="text-center text-muted">Loading statistics...</p>
                     </div>
@@ -231,7 +231,7 @@
         <div class="tab-pane fade" id="bans-pane" role="tabpanel" aria-labelledby="bans-tab">
             <div class="container">
                 <div class="admin-warning-box mb-3">
-                    <h5 class="mb-1"><i class="bi bi-diagram-3-fill"></i> One ban list. Multiple enforcement layers.</h5>
+                    <h5 class="mb-1"><i class="fas fa-diagram-project"></i> One ban list. Multiple enforcement layers.</h5>
                     <p class="mb-0">The <strong>Global Ban List</strong> below is the single source of truth. Bans
                     arrive from several detectors (manual, login brute force, SSH brute force, malicious requests),
                     and are enforced by multiple layers — the <strong>application gate</strong>, the
@@ -242,9 +242,9 @@
                 <!-- Security Enforcement Status -->
                 <div class="admin-accent-card accent-danger mb-3">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                        <h4 class="mb-0"><i class="bi bi-shield-check"></i> Enforcement Status</h4>
+                        <h4 class="mb-0"><i class="fas fa-shield-halved"></i> Enforcement Status</h4>
                         <button class="btn btn-sm btn-secondary" onclick="SC.loadSecurityOverview()">
-                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                            <i class="fas fa-sync-alt"></i> Refresh
                         </button>
                     </div>
                     <div id="sec-enforcement" class="row g-2">
@@ -255,7 +255,7 @@
 
                 <!-- Security Metrics -->
                 <div class="admin-accent-card accent-danger mb-3">
-                    <h4 class="mb-2"><i class="bi bi-graph-up"></i> Security Metrics</h4>
+                    <h4 class="mb-2"><i class="fas fa-chart-line"></i> Security Metrics</h4>
                     <div id="sec-metrics" class="row g-2 text-center">
                         <span class="text-muted small">Loading metrics…</span>
                     </div>
@@ -264,24 +264,24 @@
                 <!-- Global Ban List management -->
                 <div class="admin-accent-card accent-danger mb-4">
                     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                        <h4 class="mb-0"><i class="bi bi-shield-lock"></i> Global Ban List</h4>
+                        <h4 class="mb-0"><i class="fas fa-shield-halved"></i> Global Ban List</h4>
                         <div>
                             <button class="btn btn-success btn-sm" onclick="SC.showAddFilterModal('allowlist')">
-                                <i class="bi bi-plus-circle"></i> Add Allowlist
+                                <i class="fas fa-circle-plus"></i> Add Allowlist
                             </button>
                             <button class="btn btn-danger btn-sm" onclick="SC.showAddFilterModal('blocklist')">
-                                <i class="bi bi-ban"></i> Ban IP
+                                <i class="fas fa-ban"></i> Ban IP
                             </button>
                             <button class="btn btn-secondary btn-sm" onclick="SC.loadIPFilters()">
-                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                                <i class="fas fa-sync-alt"></i> Refresh
                             </button>
                             <button class="btn btn-outline-secondary btn-sm" onclick="SC.cleanupExpiredFilters()">
-                                <i class="bi bi-trash3"></i> Clean Expired
+                                <i class="fas fa-trash"></i> Clean Expired
                             </button>
                         </div>
                     </div>
                     <p class="text-muted small">
-                        <i class="bi bi-info-circle"></i> Every banned IP is blocked from the <strong>entire</strong>
+                        <i class="fas fa-circle-info"></i> Every banned IP is blocked from the <strong>entire</strong>
                         application (not just the login page) and, when host firewall enforcement is on, dropped at
                         the firewall too. Loopback (127.0.0.1) is always exempt so you can never lock the appliance
                         out of itself.
@@ -297,7 +297,7 @@
         <div class="tab-pane fade" id="fail2ban-pane" role="tabpanel" aria-labelledby="fail2ban-tab">
             <div class="container">
                 <div class="admin-warning-box mb-3">
-                    <h5><i class="bi bi-info-circle-fill"></i> Host-Firewall Enforcement (fail2ban)</h5>
+                    <h5><i class="fas fa-circle-info-fill"></i> Host-Firewall Enforcement (fail2ban)</h5>
                     <p class="mb-0">There is <strong>one</strong> ban list — the <strong>Global Ban List</strong> tab.
                     fail2ban is an optional <em>firewall enforcer</em> for it: when enabled, every application
                     ban (manual or automatic) is also dropped at the host firewall, before traffic reaches the
@@ -308,16 +308,16 @@
                 <!-- Status / service control -->
                 <div class="admin-accent-card accent-danger mb-3">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                        <h4 class="mb-0"><i class="bi bi-hdd-network"></i> fail2ban Service</h4>
+                        <h4 class="mb-0"><i class="fas fa-network-wired"></i> fail2ban Service</h4>
                         <div class="d-flex gap-2 flex-wrap">
                             <button class="btn btn-sm btn-outline-secondary" onclick="SC.resyncFail2ban()">
-                                <i class="bi bi-arrow-left-right"></i> Resync bans
+                                <i class="fas fa-right-left"></i> Resync bans
                             </button>
                             <button class="btn btn-sm btn-outline-secondary" onclick="SC.serviceAction('restart')">
-                                <i class="bi bi-arrow-repeat"></i> Restart
+                                <i class="fas fa-rotate-right"></i> Restart
                             </button>
                             <button class="btn btn-sm btn-secondary" onclick="SC.loadFail2banStatus()">
-                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                                <i class="fas fa-sync-alt"></i> Refresh
                             </button>
                         </div>
                     </div>
@@ -328,7 +328,7 @@
 
                 <!-- Configuration form -->
                 <div class="admin-accent-card accent-danger mb-3">
-                    <h4 class="mb-3"><i class="bi bi-sliders"></i> Configuration</h4>
+                    <h4 class="mb-3"><i class="fas fa-sliders"></i> Configuration</h4>
                     <form id="f2b-config-form" onsubmit="return false;">
                         <div class="form-check form-switch mb-1">
                             <input class="form-check-input" type="checkbox" role="switch" id="f2b-enabled">
@@ -365,14 +365,14 @@
                         </div>
 
                         <button class="btn btn-primary" onclick="SC.saveFail2banConfig()">
-                            <i class="bi bi-save"></i> Save &amp; Apply Configuration
+                            <i class="fas fa-save"></i> Save &amp; Apply Configuration
                         </button>
                     </form>
                 </div>
 
                 <!-- SSH jail bans (host SSH protection, separate concern) -->
                 <div class="admin-accent-card accent-danger mb-3" id="f2b-ssh-card" style="display: none;">
-                    <h4 class="mb-2"><i class="bi bi-terminal"></i> SSH Jail Bans
+                    <h4 class="mb-2"><i class="fas fa-terminal"></i> SSH Jail Bans
                         <small class="text-muted">(also added to the global ban list)</small></h4>
                     <p class="text-muted small mb-2">This lists what fail2ban's <code>sshd</code> jail is
                         currently holding. Each offender is also copied into the <strong>Global Ban List</strong>
@@ -399,7 +399,7 @@
                 <form id="addFilterForm">
                     <input type="hidden" id="filter-type" name="filter_type">
                     <div class="alert alert-warning py-2 small" id="allowlist-lockout-note" style="display: none;">
-                        <i class="bi bi-exclamation-triangle"></i>
+                        <i class="fas fa-triangle-exclamation"></i>
                         Adding any allowlist entry switches login to
                         <strong>allowlist-only mode</strong> &mdash; only listed IPs can sign in
                         (loopback is <em>not</em> exempt). Make sure your own IP is covered, or
