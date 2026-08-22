@@ -591,9 +591,23 @@ def _emit_audio_sources_update(app: 'Flask', socketio: 'SocketIO') -> None:
         source_list = []
         for source in sources:
             entry = {
-                'id': source.id,
+                # 'id' here must match what the REST endpoint
+                # (webapp/admin/audio_ingest/serialization.py) calls 'id':
+                # source.name, not the numeric DB primary key. The frontend
+                # (audio_monitoring.js) merges this push onto the richer
+                # object the REST fetch already populated, keyed by name --
+                # sending the numeric PK here silently broke that merge's
+                # DOM-element lookups (peak-label-<id> etc. are built from
+                # this id) every time this push landed.
+                'id': source.name,
                 'name': source.name,
-                'type': getattr(source.source_type, 'value', None) if source.source_type else 'unknown',
+                # source.source_type is already a plain string column, not
+                # an Enum -- the REST serializer uses it directly (see
+                # serialization.py line 223). getattr(..., 'value', None)
+                # assumed an Enum wrapper that was never there, so this
+                # silently returned None on every source and the frontend
+                # rendered every card's type badge as "UNKNOWN".
+                'type': source.source_type or 'unknown',
                 'enabled': source.enabled,
                 'priority': source.priority,
                 'auto_start': source.auto_start,

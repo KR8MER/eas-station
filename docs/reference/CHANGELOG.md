@@ -8,6 +8,74 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.185.7] - 2026-08-22 - Fix broken audio streaming and several console errors site-wide
+
+### Fixed
+- **Icecast audio playback was silently blocked everywhere** -- the CSP had
+  no `media-src` allowance, so every `<audio>` element pointed at Icecast
+  (a different origin/port than the Flask app) failed to load with no
+  visible error beyond the browser console. `media-src` now includes the
+  Icecast origin, resolved per-request from `IcecastSettings` (the
+  host:port is user-configurable, so it can't be hardcoded).
+- **The `/audio-monitor` live players never rendered** -- `getIcecastStreamUrl()`
+  read `metadata.icecast_mount`, a field the API has never actually
+  returned (it's `metadata.icecast_stream_url`). Derived the same-origin
+  path the nginx proxy (`location ~* ^/(?!eas-)([a-z0-9_-]+\.mp3)$`,
+  already correctly configured) expects from the field that does exist.
+  Verified live: `currentTime` advancing during actual playback, not just
+  a clean network response.
+- **`/admin/audio-sources` cards rendered correctly for ~30s, then flipped
+  to "UNKNOWN" / "? Hz . ? ch" / frozen "-- dBFS" labels and stayed broken**
+  -- three compounding bugs: (1) the periodic WebSocket push
+  (`_emit_audio_sources_update`) sends a deliberately thin payload with no
+  `config`/`metrics`, but the frontend replaced the richer REST-fetched
+  source objects wholesale instead of merging, discarding sample
+  rate/channel/level data every ~30s; (2) that same push's `id` field was
+  the numeric DB primary key while the REST endpoint's `id` is the source
+  name, breaking the merge's DOM-element lookups once merging was fixed;
+  (3) its `type` field assumed `source_type` was an Enum with a `.value`
+  attribute when it's actually a plain string column, so `type` silently
+  resolved to `None` -> "unknown" -> "UNKNOWN" on every source, every time.
+  Fixed the merge to be a merge, and fixed the push to serialize `id`/`type`
+  the same way the REST endpoint already does.
+- **Peak/RMS level labels were permanently stuck on their "-- dBFS"
+  placeholder** on any page not loading `realtime-vu-meters.js` (e.g.
+  `admin/audio_sources.html`) -- the update guard skipped writing whenever
+  the label's current text already contained "dBFS", which the static
+  HTML placeholder always does, so the check could never tell "still the
+  placeholder" from "already owned by the other script" apart. Replaced it
+  with an explicit `data-live-vu` marker `realtime-vu-meters.js` sets only
+  when it actually starts driving a label.
+- **`bootstrap is not defined` crashed `/settings/stream-profiles`** on
+  every load -- `bootstrap.Modal.getOrCreateInstance(...)` ran at the top
+  of a synchronous inline `<script>`, but `bootstrap.bundle.min.js` loads
+  via `<script defer>` and hadn't executed yet at that point in parsing.
+  Deferred the modal instance creation into the page's own
+  `DOMContentLoaded` handler.
+- **`/audio/health/dashboard` threw "Canvas is already in use"** on a
+  significant fraction of ordinary page loads (no theme switch involved)
+  -- a race between `theme.js`'s own `DOMContentLoaded` listener
+  (registered earlier, since it loads in `base.html`) synchronously
+  dispatching `theme-changed` as part of applying the saved theme, and
+  this page's `DOMContentLoaded` handler creating the same charts
+  unconditionally afterward. Made `initializeCharts()` idempotent (destroys
+  any existing instances first) instead of relying on each call site to
+  remember to.
+- Removed two dead `<script src="https://cdn.socket.io/...">` tags on
+  `/audio-monitor` -- Socket.IO is already loaded globally from the
+  vendored copy in `base.html`; these were both redundant and blocked
+  outright by CSP (no external `script-src` allowance).
+- Removed a premature `typeof showLoading !== 'function'` check on
+  `/admin/environment` that logged a false-positive console error on every
+  load (same "runs before the deferred script" pattern as the bootstrap
+  fix above, just self-correcting rather than crashing).
+- Added `https://www.debian.org` to `img-src` for the detected-OS logo on
+  `/system_health` (a fixed, single, trusted domain, unlike the
+  broadcast-metadata-sourced album art CSP gap on `/audio-monitor`, which
+  is deliberately left as-is -- that content can point at literally any
+  station's arbitrary third-party CDN, so it isn't safe to broadly
+  allowlist).
+
 ## [2.185.6] - 2026-08-22 - Fix modals trapped below the backdrop (unclickable, unscrollable)
 
 ### Fixed

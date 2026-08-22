@@ -349,15 +349,6 @@
     {% endif %}
     console.log('Has configure permission:', {{ 'true' if can_configure else 'false' }});
 
-    // Ensure required utility functions are available
-    if (typeof showLoading !== 'function' || typeof hideLoading !== 'function' || typeof showToast !== 'function') {
-        console.error('Required utility functions are not available. Check that loading-error-utils.js is loaded.');
-        // Define fallback functions
-        window.showLoading = function(message) { console.log('Loading:', message || '...'); };
-        window.hideLoading = function() { console.log('Loading complete'); };
-        window.showToast = function(message, type) { alert(message); };
-    }
-
     let categoriesData = {};
     let currentValues = {};
     let hasChanges = false;

@@ -434,7 +434,6 @@
 }
 </style>
 
-<script src="https://cdn.socket.io/4.5.4/socket.io.min.js" crossorigin="anonymous"></script>
 <script>
 let audioSources = [];
 let audioMonitoringSocket = null;
@@ -1281,8 +1280,24 @@ function getIcecastStreamUrl(sourceName) {
     // every browser's native <audio> WAV decoder. MP3 is a self-framing,
     // genuinely streamable format and doesn't have that problem, and every
     // source here already has a working Icecast mount.
+    //
+    // This read `metadata.icecast_mount`, a field the API has never
+    // actually returned (it's `metadata.icecast_stream_url`, an absolute
+    // http://<host>:<icecast-port>/<mount>.mp3 URL) -- so this always
+    // returned null and the player never rendered, independent of the nginx
+    // proxy above being configured correctly. Derive the same-origin path
+    // the nginx block expects from the one field that does exist, instead
+    // of introducing a second, independently-drifting mount-name field.
     const source = audioSources.find(s => s.name === sourceName);
-    return source?.metrics?.metadata?.icecast_mount || null;
+    const absoluteUrl = source?.metrics?.metadata?.icecast_stream_url;
+    if (!absoluteUrl) {
+        return null;
+    }
+    try {
+        return new URL(absoluteUrl, window.location.origin).pathname;
+    } catch {
+        return null;
+    }
 }
 
 function getSourceIcon(type) {
@@ -2435,10 +2450,11 @@ window.addEventListener('beforeunload', function() {
 });
 </script>
 
-<!-- Socket.IO for real-time updates -->
-<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"
-        integrity="sha384-/KNQL8Nu5gCHLqwqfQjA689Hhoqgi2S84SNUxC3roTe4EhJ9AfLkp8QiQcU8AMzI"
-        crossorigin="anonymous"></script>
+<!-- Socket.IO is already loaded globally by base.html from the vendored
+     copy (static/vendor/socketio/); loading it again from a CDN here was
+     both redundant and blocked outright by the CSP script-src policy
+     (which deliberately has no external allowance -- see the comment on
+     the CSP header in app.py). -->
 
 <!-- Real-time VU Meters (60Hz updates using Web Audio API) -->
 <script src="{{ url_for('static', filename='js/realtime-vu-meters.js') }}"></script>

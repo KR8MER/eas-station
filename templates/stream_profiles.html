@@ -228,11 +228,18 @@
         const saveButtonCreate = document.getElementById('saveButtonCreate');
         const saveButtonEdit = document.getElementById('saveButtonEdit');
         const presetInputs = Array.from(document.querySelectorAll('input[name="preset"]'));
-        const profileModal = bootstrap.Modal.getOrCreateInstance(profileModalEl);
+        // Not `bootstrap.Modal.getOrCreateInstance(...)` at this top level:
+        // this script runs synchronously as the document is parsed, but
+        // bootstrap.bundle.min.js is loaded with `<script defer>` (see
+        // base.html), which only executes after parsing finishes -- so
+        // `bootstrap` is not yet defined here. Deferred to DOMContentLoaded
+        // below, by which point it reliably is.
+        let profileModal;
 
         let profiles = {};
 
         document.addEventListener('DOMContentLoaded', () => {
+            profileModal = bootstrap.Modal.getOrCreateInstance(profileModalEl);
             loadProfiles();
             presetInputs.forEach((radio) => {
                 radio.addEventListener('change', () => {
