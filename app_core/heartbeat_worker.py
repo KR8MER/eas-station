@@ -108,10 +108,17 @@ class HeartbeatWorker:
 
 
 def send_heartbeat_ping(ping_url: str, timeout: int = 10):
-    """Send one heartbeat GET request. Returns (success, error_message)."""
+    """Send one heartbeat request. Returns (success, error_message).
+
+    POST rather than GET: healthchecks.io accepts either, but some
+    healthchecks.io-alternative services (e.g. Tickstem) only recognize
+    POST on the ping route and reply 401 "missing authorization" to a
+    GET -- misleading, since the real problem is the HTTP method, not
+    a missing credential. POST is the safe superset.
+    """
     from app_core.http_defaults import get_default_user_agent
     try:
-        response = requests.get(
+        response = requests.post(
             ping_url, timeout=timeout,
             headers={'User-Agent': get_default_user_agent()},
         )

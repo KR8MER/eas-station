@@ -111,11 +111,11 @@ def test_heartbeat_ping_sends_user_agent(monkeypatch):
     class _FakeResponse:
         status_code = 200
 
-    def fake_get(url, timeout=None, headers=None):
+    def fake_post(url, timeout=None, headers=None):
         captured['headers'] = headers
         return _FakeResponse()
 
-    monkeypatch.setattr(heartbeat_module.requests, "get", fake_get)
+    monkeypatch.setattr(heartbeat_module.requests, "post", fake_post)
 
     success, error = heartbeat_module.send_heartbeat_ping("https://example.test/ping")
 
