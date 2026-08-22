@@ -1190,6 +1190,41 @@
     color: #3a4d7a !important;
 }
 
+/* `<code>` inside these same near-white-on-dark-theme regions has the
+   identical problem, but for a different reason than .text-muted above:
+   the global `code { color: var(--text-color) }` rule (Typography
+   section) is a declaration directly on the element itself, and any
+   explicit rule on an element -- regardless of the ancestor selector's
+   specificity -- always wins over inheriting a color from a parent like
+   `.same-chip` above. So `.same-chip`'s dark #0d1b2a text never reaches
+   its `<code>` children: they keep rendering in --text-color, which on
+   these seven themes is a light near-white tint chosen for the (dark)
+   page body -- rendering as near-invisible light-on-light text sitting on
+   `.same-chip`'s own light background (confirmed live: SAME/FIPS code
+   chips on templates/eas/workflow.html measured at a 1.00 contrast ratio,
+   i.e. text and background were the literal same colour). `code`'s
+   background tint is keyed off the same --text-color too
+   (`color-mix(in srgb, var(--text-color) 5%, transparent)`), so it also
+   needs to flip to the dark ink for the tint to still read as a subtle
+   chip rather than just matching the surrounding light background. */
+:is([data-theme="lightning"],
+    [data-theme="aurora"],
+    [data-theme="nebula"],
+    [data-theme="midnight"],
+    [data-theme="charcoal"],
+    [data-theme="obsidian"],
+    [data-theme="slate"]) :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row) code {
+    color: #0d1b2a;
+    background: color-mix(in srgb, #0d1b2a 8%, transparent);
+}
+
 /* ----------------------------------------------------------------------------
    Bootstrap .form-text helper text
    ----------------------------------------------------------------------------
@@ -4448,23 +4483,36 @@ html:has(.modal.show) {
 }
 
 .status-badge.success {
-    background: color-mix(in srgb, var(--success-color) 20%, var(--surface-color));
-    color: var(--success-color);
+    /* Plain --surface-color, not tinted like the other three variants
+       below -- the --*-ink colours are tuned against --surface-color
+       itself (see the --success-ink comment above), and any tint at all
+       moves the background away from that validated point. --success-ink
+       (#198754) was measured at exactly 4.53:1 on #fff -- next to no
+       headroom, and the pixel-sampled audit (which measures under
+       antialiased glyph edges, not the nominal geometric ratio) reads it
+       closer to 4.5 than the source comment's number suggests -- so it's
+       the one variant that can't tolerate any tint at all, unlike the
+       other three which hold up fine at 2%. (20% failed 47/80 probes
+       across all four variants x 20 themes; every smaller tint tried
+       (10/5/3/2/1%) still failed on success specifically in every light
+       theme.) */
+    background: var(--surface-color);
+    color: var(--success-ink);
 }
 
 .status-badge.danger {
-    background: color-mix(in srgb, var(--danger-color) 20%, var(--surface-color));
-    color: var(--danger-color);
+    background: color-mix(in srgb, var(--danger-color) 2%, var(--surface-color));
+    color: var(--danger-ink);
 }
 
 .status-badge.warning {
-    background: color-mix(in srgb, var(--warning-color) 20%, var(--surface-color));
-    color: var(--warning-color);
+    background: color-mix(in srgb, var(--warning-color) 2%, var(--surface-color));
+    color: var(--warning-ink);
 }
 
 .status-badge.info {
-    background: color-mix(in srgb, var(--info-color) 20%, var(--surface-color));
-    color: var(--info-color);
+    background: color-mix(in srgb, var(--info-color) 2%, var(--surface-color));
+    color: var(--info-ink);
 }
 
 .status-badge.secondary {
@@ -4476,7 +4524,7 @@ html:has(.modal.show) {
    its own outlined treatment). */
 .status-badge.connected {
     background: color-mix(in srgb, var(--success-color) 10%, transparent);
-    color: var(--success-color);
+    color: var(--success-ink);
     border: 1px solid var(--success-color);
 }
 

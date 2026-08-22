@@ -43,7 +43,7 @@
         <div class="admin-form-section" id="azure-openai-section" style="display: none;">
             <h4>Azure OpenAI Settings</h4>
             <div class="alert alert-info mb-3">
-                <i class="bi bi-info-circle"></i> <strong>Azure OpenAI TTS</strong><br>
+                <i class="fas fa-circle-info"></i> <strong>Azure OpenAI TTS</strong><br>
                 Uses Azure OpenAI's text-to-speech API for high-quality voice synthesis.
             </div>
             
@@ -95,13 +95,13 @@
 
         <div class="d-flex gap-2 align-items-center flex-wrap">
             <button type="submit" class="btn btn-primary">
-                <i class="bi bi-save"></i> Save Settings
+                <i class="fas fa-save"></i> Save Settings
             </button>
             <button type="button" class="btn btn-success" id="testTtsBtn">
-                <i class="bi bi-volume-up"></i> Test TTS
+                <i class="fas fa-volume-high"></i> Test TTS
             </button>
             <button type="button" class="btn btn-secondary" onclick="window.location.reload()">
-                <i class="bi bi-arrow-clockwise"></i> Reset
+                <i class="fas fa-sync-alt"></i> Reset
             </button>
             <a href="/admin/tts/pronunciation" class="btn btn-outline-info ms-auto">
                 <i class="fas fa-spell-check me-1"></i> Pronunciation Dictionary
@@ -113,7 +113,7 @@
 <!-- Pronunciation Preview Panel -->
 <div class="admin-container mt-4" style="max-width: 1000px">
     <div class="admin-form-section mb-0">
-        <h4><i class="bi bi-eye me-1"></i> Pronunciation Preview</h4>
+        <h4><i class="fas fa-eye me-1"></i> Pronunciation Preview</h4>
         <p class="text-muted small mb-2">
             Paste any alert text to see how the normalization pipeline will transform it before
             it reaches the TTS engine.
@@ -139,10 +139,10 @@
 
         <div class="d-flex gap-2 mb-3">
             <button type="button" class="btn btn-outline-primary" id="previewNormalizeBtn">
-                <i class="bi bi-arrow-right-circle me-1"></i> Normalize Text
+                <i class="fas fa-circle-arrow-right me-1"></i> Normalize Text
             </button>
             <button type="button" class="btn btn-outline-success" id="previewSpeakBtn">
-                <i class="bi bi-volume-up me-1"></i> Normalize &amp; Speak
+                <i class="fas fa-volume-high me-1"></i> Normalize &amp; Speak
             </button>
         </div>
 
@@ -252,7 +252,7 @@ document.getElementById('testTtsBtn').addEventListener('click', async function()
         
         if (result.success) {
             alertDiv.className = 'alert alert-success mt-3';
-            titleDiv.innerHTML = '<i class="bi bi-check-circle"></i> TTS Test Successful';
+            titleDiv.innerHTML = '<i class="fas fa-circle-check"></i> TTS Test Successful';
             messageDiv.textContent = result.message;
             
             if (result.details) {
@@ -284,7 +284,7 @@ document.getElementById('testTtsBtn').addEventListener('click', async function()
             showToast('TTS test successful!', 'success');
         } else {
             alertDiv.className = 'alert alert-danger mt-3';
-            titleDiv.innerHTML = '<i class="bi bi-x-circle"></i> TTS Test Failed';
+            titleDiv.innerHTML = '<i class="fas fa-circle-xmark"></i> TTS Test Failed';
             messageDiv.textContent = result.error;
             
             if (result.details) {
@@ -311,7 +311,7 @@ document.getElementById('testTtsBtn').addEventListener('click', async function()
         const audioPlayerDiv = document.getElementById('testAudioPlayer');
         
         alertDiv.className = 'alert alert-danger mt-3';
-        titleDiv.innerHTML = '<i class="bi bi-x-circle"></i> TTS Test Failed';
+        titleDiv.innerHTML = '<i class="fas fa-circle-xmark"></i> TTS Test Failed';
         messageDiv.textContent = 'Error testing TTS: ' + error.message;
         detailsDiv.innerHTML = '';
         audioPlayerDiv.style.display = 'none';

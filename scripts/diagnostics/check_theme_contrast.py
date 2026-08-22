@@ -83,6 +83,15 @@ PROBES = {
     ".card .text-secondary": ("Card .text-secondary", True),
     ".card a.probe-link": ("Card body link", True),
     ".page-shell .probe-body": ("Body text on page", True),
+    # Same colour-on-tinted-background shape as the .text-* utilities above
+    # (own colour used for both the text and the background tint it sits
+    # on) -- went unprobed until a live-page sweep found `.status-badge.success`
+    # rendering at ~2.1:1 across every light theme because it read straight
+    # from `--success-color` instead of the AA-tuned `--*-ink` split.
+    ".status-badge.success": ("Status badge (success)", True),
+    ".status-badge.danger": ("Status badge (danger)", True),
+    ".status-badge.warning": ("Status badge (warning)", True),
+    ".status-badge.info": ("Status badge (info)", True),
 }
 
 FIXTURE = """<!DOCTYPE html>
@@ -117,6 +126,10 @@ FIXTURE = """<!DOCTYPE html>
     <p class="text-secondary">Secondary</p>
     <p><a class="probe-link" href="#">A link in card copy</a></p>
   </div></div>
+  <div class="status-badge success">Success</div>
+  <div class="status-badge danger">Danger</div>
+  <div class="status-badge warning">Warning</div>
+  <div class="status-badge info">Info</div>
 </div></main></body></html>
 """
 
