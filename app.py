@@ -1424,7 +1424,12 @@ def after_request(response):
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: https://img.shields.io https://*.tile.openstreetmap.org https://www.debian.org; "
+            # Station album art (audio_monitoring.html) comes from ICY
+            # StreamTitle metadata on operator-configured audio sources --
+            # the image host is whatever CDN that station uses (iHeart,
+            # TuneIn, etc.) and isn't knowable in advance, so this allows
+            # any https origin rather than chasing individual CDN domains.
+            "img-src 'self' data: https:; "
             "connect-src 'self' wss: ws:; "
             f"{media_src}"
             "frame-ancestors 'none';"

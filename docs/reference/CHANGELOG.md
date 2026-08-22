@@ -8,6 +8,22 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.185.8] - 2026-08-22 - Widen img-src CSP and fix heartbeat ping method
+
+### Fixed
+- **Album art blocked by CSP on `/audio-monitor`** -- station metadata (ICY
+  `StreamTitle`) can point at any CDN the broadcaster happens to use (seen:
+  `image.iheart.com`); the CSP's `img-src` only allowlisted three specific
+  hosts, so art from any other station silently failed to load. `img-src`
+  now allows any `https:` origin, since this only affects passive image
+  loading, not script execution.
+- **Uptime heartbeat pings 401'd against some healthchecks.io-alternative
+  services** (e.g. Tickstem) -- `send_heartbeat_ping()` always sent `GET`;
+  those services only accept `POST` on the ping route and (confusingly)
+  reply 401 "missing authorization" to a `GET`, which looks like a
+  credential problem but isn't one. Now sends `POST`, which healthchecks.io
+  itself also accepts, so this is backward compatible.
+
 ## [2.185.7] - 2026-08-22 - Fix broken audio streaming and several console errors site-wide
 
 ### Fixed
