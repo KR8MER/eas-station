@@ -309,6 +309,24 @@ function getAudioChartColors() {
 }
 
 function initializeCharts() {
+    // Idempotent: destroy any existing instances first. This page's own
+    // DOMContentLoaded handler below calls this once, but theme.js's
+    // DOMContentLoaded listener (registered earlier, since it loads in
+    // base.html) runs first and synchronously dispatches 'theme-changed'
+    // as part of applying the saved theme on every page load -- which
+    // this file also listens for and used to call initializeCharts()
+    // again without destroying the chart the first call had already
+    // created, throwing "Canvas is already in use" on a completely
+    // ordinary page load (no user theme switch involved).
+    if (bufferFillChart) {
+        bufferFillChart.destroy();
+        bufferFillChart = null;
+    }
+    if (restartChart) {
+        restartChart.destroy();
+        restartChart = null;
+    }
+
     const colors = getAudioChartColors();
 
     // Buffer Fill Chart
@@ -632,15 +650,7 @@ function formatUptime(seconds) {
 window.addEventListener('theme-changed', () => {
     console.log('🎨 Audio health dashboard: Theme changed, reinitializing charts...');
 
-    // Destroy existing charts
-    if (bufferFillChart) {
-        bufferFillChart.destroy();
-    }
-    if (restartChart) {
-        restartChart.destroy();
-    }
-
-    // Reinitialize with new theme colors
+    // initializeCharts() destroys any existing instances itself now.
     initializeCharts();
 
     // Re-fetch and update data

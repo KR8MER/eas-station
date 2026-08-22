@@ -352,6 +352,14 @@ function updateVUMeterForSource(sourceName, meter, deltaSeconds, timestamp) {
             if (text !== meter.renderedPeakLabel) {
                 meter.peakLabel.textContent = text;
                 meter.renderedPeakLabel = text;
+                // Marks this label as under this script's control, so
+                // audio_monitoring.js's updateMeterDisplay() (which also
+                // writes "Peak: X dBFS" text, on pages where this script
+                // isn't loaded) knows to leave it alone rather than
+                // fighting over it. A substring check on the text itself
+                // can't tell the two apart: the static HTML placeholder is
+                // "Peak: -- dBFS", which already contains "dBFS".
+                meter.peakLabel.dataset.liveVu = 'true';
             }
         }
         if (meter.rmsLabel) {
@@ -359,6 +367,7 @@ function updateVUMeterForSource(sourceName, meter, deltaSeconds, timestamp) {
             if (text !== meter.renderedRmsLabel) {
                 meter.rmsLabel.textContent = text;
                 meter.renderedRmsLabel = text;
+                meter.rmsLabel.dataset.liveVu = 'true';
             }
         }
     }

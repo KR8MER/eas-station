@@ -188,13 +188,29 @@ function handleAudioHealthUpdate(data) {
 function handleAudioSourcesUpdate(data) {
     try {
         const sources = data.sources || [];
-        // Preserve existing runtime status when the update omits it (Redis unavailable)
-        const existingStatusMap = new Map(audioSources.map(s => [s.name, s.status]));
+        // The WebSocket push (app_core/websocket_push.py's
+        // _emit_audio_sources_update, every 30s) is deliberately thin --
+        // id/name/type/enabled/priority/auto_start/status only, no config
+        // or metrics -- to keep the periodic broadcast small. This used to
+        // *replace* audioSources wholesale, so every push discarded the
+        // richer config/metrics/icecast_url/etc. fields the initial REST
+        // fetch (loadAudioSources(), GET /api/audio/sources) had populated:
+        // a card would render correctly for the first ~30s, then flip to
+        // "UNKNOWN" / "? Hz . ? ch" the moment the first push landed, and
+        // stay that way, since nothing ever re-fetched the full picture.
+        // Merge each push entry onto the existing richer object instead,
+        // the same way `status` was already being preserved below.
+        const existingByName = new Map(audioSources.map(s => [s.name, s]));
         audioSources = sources.filter(source => hasUsableId(source?.id || source?.name)).map(source => {
-            if (!source.status && existingStatusMap.has(source.name)) {
-                return { ...source, status: existingStatusMap.get(source.name) };
+            const existing = existingByName.get(source.name);
+            if (!existing) {
+                return source;
             }
-            return source;
+            const merged = { ...existing, ...source };
+            if (!source.status && existing.status) {
+                merged.status = existing.status;
+            }
+            return merged;
         });
         renderAudioSources();
 
@@ -976,8 +992,18 @@ function updateMeterDisplay(sourceId, type, levelDb) {
     bar.style.width = `${percentage}%`;
     
     // Update label if it exists (fallback for when Web Audio API is not available)
-    if (label && !label.textContent.includes('dBFS')) {
-        // Only update if not already being updated by realtime VU meters (which use dBFS format)
+    //
+    // This used to skip the update whenever the label's current text
+    // already contained "dBFS", on the theory that meant
+    // realtime-vu-meters.js's 60Hz Web Audio API tap already owned it. But
+    // the static HTML placeholder is literally "Peak: -- dBFS" / "RMS: --
+    // dBFS" -- already containing "dBFS" before either script ever runs --
+    // so on any page that doesn't load realtime-vu-meters.js (e.g.
+    // admin/audio_sources.html) this check was permanently true from the
+    // first render, and the label just stayed on its placeholder forever
+    // while the bar next to it filled in correctly. Check the explicit
+    // marker realtime-vu-meters.js now sets instead of guessing from text.
+    if (label && label.dataset.liveVu !== 'true') {
         label.textContent = `${type === 'peak' ? 'Peak' : 'RMS'}: ${safeLevel.toFixed(1)} dB`;
     }
 }

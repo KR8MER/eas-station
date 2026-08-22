@@ -1391,16 +1391,42 @@ def after_request(response):
     #     templates/system_health.html)
     #   - *.tile.openstreetmap.org: Leaflet basemap tiles (index, alert detail,
     #     county boundaries map)
+    #   - www.debian.org: the detected-OS logo on system_health.html
+    #     (app_utils/system/badges.py's get_distro_logo_url() also has entries
+    #     for 8 other distros -- not allowed here since this deployment only
+    #     ever runs Debian; add the matching host if that ever changes).
     # Socket.IO is served from /static/vendor/socketio/ so no external
     # script-src allowance is needed.
+    #
+    # media-src has no default-src fallback exemption for cross-origin, so
+    # without an explicit allowance the <audio><source> elements on
+    # admin/audio_sources.html silently fail to play: Icecast is a
+    # separate origin from the Flask app (same host, different port --
+    # e.g. http://easstation:8000 vs this app's own port), and CSP treats
+    # a differing port as a different origin even on the same hostname.
+    # The host:port is user-configurable (IcecastSettings), so it's
+    # resolved per-request rather than hardcoded.
+    icecast_origin = None
+    try:
+        from app_core.audio.icecast_auto_config import get_icecast_auto_config
+
+        auto_config = get_icecast_auto_config()
+        if auto_config.is_enabled():
+            hostname = auto_config.public_hostname or auto_config.server
+            icecast_origin = f"http://{hostname}:{auto_config.external_port}"
+    except Exception:
+        pass  # Icecast not configured / auto-config unavailable -- CSP just omits it.
+    media_src = "media-src 'self'" + (f" {icecast_origin}" if icecast_origin else "") + "; "
+
     response.headers.setdefault(
         'Content-Security-Policy',
         (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: https://img.shields.io https://*.tile.openstreetmap.org; "
+            "img-src 'self' data: https://img.shields.io https://*.tile.openstreetmap.org https://www.debian.org; "
             "connect-src 'self' wss: ws:; "
+            f"{media_src}"
             "frame-ancestors 'none';"
         ),
     )
