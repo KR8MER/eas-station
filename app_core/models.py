@@ -86,6 +86,7 @@ from ._models_backup import BackupVerificationRun
 from ._models_gpio_interlocks import RelayInterlockGroup, RelayInterlockMember
 from ._models_heartbeat import HeartbeatSettings
 from ._models_polling import PollDebugRecord, PollHistory, PollerSettings
+from ._models_tickstem import TickstemSettings
 from ._models_settings import (
     AlertFilterSettings,
     ApplicationSettings,
@@ -189,6 +190,7 @@ __all__ = [
     "StreamMetadataLog",
     "SystemLog",
     "TailscaleSettings",
+    "TickstemSettings",
     "TrafficAnalyticsSettings",
     "USCountyBoundary",
     "VFDDisplay",

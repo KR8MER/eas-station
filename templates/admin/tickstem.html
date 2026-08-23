@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}Tickstem Uptime Monitor - EAS Station{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set header_icon = 'fas fa-satellite-dish' %}
+{% set header_title = 'Tickstem Uptime Monitor' %}
+{% set header_subtitle = 'Inbound uptime checks managed through the Tickstem Monitors API' %}
+{% include 'components/page_header.html' %}
+
+<div class="container-fluid">
+    {% if settings is none %}
+    <div class="alert alert-danger"><i class="fas fa-triangle-exclamation"></i> Could not load Tickstem settings.</div>
+    {% else %}
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="alert alert-info">
+                <i class="fas fa-circle-info"></i>
+                This is the opposite direction from the <a href="{{ url_for('heartbeat.heartbeat_settings') }}">Uptime Heartbeat</a> page:
+                there, this box pings <em>out</em> on a schedule. Here, <a href="https://tickstem.dev" target="_blank" rel="noopener">Tickstem</a>
+                polls <em>in</em> against a public URL (normally <code>/health</code>) and alerts if it stops answering.
+                Creating, pausing, resuming, and deleting the monitor all go through Tickstem's account-level API key below.
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-key"></i> Tickstem API Key</h5>
+                </div>
+                <div class="card-body">
+                    <form id="apiKeyForm">
+                        <div class="mb-3">
+                            <label for="api_key" class="form-label">Account API Key</label>
+                            <input type="password" class="form-control font-monospace" id="api_key" name="api_key"
+                                   placeholder="{{ 'Saved -- leave blank to keep it' if settings.api_key else 'Paste key from app.tickstem.dev -> API Keys' }}"
+                                   autocomplete="off">
+                            <div class="form-text">
+                                Used only server-side as <code>Authorization: Bearer &lt;key&gt;</code> for monitor
+                                management calls. Never sent to the browser once saved.
+                            </div>
+                        </div>
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save Key
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-eye"></i> Uptime Monitor</h5>
+                </div>
+                <div class="card-body">
+                    <form id="monitorForm">
+                        <div class="mb-3">
+                            <label for="monitor_name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="monitor_name" name="name"
+                                   value="{{ settings.monitor_name or 'EAS Station' }}"
+                                   {{ 'disabled' if settings.monitor_id else '' }}>
+                        </div>
+                        <div class="mb-3">
+                            <label for="monitor_url" class="form-label">Public Health URL</label>
+                            <input type="url" class="form-control font-monospace" id="monitor_url" name="url"
+                                   value="{{ settings.monitor_url or default_health_url }}"
+                                   placeholder="https://your-public-hostname/health"
+                                   {{ 'disabled' if settings.monitor_id else '' }}>
+                            <div class="form-text">
+                                Must be reachable from the public internet (not a LAN-only address) -- Tickstem polls it
+                                from outside this network. Defaults to this box's own <code>/health</code> endpoint.
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="interval_secs" class="form-label">Check Interval (seconds)</label>
+                                <input type="number" class="form-control" id="interval_secs" name="interval_secs"
+                                       min="10" max="3600" value="{{ settings.interval_secs }}"
+                                       {{ 'disabled' if settings.monitor_id else '' }}>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="timeout_secs" class="form-label">Timeout (seconds)</label>
+                                <input type="number" class="form-control" id="timeout_secs" name="timeout_secs"
+                                       min="5" max="30" value="{{ settings.timeout_secs }}"
+                                       {{ 'disabled' if settings.monitor_id else '' }}>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            {% if not settings.monitor_id %}
+                            <button type="submit" class="btn btn-primary" id="createBtn">
+                                <i class="fas fa-plus"></i> Create Monitor
+                            </button>
+                            {% else %}
+                            {% if settings.monitor_status == 'paused' %}
+                            <button type="button" class="btn btn-outline-success" id="resumeBtn">
+                                <i class="fas fa-play"></i> Resume
+                            </button>
+                            {% else %}
+                            <button type="button" class="btn btn-outline-warning" id="pauseBtn">
+                                <i class="fas fa-pause"></i> Pause
+                            </button>
+                            {% endif %}
+                            <button type="button" class="btn btn-outline-danger" id="deleteBtn">
+                                <i class="fas fa-trash"></i> Delete Monitor
+                            </button>
+                            {% endif %}
+                        </div>
+                        <div class="small mt-2" id="monitorFormStatus"></div>
+                    </form>
+                </div>
+            </div>
+
+            {% if settings.monitor_id %}
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-history"></i> Recent Checks</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0" id="checksTable">
+                            <thead>
+                                <tr>
+                                    <th>Checked At</th>
+                                    <th>Status</th>
+                                    <th>HTTP</th>
+                                    <th>Duration</th>
+                                    <th>Error</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="5" class="text-muted">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-info-circle"></i> Current Status</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2">
+                            <strong>Monitor:</strong>
+                            {% if settings.monitor_id %}
+                            <span class="badge bg-{{ 'success' if settings.monitor_status == 'active' else ('warning' if settings.monitor_status == 'paused' else 'danger') }}" id="statusBadge">
+                                {{ (settings.monitor_status or 'unknown') | capitalize }}
+                            </span>
+                            {% else %}
+                            <span class="badge bg-secondary" id="statusBadge">Not created</span>
+                            {% endif %}
+                        </li>
+                        <li class="mb-2">
+                            <strong>Monitor ID:</strong>
+                            <small class="text-muted text-break-anywhere">{{ settings.monitor_id or '-' }}</small>
+                        </li>
+                        <li class="mb-2">
+                            <strong>Last Synced:</strong>
+                            <small class="text-muted" id="lastSyncedAt">
+                                {{ settings.last_synced_at | localtime('%Y-%m-%d %H:%M:%S %Z', 'Never') }}
+                            </small>
+                        </li>
+                        {% if settings.last_sync_error %}
+                        <li class="mb-0">
+                            <strong>Last Error:</strong>
+                            <div class="text-danger small text-break-anywhere">{{ settings.last_sync_error }}</div>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const csrfHeaders = { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN };
+
+    function applySettings(s) {
+        const badge = document.getElementById('statusBadge');
+        if (badge) {
+            badge.textContent = s.monitor_id ? (s.monitor_status ? s.monitor_status.charAt(0).toUpperCase() + s.monitor_status.slice(1) : 'Unknown') : 'Not created';
+            badge.className = 'badge bg-' + (!s.monitor_id ? 'secondary' : (s.monitor_status === 'active' ? 'success' : (s.monitor_status === 'paused' ? 'warning' : 'danger')));
+        }
+    }
+
+    const apiKeyForm = document.getElementById('apiKeyForm');
+    if (apiKeyForm) {
+        apiKeyForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const apiKey = document.getElementById('api_key').value.trim();
+            if (!apiKey) { showToast('Enter an API key to save', 'warning'); return; }
+            try {
+                const resp = await fetch('/admin/tickstem/save-key', {
+                    method: 'POST', headers: csrfHeaders, body: JSON.stringify({ api_key: apiKey }),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showToast('API key saved', 'success');
+                    document.getElementById('api_key').value = '';
+                    document.getElementById('api_key').placeholder = 'Saved -- leave blank to keep it';
+                } else {
+                    showToast(data.error || 'Failed to save key', 'danger');
+                }
+            } catch (err) {
+                showToast('Error saving API key', 'danger');
+            }
+        });
+    }
+
+    const monitorForm = document.getElementById('monitorForm');
+    const monitorFormStatus = document.getElementById('monitorFormStatus');
+    if (monitorForm) {
+        monitorForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const createBtn = document.getElementById('createBtn');
+            if (createBtn) createBtn.disabled = true;
+            monitorFormStatus.textContent = 'Creating monitor...';
+            try {
+                const resp = await fetch('/admin/tickstem/create-monitor', {
+                    method: 'POST', headers: csrfHeaders,
+                    body: JSON.stringify({
+                        name: document.getElementById('monitor_name').value,
+                        url: document.getElementById('monitor_url').value,
+                        interval_secs: document.getElementById('interval_secs').value,
+                        timeout_secs: document.getElementById('timeout_secs').value,
+                    }),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showToast('Monitor created', 'success');
+                    window.location.reload();
+                } else {
+                    monitorFormStatus.innerHTML = '<span class="text-danger">' + (data.error || 'Failed to create monitor') + '</span>';
+                    if (createBtn) createBtn.disabled = false;
+                }
+            } catch (err) {
+                monitorFormStatus.innerHTML = '<span class="text-danger">Request failed</span>';
+                if (createBtn) createBtn.disabled = false;
+            }
+        });
+    }
+
+    async function monitorAction(endpoint, confirmMsg) {
+        if (confirmMsg && !confirm(confirmMsg)) return;
+        try {
+            const resp = await fetch('/admin/tickstem/' + endpoint, { method: 'POST', headers: csrfHeaders });
+            const data = await resp.json();
+            if (data.success) {
+                showToast('Done', 'success');
+                window.location.reload();
+            } else {
+                showToast(data.error || 'Action failed', 'danger');
+            }
+        } catch (err) {
+            showToast('Request failed', 'danger');
+        }
+    }
+
+    const pauseBtn = document.getElementById('pauseBtn');
+    if (pauseBtn) pauseBtn.addEventListener('click', () => monitorAction('pause'));
+
+    const resumeBtn = document.getElementById('resumeBtn');
+    if (resumeBtn) resumeBtn.addEventListener('click', () => monitorAction('resume'));
+
+    const deleteBtn = document.getElementById('deleteBtn');
+    if (deleteBtn) deleteBtn.addEventListener('click', () => monitorAction('delete', 'Delete this Tickstem monitor and its history?'));
+
+    const checksTable = document.getElementById('checksTable');
+    if (checksTable) {
+        fetch('/admin/tickstem/checks')
+            .then(r => r.json())
+            .then(data => {
+                const tbody = checksTable.querySelector('tbody');
+                if (!data.success || !data.checks || !data.checks.length) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-muted">' + (data.error || 'No checks yet') + '</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.checks.map(c => {
+                    const statusClass = c.status === 'up' ? 'success' : (c.status === 'timeout' ? 'warning' : 'danger');
+                    return '<tr>' +
+                        '<td>' + (c.checked_at || '-') + '</td>' +
+                        '<td><span class="badge bg-' + statusClass + '">' + (c.status || '-') + '</span></td>' +
+                        '<td>' + (c.status_code != null ? c.status_code : '-') + '</td>' +
+                        '<td>' + (c.duration_ms != null ? c.duration_ms + ' ms' : '-') + '</td>' +
+                        '<td class="text-break-anywhere">' + (c.error || '') + '</td>' +
+                        '</tr>';
+                }).join('');
+            })
+            .catch(() => {
+                checksTable.querySelector('tbody').innerHTML = '<tr><td colspan="5" class="text-danger">Failed to load checks</td></tr>';
+            });
+    }
+});
+</script>
+{% endblock %}

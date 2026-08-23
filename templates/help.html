@@ -394,6 +394,15 @@
                                             on itself &mdash; still raises an alarm, from outside the box.
                                         </li>
                                         <li>
+                                            <strong>Tickstem Uptime Monitor</strong> (<strong>Settings &rarr;
+                                            Tickstem Uptime Monitor</strong>, <code>/admin/tickstem/</code>): the
+                                            opposite direction from Uptime Heartbeat above &mdash; instead of this
+                                            box pinging out, <a href="https://tickstem.dev" target="_blank" rel="noopener">Tickstem</a>
+                                            polls a public URL (normally this box's own <code>/health</code>) from
+                                            the outside and alerts if it stops answering. Create, pause, resume, and
+                                            delete the monitor from this page using a Tickstem account API key.
+                                        </li>
+                                        <li>
                                             <strong>Backup restore verification</strong> (<strong>Admin &rarr;
                                             Backups</strong>): a backup that's never been restored isn't a proven
                                             backup. This restores the latest backup's database into a throwaway
