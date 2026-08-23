@@ -25,7 +25,7 @@ from flask import Blueprint, current_app
 
 import re
 
-from flask import g, jsonify, render_template, request
+from flask import g, jsonify, redirect, render_template, request, url_for
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -113,6 +113,17 @@ def admin():
                 False,
                 lambda: AdminUser.query.count() == 0,
             )
+
+        # /admin can't go away entirely -- app.py's auth gate exempts this
+        # exact endpoint from the login-wall specifically so a fresh install
+        # with zero admin users can reach the create-first-admin form below
+        # without being able to log in yet (see the `admin_setup_mode`
+        # allow-list in app.py's before_request hook). But once an admin
+        # exists, there's nothing left here worth a dedicated stats page for
+        # -- the same counts already appear on the homepage. Redirect
+        # straight to Settings instead of rendering a redundant stub.
+        if not setup_mode:
+            return redirect(url_for('settings_hub'))
 
         total_boundaries = safe_db_operation(
             'count boundaries', 0, lambda: Boundary.query.count()
