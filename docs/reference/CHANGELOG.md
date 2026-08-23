@@ -8,6 +8,23 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.188.1] - 2026-08-23 - Redirect /admin to Settings once an admin exists
+
+### Changed
+- **`/admin` now redirects to `/settings` for authenticated visitors**
+  instead of rendering a stats-overview stub. The route itself can't be
+  removed -- `app.py`'s auth gate exempts this exact endpoint from the
+  login-wall specifically so a fresh install with zero admin users can
+  reach the create-first-admin form without being able to log in yet (the
+  `admin_setup_mode` allow-list in the `before_request` hook) -- but once
+  an admin exists there was nothing left on the page worth a dedicated
+  view for: the same Active Alerts / Total Boundaries counts already
+  appear on the homepage. The first-time setup wizard (`setup_mode`) is
+  unaffected and still renders normally.
+- Removed the "Admin Dashboard" entry from Settings -> Configuration
+  (`href="/admin"`) -- it had become a circular link from inside Settings
+  back to Settings itself.
+
 ## [2.188.0] - 2026-08-23 - Retire the Admin Dashboard's tabbed interface (phase 5, final)
 
 This completes the admin.html/`/settings` consolidation started in 2.186.2

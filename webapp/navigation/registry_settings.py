@@ -63,13 +63,12 @@ SETTINGS_SECTION = NavSection(
             label="Configuration",
             icon="fas fa-sliders",
             items=(
-                NavItem(
-                    label="Admin Dashboard",
-                    icon="fas fa-sliders",
-                    href="/admin",
-                    description="Core system configuration and admin overview.",
-                    permissions=(SYSTEM_VIEW_CONFIG,),
-                ),
+                # "Admin Dashboard" (href="/admin") used to live here. Now that
+                # every tab that page ever had has its own registered entry
+                # (see the phase 1-5 admin/settings consolidation), /admin
+                # itself just redirects authenticated visitors straight back
+                # to /settings -- a circular link from inside Settings to
+                # Settings itself, so it was removed rather than kept.
                 NavItem(
                     label="Environment Variables",
                     icon="fas fa-code",
