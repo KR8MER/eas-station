@@ -372,7 +372,15 @@ async function submitAlertEdit(event) {
     }
 }
 // File upload handling
-document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+// Note: this handles the Data tab's boundary-upload form despite living in
+// alert-management.js -- historical, not a naming mistake worth chasing
+// down right now. Guarded (unlike alert-management's own init below, this
+// runs unconditionally at script-parse time) so this file can be loaded on
+// pages that don't have the boundary-upload markup, like the standalone
+// Alert Management page.
+const boundaryUploadForm = document.getElementById('uploadForm');
+if (boundaryUploadForm) {
+boundaryUploadForm.addEventListener('submit', async function(e) {
     e.preventDefault();
     let selection;
     try {
@@ -412,9 +420,12 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
         submitBtn.disabled = false;
     }
 });
+}
 
 // Shapefile upload handling
-document.getElementById('shapefileUploadForm').addEventListener('submit', async function(e) {
+const shapefileUploadForm = document.getElementById('shapefileUploadForm');
+if (shapefileUploadForm) {
+shapefileUploadForm.addEventListener('submit', async function(e) {
     e.preventDefault();
 
     const boundaryType = document.getElementById('shapefileBoundaryType').value;
@@ -454,6 +465,7 @@ document.getElementById('shapefileUploadForm').addEventListener('submit', async 
         submitBtn.disabled = false;
     }
 });
+}
 
 // Load shapefiles available on server
 

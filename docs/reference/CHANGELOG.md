@@ -8,6 +8,40 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.187.2] - 2026-08-23 - Extract Alert Management from Admin Dashboard (phase 3 of consolidation)
+
+### Added
+- **New `/admin/alert-management` page** (`templates/admin/alert_management.html`,
+  `dashboard.py:alert_management_page()`) -- the stored-alerts table
+  (search/edit/delete) and mark/delete-expired operations that used to be
+  the Admin Dashboard's "Alerts" sub-tab. No dedicated page existed for
+  this, so it was extracted rather than deleted, reusing the exact same
+  `static/js/admin/alert-management.js` and edit-alert modal markup
+  (faithful move, not a rewrite, given how much interactive logic is in
+  that file).
+
+### Fixed
+- **`alert-management.js` would have crashed on any page without the Data
+  tab's boundary-upload form.** Despite its name, this file also
+  unconditionally wires up `#uploadForm`/`#shapefileUploadForm` submit
+  handlers (`document.getElementById(...).addEventListener(...)` with no
+  null check) -- historical, not something worth renaming/splitting right
+  now. Guarded both, matching the defensive pattern already used elsewhere
+  in the same file for `#alerts-subtab`. Required to load this file safely
+  on the new standalone page; behavior on the Admin Dashboard's Data tab,
+  where those elements do exist, is unchanged.
+
+### Removed
+- **Admin Dashboard's Alert Management sub-tab** and its now-orphaned Edit
+  Alert modal (nothing else in admin.html triggers it once the sub-tab and
+  its "Edit" buttons are gone). `alert-management.js` itself stays loaded
+  on admin.html -- it still runs the Data tab's boundary-upload handling.
+
+  Remaining in admin.html: Data tab, System tab's Location/Alert Filtering,
+  Broadcast's EAS Encoder Settings -- all three share one 1,475-line
+  interactive JS module (FIPS pickers, zone search, EAS tone/DTMF UI) and
+  are next.
+
 ## [2.187.1] - 2026-08-23 - Remove duplicate navigation entries
 
 ### Removed
