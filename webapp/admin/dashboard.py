@@ -24,26 +24,16 @@ from __future__ import annotations
 from flask import Blueprint, current_app
 
 import re
-from typing import Dict, List
 
 from flask import g, jsonify, render_template, request
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 
 from app_core.extensions import db
-from app_core.models import AdminSession, AdminUser, ApplicationSettings, Boundary, CAPAlert, EASMessage, SystemLog
+from app_core.models import AdminSession, AdminUser, ApplicationSettings, Boundary, CAPAlert, SystemLog
 from app_core.auth.roles import Role
 from app_core.auth.roles import require_permission
 from app_core.alerts import get_active_alerts_query, get_expired_alerts_query
-from app_core.location import get_location_settings
-from app_core.zones import build_county_forecast_zone_map
-from app_utils.eas import (
-    ORIGINATOR_DESCRIPTIONS,
-    PRIMARY_ORIGINATORS,
-    SAME_HEADER_FIELD_DESCRIPTIONS,
-    P_DIGIT_MEANINGS,
-    manual_default_same_codes,
-)
 from app_utils.event_codes import EVENT_CODE_REGISTRY
 from app_utils.fips_codes import (
     get_extended_same_lookup,
@@ -86,7 +76,18 @@ def register_dashboard_routes(app, logger, eas_config):
 
 @dashboard_bp.route('/admin')
 def admin():
-    """Admin interface"""
+    """Admin interface -- now just a stats overview plus the first-time
+    setup wizard.
+
+    Used to also compute and pass a large amount of location/EAS context
+    (location_settings, eas_event_codes, eas_fips_states, boundary_stats,
+    recent EAS messages, etc.) for the tabbed interface that lived here.
+    That interface has been fully extracted to its own registered pages
+    (see the phase 1-5 admin/settings consolidation entries in
+    docs/reference/CHANGELOG.md) -- none of that context is read by
+    admin.html anymore, so it was dropped rather than computed and thrown
+    away on every request.
+    """
 
     def safe_db_operation(description: str, default, operation):
         try:
@@ -126,94 +127,12 @@ def admin():
             'count expired CAP alerts', 0, lambda: get_expired_alerts_query().count()
         )
 
-        boundary_stats = safe_db_operation(
-            'load boundary statistics',
-            [],
-            lambda: db.session.query(
-                Boundary.type, func.count(Boundary.id).label('count')
-            ).group_by(Boundary.type).all(),
-        )
-
-        location_settings = safe_db_operation(
-            'load location settings', {}, get_location_settings
-        )
-        manual_same_defaults = manual_default_same_codes()
-        location_settings_view: Dict[str, List[str]] = dict(location_settings)
-        fips_defaults = list(location_settings_view.get('fips_codes') or [])
-        if fips_defaults:
-            location_settings_view['same_codes'] = list(fips_defaults)
-        else:
-            location_settings_view.setdefault('same_codes', manual_same_defaults)
-        location_settings_view.setdefault('fips_codes', fips_defaults)
-
-        eas_enabled = current_app.config.get('EAS_BROADCAST_ENABLED', False)
-        total_eas_messages = 0
-        recent_eas_messages: List[EASMessage] = []
-        if eas_enabled:
-            total_eas_messages = safe_db_operation(
-                'count EAS messages', 0, lambda: EASMessage.query.count()
-            )
-            recent_eas_messages = safe_db_operation(
-                'load recent EAS messages',
-                [],
-                # without_audio(): the dashboard shows filenames and timestamps.
-                lambda: EASMessage.without_audio()
-                .order_by(EASMessage.created_at.desc())
-                .limit(10)
-                .all(),
-            )
-
-        eas_event_options = [
-            {'code': code, 'name': entry.get('name', code), 'product': entry.get('default_product', '')}
-            for code, entry in EVENT_CODE_REGISTRY.items()
-            if '?' not in code
-        ]
-        eas_event_options.sort(key=lambda item: item['code'])
-
-        # Extended tree includes marine areas loaded via mz_*.dbf so the
-        # FIPS picker can surface codes like American Samoa marine 077###.
-        eas_state_tree = get_extended_state_county_tree()
-        eas_lookup = get_extended_same_lookup()
-        originator_choices = [
-            {
-                'code': code,
-                'description': ORIGINATOR_DESCRIPTIONS.get(code, ''),
-            }
-            for code in PRIMARY_ORIGINATORS
-        ]
-
-        county_zone_map = safe_db_operation(
-            'build county-to-forecast zone index',
-            {},
-            build_county_forecast_zone_map,
-        )
-
         return render_template(
             'admin.html',
             total_boundaries=total_boundaries,
             total_alerts=total_alerts,
             active_alerts=active_alerts,
             expired_alerts=expired_alerts,
-            boundary_stats=boundary_stats,
-            location_settings=location_settings_view,
-            eas_enabled=eas_enabled,
-            eas_total_messages=total_eas_messages,
-            eas_recent_messages=recent_eas_messages,
-            eas_web_subdir=current_app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages'),
-            eas_event_codes=eas_event_options,
-            eas_originator=dashboard_bp.eas_config.get('originator', 'WXR'),
-            eas_station_id=dashboard_bp.eas_config.get('station_id', 'EASNODES'),
-            eas_attention_seconds=dashboard_bp.eas_config.get('attention_tone_seconds', 8),
-            eas_sample_rate=dashboard_bp.eas_config.get('sample_rate', 16000),
-            eas_tts_provider=(dashboard_bp.eas_config.get('tts_provider') or '').strip().lower(),
-            eas_fips_states=eas_state_tree,
-            eas_fips_lookup=eas_lookup,
-            eas_originator_descriptions=ORIGINATOR_DESCRIPTIONS,
-            eas_originator_choices=originator_choices,
-            eas_header_fields=SAME_HEADER_FIELD_DESCRIPTIONS,
-            eas_p_digit_meanings=P_DIGIT_MEANINGS,
-            eas_default_same_codes=manual_same_defaults,
-            eas_county_zone_map=county_zone_map,
             setup_mode=setup_mode,
         )
     except Exception as exc:  # pragma: no cover - defensive logging
@@ -223,7 +142,7 @@ def admin():
             pass
         current_app.logger.error('Error rendering admin template: %s', exc)
         return "<h1>Admin Interface</h1><p>Admin panel loading...</p><p><a href='/'>← Back to Main</a></p>"
-    
+
 
 @dashboard_bp.route('/admin/user-accounts', methods=['GET'])
 @require_permission('system.manage_users')
@@ -260,6 +179,51 @@ def data_management_page():
     extracting this from the Admin Dashboard's Data tab.
     """
     return render_template('admin/data_management.html')
+
+
+@dashboard_bp.route('/admin/location-settings', methods=['GET'])
+@require_permission('system.configure')
+def location_settings_page():
+    """Render the station location and alert-filtering (FIPS/zone) settings page.
+
+    location_settings itself is available on every template via the global
+    context processor (app_core/flask/context_processors.py); only the
+    FIPS/zone reference data used by the county picker's JS is route-
+    specific and needs to be passed explicitly here.
+    """
+    eas_state_tree = get_extended_state_county_tree()
+    eas_lookup = get_extended_same_lookup()
+    return render_template(
+        'admin/location_settings.html',
+        eas_fips_states=eas_state_tree,
+        eas_fips_lookup=eas_lookup,
+    )
+
+
+@dashboard_bp.route('/admin/eas-encoder-settings', methods=['GET'])
+@require_permission('system.configure')
+def eas_encoder_settings_page():
+    """Render the EAS/SAME encoder configuration page.
+
+    Only EAS_EVENT_CODES is actually read by location-settings.js's EAS
+    functions (initEasSettings/buildEasEventFilterUI/etc.) -- the current
+    form values themselves are loaded client-side from GET
+    /admin/eas_settings, not server-rendered. EAS_DEFAULTS/
+    EAS_ORIGINATOR_DESCRIPTIONS/EAS_P_DIGIT_MEANINGS were computed and
+    passed by the old /admin route but never actually read by any JS or
+    template in the Broadcast tab -- confirmed dead before dropping them
+    here rather than carrying the dead weight forward.
+    """
+    eas_event_options = [
+        {'code': code, 'name': entry.get('name', code), 'product': entry.get('default_product', '')}
+        for code, entry in EVENT_CODE_REGISTRY.items()
+        if '?' not in code
+    ]
+    eas_event_options.sort(key=lambda item: item['code'])
+    return render_template(
+        'admin/eas_encoder_settings.html',
+        eas_event_codes=eas_event_options,
+    )
 
 
 @dashboard_bp.route('/admin/users', methods=['GET', 'POST'])

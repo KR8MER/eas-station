@@ -85,6 +85,20 @@ SETTINGS_SECTION = NavSection(
                     permissions=(SYSTEM_CONFIGURE,),
                 ),
                 NavItem(
+                    label="Location & Alert Filtering",
+                    icon="fas fa-map-marker-alt",
+                    href="/admin/location-settings",
+                    description="Station jurisdiction, timezone, map defaults, and monitored counties/zones.",
+                    permissions=(SYSTEM_CONFIGURE,),
+                ),
+                NavItem(
+                    label="EAS Encoder Settings",
+                    icon="fas fa-broadcast-tower",
+                    href="/admin/eas-encoder-settings",
+                    description="SAME/EAS encoder configuration: station identity, tone signaling, event filtering and dedup.",
+                    permissions=(SYSTEM_CONFIGURE,),
+                ),
+                NavItem(
                     label="Alert Sources",
                     icon="fas fa-rss",
                     href="/admin/alert-feeds",

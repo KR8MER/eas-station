@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+
+{% block title %}EAS Encoder Settings - EAS Station™{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set header_icon = 'fas fa-broadcast-tower' %}
+{% set header_title = 'EAS Encoder Settings' %}
+{% set header_subtitle = 'Emergency Alert System encoder settings for SAME/EAS audio generation' %}
+{% include 'components/page_header.html' %}
+
+<div class="container-fluid">
+    <form id="easSettingsForm">
+        <div class="row g-3">
+            <!-- Master Enable -->
+            <div class="col-12">
+                <div class="card border-warning">
+                    <div class="card-body">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="easBroadcastEnabled" name="broadcast_enabled">
+                            <label class="form-check-label fw-bold" for="easBroadcastEnabled">
+                                <i class="fas fa-power-off me-2"></i> Enable EAS Broadcasting
+                            </label>
+                        </div>
+                        <small class="text-muted">When enabled, the system can generate SAME/EAS audio for alerts.</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Station Identity -->
+            <div class="col-md-4">
+                <label for="easOriginator" class="form-label fw-bold">Originator Code</label>
+                <select class="form-select" id="easOriginator" name="originator">
+                    <option value="WXR">WXR - Weather Radio</option>
+                    <option value="EAS">EAS - Emergency Alert System</option>
+                    <option value="PEP">PEP - Primary Entry Point</option>
+                    <option value="CIV">CIV - Civil Authority</option>
+                </select>
+                <small class="text-muted">Identifies who is originating the alert</small>
+            </div>
+            <div class="col-md-4">
+                <label for="easStationId" class="form-label fw-bold">Station ID (Callsign)</label>
+                <input type="text" class="form-control" id="easStationId" name="station_id" maxlength="8" placeholder="EASNODES" style="text-transform: uppercase;">
+                <small class="text-muted">8-character SAME callsign identifier</small>
+            </div>
+            <div class="col-md-4">
+                <label for="easSampleRate" class="form-label fw-bold">Audio Sample Rate</label>
+                <select class="form-select" id="easSampleRate" name="sample_rate">
+                    <option value="8000">8000 Hz</option>
+                    <option value="16000" selected>16000 Hz (Recommended - Low CPU)</option>
+                    <option value="22050">22050 Hz</option>
+                    <option value="44100">44100 Hz (High CPU)</option>
+                    <option value="48000">48000 Hz (High CPU)</option>
+                </select>
+                <small class="form-text text-muted">
+                    For generated EAS alerts. Lower rates save CPU. 16kHz is optimal for SAME tones and voice narration.
+                </small>
+            </div>
+
+            <!-- Audio Settings -->
+            <div class="col-md-4">
+                <label for="easAttentionTone" class="form-label fw-bold">Attention Tone Duration</label>
+                <div class="input-group">
+                    <input type="number" class="form-control" id="easAttentionTone" name="attention_tone_seconds" min="1" max="25" value="8">
+                    <span class="input-group-text">seconds</span>
+                </div>
+                <small class="text-muted">Duration of the attention tone (1-25 seconds)</small>
+            </div>
+            <div class="col-md-4">
+                <label for="easAudioPlayer" class="form-label fw-bold">Audio Player Command</label>
+                <input type="text" class="form-control" id="easAudioPlayer" name="audio_player" placeholder="aplay">
+                <small class="text-muted">Command to play audio (aplay, paplay, etc.)</small>
+            </div>
+            <div class="col-md-4">
+                <label for="easOutputDir" class="form-label fw-bold">Output Directory</label>
+                <input type="text" class="form-control" id="easOutputDir" name="output_dir" placeholder="static/eas_messages">
+                <small class="text-muted">Directory for generated EAS audio files</small>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-bold">Station Fingerprint</label>
+                <div class="form-check form-switch mt-1">
+                    <input class="form-check-input" type="checkbox" id="easEndecFingerprint" name="endec_fingerprint">
+                    <label class="form-check-label" for="easEndecFingerprint">Enable trill fingerprint</label>
+                </div>
+                <small class="text-muted">Appends a distinctive trill after each SAME burst to identify this station</small>
+            </div>
+            <div class="col-md-4">
+                <label for="easRelayNarrationSource" class="form-label fw-bold">Relay Narration Audio</label>
+                <select class="form-select" id="easRelayNarrationSource" name="relay_narration_source">
+                    <option value="auto" selected>Auto — captured unless degraded (recommended)</option>
+                    <option value="captured">Captured off-air audio (legacy)</option>
+                    <option value="tts">Always local TTS</option>
+                </select>
+                <small class="text-muted">Voice narration used when relaying received (OTA) alerts. Auto substitutes local TTS when the captured off-air audio is detected as gate-chopped/stuttering. Requires a configured TTS provider to substitute.</small>
+            </div>
+
+            <!-- Pre/Post-Alert Signaling -->
+            <div class="col-12">
+                <div class="card border-info-subtle">
+                    <div class="card-header bg-info-subtle">
+                        <h6 class="mb-0"><i class="fas fa-signal me-2"></i> Pre/Post-Alert Signaling</h6>
+                        <small class="text-muted">Optional signals played before the SAME header and after the EOM. Applies to every broadcast (CAP, OTA relay, and manual).</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="easPreAlertChime" class="form-label fw-bold">Pre-Alert Signal</label>
+                                <select class="form-select" id="easPreAlertChime" name="pre_alert_chime">
+                                    <option value="none">None (disabled)</option>
+                                    <option value="bell">Bell (decaying 880 Hz)</option>
+                                    <option value="beep">Beep (1000 Hz tone)</option>
+                                    <option value="three_tone">Three-Tone (440 / 880 / 1320 Hz)</option>
+                                    <option value="qc2">QC-II (Quick Call II two-tone paging)</option>
+                                    <option value="dtmf">DTMF (dialing sequence)</option>
+                                    <option value="mdc1200">MDC1200 (digital selective calling)</option>
+                                </select>
+                                <small class="text-muted">Plays before the first SAME header burst.</small>
+                            </div>
+                            <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="pre-duration">
+                                <label for="easPreAlertChimeDuration" class="form-label fw-bold">Pre-Alert Signal Duration</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="easPreAlertChimeDuration" name="pre_alert_chime_duration" min="0.1" max="10" step="0.1" value="2.0">
+                                    <span class="input-group-text">seconds</span>
+                                </div>
+                                <small class="text-muted">Total signal duration (0.1–10 seconds).</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="easPostAlertChime" class="form-label fw-bold">Post-Alert Signal</label>
+                                <select class="form-select" id="easPostAlertChime" name="post_alert_chime">
+                                    <option value="none">None (disabled)</option>
+                                    <option value="bell">Bell (decaying 880 Hz)</option>
+                                    <option value="beep">Beep (1000 Hz tone)</option>
+                                    <option value="three_tone">Three-Tone (440 / 880 / 1320 Hz)</option>
+                                    <option value="qc2">QC-II (Quick Call II two-tone paging)</option>
+                                    <option value="dtmf">DTMF (dialing sequence)</option>
+                                    <option value="mdc1200">MDC1200 (digital selective calling)</option>
+                                </select>
+                                <small class="text-muted">Plays after the EOM sequence.</small>
+                            </div>
+                            <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="post-duration">
+                                <label for="easPostAlertChimeDuration" class="form-label fw-bold">Post-Alert Signal Duration</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="easPostAlertChimeDuration" name="post_alert_chime_duration" min="0.1" max="10" step="0.1" value="2.0">
+                                    <span class="input-group-text">seconds</span>
+                                </div>
+                                <small class="text-muted">Total signal duration (0.1–10 seconds).</small>
+                            </div>
+                            <div class="col-12 eas-tone-conditional" data-eas-tone-show="qc2">
+                                <div class="alert alert-light border small mb-0">
+                                    <i class="fas fa-info-circle me-2 text-info"></i>
+                                    <strong>QC-II (Motorola Quick Call II)</strong> two-tone paging uses a fixed
+                                    1&nbsp;s Tone&nbsp;A followed by a 4&nbsp;s Tone&nbsp;B (5&nbsp;s total). Timing is
+                                    standardized — only the tone-pair frequencies and optional long tone below are configurable.
+                                </div>
+                            </div>
+                            <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="qc2">
+                                <label for="easQc2ToneAFreq" class="form-label fw-bold">QC-II Tone&nbsp;A Frequency</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="easQc2ToneAFreq" name="qc2_tone_a_freq" min="50" max="4000" step="0.1" value="1000.0">
+                                    <span class="input-group-text">Hz</span>
+                                </div>
+                                <small class="text-muted">First (short) tone, 50–4000 Hz.</small>
+                            </div>
+                            <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="qc2">
+                                <label for="easQc2ToneBFreq" class="form-label fw-bold">QC-II Tone&nbsp;B Frequency</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="easQc2ToneBFreq" name="qc2_tone_b_freq" min="50" max="4000" step="0.1" value="1500.0">
+                                    <span class="input-group-text">Hz</span>
+                                </div>
+                                <small class="text-muted">Second (long) tone, 50–4000 Hz.</small>
+                            </div>
+                            <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="qc2">
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" type="checkbox" id="easQc2LongToneEnabled" name="qc2_long_tone_enabled">
+                                    <label class="form-check-label fw-bold" for="easQc2LongToneEnabled">Enable Long Tone</label>
+                                </div>
+                                <small class="text-muted">Append a sustained tone at Tone&nbsp;B frequency after the A+B sequence.</small>
+                            </div>
+                            <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="qc2">
+                                <label for="easQc2LongToneSeconds" class="form-label fw-bold">Long Tone Duration</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="easQc2LongToneSeconds" name="qc2_long_tone_seconds" min="1" max="120" step="0.5" value="10.0">
+                                    <span class="input-group-text">seconds</span>
+                                </div>
+                                <small class="text-muted">Duration of the long tone (1–120 s). Only used when enabled.</small>
+                            </div>
+                            <div class="col-12 eas-tone-conditional" data-eas-tone-show="dtmf">
+                                <div class="alert alert-light border small mb-0">
+                                    <i class="fas fa-info-circle me-2 text-info"></i>
+                                    <strong>DTMF (Dual-Tone Multi-Frequency)</strong> plays each character of the sequence below as
+                                    its standard touch-tone pair. Allowed characters: <code>0-9</code>, <code>A-D</code>,
+                                    <code>*</code>, <code>#</code>. Timing is fixed at 100&nbsp;ms tone / 50&nbsp;ms gap per digit.
+                                </div>
+                            </div>
+                            <div class="col-12 eas-tone-conditional" data-eas-tone-show="dtmf">
+                                <label for="easDtmfSequence" class="form-label fw-bold">DTMF Sequence</label>
+                                <input type="text" class="form-control" id="easDtmfSequence" name="dtmf_sequence" maxlength="32" placeholder="e.g. *1234#" pattern="[0-9A-Da-d*#]*" style="text-transform: uppercase;">
+                                <small class="text-muted">Up to 32 valid digits; invalid characters are stripped on save.</small>
+                            </div>
+                            <div class="col-12 eas-tone-conditional" data-eas-tone-show="mdc1200">
+                                <div class="alert alert-light border small mb-0">
+                                    <i class="fas fa-info-circle me-2 text-info"></i>
+                                    <strong>MDC1200 (Motorola Selective Calling)</strong> transmits a 1200-baud
+                                    FFSK packet (mark = 1200&nbsp;Hz, space = 1800&nbsp;Hz) carrying this
+                                    station's <em>Unit ID</em> and an op-code. Receiving Motorola
+                                    radios display the unit ID and execute the op-code (PTT-ID,
+                                    Emergency, etc.). Single-packet ops (PTT-ID, Emergency,
+                                    Request to Talk, Remote Monitor) are <strong>~173&nbsp;ms</strong>;
+                                    double-packet ops (Call Alert, Selective Call) carry a
+                                    target unit ID in a second info block and are
+                                    <strong>~267&nbsp;ms</strong>. Signal-duration field is ignored.
+                                    Verify on the bench with a dedicated MDC1200 decoder such as
+                                    <a href="https://github.com/pabutusa/mdc-decoder" target="_blank" rel="noopener">mdc-decoder</a>
+                                    (decodes a WAV directly) before going on the air — note that mainline
+                                    <code>multimon-ng</code> does <strong>not</strong> include an MDC demodulator.
+                                </div>
+                            </div>
+                            <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="mdc1200">
+                                <label for="easMdc1200UnitId" class="form-label fw-bold">MDC1200 Unit ID</label>
+                                <input type="text" class="form-control" id="easMdc1200UnitId" name="mdc1200_unit_id" maxlength="8" placeholder="1234 or 0x04D2" pattern="(0[xX][0-9A-Fa-f]{1,4}|\d{1,5})" value="1">
+                                <small class="text-muted">16-bit subscriber ID (1–65535 decimal, or <code>0x0001</code>–<code>0xFFFF</code> hex). Motorola CPS often shows unit IDs in 4-digit hex.</small>
+                            </div>
+                            <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="mdc1200">
+                                <label for="easMdc1200OpCode" class="form-label fw-bold">MDC1200 Op-Code</label>
+                                <select class="form-select" id="easMdc1200OpCode" name="mdc1200_op_code">
+                                    <option value="ptt_id_pre">PTT-ID Pre (op 0x01 / arg 0x80)</option>
+                                    <option value="ptt_id_post">PTT-ID Post (op 0x00 / arg 0x80)</option>
+                                    <option value="emergency">Emergency (op 0x40 / arg 0x80)</option>
+                                    <option value="request_to_talk">Request to Talk (op 0x35 / arg 0x89)</option>
+                                    <option value="remote_monitor">Remote Monitor (op 0x11 / arg 0x80)</option>
+                                    <option value="call_alert">Call Alert (op 0x63 / arg 0x85) — pages target unit</option>
+                                    <option value="selective_call">Selective Call (op 0x35 / arg 0x80) — unmutes target unit</option>
+                                    <option value="custom">Custom (use raw values below)</option>
+                                </select>
+                                <small class="text-muted">Pick a preset, or choose <em>Custom</em> to set raw bytes. For <em>Call Alert</em> and <em>Selective Call</em> the Unit ID above is the <strong>target</strong> radio's ID. Leave this on <em>PTT-ID Pre</em> to bookend the broadcast — see the note below.</small>
+                            </div>
+                            <div class="col-12 eas-tone-conditional" data-eas-tone-show="mdc1200-bookend">
+                                <div class="alert alert-success border small mb-0">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Bookend pair active.</strong> Both the Pre- and Post-Alert
+                                    Signals are set to MDC1200 with op-code <em>PTT-ID Pre</em>, so the
+                                    broadcast is automatically bookended: <strong>PTT-ID Pre</strong>
+                                    (op&nbsp;0x01) is sent before the alert and <strong>PTT-ID Post</strong>
+                                    (op&nbsp;0x00) after it. You don't pick both manually — the post-side
+                                    packet is substituted for you. Choosing any other op-code sends that
+                                    same op-code on both ends instead.
+                                </div>
+                            </div>
+                            <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="mdc1200-custom">
+                                <label for="easMdc1200OpCodeRaw" class="form-label fw-bold">Raw Op-Code</label>
+                                <input type="text" class="form-control" id="easMdc1200OpCodeRaw" name="mdc1200_op_code_raw" maxlength="6" placeholder="0x01" pattern="(0[xX][0-9A-Fa-f]{1,2}|\d{1,3})">
+                                <small class="text-muted">8-bit op-code (decimal 0–255 or 0x00–0xFF). Used only when op-code preset is <em>Custom</em>.</small>
+                            </div>
+                            <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="mdc1200-custom">
+                                <label for="easMdc1200ArgRaw" class="form-label fw-bold">Raw Argument</label>
+                                <input type="text" class="form-control" id="easMdc1200ArgRaw" name="mdc1200_arg_raw" maxlength="6" placeholder="0x80" pattern="(0[xX][0-9A-Fa-f]{1,2}|\d{1,3})">
+                                <small class="text-muted">8-bit argument byte (decimal 0–255 or 0x00–0xFF). Used only when op-code preset is <em>Custom</em>.</small>
+                            </div>
+                            <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="mdc1200-double">
+                                <label for="easMdc1200TargetUnitId" class="form-label fw-bold">MDC1200 Target Unit ID</label>
+                                <input type="text" class="form-control" id="easMdc1200TargetUnitId" name="mdc1200_target_unit_id" maxlength="8" placeholder="e.g. 0x04D2 (leave blank for single packet)" pattern="(0[xX][0-9A-Fa-f]{1,4}|\d{1,5})">
+                                <small class="text-muted">16-bit ID of the <strong>destination</strong> radio (1–65535 decimal or 0x0001–0xFFFF). Used by <em>Call Alert</em> and <em>Selective Call</em> double-packet ops; the encoder appends a second 14-byte info block carrying this ID, making the on-air frame ~267&nbsp;ms instead of ~173&nbsp;ms. Leave blank to fall back to a single-packet frame where the source Unit ID also acts as the target.</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Note about FIPS codes -->
+            <div class="col-12">
+                <div class="alert alert-info small mb-0">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Broadcast Counties:</strong> EAS broadcasts use the SAME/FIPS counties configured under <a href="{{ url_for('dashboard.location_settings_page') }}" class="alert-link">Location &amp; Alert Filtering &rarr; Alert Filtering</a>.
+                    For Required Weekly Tests (RWT), configure target counties on the <a href="/rwt-schedule" class="alert-link">RWT Schedule</a> page.
+                </div>
+            </div>
+
+            <!-- Auto-Forward Event Filter -->
+            <div class="col-12">
+                <div class="card border-warning-subtle">
+                    <div class="card-header bg-warning-subtle">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <div>
+                                <h6 class="mb-0"><i class="fas fa-filter me-2"></i> Auto-Forward Event Filter</h6>
+                                <small class="text-muted">Select which event types to automatically forward to air. Leave all unchecked to forward all events.</small>
+                            </div>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" id="easEventSelectAll">Select All</button>
+                                <button type="button" class="btn btn-outline-secondary" id="easEventClearAll">Clear All</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body" id="easEventFilterContainer">
+                        <p class="text-muted small mb-0">Loading event codes…</p>
+                    </div>
+                </div>
+                <input type="hidden" id="easForwardedEventCodes" name="forwarded_event_codes">
+            </div>
+
+            <!-- Deduplication & Audio Detection -->
+            <div class="col-12">
+                <div class="card border-secondary-subtle">
+                    <div class="card-header bg-secondary-subtle">
+                        <h6 class="mb-0"><i class="fas fa-clone me-2"></i> Deduplication &amp; Audio Detection</h6>
+                        <small class="text-muted">Controls how long a duplicate alert is suppressed, and whether low-confidence audio detections with no decoded header get logged at all.</small>
+                    </div>
+                    <div class="card-body row g-3">
+                        <div class="col-md-4">
+                            <label for="easCrossSourceDedupMinutes" class="form-label fw-bold">
+                                Cross-Source Dedup Window (min)
+                                <i class="fas fa-info-circle text-primary ms-1" data-bs-toggle="tooltip" title="Used when only event code + FIPS set are available to compare (no SAME header, e.g. the CAP-only path)."></i>
+                            </label>
+                            <input type="number" class="form-control" id="easCrossSourceDedupMinutes" name="cross_source_dedup_minutes" min="1" max="1440" value="15">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="easHeaderKeyDedupMinutes" class="form-label fw-bold">
+                                Header-Key Dedup Window (min)
+                                <i class="fas fa-info-circle text-primary ms-1" data-bs-toggle="tooltip" title="Used when a SAME header is available. The header key encodes the issuer's release time, so an identical key is the same alert issuance regardless of how far apart the copies arrive — safe to set much higher than the cross-source window."></i>
+                            </label>
+                            <input type="number" class="form-control" id="easHeaderKeyDedupMinutes" name="header_key_dedup_minutes" min="1" max="10080" value="1440">
+                            <small class="text-muted">Default 1440 = 24 hours</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="easMinLogConfidencePercent" class="form-label fw-bold">
+                                Min Confidence to Log (%)
+                                <i class="fas fa-info-circle text-primary ms-1" data-bs-toggle="tooltip" title="Only applies to detections with NO decoded event code (a partial/garbled SAME burst). A real decoded alert is always logged regardless of confidence, even if it doesn't match local FIPS coverage. 0 = log every detection."></i>
+                            </label>
+                            <input type="number" class="form-control" id="easMinLogConfidencePercent" name="min_log_confidence_percent" min="0" max="100" step="1" value="0">
+                            <small class="text-muted">0 disables filtering (logs everything)</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <label for="easAuthorizedEvents" class="form-label fw-bold">
+                    Authorized Event Codes
+                    <i class="fas fa-info-circle text-primary ms-1" data-bs-toggle="tooltip" title="Event codes authorized for manual broadcasts"></i>
+                </label>
+                <textarea class="form-control" id="easAuthorizedEvents" name="authorized_event_codes" rows="3" placeholder="RWT&#10;RMT&#10;DMO"></textarea>
+                <small class="text-muted">One event code per line (e.g., RWT, RMT, DMO)</small>
+            </div>
+
+            <!-- Save Button -->
+            <div class="col-12 d-flex align-items-center">
+                <button type="submit" class="btn btn-warning">
+                    <i class="fas fa-save"></i> Save EAS Settings
+                </button>
+                <button type="button" class="btn btn-outline-secondary ms-2" id="resetEasSettings">
+                    <i class="fas fa-undo"></i> Reset Changes
+                </button>
+                <span class="text-muted small ms-3" id="easSettingsStatus"></span>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+        // location-settings.js's EAS functions read this via window.* for
+        // the Auto-Forward Event Filter checkbox grid.
+        window.EAS_EVENT_CODES = {{ eas_event_codes|tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/admin/core.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/utilities.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/location-settings.js') }}"></script>
+    <!-- location-settings.js self-initializes on DOMContentLoaded, calling
+         initLocationSettings()/initZoneSearch() (no-ops here -- guarded on
+         #locationSettingsForm/#locationZoneSearch, which this page doesn't
+         have) and initEasSettings() (used above). -->
+{% endblock %}

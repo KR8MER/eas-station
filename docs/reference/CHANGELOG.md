@@ -8,6 +8,62 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.188.0] - 2026-08-23 - Retire the Admin Dashboard's tabbed interface (phase 5, final)
+
+This completes the admin.html/`/settings` consolidation started in 2.186.2
+(phases 1-4: #2455, #2456, #2458, #2459). `templates/admin.html` goes from
+~2099 lines to 135 -- a stats overview plus the first-time setup wizard,
+nothing else.
+
+### Added
+- **New `/admin/location-settings` page** -- station jurisdiction, timezone,
+  map defaults, and monitored counties/zones (SAME/FIPS + NOAA zone
+  picker). Extracted verbatim (same pill-tab structure, same element IDs)
+  from the Admin Dashboard's System tab.
+- **New `/admin/eas-encoder-settings` page** -- SAME/EAS encoder
+  configuration: station identity, pre/post-alert tone signaling
+  (bell/beep/three-tone/QC-II/DTMF/MDC1200), event filtering, and dedup
+  windows. Extracted verbatim from the Admin Dashboard's Broadcast tab,
+  which had no other content -- Broadcast is now gone from admin.html
+  entirely.
+- Both new pages share `static/js/admin/location-settings.js`
+  unmodified -- it already self-initializes three independently-guarded
+  features (`initLocationSettings`, `initZoneSearch`, `initEasSettings`)
+  on `DOMContentLoaded`, each a no-op when its target elements are absent,
+  so loading the same file on two different pages was safe without any
+  per-page glue code.
+
+### Removed
+- **The Admin Dashboard's entire tabbed interface.** With System and
+  Broadcast (the last two tabs) extracted, nothing was left in the tab
+  shell -- removed it along with the now-fully-dead inline
+  `EAS_*`/`BOUNDARY_TYPE_CONFIG`/`boundaryCache`/etc. globals block,
+  `#confirmationModal` (nothing on the page calls `showConfirmation()`
+  anymore), `#operationStatus` (dead since the Operations tab was removed
+  in phase 2), and a "Keyboard Shortcuts" hint for a feature
+  (`setupKeyboardShortcuts()`) that was already never actually invoked
+  anywhere in the codebase. Replaced with a short pointer card to
+  `/settings`. `core.js`, `boundary-management.js`, `alert-management.js`,
+  `zone-catalog.js`, and `location-settings.js` are no longer loaded on
+  `admin.html` -- only `utilities.js` (for `showStatus()`) and
+  `user-management.js` (the first-time setup form) remain.
+- **Simplified `dashboard.py`'s `/admin` route** to match -- dropped all
+  the location/EAS/boundary-stats context computation (`location_settings`,
+  `eas_event_codes`, `eas_fips_states`, `eas_recent_messages`,
+  `boundary_stats`, etc.) that admin.html no longer reads. It now only
+  computes the four stat-card counts and `setup_mode`. Removed the
+  now-unused imports this left behind (`Dict`/`List`, `EASMessage`,
+  `get_location_settings`, `build_county_forecast_zone_map`,
+  `PRIMARY_ORIGINATORS`, `SAME_HEADER_FIELD_DESCRIPTIONS`,
+  `manual_default_same_codes`, `ORIGINATOR_DESCRIPTIONS`,
+  `P_DIGIT_MEANINGS`).
+- Updated `tests/test_admin_dashboard_fixes.py`'s
+  `test_dashboard_uses_current_app`, which pinned to two specific
+  `current_app.config.get(...)` calls that were part of the now-removed
+  EAS-message-stats computation. The regression it actually guards
+  against (an undefined bare `app` variable) is still covered by the
+  `current_app.logger.*` assertions, which remain.
+
 ## [2.187.4] - 2026-08-23 - Fix broken boundary upload on Data Management page
 
 ### Fixed
