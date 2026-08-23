@@ -141,43 +141,16 @@
     color: var(--text-muted);
 }
 
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-    margin: 0.75rem 0;
-}
-
-/* Stat card base — theme variables replace hardcoded indigo/purple */
-.stat-card {
-    background: linear-gradient(135deg,
-        var(--primary-color) 0%,
-        color-mix(in srgb, var(--primary-color) 60%, var(--secondary-color)) 50%,
-        var(--secondary-color) 100%);
-    color: white;
-    padding: 1.5rem;
-    border-radius: 16px;
-    text-align: center;
-    transition: box-shadow 0.3s ease, transform 0.3s ease;
-    position: relative;
-    overflow: hidden;
-}
-
-.stat-card::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    right: -30%;
-    width: 80%;
-    height: 150%;
-    background: radial-gradient(circle, rgba(255,255,255,0.12) 0%, transparent 60%);
-    pointer-events: none;
-}
-
-.stat-card:hover {
-    box-shadow: 0 8px 25px color-mix(in srgb, var(--primary-color) 40%, transparent);
-    transform: translateY(-3px);
-}
+/* .stats-grid and .stat-card are intentionally NOT redeclared here --
+   static/css/styles.css owns the current "iOS 26 vibrant mesh gradient"
+   design for both, used site-wide. This file used to carry an older,
+   plainer version of the same two selectors; since this stylesheet loads
+   after styles.css (base.html's extra_css block), the cascade tie went to
+   whichever loaded last, silently keeping the Admin Dashboard's stat cards
+   stuck on the old look while every other page got the new one -- the
+   same trap already documented and fixed once below for .nav-tabs
+   .nav-link. Only .stat-number/.stat-label (typography, not owned by
+   styles.css) stay here. */
 
 .stat-number {
     font-size: 2.25rem;

@@ -8,6 +8,45 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.186.2] - 2026-08-23 - Remove pure link-grid tabs from the Admin Dashboard
+
+### Removed
+- **Admin Dashboard's Services and Hardware tabs**, and the "Broadcast Tools"
+  and "Security Monitoring" link grids inside the Broadcast and Security
+  tabs. All four were pure card-grids linking to other pages -- zero inline
+  forms or JS actions -- and every single link duplicated a page already
+  registered in the nav (`webapp/navigation/registry.py` /
+  `registry_settings.py`), same class of drift that caused #2454. Verified
+  each of the ~25 removed links against the registry before deleting (two,
+  "EAS Workflow" and "RWT Schedule", are registered via `endpoint=` rather
+  than a literal `href=` matching their admin.html URL, which is why an
+  earlier plain-text grep missed them -- double-checked those against the
+  actual endpoint names before confirming duplication).
+
+  This is phase 1 of a larger admin.html/`/settings` consolidation --
+  admin.html's remaining tabs (Data, System, Broadcast's encoder form,
+  Security's user management, Operations) contain real inline functionality,
+  including several that duplicate the *implementation* of a separately
+  registered page (not just the link) -- e.g. its own user-CRUD UI, its own
+  DB-optimize/recalculate-intersections buttons, its own backup trigger, and
+  its own `.env` editor, each independent of the dedicated page for the same
+  feature. Those need to be resolved (confirm equivalence, then delete one
+  side) or extracted into their own registered pages, tab by tab, as
+  separate follow-up work -- left as-is here since it changes application
+  behavior, not just navigation.
+
+### Fixed
+- **Admin Dashboard's stat cards didn't match the rest of the app.**
+  `static/css/admin.css` carried a stale, plainer `.stat-card`/`.stats-grid`
+  definition (flat primary/secondary gradient, 16px radius, no shimmer);
+  `static/css/styles.css` owns the current "iOS 26 vibrant mesh gradient"
+  version used everywhere else. Same selector, same specificity, and
+  `admin.css` loads after `styles.css` (`base.html`'s `extra_css` block), so
+  the cascade tie silently went to the older rule -- the exact trap already
+  documented and fixed once in this file for `.nav-tabs .nav-link`, just not
+  caught here. Removed the stale duplicate so the Admin Dashboard picks up
+  the same stat cards as every other page.
+
 ## [2.186.1] - 2026-08-23 - Fix Tickstem/Heartbeat nav placement
 
 ### Fixed
