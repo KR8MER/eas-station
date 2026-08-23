@@ -457,5 +457,10 @@
     <script src="{{ url_for('static', filename='js/admin/core.js') }}"></script>
     <script src="{{ url_for('static', filename='js/admin/utilities.js') }}"></script>
     <script src="{{ url_for('static', filename='js/admin/boundary-management.js') }}"></script>
+    <!-- alert-management.js despite its name also owns the #uploadForm/
+         #shapefileUploadForm submit handlers above (see the null-guard
+         comment in that file) -- without it these forms did a plain HTML
+         submission instead of the AJAX upload flow. -->
+    <script src="{{ url_for('static', filename='js/admin/alert-management.js') }}"></script>
     <script src="{{ url_for('static', filename='js/admin/zone-catalog.js') }}"></script>
 {% endblock %}
