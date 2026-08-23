@@ -8,6 +8,37 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.187.3] - 2026-08-23 - Extract Data Management from Admin Dashboard (phase 4 of consolidation)
+
+### Added
+- **New `/admin/data-management` page** (`templates/admin/data_management.html`,
+  `dashboard.py:data_management_page()`) -- boundary polygon upload
+  (GeoJSON/Shapefile, any type: electric, fire, school, custom, ...), the
+  NOAA zone catalog (.dbf upload/reload/search), and bulk manage/delete,
+  extracted verbatim from the Admin Dashboard's Data tab. Confirmed this
+  does NOT duplicate the already-registered `/admin/county_boundaries` --
+  that page manages NOAA county/zone *reference* lookup data (FIPS/SAME
+  code resolution) via entirely different backend endpoints
+  (`/admin/county_boundaries/*`) from this page's general boundary-polygon
+  management (`/admin/upload_boundaries`, `/admin/clear_boundaries/*`,
+  etc.).
+- Extracted **structurally verbatim** rather than redesigned: same
+  pill-tab sub-navigation, same element IDs, same
+  `static/js/admin/boundary-management.js` and `zone-catalog.js` files --
+  both already expect these exact IDs and Bootstrap `shown.bs.tab` events,
+  so relocating the markup as-is was the lowest-risk option.
+
+### Removed
+- **Admin Dashboard's Data tab.** System is now the dashboard's first
+  (default-active) tab.
+
+  This completes the multi-phase admin.html/`/settings` consolidation
+  (phases 1-4: #2455, #2456, #2458, this one). Remaining in admin.html:
+  System tab's Location Settings/Alert Filtering and Broadcast's EAS
+  Encoder Settings -- both share one 1,475-line interactive JS module
+  (FIPS pickers, live zone search, EAS tone/DTMF UI) and are the last
+  piece.
+
 ## [2.187.2] - 2026-08-23 - Extract Alert Management from Admin Dashboard (phase 3 of consolidation)
 
 ### Added
