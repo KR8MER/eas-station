@@ -270,6 +270,13 @@ SETTINGS_SECTION = NavSection(
                     permissions=(SYSTEM_CONFIGURE,),
                 ),
                 NavItem(
+                    label="Alert Management",
+                    icon="fas fa-exclamation-triangle",
+                    href="/admin/alert-management",
+                    description="Edit or remove stored alerts; mark or delete expired alerts.",
+                    permissions=(SYSTEM_CONFIGURE,),
+                ),
+                NavItem(
                     label="County Boundaries",
                     icon="fas fa-map",
                     href="/admin/county_boundaries",

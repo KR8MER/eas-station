@@ -239,6 +239,13 @@ def user_accounts_page():
     return render_template('admin/user_accounts.html')
 
 
+@dashboard_bp.route('/admin/alert-management', methods=['GET'])
+@require_permission('system.configure')
+def alert_management_page():
+    """Render the stored-alerts management page (edit/mark-expired/delete-expired)."""
+    return render_template('admin/alert_management.html')
+
+
 @dashboard_bp.route('/admin/users', methods=['GET', 'POST'])
 @require_permission('system.manage_users')
 def admin_users():
