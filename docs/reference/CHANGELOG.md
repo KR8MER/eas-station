@@ -8,6 +8,17 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.187.4] - 2026-08-23 - Fix broken boundary upload on Data Management page
+
+### Fixed
+- **GeoJSON/Shapefile upload forms on `/admin/data-management` did a plain
+  HTML submission instead of the AJAX upload flow.** #2459 extracted this
+  page from the Admin Dashboard's Data tab but missed a script include:
+  despite its name, `static/js/admin/alert-management.js` -- not
+  `boundary-management.js` -- owns the `#uploadForm`/`#shapefileUploadForm`
+  submit handlers (historical, not a naming mistake worth fixing right
+  now). Added the missing `<script src>`.
+
 ## [2.187.3] - 2026-08-23 - Extract Data Management from Admin Dashboard (phase 4 of consolidation)
 
 ### Added
