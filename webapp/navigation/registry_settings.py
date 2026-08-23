@@ -263,6 +263,13 @@ SETTINGS_SECTION = NavSection(
                     permissions=(SYSTEM_CONFIGURE,),
                 ),
                 NavItem(
+                    label="Alert Purge",
+                    icon="fas fa-broom",
+                    href="/admin/alert-purge/",
+                    description="Remove received alerts and reclaim captured audio storage, manually or on a schedule.",
+                    permissions=(SYSTEM_CONFIGURE,),
+                ),
+                NavItem(
                     label="County Boundaries",
                     icon="fas fa-map",
                     href="/admin/county_boundaries",

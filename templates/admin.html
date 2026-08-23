@@ -123,11 +123,6 @@
                             <i class="fas fa-shield-alt"></i> Security
                         </button>
                     </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="operations-tab" data-bs-toggle="tab" data-bs-target="#operations" type="button" role="tab">
-                            <i class="fas fa-tools"></i> Operations
-                        </button>
-                    </li>
                 </ul>
             </div>
             <div class="card-body p-0">
@@ -1340,174 +1335,23 @@
                 </div>
                 <!-- END SECURITY TAB -->
 
-                <!-- Operations Tab -->
-                <div class="tab-pane fade" id="operations" role="tabpanel">
-                    <div class="container-fluid">
-                        <h3><i class="fas fa-tools"></i> Operations</h3>
-                        <p class="text-muted mb-4">System operations, maintenance, and management tools</p>
+                <!-- The Operations tab that used to live here (CAP Alert Polling,
+                     One-Button Backup, One-Button Upgrade, Import Archived Alert,
+                     Database Optimization, Fix Intersections, Environment Config,
+                     Database Health, Alert Purge) was almost entirely a duplicate
+                     *implementation*, not just a link: Backup/Upgrade/DB-Optimize/
+                     Fix-Intersections/DB-Health called the exact same backend
+                     endpoints as the registered /admin/operations page
+                     (templates/admin/operations.html); Environment Config
+                     duplicated /admin/environment's own .env editor. Removed all
+                     nine. CAP Alert Polling and Import Archived Alert had no other
+                     home, so their forms and JS moved to /admin/poller (Alert
+                     Poller Settings) -- "Trigger Poll Now" and "Manual Alert
+                     Import" cards -- rather than being deleted outright. Alert
+                     Purge was, surprisingly, an orphaned page with no nav entry at
+                     all; added to Settings -> Data & Storage alongside Backups.
+                     Tab button removed along with this content. -->
 
-                        <div class="row g-4">
-                        <div class="col-md-6 col-lg-4">
-                            <div class="card shadow-sm h-100">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-download fa-2x text-primary mb-3"></i>
-                                    <h6>CAP Alert Polling</h6>
-                                    <p class="text-muted small">Manually fetch latest alerts from NOAA</p>
-                                    <button onclick="triggerCAPPoll()" class="btn btn-primary w-100">
-                                        <i class="fas fa-satellite-dish"></i> Trigger Poll
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6 col-lg-4">
-                            <div class="card shadow-sm h-100">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-hdd fa-2x text-success mb-3"></i>
-                                    <h6>One-Button Backup</h6>
-                                    <p class="text-muted small">Snapshot the configuration and database using the backup helper.</p>
-                                    <div class="mb-2">
-                                        <label class="form-label small fw-semibold" for="backupLabel">Optional label</label>
-                                        <input type="text" class="form-control" id="backupLabel" maxlength="48" placeholder="e.g. pre-upgrade">
-                                        <div class="form-text">The label is appended to the timestamped backup folder.</div>
-                                    </div>
-                                    <button id="backupButton" onclick="runOneClickBackup()" class="btn btn-success w-100">
-                                        <i class="fas fa-save"></i> Run Backup
-                                    </button>
-                                    <div id="backupStatus" class="small text-muted mt-2">No backups run yet.</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6 col-lg-4">
-                            <div class="card shadow-sm h-100">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-level-up-alt fa-2x text-primary mb-3"></i>
-                                    <h6>One-Button Upgrade</h6>
-                                    <p class="text-muted small">Fetch updates, rebuild services, and restart in place.</p>
-                                    <div class="mb-2">
-                                        <label class="form-label small fw-semibold" for="upgradeCheckout">Checkout ref (optional)</label>
-                                        <input type="text" class="form-control" id="upgradeCheckout" placeholder="e.g. v2.3.1">
-                                        <div class="form-text">Leave blank to stay on the current branch.</div>
-                                    </div>
-                                    <div class="form-check form-switch text-start mb-2">
-                                        <input class="form-check-input" type="checkbox" id="upgradeSkipMigrations">
-                                        <label class="form-check-label small" for="upgradeSkipMigrations">Skip database migrations</label>
-                                    </div>
-                                    <div class="form-check form-switch text-start mb-3">
-                                        <input class="form-check-input" type="checkbox" id="upgradeAllowDirty">
-                                        <label class="form-check-label small" for="upgradeAllowDirty">Allow dirty git worktree</label>
-                                    </div>
-                                    <button id="upgradeButton" onclick="runOneClickUpgrade()" class="btn btn-primary w-100">
-                                        <i class="fas fa-sync-alt"></i> Run Upgrade
-                                    </button>
-                                    <div id="upgradeStatus" class="small text-muted mt-2">No upgrades run yet.</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6 col-lg-4">
-                            <div class="card shadow-sm h-100">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-history fa-2x text-secondary mb-3"></i>
-                                    <h6>Import Archived Alert</h6>
-                                    <p class="text-muted small">Query NOAA for specific alerts (including expired) and store them locally.</p>
-                                    <div class="mb-3">
-                                        <label class="form-label">Alert Identifier</label>
-                                        <input type="text" class="form-control" id="manualAlertIdentifier" placeholder="e.g. NWS-ID-123456" autocomplete="off">
-                                    </div>
-                                    <div class="row g-2">
-                                        <div class="col-md-6">
-                                            <label class="form-label">Start (local)</label>
-                                            <input type="datetime-local" class="form-control" id="manualAlertStart">
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label">End (local)</label>
-                                            <input type="datetime-local" class="form-control" id="manualAlertEnd">
-                                        </div>
-                                    </div>
-                                    <div class="row g-2">
-                                        <div class="col-md-4">
-                                            <label class="form-label">State (2-letter)</label>
-                                            <input type="text" class="form-control" id="manualAlertArea" value="OH" placeholder="e.g. OH" maxlength="2">
-                                        </div>
-                                        <div class="col-md-4">
-                                            <label class="form-label">Event Filter (optional)</label>
-                                            <input type="text" class="form-control" id="manualAlertEvent" placeholder="e.g. Tornado Warning">
-                                        </div>
-                                        <div class="col-md-4">
-                                            <label class="form-label">Result Limit</label>
-                                            <input type="number" class="form-control" id="manualAlertLimit" min="1" max="50" value="5">
-                                        </div>
-                                    </div>
-                                    <div class="form-text mt-2">Provide an identifier for the fastest lookup, or specify a start and end range with the two-letter state code. NOAA manual imports require state-level queries.</div>
-                                    <button onclick="manualImportAlert()" class="btn btn-secondary w-100 mt-3">
-                                        <i class="fas fa-cloud-download-alt"></i> Fetch &amp; Save
-                                    </button>
-                                    <div id="manualImportResults" class="small text-muted mt-2"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6 col-lg-4">
-                            <div class="card shadow-sm h-100">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-database fa-2x text-success mb-3"></i>
-                                    <h6>Database Optimization</h6>
-                                    <p class="text-muted small">Optimize database performance</p>
-                                    <button onclick="optimizeDatabase()" class="btn btn-success w-100">
-                                        <i class="fas fa-tools"></i> Optimize DB
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6 col-lg-4">
-                            <div class="card shadow-sm h-100">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-sitemap fa-2x text-info mb-3"></i>
-                                    <h6>Fix Intersections</h6>
-                                    <p class="text-muted small">Recalculate alert-boundary intersections</p>
-                                    <button onclick="recalculateIntersections()" class="btn btn-info w-100">
-                                        <i class="fas fa-link"></i> Fix Intersections
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6 col-lg-4">
-                            <div class="card shadow-sm h-100">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-cog fa-2x text-warning mb-3"></i>
-                                    <h6>Environment Config</h6>
-                                    <p class="text-muted small">Edit stack.env configuration</p>
-                                    <button onclick="openEnvEditor()" class="btn btn-warning w-100">
-                                        <i class="fas fa-edit"></i> Edit Config
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6 col-lg-4">
-                            <div class="card shadow-sm h-100">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-heartbeat fa-2x text-danger mb-3"></i>
-                                    <h6>Database Health</h6>
-                                    <p class="text-muted small">Check database health status</p>
-                                    <button onclick="checkDatabaseHealth()" class="btn btn-danger w-100">
-                                        <i class="fas fa-stethoscope"></i> Health Check
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6 col-lg-4">
-                            <div class="card shadow-sm h-100">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-trash-alt fa-2x text-warning mb-3"></i>
-                                    <h6>Alert Purge</h6>
-                                    <p class="text-muted small">Remove received alerts and reclaim captured audio storage &mdash; manually or on a schedule</p>
-                                    <a href="/admin/alert-purge/" class="btn btn-warning w-100">
-                                        <i class="fas fa-broom"></i> Open Alert Purge
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    </div>
-                </div>
 
                 <!-- The Hardware tab that used to live here (Hardware Settings, GPS
                      & Time, Radio/SDR, LED Sign, VFD Display, Zigbee, GPIO/Relays) was
@@ -1568,48 +1412,15 @@
      no way to dismiss short of reloading. See the identical fix on
      templates/admin/certbot.html's #logModal and
      templates/security/security_center.html's #trafficSettingsModal. -->
-    <!-- Environment Config Editor Modal -->
-    <div class="modal fade" id="envEditorModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header bg-warning text-dark">
-                    <h5 class="modal-title">
-                        <i class="fas fa-exclamation-triangle"></i> Environment Configuration Editor
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-danger" role="alert">
-                        <i class="fas fa-skull-crossbones"></i>
-                        <strong>WARNING:</strong> Editing environment variables can break your application!
-                        <ul class="mb-0 mt-2">
-                            <li>Changes require application restart to take effect</li>
-                            <li>Invalid values may prevent the application from starting</li>
-                            <li>A backup will be created automatically as stack.env.backup</li>
-                            <li>Do NOT expose sensitive values (passwords, API keys) in screenshots or logs</li>
-                        </ul>
-                    </div>
-                    <div class="mb-3">
-                        <label for="envContent" class="form-label fw-bold">stack.env Content</label>
-                        <textarea id="envContent" class="form-control font-monospace" rows="25" style="font-size: 0.85rem;"
-                                  spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
-                        <div class="form-text">
-                            <i class="fas fa-info-circle"></i>
-                            Edit the configuration file above. Lines starting with # are comments.
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times"></i> Cancel
-                    </button>
-                    <button type="button" class="btn btn-warning" onclick="saveEnvConfig()">
-                        <i class="fas fa-save"></i> Save & Restart Required
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- The Environment Config Editor Modal that used to live here duplicated
+         /admin/environment's own .env editor and had already lost its only
+         trigger button when the Operations tab was removed. static/js/admin/
+         operations.js (openEnvEditor/saveEnvConfig/runOneClickBackup/
+         runOneClickUpgrade/optimizeDatabase/recalculateIntersections/
+         checkDatabaseHealth/triggerCAPPoll/manualImportAlert) was entirely
+         dead code once the Operations tab was gone -- nothing else loaded
+         that script -- so the whole file was deleted rather than just this
+         modal. -->
 
     <!-- Edit Alert Modal -->
     <div class="modal fade" id="editAlertModal" tabindex="-1" aria-hidden="true">
@@ -1797,8 +1608,10 @@
     <script src="{{ url_for('static', filename='js/admin/boundary-management.js') }}"></script>
     <script src="{{ url_for('static', filename='js/admin/user-management.js') }}"></script>
     <script src="{{ url_for('static', filename='js/admin/alert-management.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/admin/hardware-settings.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/admin/operations.js') }}"></script>
+    <!-- hardware-settings.js (GPS sky-plot panel) was included here but nothing
+         on this page calls any of its functions -- it belongs to, and is
+         still loaded by, templates/admin/hardware_settings.html (the actual
+         registered Hardware Settings page). Removed the redundant include. -->
     <script src="{{ url_for('static', filename='js/admin/zone-catalog.js') }}"></script>
     <script src="{{ url_for('static', filename='js/admin/location-settings.js') }}"></script>
 {% endblock %}

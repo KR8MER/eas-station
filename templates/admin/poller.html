@@ -161,11 +161,58 @@
                     <h5 class="mb-0"><i class="fas fa-server"></i> Service Status</h5>
                 </div>
                 <div class="card-body">
-                    <div class="alert alert-info mb-0">
+                    <div class="alert alert-info">
                         <i class="fas fa-check-circle"></i> <strong>Good News:</strong>
                         The poller service reads settings from the database each poll cycle, so changes
                         take effect automatically without restarting the service.
                     </div>
+                    <button type="button" class="btn btn-outline-primary" id="triggerPollBtn">
+                        <i class="fas fa-satellite-dish"></i> Trigger Poll Now
+                    </button>
+                    <span class="small text-muted ms-2" id="triggerPollStatus"></span>
+                </div>
+            </div>
+
+            <!-- Manual Alert Import Card -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-cloud-download-alt"></i> Manual Alert Import</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Query NOAA for specific alerts (including expired) and store them locally -- useful for backfilling an alert that arrived before this station was polling, or that expired before it was captured.</p>
+                    <div class="mb-3">
+                        <label for="manualAlertIdentifier" class="form-label">Alert Identifier</label>
+                        <input type="text" class="form-control" id="manualAlertIdentifier" placeholder="e.g. NWS-ID-123456" autocomplete="off">
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label for="manualAlertStart" class="form-label">Start (local)</label>
+                            <input type="datetime-local" class="form-control" id="manualAlertStart">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="manualAlertEnd" class="form-label">End (local)</label>
+                            <input type="datetime-local" class="form-control" id="manualAlertEnd">
+                        </div>
+                    </div>
+                    <div class="row g-2 mt-0">
+                        <div class="col-md-4">
+                            <label for="manualAlertArea" class="form-label">State (2-letter)</label>
+                            <input type="text" class="form-control" id="manualAlertArea" value="OH" placeholder="e.g. OH" maxlength="2">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="manualAlertEvent" class="form-label">Event Filter (optional)</label>
+                            <input type="text" class="form-control" id="manualAlertEvent" placeholder="e.g. Tornado Warning">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="manualAlertLimit" class="form-label">Result Limit</label>
+                            <input type="number" class="form-control" id="manualAlertLimit" min="1" max="50" value="5">
+                        </div>
+                    </div>
+                    <div class="form-text mt-2">Provide an identifier for the fastest lookup, or specify a start and end range with the two-letter state code. NOAA manual imports require state-level queries.</div>
+                    <button type="button" class="btn btn-secondary w-100 mt-3" id="manualImportBtn">
+                        <i class="fas fa-cloud-download-alt"></i> Fetch &amp; Save
+                    </button>
+                    <div id="manualImportResults" class="small text-muted mt-2"></div>
                 </div>
             </div>
         </div>
@@ -321,6 +368,114 @@ document.addEventListener('DOMContentLoaded', function() {
             submitBtn.innerHTML = originalBtnText;
         }
     });
+
+    const triggerBtn = document.getElementById('triggerPollBtn');
+    const triggerStatus = document.getElementById('triggerPollStatus');
+    if (triggerBtn) {
+        triggerBtn.addEventListener('click', async function() {
+            triggerBtn.disabled = true;
+            triggerStatus.textContent = 'Polling...';
+            try {
+                const resp = await fetch('/admin/trigger_poll', { method: 'POST' });
+                const data = await resp.json();
+                if (resp.ok) {
+                    showToast(data.message || 'Poll triggered', 'success');
+                    triggerStatus.textContent = data.message || 'Done';
+                } else {
+                    showToast(data.error || 'Poll trigger failed', 'danger');
+                    triggerStatus.textContent = data.error || 'Failed';
+                }
+            } catch (err) {
+                showToast('Poll trigger failed', 'danger');
+                triggerStatus.textContent = 'Failed';
+            } finally {
+                triggerBtn.disabled = false;
+            }
+        });
+    }
+
+    const importBtn = document.getElementById('manualImportBtn');
+    if (importBtn) {
+        importBtn.addEventListener('click', async function() {
+            const identifierInput = document.getElementById('manualAlertIdentifier');
+            const startInput = document.getElementById('manualAlertStart');
+            const endInput = document.getElementById('manualAlertEnd');
+            const areaInput = document.getElementById('manualAlertArea');
+            const eventInput = document.getElementById('manualAlertEvent');
+            const limitInput = document.getElementById('manualAlertLimit');
+            const resultsDiv = document.getElementById('manualImportResults');
+            resultsDiv.textContent = '';
+
+            const identifier = identifierInput.value.trim();
+            const startValue = startInput.value;
+            const endValue = endInput.value;
+            const rawState = areaInput.value.trim().toUpperCase();
+            const sanitizedState = rawState.replace(/[^A-Z]/g, '').slice(0, 2);
+            const eventFilter = eventInput.value.trim();
+            const limit = parseInt(limitInput.value, 10);
+
+            const normalizeDate = (value) => {
+                if (!value) return null;
+                const parsed = Date.parse(value);
+                if (Number.isNaN(parsed)) return null;
+                return new Date(parsed).toISOString();
+            };
+            const startIso = normalizeDate(startValue);
+            const endIso = normalizeDate(endValue);
+
+            if (!identifier && (!startIso || !endIso)) {
+                showToast('Provide an alert identifier or both start and end timestamps.', 'warning');
+                return;
+            }
+            if (!identifier) {
+                if (!sanitizedState || sanitizedState.length !== 2) {
+                    showToast('Provide the two-letter state code when searching without an identifier.', 'warning');
+                    return;
+                }
+            } else if (sanitizedState && sanitizedState.length !== 2) {
+                showToast('State filters must use the two-letter postal abbreviation.', 'warning');
+                return;
+            }
+
+            const payload = {
+                identifier,
+                event: eventFilter,
+                limit: Number.isNaN(limit) ? 5 : limit,
+            };
+            if (sanitizedState && sanitizedState.length === 2) {
+                payload.area = sanitizedState;
+            }
+            if (startIso) payload.start = startIso;
+            if (endIso) payload.end = endIso;
+
+            importBtn.disabled = true;
+            resultsDiv.textContent = 'Contacting NOAA API...';
+            try {
+                const resp = await fetch('/admin/import_alert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (resp.ok && !data.error) {
+                    const parts = [];
+                    if (typeof data.inserted === 'number') parts.push(`${data.inserted} inserted`);
+                    if (typeof data.updated === 'number') parts.push(`${data.updated} updated`);
+                    if (typeof data.skipped === 'number' && data.skipped > 0) parts.push(`${data.skipped} skipped`);
+                    showToast(data.message || 'Alert import completed', 'success');
+                    resultsDiv.textContent = parts.join(' • ');
+                } else {
+                    showToast(data.error || 'Manual alert import failed', 'danger');
+                    resultsDiv.textContent = '';
+                }
+            } catch (err) {
+                showToast('NOAA import failed', 'danger');
+                resultsDiv.textContent = '';
+            } finally {
+                importBtn.disabled = false;
+            }
+        });
+    }
 });
 </script>
 {% endblock %}

@@ -8,6 +8,43 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.187.0] - 2026-08-23 - Remove Admin Dashboard's Operations tab (phase 2 of consolidation)
+
+### Added
+- **"Trigger Poll Now" and "Manual Alert Import"** on Admin -> Alert Poller
+  Settings (`/admin/poller`) -- these had no home other than the Admin
+  Dashboard's Operations tab, so their forms and JS moved here rather than
+  being deleted with the rest of that tab.
+
+### Removed
+- **Admin Dashboard's entire Operations tab** (CAP Alert Polling, One-Button
+  Backup, One-Button Upgrade, Import Archived Alert, Database Optimization,
+  Fix Intersections, Environment Config, Database Health, Alert Purge).
+  Confirmed the backup/upgrade/DB-optimize/fix-intersections/DB-health
+  buttons called the *exact same backend endpoints*
+  (`/admin/operations/backup`, `/admin/operations/upgrade`,
+  `/admin/optimize_db`, `/admin/recalculate_intersections`,
+  `/admin/check_db_health`) as the already-registered `/admin/operations`
+  page, which itself links onward to the more capable `/admin/backups` for
+  full backup management -- these weren't just duplicate links, they were
+  independent frontends for the same backend actions, and any future change
+  to one would silently not apply to the other. Environment Config
+  duplicated `/admin/environment`'s own editor the same way; deleted its
+  modal along with the two forms.
+- **`static/js/admin/operations.js`** -- entirely dead code once the
+  Operations tab was removed; nothing else loaded it.
+- **`hardware-settings.js`'s redundant `<script>` include on admin.html** --
+  found while auditing the other includes: nothing on the page calls any of
+  its functions (it's the GPS sky-plot panel for the already-registered
+  Hardware Settings page, which still loads it correctly on its own).
+- **Alert Purge was an orphaned page** -- had no navigation entry anywhere,
+  reachable only via this tab or a direct URL. Added to Settings -> Data &
+  Storage, next to Backups, instead of just deleting its only link.
+
+  This continues the admin.html/`/settings` consolidation from 2.186.2.
+  Remaining tabs (Data, System, Broadcast's encoder form, Security's user
+  management) still need the same treatment.
+
 ## [2.186.2] - 2026-08-23 - Remove pure link-grid tabs from the Admin Dashboard
 
 ### Removed
