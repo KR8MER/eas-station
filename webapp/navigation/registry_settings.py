@@ -283,6 +283,13 @@ SETTINGS_SECTION = NavSection(
                     description="Import and manage county/zone boundary geometry.",
                     permissions=(SYSTEM_CONFIGURE,),
                 ),
+                NavItem(
+                    label="Data Management",
+                    icon="fas fa-database",
+                    href="/admin/data-management",
+                    description="Upload and manage general boundary polygons (electric, fire, school, custom, ...) and the NOAA zone catalog.",
+                    permissions=(SYSTEM_CONFIGURE,),
+                ),
             ),
         ),
         NavGroup(

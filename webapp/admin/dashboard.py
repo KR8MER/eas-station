@@ -246,6 +246,22 @@ def alert_management_page():
     return render_template('admin/alert_management.html')
 
 
+@dashboard_bp.route('/admin/data-management', methods=['GET'])
+@require_permission('system.configure')
+def data_management_page():
+    """Render the boundary/zone-catalog data management page.
+
+    Distinct from /admin/county_boundaries: that page manages NOAA
+    county/zone *reference* lookup data (FIPS/SAME code resolution). This
+    page manages general boundary polygons of any type (electric, fire,
+    school districts, custom, ...) for map overlays and alert-intersection
+    calculations, plus the separate NOAA zone .dbf catalog upload. Different
+    data, different backend endpoints -- confirmed not a duplicate before
+    extracting this from the Admin Dashboard's Data tab.
+    """
+    return render_template('admin/data_management.html')
+
+
 @dashboard_bp.route('/admin/users', methods=['GET', 'POST'])
 @require_permission('system.manage_users')
 def admin_users():
