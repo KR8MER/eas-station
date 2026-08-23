@@ -38,13 +38,15 @@ def test_dashboard_uses_current_app():
     # Verify current_app is imported
     assert 'from flask import' in content
     assert 'current_app' in content
-    
-    # Verify we're not using undefined 'app' variable in routes
-    # Check that the problematic line uses current_app
-    assert "current_app.config.get('EAS_BROADCAST_ENABLED'" in content
-    assert "current_app.config.get('EAS_OUTPUT_WEB_SUBDIR'" in content
-    
-    # Verify logger calls use current_app.logger
+
+    # Verify we're not using undefined 'app' variable in routes.
+    # This used to spot-check two specific current_app.config.get(...) calls
+    # (EAS_BROADCAST_ENABLED, EAS_OUTPUT_WEB_SUBDIR) computed for the Admin
+    # Dashboard's EAS-message-stats display; that display was removed when
+    # the tabbed admin.html interface was extracted to its own registered
+    # pages (see the phase 1-5 admin/settings consolidation entries in
+    # docs/reference/CHANGELOG.md), so those two calls no longer exist.
+    # Logger calls remain a reliable proxy for the same regression.
     assert 'current_app.logger.warning' in content
     assert 'current_app.logger.error' in content
 
