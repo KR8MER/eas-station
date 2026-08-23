@@ -340,20 +340,6 @@ _DIAGNOSTICS = NavSection(
                     description="Live waterfall, spectrum scope, historical trend charts and a full pipeline health checklist per receiver.",
                     permissions=(RECEIVERS_VIEW,),
                 ),
-                NavItem(
-                    label="Uptime Heartbeat",
-                    icon="fas fa-heart-pulse",
-                    endpoint="heartbeat.heartbeat_settings",
-                    description="Outbound dead-man's-switch ping to an external monitor (e.g. healthchecks.io, Tickstem).",
-                    permissions=(SYSTEM_CONFIGURE,),
-                ),
-                NavItem(
-                    label="Tickstem Uptime Monitor",
-                    icon="fas fa-satellite-dish",
-                    endpoint="tickstem.tickstem_settings",
-                    description="Inbound uptime checks against this box's /health endpoint, managed via Tickstem's Monitors API.",
-                    permissions=(SYSTEM_CONFIGURE,),
-                ),
             ) + (
                 (
                     NavItem(

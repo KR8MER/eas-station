@@ -8,6 +8,17 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.186.1] - 2026-08-23 - Fix Tickstem/Heartbeat nav placement
+
+### Fixed
+- **Tickstem Uptime Monitor didn't appear on the Settings hub.** #2453 added
+  it (and a duplicate "Uptime Heartbeat" entry) to the navbar's Diagnostics
+  section, on the mistaken belief that Heartbeat had no menu entry at all --
+  it did, in `webapp/navigation/registry_settings.py` (a separate module
+  from `registry.py` that a plain grep missed), already surfaced correctly
+  on `/settings`. Removed the duplicate/misplaced entries and added Tickstem
+  next to Heartbeat in the Settings hub's Configuration group instead.
+
 ## [2.186.0] - 2026-08-22 - Add Tickstem uptime-monitor integration
 
 ### Added

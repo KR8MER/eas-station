@@ -106,6 +106,13 @@ SETTINGS_SECTION = NavSection(
                     permissions=(SYSTEM_CONFIGURE,),
                 ),
                 NavItem(
+                    label="Tickstem Uptime Monitor",
+                    icon="fas fa-satellite-dish",
+                    href="/admin/tickstem/",
+                    description="Inbound uptime checks against this box's /health endpoint, managed via Tickstem's Monitors API.",
+                    permissions=(SYSTEM_CONFIGURE,),
+                ),
+                NavItem(
                     label="Alert Gating",
                     icon="fas fa-hourglass-half",
                     href="/admin/alert-gating/",
