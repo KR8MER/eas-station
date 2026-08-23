@@ -8,6 +8,37 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.187.1] - 2026-08-23 - Remove duplicate navigation entries
+
+### Removed
+- **Hardware Settings and Zigbee were listed twice** -- once under Monitor
+  -> Station Hardware, again under Settings -> Hardware, same pages, two
+  different icons/labels. Both are configuration screens, not live-status
+  views, so Settings is their one home now; Monitor -> Station Hardware
+  keeps only GPS & Time (a real live-status dashboard).
+- **Audio Ingestion (Monitor) duplicated Audio Streams (Settings)** -- both
+  pointed at `/admin/audio-sources`. Kept the Settings entry.
+- Settings -> Hardware's entry now references
+  `endpoint="hardware.hardware_settings_page"` instead of a hardcoded
+  `href="/admin/hardware"` -- same URL, but matches how the rest of the
+  registry references pages that can move, and keeps
+  `test_both_settings_pages_are_reachable_from_the_navigation` (which checks
+  for that specific endpoint reference) passing now that it's no longer
+  duplicated under Monitor.
+- **Left Security Center duplicated on purpose** -- also listed under both
+  Monitor -> Diagnostics and Settings -> Security & Access with the same
+  `LOGS_VIEW` permission gate. Removing the Settings copy left a
+  LOGS_VIEW-only viewer with a Settings link that opens to zero cards
+  (caught by `test_settings_link_never_leads_to_an_empty_hub`) -- it's the
+  only Settings-hub item that permission level can see, so both copies
+  stay.
+- **Left Security Settings/Security Policies duplicated on purpose** --
+  one copy lives in the signed-in user's own account menu ("your password,
+  MFA and active sessions"), the other in the Settings hub ("password
+  policy, session limits and MFA settings"). Same URL, but a personal
+  quick-link and a general-discoverability entry serve different purposes,
+  similar to how most sites surface account security in both places.
+
 ## [2.187.0] - 2026-08-23 - Remove Admin Dashboard's Operations and Security tabs (phase 2 of consolidation)
 
 ### Added

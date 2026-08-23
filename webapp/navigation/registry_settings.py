@@ -231,7 +231,7 @@ SETTINGS_SECTION = NavSection(
                 NavItem(
                     label="Hardware Settings",
                     icon="fas fa-microchip",
-                    href="/admin/hardware",
+                    endpoint="hardware.hardware_settings_page",
                     description="GPIO, OLED, LED display and VFD configuration.",
                     permissions=(SYSTEM_CONFIGURE,),
                 ),
@@ -310,6 +310,12 @@ SETTINGS_SECTION = NavSection(
                     description="Password policy, session limits and MFA settings.",
                     permissions=(SYSTEM_MANAGE_USERS,),
                 ),
+                # Also listed under Diagnostics -> Security with the same
+                # LOGS_VIEW gate -- normally a duplicate worth pruning, but
+                # it's the *only* Settings-hub item visible to a LOGS_VIEW-
+                # only viewer (test_settings_link_never_leads_to_an_empty_hub
+                # catches this); removing it here leaves that viewer with a
+                # Settings link that opens to nothing. Kept intentionally.
                 NavItem(
                     label="Security Center",
                     icon="fas fa-tower-observation",
