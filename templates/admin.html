@@ -119,16 +119,6 @@
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="services-tab" data-bs-toggle="tab" data-bs-target="#services" type="button" role="tab">
-                            <i class="fas fa-server"></i> Services
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="hardware-tab" data-bs-toggle="tab" data-bs-target="#hardware-integrations" type="button" role="tab">
-                            <i class="fas fa-microchip"></i> Hardware
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
                         <button class="nav-link" id="security-tab" data-bs-toggle="tab" data-bs-target="#security" type="button" role="tab">
                             <i class="fas fa-shield-alt"></i> Security
                         </button>
@@ -1229,196 +1219,22 @@
                                 </div>
                             </div>
                         </form>
-
-                        <!-- Broadcast Tools -->
-                        <hr class="my-5">
-                        <h4 class="mb-3"><i class="fas fa-tools text-secondary"></i> Broadcast Tools</h4>
-                        <p class="text-muted mb-4">Pages and tools for managing EAS broadcasts, tests, compliance, and monitoring.</p>
-                        <div class="row g-4">
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-paper-plane fa-2x text-warning mb-3"></i>
-                                        <h6>EAS Workflow</h6>
-                                        <p class="card-text text-muted small">Compose and send manual EAS broadcasts</p>
-                                        <a href="/eas/" class="btn btn-warning w-100">
-                                            <i class="fas fa-broadcast-tower"></i> Open Workflow
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-calendar-check fa-2x text-primary mb-3"></i>
-                                        <h6>RWT Schedule</h6>
-                                        <p class="card-text text-muted small">Configure Required Weekly Test scheduling</p>
-                                        <a href="/rwt-schedule" class="btn btn-primary w-100">
-                                            <i class="fas fa-clock"></i> Configure RWT
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-clipboard-check fa-2x text-success mb-3"></i>
-                                        <h6>EAS Compliance</h6>
-                                        <p class="card-text text-muted small">Compliance log and FCC reports in the unified hub</p>
-                                        <a href="/logs?type=compliance" class="btn btn-success w-100">
-                                            <i class="fas fa-chart-bar"></i> View Compliance
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-satellite-dish fa-2x text-info mb-3"></i>
-                                        <h6>Alert Verification</h6>
-                                        <p class="card-text text-muted small">Monitor and verify OTA EAS broadcasts</p>
-                                        <a href="/admin/alert-verification" class="btn btn-info w-100">
-                                            <i class="fas fa-search"></i> Verify Alerts
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-signal fa-2x text-secondary mb-3"></i>
-                                        <h6>EAS Decoder Monitor</h6>
-                                        <p class="card-text text-muted small">Monitor EAS decoder status and activity</p>
-                                        <a href="/admin/eas_decoder_monitor" class="btn btn-secondary w-100">
-                                            <i class="fas fa-wave-square"></i> Monitor Decoder
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-plug fa-2x text-secondary mb-3"></i>
-                                        <h6>ENDEC Device Feeds</h6>
-                                        <p class="card-text text-muted small">Sage-ENDEC-compatible TCP feeds for CGs &amp; newsroom software</p>
-                                        <a href="/admin/endec_feeds" class="btn btn-secondary w-100">
-                                            <i class="fas fa-plug"></i> Configure Feeds
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-microphone fa-2x text-danger mb-3"></i>
-                                        <h6>Text-to-Speech</h6>
-                                        <p class="card-text text-muted small">Configure TTS voice for alert narration</p>
-                                        <a href="/admin/tts" class="btn btn-danger w-100">
-                                            <i class="fas fa-volume-up"></i> Configure TTS
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-headphones fa-2x text-primary mb-3"></i>
-                                        <h6>Audio Sources</h6>
-                                        <p class="card-text text-muted small">Audio input/output configuration for broadcast</p>
-                                        <a href="/admin/audio-sources" class="btn btn-primary w-100">
-                                            <i class="fas fa-sliders-h"></i> Configure Audio
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <!-- The "Broadcast Tools" link grid that used to live here (EAS
+                             Workflow, RWT Schedule, Compliance, Alert Verification, EAS
+                             Decoder Monitor, ENDEC Feeds, TTS, Audio Sources) duplicated
+                             pages already registered under Broadcast / Diagnostics /
+                             Settings in the nav -- removed rather than kept in sync by
+                             hand in two places. -->
                     </div>
                 </div>
                 <!-- END BROADCAST TAB -->
 
-                <!-- SERVICES TAB -->
-                <div class="tab-pane fade" id="services" role="tabpanel">
-                    <div class="container-fluid">
-                        <h3><i class="fas fa-server"></i> Services</h3>
-                        <p class="text-muted mb-4">Manage streaming, SSL certificates, TTS, and integrations</p>
+                <!-- The Services tab that used to live here (Icecast, SSL Certs,
+                     Tailscale, TTS, Alert Poller, Audio Sources) was a pure link
+                     grid -- every card duplicated a page already registered in
+                     Settings -> Audio & Speech / Network / Configuration. Removed
+                     along with its tab button rather than kept in sync by hand. -->
 
-                        <div class="row g-4">
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-broadcast-tower fa-2x text-primary mb-3"></i>
-                                        <h6>Icecast Streaming</h6>
-                                        <p class="card-text text-muted small">Configure audio streaming server</p>
-                                        <a href="/admin/icecast" class="btn btn-primary w-100">
-                                            <i class="fas fa-cog"></i> Configure
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-lock fa-2x text-success mb-3"></i>
-                                        <h6>SSL Certificates</h6>
-                                        <p class="card-text text-muted small">Manage Let's Encrypt certificates</p>
-                                        <a href="/admin/certbot" class="btn btn-success w-100">
-                                            <i class="fas fa-certificate"></i> Manage
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-shield-alt fa-2x text-primary mb-3"></i>
-                                        <h6>Tailscale VPN</h6>
-                                        <p class="card-text text-muted small">Secure remote access via Tailscale</p>
-                                        <a href="/admin/tailscale" class="btn btn-primary w-100">
-                                            <i class="fas fa-shield-alt"></i> Configure
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-volume-up fa-2x text-info mb-3"></i>
-                                        <h6>Text-to-Speech</h6>
-                                        <p class="card-text text-muted small">Configure TTS providers</p>
-                                        <a href="/admin/tts" class="btn btn-info w-100">
-                                            <i class="fas fa-microphone"></i> Configure
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-satellite-dish fa-2x text-secondary mb-3"></i>
-                                        <h6>Alert Poller</h6>
-                                        <p class="card-text text-muted small">Configure CAP alert polling intervals</p>
-                                        <a href="/admin/poller" class="btn btn-secondary w-100">
-                                            <i class="fas fa-cog"></i> Configure
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-headphones fa-2x text-primary mb-3"></i>
-                                        <h6>Audio Sources</h6>
-                                        <p class="card-text text-muted small">Audio input/output configuration</p>
-                                        <a href="/admin/audio-sources" class="btn btn-primary w-100">
-                                            <i class="fas fa-sliders-h"></i> Configure
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
                 <!-- SECURITY TAB -->
                 <div class="tab-pane fade" id="security" role="tabpanel">
                     <div class="container-fluid">
@@ -1513,32 +1329,9 @@
                             </div>
                         </div>
                     </div>
-
-                    <!-- Security Monitoring -->
-                    <div class="row g-4 mt-4">
-                        <div class="col-12">
-                            <div class="border rounded-4 p-4" style="background: var(--bg-color); color: var(--text-color);">
-                                <h5 class="fw-bold mb-3"><i class="fas fa-shield-exclamation text-danger"></i> Security Monitoring</h5>
-                                <p class="text-muted mb-4">Monitor login attempts and security events to protect your system.</p>
-                                <div class="row g-3">
-                                    <div class="col-md-6">
-                                        <a href="/security/center" class="btn btn-outline-danger w-100 p-3">
-                                            <i class="fas fa-shield-halved mb-2 d-block fs-3"></i>
-                                            <strong>Security Center</strong>
-                                            <small class="d-block text-muted mt-1">Traffic, malicious logins, IP bans &amp; fail2ban</small>
-                                        </a>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <a href="/logs?type=audit" class="btn btn-outline-primary w-100 p-3">
-                                            <i class="fas fa-clipboard-list mb-2 d-block fs-3"></i>
-                                            <strong>Audit Log</strong>
-                                            <small class="d-block text-muted mt-1">Review all administrative actions (Logs &amp; Reports hub)</small>
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <!-- Security Center and Audit Log are registered pages, reachable from
+                         Settings -> Configuration and Monitor -> Reports respectively --
+                         removed the duplicate link cards that lived here. -->
                 </div>
 
                         </div>
@@ -1716,100 +1509,12 @@
                     </div>
                 </div>
 
-                <!-- Hardware Integrations Tab -->
-                <div class="tab-pane fade" id="hardware-integrations" role="tabpanel">
-                    <div class="container-fluid">
-                        <h3><i class="fas fa-microchip"></i> Hardware</h3>
-                        <p class="text-muted mb-4">Configure hardware devices and peripherals connected to the station</p>
-
-                        <div class="row g-4">
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-cogs fa-2x text-primary mb-3"></i>
-                                        <h6>Hardware Settings</h6>
-                                        <p class="text-muted small">GPIO, OLED, LED Sign, VFD, Zigbee</p>
-                                        <a href="{{ url_for('hardware.hardware_settings_page') }}" class="btn btn-primary w-100">
-                                            <i class="fas fa-cog"></i> Configure
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-satellite-dish fa-2x text-info mb-3"></i>
-                                        <h6>GPS &amp; Time Dashboard</h6>
-                                        <p class="text-muted small">Stratum 1 lock, chrony tracking, sky plot, satellite SNR</p>
-                                        <a href="{{ url_for('hardware.gps_dashboard_page') }}" class="btn btn-info w-100">
-                                            <i class="fas fa-satellite-dish"></i> Open Dashboard
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-signal fa-2x text-success mb-3"></i>
-                                        <h6>Radio / SDR</h6>
-                                        <p class="text-muted small">SDR receivers and radio monitoring</p>
-                                        <a href="/admin/radio" class="btn btn-success w-100">
-                                            <i class="fas fa-broadcast-tower"></i> Configure
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-sign fa-2x text-info mb-3"></i>
-                                        <h6>LED Sign</h6>
-                                        <p class="text-muted small">BetaBrite/Alpha emergency display</p>
-                                        <a href="/led_control" class="btn btn-info w-100">
-                                            <i class="fas fa-sliders-h"></i> Control Panel
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-tv fa-2x text-warning mb-3"></i>
-                                        <h6>VFD Display</h6>
-                                        <p class="text-muted small">Noritake vacuum fluorescent display</p>
-                                        <a href="/vfd_control" class="btn btn-warning w-100">
-                                            <i class="fas fa-sliders-h"></i> Control Panel
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-broadcast-tower fa-2x text-danger mb-3"></i>
-                                        <h6>Zigbee</h6>
-                                        <p class="text-muted small">Coordinator, lights, and sensors</p>
-                                        <a href="{{ url_for('zigbee.zigbee_settings') }}" class="btn btn-danger w-100">
-                                            <i class="fas fa-network-wired"></i> Configure
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6 col-lg-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body text-center">
-                                        <i class="fas fa-plug fa-2x text-secondary mb-3"></i>
-                                        <h6>GPIO / Relays</h6>
-                                        <p class="text-muted small">Transmitter PTT and relay outputs</p>
-                                        <a href="/admin/gpio" class="btn btn-secondary w-100">
-                                            <i class="fas fa-microchip"></i> Control Panel
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <!-- The Hardware tab that used to live here (Hardware Settings, GPS
+                     & Time, Radio/SDR, LED Sign, VFD Display, Zigbee, GPIO/Relays) was
+                     a pure link grid -- every card duplicated a page already
+                     registered in Settings -> Hardware or Diagnostics -> System
+                     Health. Removed along with its tab button rather than kept in
+                     sync by hand. -->
 
                 <!-- End of tab-content -->
             </div>
