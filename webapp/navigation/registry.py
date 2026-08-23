@@ -141,13 +141,6 @@ _MONITOR = NavSection(
                     permissions=_RADIO_WATCHERS,
                 ),
                 NavItem(
-                    label="Audio Ingestion",
-                    icon="fas fa-microphone",
-                    href="/admin/audio-sources",
-                    description="Configure audio input sources and dead-air monitoring.",
-                    permissions=(SYSTEM_CONFIGURE,),
-                ),
-                NavItem(
                     label="Audio Health",
                     icon="fas fa-wave-square",
                     href="/audio/health/dashboard",
@@ -174,25 +167,17 @@ _MONITOR = NavSection(
             label="Station Hardware",
             icon="fas fa-microchip",
             items=(
-                NavItem(
-                    label="Hardware Settings",
-                    icon="fas fa-microchip",
-                    endpoint="hardware.hardware_settings_page",
-                    description="GPIO, displays, tower light, rack buzzer and serial devices.",
-                    permissions=(SYSTEM_CONFIGURE,),
-                ),
+                # Hardware Settings and Zigbee used to also be listed here,
+                # duplicating Settings -> Hardware's entries for the exact
+                # same pages under different labels/icons. GPS & Time is a
+                # live-status dashboard (fix quality, sky plot) so it stays
+                # here in Monitor; the other two are configuration screens,
+                # so Settings is their one home now.
                 NavItem(
                     label="GPS & Time",
                     icon="fas fa-satellite",
                     endpoint="hardware.gps_dashboard_page",
                     description="GNSS fix quality, satellites and time discipline.",
-                    permissions=(SYSTEM_CONFIGURE,),
-                ),
-                NavItem(
-                    label="Zigbee",
-                    icon="fas fa-broadcast-tower",
-                    href="/admin/zigbee",
-                    description="Zigbee coordinator status and paired devices.",
                     permissions=(SYSTEM_CONFIGURE,),
                 ),
             ),
