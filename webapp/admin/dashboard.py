@@ -225,6 +225,20 @@ def admin():
         return "<h1>Admin Interface</h1><p>Admin panel loading...</p><p><a href='/'>← Back to Main</a></p>"
     
 
+@dashboard_bp.route('/admin/user-accounts', methods=['GET'])
+@require_permission('system.manage_users')
+def user_accounts_page():
+    """Render the administrator-accounts page.
+
+    Deliberately a separate route from /admin/users below -- that one is a
+    JSON-only API (GET returns a user list, POST creates), consumed by this
+    page's own JS. The nav registry used to link "User Accounts" straight at
+    /admin/users, which meant clicking it served a raw JSON blob instead of
+    a page.
+    """
+    return render_template('admin/user_accounts.html')
+
+
 @dashboard_bp.route('/admin/users', methods=['GET', 'POST'])
 @require_permission('system.manage_users')
 def admin_users():

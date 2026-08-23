@@ -292,7 +292,7 @@ SETTINGS_SECTION = NavSection(
                 NavItem(
                     label="User Accounts",
                     icon="fas fa-users",
-                    href="/admin/users",
+                    href="/admin/user-accounts",
                     description="Create, edit and deactivate user accounts.",
                     permissions=(SYSTEM_MANAGE_USERS,),
                 ),

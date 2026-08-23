@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}User Accounts - EAS Station™{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set header_icon = 'fas fa-users-cog' %}
+{% set header_title = 'User Accounts' %}
+{% set header_subtitle = 'Create, reset, and revoke access for control panel administrators' %}
+{% include 'components/page_header.html' %}
+
+<div class="container-fluid">
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-user-plus text-success"></i> Create User</h5>
+                </div>
+                <div class="card-body">
+                    <form id="createUserForm" class="needs-validation" novalidate>
+                        <div class="mb-3">
+                            <label for="newUserUsername" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="newUserUsername" name="username" pattern="[A-Za-z0-9_.-]{3,64}" required>
+                            <div class="form-text">3-64 characters: letters, numbers, dot, dash, and underscore only.</div>
+                            <div class="invalid-feedback">Enter a valid username (letters, numbers, dot, dash, underscore).</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="newUserPassword" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="newUserPassword" name="password" minlength="8" required>
+                            <div class="form-text">Passwords are stored using salted SHA-256 hashes.</div>
+                            <div class="invalid-feedback">Password must be at least 8 characters long.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="newUserPasswordConfirm" class="form-label">Confirm Password</label>
+                            <input type="password" class="form-control" id="newUserPasswordConfirm" minlength="8" required>
+                            <div class="invalid-feedback">Passwords must match.</div>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="fas fa-user-shield"></i> Create Administrator
+                        </button>
+                    </form>
+                    <small class="text-muted d-block mt-3">
+                        Tip: Use the "Reset Password" action to rotate credentials without deleting an account.
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-address-book"></i> Existing Users</h5>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="refreshUserList">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table eas-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Username</th>
+                                    <th scope="col" class="text-nowrap">Created</th>
+                                    <th scope="col" class="text-nowrap">Last Login</th>
+                                    <th scope="col" class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="userTableBody">
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-4">
+                                        <div class="loading-spinner"></div>
+                                        <span class="ms-2">Loading users...</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <small class="text-muted d-block mt-3">
+                        At least one active administrator is required at all times. Accounts can only be deleted by another signed-in administrator.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('createUserForm');
+    const passwordInput = document.getElementById('newUserPassword');
+    const confirmInput = document.getElementById('newUserPasswordConfirm');
+    const tableBody = document.getElementById('userTableBody');
+
+    function formatTimestamp(ts) {
+        if (!ts) return '—';
+        const d = new Date(ts);
+        return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+    }
+
+    async function loadUsers() {
+        tableBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4"><div class="loading-spinner"></div><span class="ms-2">Loading users...</span></td></tr>';
+        try {
+            const resp = await fetch('/admin/users', { headers: { 'Accept': 'application/json' } });
+            if (resp.status === 401) { window.location.href = '/login'; return; }
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                showToast(data.error || 'Unable to load users.', 'danger');
+                return;
+            }
+            const users = data.users || [];
+            if (!users.length) {
+                tableBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">No administrator accounts found.</td></tr>';
+                return;
+            }
+            tableBody.innerHTML = '';
+            users.forEach(user => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td data-label="Username" class="text-nowrap"><strong>${user.username}</strong></td>
+                    <td data-label="Created" class="text-nowrap">${formatTimestamp(user.created_at)}</td>
+                    <td data-label="Last Login" class="text-nowrap">${formatTimestamp(user.last_login_at)}</td>
+                    <td class="text-end">
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-sm btn-outline-primary" data-action="reset-password" data-user-id="${user.id}" data-username="${user.username}">
+                                <i class="fas fa-key"></i> Reset
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" data-action="delete-user" data-user-id="${user.id}" data-username="${user.username}">
+                                <i class="fas fa-user-times"></i> Delete
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        } catch (err) {
+            showToast('Unexpected error while loading users.', 'danger');
+        }
+    }
+
+    const validatePasswordMatch = () => {
+        confirmInput.setCustomValidity(confirmInput.value !== passwordInput.value ? 'Passwords must match.' : '');
+    };
+    passwordInput.addEventListener('input', validatePasswordMatch);
+    confirmInput.addEventListener('input', validatePasswordMatch);
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        validatePasswordMatch();
+        if (!form.checkValidity()) {
+            form.classList.add('was-validated');
+            return;
+        }
+        const username = form.username.value.trim();
+        const password = passwordInput.value;
+        try {
+            const resp = await fetch('/admin/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN },
+                body: JSON.stringify({ username, password }),
+            });
+            if (resp.status === 401) { window.location.href = '/login'; return; }
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                showToast(data.error || 'Failed to create user.', 'danger');
+                return;
+            }
+            form.reset();
+            form.classList.remove('was-validated');
+            confirmInput.setCustomValidity('');
+            showToast(data.message || 'User created successfully.', 'success');
+            loadUsers();
+        } catch (err) {
+            showToast('Unexpected error while creating user.', 'danger');
+        }
+    });
+
+    tableBody.addEventListener('click', function(e) {
+        const button = e.target.closest('button[data-action]');
+        if (!button) return;
+        const userId = button.dataset.userId;
+        const username = button.dataset.username;
+        if (button.dataset.action === 'reset-password') {
+            handlePasswordReset(userId, username);
+        } else if (button.dataset.action === 'delete-user') {
+            handleDeletion(userId, username);
+        }
+    });
+
+    async function handlePasswordReset(userId, username) {
+        const newPassword = prompt(`Enter a new password for ${username} (minimum 8 characters):`);
+        if (newPassword === null) return;
+        if (newPassword.trim().length < 8) {
+            showToast('Password must be at least 8 characters long.', 'warning');
+            return;
+        }
+        try {
+            const resp = await fetch(`/admin/users/${userId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN },
+                body: JSON.stringify({ password: newPassword }),
+            });
+            if (resp.status === 401) { window.location.href = '/login'; return; }
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                showToast(data.error || 'Failed to reset password.', 'danger');
+                return;
+            }
+            showToast(data.message || 'Password reset successfully.', 'success');
+            loadUsers();
+        } catch (err) {
+            showToast('Unexpected error while resetting password.', 'danger');
+        }
+    }
+
+    function handleDeletion(userId, username) {
+        if (!confirm(`Remove administrator ${username}? This user will immediately lose access to the admin console.`)) {
+            return;
+        }
+        (async () => {
+            try {
+                const resp = await fetch(`/admin/users/${userId}`, {
+                    method: 'DELETE',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN },
+                });
+                if (resp.status === 401) { window.location.href = '/login'; return; }
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) {
+                    showToast(data.error || 'Failed to delete user.', 'danger');
+                    return;
+                }
+                showToast(data.message || 'User deleted successfully.', 'success');
+                loadUsers();
+            } catch (err) {
+                showToast('Unexpected error while deleting user.', 'danger');
+            }
+        })();
+    }
+
+    document.getElementById('refreshUserList').addEventListener('click', loadUsers);
+    loadUsers();
+});
+</script>
+{% endblock %}

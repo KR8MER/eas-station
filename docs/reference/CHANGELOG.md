@@ -8,13 +8,23 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.187.0] - 2026-08-23 - Remove Admin Dashboard's Operations tab (phase 2 of consolidation)
+## [2.187.0] - 2026-08-23 - Remove Admin Dashboard's Operations and Security tabs (phase 2 of consolidation)
 
 ### Added
 - **"Trigger Poll Now" and "Manual Alert Import"** on Admin -> Alert Poller
   Settings (`/admin/poller`) -- these had no home other than the Admin
   Dashboard's Operations tab, so their forms and JS moved here rather than
   being deleted with the rest of that tab.
+- **New `/admin/user-accounts` page** (`templates/admin/user_accounts.html`,
+  `dashboard.py:user_accounts_page()`) extracting the Admin Dashboard's
+  Security tab's "Users & Roles" sub-tab -- the full create/list/reset/
+  delete-user UI. This one was NOT a duplicate: the nav registry's "User
+  Accounts" entry linked straight at `/admin/users`, which turned out to be
+  a JSON-only API (`dashboard.py`'s `admin_users()`, GET returns a user
+  list, POST creates), not a page -- clicking that Settings link served a
+  raw JSON blob. The Admin Dashboard's tab was the *only* working UI for
+  user management, so it was extracted rather than deleted, and the
+  registry entry fixed to point at the new page instead of the API.
 
 ### Removed
 - **Admin Dashboard's entire Operations tab** (CAP Alert Polling, One-Button
@@ -40,10 +50,13 @@ tracks releases under the 2.x series.
 - **Alert Purge was an orphaned page** -- had no navigation entry anywhere,
   reachable only via this tab or a direct URL. Added to Settings -> Data &
   Storage, next to Backups, instead of just deleting its only link.
+- **Admin Dashboard's entire Security tab** -- "Users & Roles" moved to the
+  new `/admin/user-accounts` page above; "Local Authorities" was already a
+  separate registered page, just linked from here too.
 
   This continues the admin.html/`/settings` consolidation from 2.186.2.
-  Remaining tabs (Data, System, Broadcast's encoder form, Security's user
-  management) still need the same treatment.
+  Remaining tabs (Data, System, Broadcast's EAS Encoder Settings form) still
+  need the same treatment.
 
 ## [2.186.2] - 2026-08-23 - Remove pure link-grid tabs from the Admin Dashboard
 
