@@ -78,15 +78,12 @@ def register(app: Flask, logger) -> None:
                 'error': 'Failed to abort the broadcast; see server logs.',
             }), 500
 
-        if pid_before is None:
-            # The state marker said "active" but there was no trackable
-            # playback process yet (a narrow timing window right at
-            # broadcast start) -- nothing could actually be killed.
-            return jsonify({
-                'success': False,
-                'error': 'Broadcast has no trackable playback process yet; try again in a moment.',
-            }), 409
-
+        # A local playback subprocess is only one of two surfaces
+        # abort_current_broadcast() stops -- it also purges audio already
+        # queued into the live Icecast air-chain (a station with no local
+        # player configured, e.g. Icecast-only, never has a trackable PID at
+        # all). The state marker being active above is enough to know there
+        # was something to abort; pid_before is only logged for context.
         logger.warning(
             "Web-triggered Dump/Abort Broadcast by %s (pid %s)", operator, pid_before,
         )

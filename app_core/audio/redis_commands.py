@@ -38,6 +38,7 @@ Commands:
     - eas_monitor_stop: Stop EAS monitor
     - inject_test_signal: Inject a synthetic SAME RWT test signal
     - inject_eas_audio: Re-inject a stored EAS WAV into the live air-chain (resend)
+    - abort_injected_audio: Purge queued EAS audio from the live air-chain (Hold to Abort)
 """
 
 import json
@@ -278,6 +279,39 @@ class AudioCommandPublisher:
         return self._publish_command(
             'inject_eas_audio',
             {'message_id': message_id},
+            wait_for_response=True,
+            timeout=timeout,
+        )
+
+    def abort_injected_audio(self, eom_wav: Optional[bytes] = None, timeout: float = 10.0) -> Dict[str, Any]:
+        """Purge any EAS audio already queued into the live Icecast air-chain.
+
+        Called by ``abort_current_broadcast()`` (the "Hold to Abort
+        Broadcast" web button and the physical GPIO Dump/Abort input)
+        alongside killing the local playback subprocess -- ``inject_eas_audio``
+        pushes a broadcast's audio chunks into each source's
+        ``BroadcastQueue`` up front, a separate pipeline the local-subprocess
+        kill never touches, so without this an abort left Icecast listeners
+        hearing the alert play out to completion regardless of how long the
+        button was held.
+
+        Args:
+            eom_wav: Optional isolated EOM tone-burst WAV bytes to inject
+                immediately after purging, so stream listeners hear a
+                compliant sign-off instead of a hard cut to dead air.
+                Base64-encoded before sending -- raw bytes are not JSON-safe.
+            timeout: How long to wait for the audio-service to confirm.
+
+        Returns:
+            Response dict with 'success', 'message', and 'data': {'cleared': int}.
+        """
+        params: Dict[str, Any] = {}
+        if eom_wav:
+            import base64
+            params['eom_wav_b64'] = base64.b64encode(eom_wav).decode('ascii')
+        return self._publish_command(
+            'abort_injected_audio',
+            params,
             wait_for_response=True,
             timeout=timeout,
         )
@@ -765,6 +799,24 @@ class AudioCommandSubscriber:
                     'success': False,
                     'message': 'No active source queues to inject into',
                     'data': {'injected': False},
+                }
+
+            elif command == 'abort_injected_audio':
+                eom_wav = None
+                eom_wav_b64 = params.get('eom_wav_b64')
+                if eom_wav_b64:
+                    import base64
+                    try:
+                        eom_wav = base64.b64decode(eom_wav_b64)
+                    except Exception as exc:
+                        logger.warning('abort_injected_audio: failed to decode EOM audio: %s', exc)
+
+                from app_core.audio.eas_stream_injector import abort_injected_audio as _abort_injected_audio
+                cleared = _abort_injected_audio(replacement_wav=eom_wav)
+                return {
+                    'success': True,
+                    'message': f'Cleared {cleared} queued EAS audio chunk(s)',
+                    'data': {'cleared': cleared},
                 }
 
             else:

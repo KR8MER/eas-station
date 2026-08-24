@@ -156,10 +156,10 @@ def test_abort_route_success_calls_abort_current_broadcast(abort_app, authentica
         'app_utils.eas.get_broadcast_state',
         lambda: {'active': True, 'label': 'Tornado Warning'},
     )
-    pid_calls = iter([4321, None])  # before-call: real PID; after-call: cleared
-    abort_app.monkeypatch.setattr(
-        'app_utils.eas.get_broadcast_pid', lambda: next(pid_calls),
-    )
+    # The route reads this once, purely to log it alongside the abort --
+    # abort_current_broadcast() (mocked below) is the one that actually
+    # decides what there is to abort.
+    abort_app.monkeypatch.setattr('app_utils.eas.get_broadcast_pid', lambda: 4321)
 
     calls = []
     abort_app.monkeypatch.setattr(
@@ -179,23 +179,29 @@ def test_abort_route_success_calls_abort_current_broadcast(abort_app, authentica
     assert calls[0]['operator'] == 'anonymous'
 
 
-def test_abort_route_409_when_no_trackable_pid(abort_app, authenticated_user):
-    """The state marker says 'active' but no PID was ever published for it
-    (a narrow timing window right at broadcast start) -- must not report
-    success for something it couldn't actually touch."""
+def test_abort_route_succeeds_with_no_trackable_pid(abort_app, authenticated_user):
+    """The state marker says 'active' but no PID was ever published for it --
+    true for a station with no local audio player configured at all
+    (Icecast-only), not just the narrow timing window right at broadcast
+    start. abort_current_broadcast() itself now purges audio already queued
+    into the live Icecast air-chain in this case, so the route must still
+    report success rather than a 409 for something it "couldn't touch" --
+    it can, just not by killing a PID that was never published."""
     abort_app.monkeypatch.setattr(
         'app_utils.eas.get_broadcast_state', lambda: {'active': True, 'label': 'x'},
     )
     abort_app.monkeypatch.setattr('app_utils.eas.get_broadcast_pid', lambda: None)
+    calls = []
     abort_app.monkeypatch.setattr(
         'app_core.audio.gpio_input_actions.abort_current_broadcast',
-        lambda reason=None, operator=None: None,
+        lambda reason=None, operator=None: calls.append((reason, operator)),
     )
 
     resp = abort_app.client.post('/api/broadcast/abort')
 
-    assert resp.status_code == 409
-    assert resp.get_json()['success'] is False
+    assert resp.status_code == 200
+    assert resp.get_json() == {'success': True}
+    assert len(calls) == 1
 
 
 def test_abort_route_500_when_abort_raises(abort_app, authenticated_user):
