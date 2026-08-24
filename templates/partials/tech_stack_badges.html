@@ -80,11 +80,11 @@
     <a href="https://alembic.sqlalchemy.org/" target="_blank" rel="noopener noreferrer" class="tech-badge" title="Alembic 1.19.1 — schema migrations. `alembic upgrade head` runs on every install/update.">
         <img src="https://img.shields.io/badge/Alembic-1.19.1-6BA3BE?style=for-the-badge{% if alembic_logo %}&logo={{ alembic_logo | urlencode }}{% endif %}" alt="Alembic 1.19.1">
     </a>
-    <a href="https://www.postgresql.org/" target="_blank" rel="noopener noreferrer" class="tech-badge" title="PostgreSQL 17 + PostGIS 3.4 — primary database. PostGIS provides spatial filtering for county/zone alert matching.">
+    <a href="https://www.postgresql.org/" target="_blank" rel="noopener noreferrer" class="tech-badge" title="PostgreSQL 17 + PostGIS 3.5 — primary database. PostGIS provides spatial filtering for county/zone alert matching.">
         <img src="https://img.shields.io/badge/PostgreSQL-17%20%2B%20PostGIS-0093D0?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL 17 with PostGIS">
     </a>
-    <a href="https://redis.io/" target="_blank" rel="noopener noreferrer" class="tech-badge" title="Redis 7.1 — pub/sub bus between the web app and SDR/hardware services; cache; rate-limit store.">
-        <img src="https://img.shields.io/badge/Redis-7.1-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis 7.1">
+    <a href="https://redis.io/" target="_blank" rel="noopener noreferrer" class="tech-badge" title="Redis 8.0 — pub/sub bus between the web app and SDR/hardware services; cache; rate-limit store.">
+        <img src="https://img.shields.io/badge/Redis-8.0-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis 8.0">
     </a>
 
     {# --- Servers / deployment -------------------------------------------- #}
@@ -94,8 +94,8 @@
     <a href="https://www.gevent.org/" target="_blank" rel="noopener noreferrer" class="tech-badge" title="gevent 25.9.1 — async worker class for Gunicorn so Flask-SocketIO can hold thousands of concurrent WebSocket connections.">
         <img src="https://img.shields.io/badge/gevent-25.9.1-1F8B4C?style=for-the-badge{% if gevent_logo %}&logo={{ gevent_logo | urlencode }}{% endif %}" alt="gevent 25.9.1">
     </a>
-    <a href="https://nginx.org/" target="_blank" rel="noopener noreferrer" class="tech-badge" title="Nginx — reverse proxy / TLS terminator / static file server in front of Gunicorn and Icecast.">
-        <img src="https://img.shields.io/badge/Nginx-Alpine-009639?style=for-the-badge&logo=nginx&logoColor=white" alt="Nginx (Alpine)">
+    <a href="https://nginx.org/" target="_blank" rel="noopener noreferrer" class="tech-badge" title="Nginx — reverse proxy / TLS terminator / static file server in front of Gunicorn and Icecast. Installed as a system package (apt), not the Docker/Alpine image this badge used to imply.">
+        <img src="https://img.shields.io/badge/Nginx-system-009639?style=for-the-badge&logo=nginx&logoColor=white" alt="Nginx (system package)">
     </a>
     <a href="https://letsencrypt.org/" target="_blank" rel="noopener noreferrer" class="tech-badge" title="Let's Encrypt / Certbot — automated TLS certificate issuance and renewal for the public HTTPS endpoint.">
         <img src="https://img.shields.io/badge/Let's%20Encrypt-Certbot-003A70?style=for-the-badge&logo=letsencrypt&logoColor=white" alt="Let's Encrypt Certbot">
@@ -148,8 +148,8 @@
     <a href="https://leafletjs.com/" target="_blank" rel="noopener noreferrer" class="tech-badge" title="Leaflet 1.9.4 — interactive maps for alert polygons, coverage zones, and county boundaries.">
         <img src="https://img.shields.io/badge/Leaflet-1.9.4-199900?style=for-the-badge&logo=leaflet&logoColor=white" alt="Leaflet 1.9.4">
     </a>
-    <a href="https://www.chartjs.org/" target="_blank" rel="noopener noreferrer" class="tech-badge" title="Chart.js 3.9.1 — time-series charts on the Analytics, System Health, and GPS dashboards.">
-        <img src="https://img.shields.io/badge/Chart.js-3.9.1-FF6384?style=for-the-badge&logo=chartdotjs&logoColor=white" alt="Chart.js 3.9.1">
+    <a href="https://www.chartjs.org/" target="_blank" rel="noopener noreferrer" class="tech-badge" title="Chart.js — time-series charts on the Analytics, System Health, and GPS dashboards. Two versions are vendored and in concurrent use: v3.9.1 (most dashboards) and v4.4.0 (System Health, Repository Statistics) — not yet consolidated onto one version.">
+        <img src="https://img.shields.io/badge/Chart.js-3.9%20%26%204.4-FF6384?style=for-the-badge&logo=chartdotjs&logoColor=white" alt="Chart.js 3.9 and 4.4 (two versions vendored)">
     </a>
 
     {# --- Auth / notifications ------------------------------------------- #}

@@ -2,7 +2,7 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-2.192.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.192.1-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -13,10 +13,10 @@
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0.52-CA2C39?style=flat-square&logo=sqlalchemy&logoColor=white)](https://www.sqlalchemy.org/)
 [![Alembic](https://img.shields.io/badge/Alembic-1.19.1-6BA3BE?style=flat-square&logo=sqlalchemy&logoColor=white)](https://alembic.sqlalchemy.org/)
 [![PostgreSQL + PostGIS](https://img.shields.io/badge/PostgreSQL-17%20%2B%20PostGIS-0093D0?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Redis](https://img.shields.io/badge/Redis-7.1-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
+[![Redis](https://img.shields.io/badge/Redis-8.0-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
 [![Gunicorn](https://img.shields.io/badge/Gunicorn-26.1.0-499848?style=flat-square&logo=gunicorn&logoColor=white)](https://gunicorn.org/)
 [![gevent](https://img.shields.io/badge/gevent-25.9.1-1F8B4C?style=flat-square)](https://www.gevent.org/)
-[![Nginx](https://img.shields.io/badge/Nginx-Alpine-009639?style=flat-square&logo=nginx&logoColor=white)](https://nginx.org/)
+[![Nginx](https://img.shields.io/badge/Nginx-system-009639?style=flat-square&logo=nginx&logoColor=white)](https://nginx.org/)
 [![Let's Encrypt](https://img.shields.io/badge/Let's%20Encrypt-Certbot-003A70?style=flat-square&logo=letsencrypt&logoColor=white)](https://letsencrypt.org/)
 [![Systemd](https://img.shields.io/badge/Systemd-Services-33A9DC?style=flat-square&logo=systemd&logoColor=white)](https://systemd.io/)
 [![Icecast](https://img.shields.io/badge/Icecast-2.4.4-1F3B73?style=flat-square)](https://icecast.org/)
@@ -32,7 +32,7 @@
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3.0-7952B3?style=flat-square&logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
 [![Font Awesome](https://img.shields.io/badge/Font%20Awesome-6.4.0-528DD7?style=flat-square&logo=fontawesome&logoColor=white)](https://fontawesome.com/)
 [![Leaflet](https://img.shields.io/badge/Leaflet-1.9.4-199900?style=flat-square&logo=leaflet&logoColor=white)](https://leafletjs.com/)
-[![Chart.js](https://img.shields.io/badge/Chart.js-3.9.1-FF6384?style=flat-square&logo=chartdotjs&logoColor=white)](https://www.chartjs.org/)
+[![Chart.js](https://img.shields.io/badge/Chart.js-3.9%20%26%204.4-FF6384?style=flat-square&logo=chartdotjs&logoColor=white)](https://www.chartjs.org/)
 [![PyOTP](https://img.shields.io/badge/PyOTP-2.10.0-2E7D32?style=flat-square)](https://pyauth.github.io/pyotp/)
 [![cryptography](https://img.shields.io/badge/cryptography-46.0.5-2c5282?style=flat-square)](https://cryptography.io/)
 [![Twilio](https://img.shields.io/badge/Twilio-SMS-F22F46?style=flat-square&logo=twilio&logoColor=white)](https://www.twilio.com/)
@@ -221,8 +221,8 @@ graph TB
     end
 
     subgraph Infrastructure["Infrastructure"]
-        DB[(PostgreSQL 17<br/>+ PostGIS 3.4)]
-        REDIS[(Redis 7<br/>Cache · Pub/Sub)]
+        DB[(PostgreSQL 17<br/>+ PostGIS 3.5)]
+        REDIS[(Redis 8<br/>Cache · Pub/Sub)]
         NGINX[nginx<br/>HTTPS · Proxy]
         AUDIT[(Tamper-Evident<br/>Audit Ledger<br/>Ed25519)]
     end
@@ -271,7 +271,7 @@ graph TB
 | **eas-station-audio** | Audio processing, EAS monitoring, Redis pub/sub |
 | **chrony + gpsd** | GPS-disciplined kernel refclock; stratum-1 NTP serving |
 
-**Infrastructure:** PostgreSQL 17 + PostGIS 3.4 for persistent storage · Redis 7 for real-time metrics and inter-service messaging · nginx for HTTPS termination · chrony + gpsd for stratum-1 time.
+**Infrastructure:** PostgreSQL 17 + PostGIS 3.5 for persistent storage · Redis 8 for real-time metrics and inter-service messaging · nginx for HTTPS termination · chrony + gpsd for stratum-1 time.
 
 **Frontend libraries (all vendored locally under `static/vendor/`):** Bootstrap 5, jQuery, Font Awesome, Leaflet (maps), Mermaid (diagrams), Chart.js 3 with the datalabels, matrix and date-fns adapter plugins (dashboards), and jsPDF + html2canvas (client-side PDF report export).
 
@@ -486,19 +486,19 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 | psycopg2‑binary | 2.9.12 | LGPL‑3.0 | Sync PostgreSQL driver SQLAlchemy talks to. | https://www.psycopg.org/ |
 | GeoAlchemy2 | 0.20.0 | MIT | SQLAlchemy types and ST_* function bindings for PostGIS geometry/geography columns. | https://geoalchemy-2.readthedocs.io/ |
 | PostgreSQL | 17 | PostgreSQL | Primary database (alerts, users, audit, configuration). | https://www.postgresql.org/ |
-| PostGIS | 3.4 | GPL‑2.0+ | Spatial extension — county/zone boundary matching, polygon containment, alert geo‑filtering. | https://postgis.net/ |
+| PostGIS | 3.5 | GPL‑2.0+ | Spatial extension — county/zone boundary matching, polygon containment, alert geo‑filtering. | https://postgis.net/ |
 | greenlet | 3.5.5 | MIT / PSF | Required for SQLAlchemy 2.0 sync I/O when running under the gevent worker. | https://greenlet.readthedocs.io/ |
 
 ### Caching, queueing & runtime servers
 
 | Component | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
-| Redis (server) | 7.1 | RSAL/SSPL/AGPL (per upstream) | Pub/sub bus between the web app and the SDR / hardware services; cache; rate‑limit store; capture registry; live spectrum + waterfall feed. | https://redis.io/ |
+| Redis (server) | 8.0 | RSAL/SSPL/AGPL (per upstream) | Pub/sub bus between the web app and the SDR / hardware services; cache; rate‑limit store; capture registry; live spectrum + waterfall feed. | https://redis.io/ |
 | redis (Python) | 8.1.0 | MIT | Python client for the Redis server. | https://github.com/redis/redis-py |
 | hiredis | 3.4.1 | BSD‑3‑Clause | C parser accelerator for `redis‑py` (faster pub/sub fan‑out). | https://github.com/redis/hiredis-py |
 | Gunicorn | 26.1.0 | MIT | Production WSGI server fronting the Flask app. | https://gunicorn.org/ |
 | gevent | 25.9.1+ | MIT | Async worker class for Gunicorn so Flask‑SocketIO can hold thousands of concurrent WebSocket connections. | https://www.gevent.org/ |
-| Nginx | Alpine | BSD‑2‑Clause | Reverse proxy / TLS terminator / static file server in front of Gunicorn and Icecast. | https://nginx.org/ |
+| Nginx | system (apt) | BSD‑2‑Clause | Reverse proxy / TLS terminator / static file server in front of Gunicorn and Icecast. Installed via `install.sh`'s `apt-get install nginx` — no version pin, and no Docker/Alpine image is involved despite this table's earlier claim. | https://nginx.org/ |
 | systemd | system | LGPL‑2.1+ | Process supervisor for `eas-station`, `sdr_hardware_service`, `hardware_service`, `gps_manager`, Icecast, Redis. | https://systemd.io/ |
 | Let's Encrypt / Certbot | — | Apache‑2.0 / ISRG | Automated TLS certificate issuance and renewal for the public HTTPS endpoint. | https://letsencrypt.org/ |
 
@@ -589,7 +589,7 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 | Bootstrap | 5.3.0 | MIT | CSS grid + component library underlying every dashboard layout. | https://getbootstrap.com/ |
 | Font Awesome (Free) | 6.4.0 | CC BY 4.0 / SIL OFL / MIT | Icon set used throughout navigation, status pills, and badges. | https://fontawesome.com/ |
 | Leaflet | 1.9.4 | BSD‑2‑Clause | Interactive maps for alert polygons, coverage zones, and county boundaries. | https://leafletjs.com/ |
-| Chart.js | 3.9.1 | MIT | Time‑series charts on the Analytics, System Health, and GPS dashboards. | https://www.chartjs.org/ |
+| Chart.js | 3.9.1 & 4.4.0 | MIT | Time‑series charts on the Analytics, System Health, and GPS dashboards. Two versions are vendored (`static/vendor/chartjs/chart-v3.min.js`, used by most dashboards, and `chart.min.js` at v4.4.0, used by System Health and Repository Statistics) — not yet consolidated onto one version. | https://www.chartjs.org/ |
 | Socket.IO client | 4.5.4 | MIT | Browser WebSocket client that receives the live alert / radio / GPS push updates. | https://socket.io/ |
 | jsPDF + html2canvas | latest | MIT | Client‑side PDF export of the full Statistics dashboard. | https://github.com/parallax/jsPDF |
 | flag-icons | latest | MIT | Country flag SVGs (served locally) for the Traffic Analytics country/visitor reports. | https://github.com/lipis/flag-icons |
