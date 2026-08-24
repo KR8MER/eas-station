@@ -46,6 +46,7 @@ from .scanner import (
     classify,
     count_lines,
     discover_files,
+    git_history,
     repo_root,
 )
 
@@ -155,6 +156,7 @@ def compute_stats(app=None, root: Optional[Path] = None) -> Dict[str, object]:
         'buckets': {name: _finalize(buckets[name]) for name in BUCKETS},
         'routes': routes,
         'components': count_components(base, files),
+        'git_history': git_history(base) if source == 'git' else None,
         'duration_ms': round((time.monotonic() - started) * 1000, 1),
     }
 
@@ -197,6 +199,7 @@ __all__ = [
     'count_lines',
     'discover_files',
     'get_stats',
+    'git_history',
     'invalidate_cache',
     'repo_root',
     'routes_from_source',
