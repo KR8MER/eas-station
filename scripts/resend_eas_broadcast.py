@@ -51,7 +51,9 @@ def _run(message_id: int, operator: str | None) -> int:
     # Imported lazily so ``--help`` doesn't pay the full app-import cost.
     from app import app, db, EASMessage
     from app_core.models import SystemLog
+    from app_core.auth.audit import AuditAction, AuditLogger
     from app_utils.eas import (
+        load_eas_config,
         set_broadcast_active,
         clear_broadcast_active,
         play_broadcast_audio,
@@ -97,18 +99,27 @@ def _run(message_id: int, operator: str | None) -> int:
             event_info.get('name', event_code) if isinstance(event_info, dict) else event_code
         ) or 'EAS Alert'
 
-        audio_player_cmd_raw = app.config.get('AUDIO_PLAYER_CMD') or os.environ.get('AUDIO_PLAYER_CMD')
-        if isinstance(audio_player_cmd_raw, str):
-            audio_player_cmd = audio_player_cmd_raw.split() if audio_player_cmd_raw.strip() else None
-        elif isinstance(audio_player_cmd_raw, list):
-            audio_player_cmd = audio_player_cmd_raw or None
-        else:
-            audio_player_cmd = None
+        # Every other broadcast path (manual Send, RWT, live/auto-forward)
+        # resolves the player command through load_eas_config()'s
+        # 'audio_player_cmd' key -- EAS_AUDIO_PLAYER env var or the
+        # EASSettings.audio_player DB column, already split into argv form.
+        # This script used to look for an 'AUDIO_PLAYER_CMD' app.config/env
+        # key instead, which nothing else in the codebase ever sets -- local
+        # playback (and therefore the PID an abort needs to find) was dead
+        # code on every real deployment.
+        audio_player_cmd = load_eas_config(app.root_path).get('audio_player_cmd') or None
 
         tmp_file = None
         audio_played = False
         audio_injected = False
         airchain_signalled = False
+        # Captures any unexpected failure during setup/playout so the log
+        # entries below are always written -- this process's stdout/stderr
+        # are redirected to DEVNULL by the Flask route that launches it (see
+        # webapp/eas/messages.py::resend_eas_message), so an exception that
+        # propagated past this point used to vanish with zero record of the
+        # resend ever being attempted.
+        resend_error: Exception | None = None
 
         try:
             tmp_file = tempfile.NamedTemporaryFile(suffix='.wav', prefix='eas_resend_', delete=False)
@@ -186,6 +197,12 @@ def _run(message_id: int, operator: str | None) -> int:
             if remaining > 0:
                 time.sleep(remaining)
 
+        except Exception as exc:
+            resend_error = exc
+            logger.error(
+                'Resend of EASMessage #%s failed during playout: %s',
+                message_id, exc, exc_info=True,
+            )
         finally:
             # Falling edge: clearing the marker releases the relay in the GPIO
             # subprocess (which also self-releases on the marker TTL).  Pass the
@@ -200,8 +217,8 @@ def _run(message_id: int, operator: str | None) -> int:
         try:
             db.session.add(
                 SystemLog(
-                    level='INFO',
-                    message='EAS message resent',
+                    level='ERROR' if resend_error else 'INFO',
+                    message='EAS message resend failed' if resend_error else 'EAS message resent',
                     module='eas',
                     details={
                         'message_id': message_id,
@@ -215,12 +232,48 @@ def _run(message_id: int, operator: str | None) -> int:
                         'audio_injected': audio_injected,
                         'playback_duration_seconds': round(float(playback_duration), 2),
                         'resent_by': operator,
+                        'error': str(resend_error) if resend_error else None,
                     },
                 )
             )
             db.session.commit()
         except Exception:
             db.session.rollback()
+
+        # A resend is a transmission event just like a fresh manual "Send" or
+        # RWT airchain -- webapp/eas/workflow.py writes an EAS_BROADCAST audit
+        # entry for its transmissions, but this script only ever wrote the
+        # SystemLog row above. A resend never inserts a new EASMessage row (it
+        # replays the existing one), so the SQLAlchemy after_insert listener
+        # that normally fires EAS_BROADCAST for a new message never runs
+        # either -- leaving resends with zero audit-ledger trail. Record it
+        # explicitly here, same action/shape as the manual Send path (and
+        # unconditionally -- even a failed resend attempt -- so "who resent
+        # which message, when, and whether it worked" is always captured for
+        # compliance review rather than silently vanishing along with this
+        # detached process's DEVNULL-redirected stderr).
+        try:
+            AuditLogger.log(
+                action=AuditAction.EAS_BROADCAST,
+                success=resend_error is None,
+                username=operator,
+                resource_type='eas_message',
+                resource_id=str(message_id),
+                details={
+                    'resend': True,
+                    'event_code': event_code,
+                    'airchain_signalled': airchain_signalled,
+                    'audio_played': audio_played if audio_player_cmd else None,
+                    'audio_injected': audio_injected,
+                    'playback_duration_seconds': round(float(playback_duration), 2),
+                    'error': str(resend_error) if resend_error else None,
+                },
+            )
+        except Exception as exc:
+            logger.error('Failed to write audit log entry for resend of EASMessage #%s: %s', message_id, exc)
+
+        if resend_error:
+            return 1
 
         logger.info(
             'Resend complete for EASMessage #%s (event=%s, injected=%s, held=%.1fs)',

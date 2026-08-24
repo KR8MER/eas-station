@@ -245,4 +245,89 @@ def _resample(samples: np.ndarray, src_rate: int, dst_rate: int) -> np.ndarray:
     return np.interp(src_indices, np.arange(src_len), samples).astype(np.float32)
 
 
-__all__ = ["set_controller", "inject_eas_audio"]
+def abort_injected_audio(replacement_wav: Optional[bytes] = None) -> int:
+    """Drop any pending EAS audio chunks from every active source's queue.
+
+    ``inject_eas_audio()`` pushes a broadcast's audio chunks into each
+    source's ``BroadcastQueue`` up front; ``IcecastStreamer`` then drains
+    them to the Icecast server in real time. That queue is a completely
+    separate pipeline from the local playback subprocess
+    ``abort_current_broadcast()`` (the "Hold to Abort Broadcast" web button
+    and the physical GPIO Dump/Abort input) kills by PID -- so an abort that
+    only kills the local subprocess leaves whatever hasn't drained yet to
+    keep streaming to Icecast listeners regardless of how long the button
+    was held. This is the other half of that abort: called alongside the
+    local kill so both playback surfaces actually stop.
+
+    Parameters
+    ----------
+    replacement_wav:
+        Optional isolated EOM tone-burst to inject immediately after
+        purging, so stream listeners hear a compliant sign-off (47 CFR
+        11.61(a)) instead of a hard cut to dead air. Passed straight to
+        ``inject_eas_audio()``.
+
+    Returns
+    -------
+    int
+        Total number of chunks discarded across every subscriber of every
+        registered source. 0 is not necessarily an error -- it can also
+        mean nothing was left queued (the message had already fully
+        drained) or no sources are registered.
+    """
+    with _lock:
+        controller = _controller
+
+    if controller is None:
+        return 0
+
+    try:
+        with controller._lock:
+            adapters = dict(controller._sources)
+    except Exception as exc:
+        logger.error("EAS stream injector: could not read sources from controller: %s", exc)
+        return 0
+
+    cleared_total = 0
+    for source_name, adapter in adapters.items():
+        try:
+            broadcast_queue = adapter._source_broadcast
+        except AttributeError:
+            continue
+
+        # An abort mid-injection should release the gate too, so live
+        # program audio can resume publishing on the capture loop's next
+        # iteration rather than staying silenced indefinitely.
+        gate = getattr(adapter, '_eas_injection_active', None)
+        if gate is not None:
+            gate.clear()
+
+        try:
+            with broadcast_queue._lock:
+                subscriber_ids = list(broadcast_queue._subscribers.keys())
+        except Exception as exc:
+            logger.warning(
+                "EAS stream injector: could not read subscribers for source %s: %s",
+                source_name, exc,
+            )
+            continue
+
+        source_cleared = sum(
+            broadcast_queue.clear_subscriber_queue(subscriber_id)
+            for subscriber_id in subscriber_ids
+        )
+        cleared_total += source_cleared
+
+        if source_cleared:
+            logger.info(
+                "EAS stream injector: abort cleared %d queued EAS chunk(s) for source '%s'",
+                source_cleared, source_name,
+            )
+
+    if replacement_wav:
+        inject_eas_audio(replacement_wav)
+
+    return cleared_total
+
+
+__all__ = ["set_controller", "inject_eas_audio", "abort_injected_audio"]

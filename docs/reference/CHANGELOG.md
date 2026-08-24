@@ -8,7 +8,97 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.189.0] - 2026-08-24 - Fix undercounted stats and add git history to Repo Stats
+## [2.189.1] - 2026-08-24 - Fix resend logging and its dead local-playback config
+
+### Fixed
+- **A resend ("Resend on Air") was never actually reaching the tamper-evident
+  audit ledger.** Every other broadcast trigger (manual Send, RWT, live/
+  auto-forwarded alerts) writes an `EAS_BROADCAST` audit-log entry either via
+  the SQLAlchemy `after_insert` listener on `EASMessage` (new transmissions)
+  or an explicit `AuditLogger.log()` call (`webapp/eas/workflow.py`). A
+  resend replays an *existing* `EASMessage` row rather than inserting a new
+  one, so neither mechanism ever fired for it — the only record was a plain
+  `SystemLog` row written at the very end of
+  `scripts/resend_eas_broadcast.py`, and even that vanished with zero trace
+  if anything raised earlier in the script, since its stdout/stderr are
+  redirected to `DEVNULL` by the Flask route that launches it. The script
+  now writes an explicit `EAS_BROADCAST` audit entry (tagged `resend: true`)
+  unconditionally, and the whole playout body is wrapped so a failure is
+  always recorded (as an `ERROR`-level `SystemLog` row and a `success: false`
+  audit entry) instead of disappearing silently.
+- **A resend's local audio playback — and therefore its PID, which is what
+  makes a broadcast abortable — was dead code on every real deployment.**
+  `scripts/resend_eas_broadcast.py` resolved its player command from an
+  `AUDIO_PLAYER_CMD` app.config/env key that nothing else in the codebase
+  ever sets; every other broadcast path resolves `audio_player_cmd` through
+  `load_eas_config()` (the `EAS_AUDIO_PLAYER` env var or the
+  `EASSettings.audio_player` DB column). Because of this, a resend never
+  played through a locally configured player and never published a PID via
+  `play_broadcast_audio()` — so on a station with a local player configured,
+  the "Hold to Abort Broadcast" button had nothing to find and kill for a
+  resent alert. Now reads the same `load_eas_config()` value as manual Send,
+  RWT, and live/forwarded alerts.
+- New `tests/test_eas_resend_logging.py` pins both fixes: `audio_player_cmd`
+  comes from `load_eas_config()`, a successful resend writes both the
+  `SystemLog` row and the `EAS_BROADCAST` audit entry, and a resend that
+  raises mid-playout still writes both, flagged as a failure, and returns a
+  non-zero exit code instead of looking like a silent success.
+
+## [2.190.0] - 2026-08-24 - Hold to Abort Broadcast now stops injected Icecast audio too
+
+"Hold to Abort Broadcast" (the web button and the physical GPIO Dump/Abort
+input) only ever stopped a local playback subprocess by PID. A broadcast's
+audio is also pushed directly into the live Icecast air-chain
+(`eas_stream_injector.inject_eas_audio()`, queued into each source's
+`BroadcastQueue` up front) -- a completely separate pipeline the local kill
+never touched, and the one that station operators and stream listeners
+actually hear. On a station with no local audio player configured at all
+(Icecast-only, a real supported deployment mode called out in the codebase's
+own comments), there was never a PID to find, so `abort_current_broadcast()`
+returned immediately ("nothing is currently playing") and the alert played
+out to completion regardless of how long the button was held.
+
+### Added
+- **`abort_injected_audio()`** (`app_core/audio/eas_stream_injector.py`) --
+  purges every active source's queued EAS audio from its `BroadcastQueue`
+  subscribers (using the existing `clear_subscriber_queue()`), releases the
+  injection gate, and can optionally inject a replacement WAV (the EOM
+  burst) immediately after, so stream listeners hear a compliant sign-off
+  instead of a hard cut to dead air.
+- **New `abort_injected_audio` Redis command** (`app_core/audio/redis_commands.py`):
+  `AudioCommandPublisher.abort_injected_audio(eom_wav=None)` (base64-encodes
+  the EOM bytes for the JSON-only command channel) and the matching
+  `AudioCommandSubscriber` dispatch handler, mirroring the existing
+  `inject_eas_audio` command's shape.
+
+### Fixed
+- **`abort_current_broadcast()` no longer treats "no local PID" as "nothing
+  to abort."** It now checks the broadcast-active marker too, and always
+  attempts the Icecast purge (with the EOM burst injected into the stream)
+  regardless of whether a local subprocess was ever running. The audit
+  ledger's `EAS_CANCELLATION` entry now also records
+  `injected_audio_cleared` (chunk count) alongside `eom_sent`.
+- **`POST /api/broadcast/abort` no longer 409s when there's no trackable
+  PID.** That case used to mean "couldn't actually abort anything"; it now
+  correctly means "aborted via the Icecast purge instead of a local kill,"
+  since `abort_current_broadcast()` handles it.
+- Extended `tests/test_gpio_dump_broadcast.py` and
+  `tests/test_broadcast_phase_and_web_abort.py` to cover the no-PID/
+  Icecast-only abort path and the new `injected_audio_cleared` audit field;
+  new `tests/test_eas_abort_injected_audio.py` covers the purge itself
+  (multi-subscriber clearing, gate release, EOM re-injection) and the new
+  Redis command's publisher/dispatcher wiring.
+
+### Real-hardware verification still needed
+This closes the gap identified when 2.189.1 shipped, but per this project's
+standing practice for broadcast-control changes (see the 2.184.0/2.184.1
+Dump/Abort Broadcast history below, where mocked unit tests alone missed two
+real gaps), the on-air behavior -- does an Icecast listener actually stop
+hearing the alert, and does the injected EOM burst actually play -- should be
+confirmed against a real running audio-service and Icecast mount before this
+is fully trusted in production.
+
+## [2.189.1] - 2026-08-24 - Fix resend logging and its dead local-playback config
 
 ### Fixed
 - **Blueprints undercounted on `/repo-stats`.** `count_components()` only

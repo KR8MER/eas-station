@@ -33,6 +33,7 @@ burst (47 CFR 11.61(a)) -- that requirement is exercised explicitly below.
 
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -294,6 +295,11 @@ def test_abort_is_noop_when_nothing_playing(monkeypatch):
 
     monkeypatch.setattr(gpio_input_actions, "logger", gpio_input_actions.logger)
     monkeypatch.setattr("app_utils.eas.get_broadcast_pid", lambda: None)
+    # No PID published AND no active marker -- genuinely nothing to abort.
+    # Explicitly mocked (rather than relying on the real function's
+    # no-Redis-available fallback) so this stays fast and deterministic
+    # regardless of what Redis this test happens to run next to.
+    monkeypatch.setattr("app_utils.eas.get_broadcast_state", lambda: {"active": False})
 
     killed = []
     monkeypatch.setattr("os.kill", lambda pid, sig: killed.append((pid, sig)))
@@ -320,7 +326,24 @@ def _install_common_abort_mocks(monkeypatch, pid, label="Tornado Warning", ident
     import app_core.auth.audit as audit_module
     monkeypatch.setattr(audit_module.AuditLogger, "log", lambda **kwargs: audit_calls.append(kwargs))
 
-    return cleared, audit_calls
+    # abort_current_broadcast() now also purges audio already queued into
+    # the live Icecast air-chain via this Redis command -- mock it to a fast
+    # canned response so tests don't pay a real (and, with no Redis
+    # reachable, slow-retrying) connection attempt just to be swallowed by
+    # the caller's own try/except.
+    abort_injected_calls = []
+
+    class _FakePublisher:
+        def abort_injected_audio(self, eom_wav=None, timeout=10.0):
+            abort_injected_calls.append({"eom_wav": eom_wav, "timeout": timeout})
+            return {"success": True, "message": "ok", "data": {"cleared": 3}}
+
+    monkeypatch.setattr(
+        "app_core.audio.redis_commands.get_audio_command_publisher",
+        lambda: _FakePublisher(),
+    )
+
+    return cleared, audit_calls, abort_injected_calls
 
 
 def test_abort_sends_sigterm_plays_eom_then_clears_marker_and_audits(monkeypatch):
@@ -328,7 +351,7 @@ def test_abort_sends_sigterm_plays_eom_then_clears_marker_and_audits(monkeypatch
 
     from app_core.audio import gpio_input_actions
 
-    cleared, audit_calls = _install_common_abort_mocks(monkeypatch, pid=4321)
+    cleared, audit_calls, abort_injected_calls = _install_common_abort_mocks(monkeypatch, pid=4321)
 
     kill_calls = []
 
@@ -365,6 +388,11 @@ def test_abort_sends_sigterm_plays_eom_then_clears_marker_and_audits(monkeypatch
     assert audit_calls[0]["details"]["label"] == "Tornado Warning"
     assert audit_calls[0]["details"]["eom_sent"] is True
     assert audit_calls[0]["username"] == "tester"
+    # The Icecast air-chain purge must run too, carrying the same EOM audio
+    # so stream listeners hear a compliant sign-off rather than dead air.
+    assert len(abort_injected_calls) == 1
+    assert abort_injected_calls[0]["eom_wav"] == b"EOMBYTES"
+    assert audit_calls[0]["details"]["injected_audio_cleared"] == 3
 
 
 def test_abort_without_eom_audio_still_completes_and_flags_it(monkeypatch):
@@ -374,7 +402,9 @@ def test_abort_without_eom_audio_still_completes_and_flags_it(monkeypatch):
     NOT sent."""
     from app_core.audio import gpio_input_actions
 
-    cleared, audit_calls = _install_common_abort_mocks(monkeypatch, pid=5432, eom_wav=None)
+    cleared, audit_calls, _abort_injected_calls = _install_common_abort_mocks(
+        monkeypatch, pid=5432, eom_wav=None,
+    )
 
     kill_calls = []
 
@@ -406,7 +436,7 @@ def test_abort_eom_playback_failure_still_completes_and_flags_it(monkeypatch):
     forever is its own violation) but the audit record must say so."""
     from app_core.audio import gpio_input_actions
 
-    cleared, audit_calls = _install_common_abort_mocks(monkeypatch, pid=6543)
+    cleared, audit_calls, _abort_injected_calls = _install_common_abort_mocks(monkeypatch, pid=6543)
 
     kill_calls = []
 
@@ -430,8 +460,9 @@ def test_abort_escalates_to_sigkill_then_settles_before_eom(monkeypatch):
 
     from app_core.audio import gpio_input_actions
 
-    cleared, audit_calls = _install_common_abort_mocks(monkeypatch, pid=7777, label="RWT",
-                                                         identifier=None)
+    cleared, audit_calls, _abort_injected_calls = _install_common_abort_mocks(
+        monkeypatch, pid=7777, label="RWT", identifier=None,
+    )
 
     kill_calls = []
     # Process never reports as exited via SIGTERM-phase polls, but does
@@ -475,6 +506,20 @@ def test_abort_process_already_exited_still_clears_marker(monkeypatch):
     monkeypatch.setattr(
         "app_utils.eas.get_broadcast_state", lambda: {"active": True, "label": "x"},
     )
+    monkeypatch.setattr("app_utils.eas.get_broadcast_eom_audio", lambda: None)
+    # The Icecast purge still runs even though the local process was already
+    # gone -- mocked to a fast canned response rather than a real (and, with
+    # no Redis reachable, slow-retrying) connection attempt.
+    monkeypatch.setattr(
+        "app_core.audio.redis_commands.get_audio_command_publisher",
+        lambda: SimpleNamespace(
+            abort_injected_audio=lambda eom_wav=None, timeout=10.0: {
+                "success": True, "message": "ok", "data": {"cleared": 0},
+            },
+        ),
+    )
+    import app_core.auth.audit as audit_module
+    monkeypatch.setattr(audit_module.AuditLogger, "log", lambda **kwargs: None)
 
     def fake_kill(pid, sig):
         raise ProcessLookupError()
@@ -487,6 +532,63 @@ def test_abort_process_already_exited_still_clears_marker(monkeypatch):
     gpio_input_actions.abort_current_broadcast()
 
     assert cleared == [True]
+
+
+def test_abort_works_with_no_local_pid_but_active_icecast_broadcast(monkeypatch):
+    """A station with no local audio player configured at all (Icecast-only,
+    a real supported deployment) never has a trackable PID -- before this
+    fix, abort_current_broadcast() returned immediately in this case
+    ("nothing is currently playing") even while the alert was actively
+    streaming to Icecast listeners. It must now still purge the queued
+    audio, attempt the EOM burst, release the marker, and audit the abort."""
+    from app_core.audio import gpio_input_actions
+
+    monkeypatch.setattr("app_utils.eas.get_broadcast_pid", lambda: None)
+    monkeypatch.setattr(
+        "app_utils.eas.get_broadcast_state",
+        lambda: {"active": True, "label": "Tornado Warning", "identifier": "urn:test-2"},
+    )
+    monkeypatch.setattr("app_utils.eas.get_broadcast_eom_audio", lambda: b"EOMBYTES")
+
+    cleared = []
+    monkeypatch.setattr("app_utils.eas.clear_broadcast_active", lambda: cleared.append(True))
+
+    audit_calls = []
+    import app_core.auth.audit as audit_module
+    monkeypatch.setattr(audit_module.AuditLogger, "log", lambda **kwargs: audit_calls.append(kwargs))
+
+    abort_injected_calls = []
+
+    class _FakePublisher:
+        def abort_injected_audio(self, eom_wav=None, timeout=10.0):
+            abort_injected_calls.append(eom_wav)
+            return {"success": True, "message": "ok", "data": {"cleared": 12}}
+
+    monkeypatch.setattr(
+        "app_core.audio.redis_commands.get_audio_command_publisher",
+        lambda: _FakePublisher(),
+    )
+
+    killed = []
+    monkeypatch.setattr("os.kill", lambda pid, sig: killed.append((pid, sig)))
+
+    eom_calls = []
+    monkeypatch.setattr(
+        gpio_input_actions, "_play_abort_eom_burst",
+        lambda eom_wav: eom_calls.append(eom_wav) or True,
+    )
+
+    gpio_input_actions.abort_current_broadcast(reason="test", operator="tester")
+
+    # No local process to touch -- but the Icecast queue and EOM burst
+    # still had to be handled, and the broadcast still had to be released.
+    assert killed == []
+    assert abort_injected_calls == [b"EOMBYTES"]
+    assert eom_calls == [b"EOMBYTES"]
+    assert cleared == [True]
+    assert len(audit_calls) == 1
+    assert audit_calls[0]["details"]["injected_audio_cleared"] == 12
+    assert audit_calls[0]["details"]["eom_sent"] is True
 
 
 def test_play_abort_eom_burst_runs_configured_player(monkeypatch):
