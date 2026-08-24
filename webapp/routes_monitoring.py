@@ -672,6 +672,14 @@ def register(app: Flask, logger) -> None:
 
     @app.route("/api/monitoring/radio")
     def monitoring_radio():
+        """List every configured radio receiver with its latest reported status.
+
+        Returns:
+            200 with {receivers: [{id, identifier, display_name, driver,
+            frequency_hz, sample_rate, gain, channel, auto_start, enabled,
+            notes, latest_status: {reported_at, locked, signal_strength,
+            last_error, capture_mode, capture_path} | null}, ...], count}.
+        """
         try:
             ensure_radio_tables(route_logger)
         except Exception as exc:  # pragma: no cover - defensive

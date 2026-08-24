@@ -150,6 +150,30 @@ def register(app: Flask, logger) -> None:
     @require_auth
     @require_role("Admin", "Operator")
     def api_led_send_message():
+        """Send a custom message to the RS-232 LED sign.
+
+        Body:
+            lines (list[str] | list[dict], required): One entry per display
+                line. A dict entry may carry per-line/per-segment
+                formatting (text, font, color, rgb_color, mode, speed,
+                special_functions, segments) instead of plain text.
+            color (str, optional): Named color (e.g. "RED"). Default RED.
+            font (str, optional): Named font/size. Default DEFAULT.
+            mode (str, optional): Display effect (e.g. "HOLD", "SCROLL").
+                Default HOLD.
+            speed (str, optional): Named scroll speed. Default SPEED_3.
+            priority (int | str, optional): MessagePriority value or name.
+                Default NORMAL.
+            hold_time (int, optional): Seconds to hold the message. Default 5.
+            special_functions (list[str], optional): Named SpecialFunction
+                values (e.g. tones/effects) to trigger with the message.
+
+        Returns:
+            200 with {success, message_id, timestamp} on success (success
+            is false, with an "error" key, if the sign/controller/enums
+            aren't available or the payload is invalid -- this endpoint
+            reports failures with a 200 status rather than an error code).
+        """
         try:
             ensure_led_tables()
 
@@ -380,6 +404,20 @@ def register(app: Flask, logger) -> None:
     @require_auth
     @require_role("Admin", "Operator")
     def api_led_send_canned():
+        """Send one of the sign's pre-configured canned messages.
+
+        Body:
+            message_name (str, required): Key from the canned-message set
+                (see GET /api/led/canned_messages for the available names).
+            parameters (dict, optional): Named substitution values the
+                canned message template accepts, passed through as
+                keyword arguments.
+
+        Returns:
+            200 with {success, message_id, timestamp}.
+            200 with {success: false, error} if message_name is missing or
+            the LED controller is unavailable.
+        """
         try:
             ensure_led_tables()
 
@@ -423,6 +461,11 @@ def register(app: Flask, logger) -> None:
     @require_auth
     @require_role("Admin", "Operator")
     def api_led_clear():
+        """Clear the LED sign's display immediately.
+
+        Returns:
+            200 with {success, timestamp}.
+        """
         try:
             ensure_led_tables()
 
@@ -451,6 +494,17 @@ def register(app: Flask, logger) -> None:
     @require_auth
     @require_role("Admin", "Operator")
     def api_led_brightness():
+        """Set the LED sign's display brightness.
+
+        Body:
+            brightness (int, optional): Level from 1 (dimmest) to 16
+                (brightest). Default 10.
+
+        Returns:
+            200 with {success, brightness}.
+            200 with {success: false, error} if brightness is out of range
+            (1-16) or the LED controller is unavailable.
+        """
         try:
             ensure_led_tables()
 
@@ -484,6 +538,11 @@ def register(app: Flask, logger) -> None:
     @require_auth
     @require_role("Admin", "Operator")
     def api_led_test():
+        """Run the sign's built-in self-test sequence (all fonts/colors/effects).
+
+        Returns:
+            200 with {success, message}.
+        """
         try:
             if not led_module.led_controller:
                 return jsonify({"success": False, "error": "LED controller not available"})
@@ -562,6 +621,17 @@ def register(app: Flask, logger) -> None:
     @require_auth
     @require_role("Admin", "Operator")
     def api_led_emergency():
+        """Override the sign with a high-priority emergency message.
+
+        Body:
+            message (str, optional): Text to display. Default
+                "EMERGENCY ALERT".
+            duration (int, optional): Seconds to hold the override.
+                Default 30.
+
+        Returns:
+            200 with {success, message_id, duration}.
+        """
         try:
             data = request.get_json(silent=True) or {}
             message = data.get("message", "EMERGENCY ALERT")
@@ -595,6 +665,18 @@ def register(app: Flask, logger) -> None:
     @require_auth
     @require_role("Admin", "Operator")
     def api_led_status():
+        """Report the LED sign's connection status and configured host/port.
+
+        Query:
+            health_check (bool, optional): Actively probe the sign rather
+                than reporting last-known state. Default true.
+
+        Returns:
+            200 with {success, connected, host, port, health_checked,
+            timestamp}. Still 200 (with connected: false and an error
+            message) when the controller isn't available -- this endpoint
+            doesn't use error status codes.
+        """
         try:
             # Get LED settings from database
             led_settings = get_led_settings()
@@ -642,6 +724,14 @@ def register(app: Flask, logger) -> None:
     @require_auth
     @require_role("Admin", "Operator")
     def api_led_messages():
+        """List the 50 most recent LED messages (sent or pending).
+
+        Returns:
+            200 with {success, messages: [{id, message_type, content,
+            priority, status ("sent"|"pending"), scheduled_time, sent_at,
+            created_at}, ...], count}.
+            500 with {error} on failure.
+        """
         try:
             ensure_led_tables()
 
@@ -672,6 +762,12 @@ def register(app: Flask, logger) -> None:
     @require_auth
     @require_role("Admin", "Operator")
     def api_led_canned_messages():
+        """List the sign's pre-configured canned messages and their parameters.
+
+        Returns:
+            200 with {success, messages: [{name, lines, parameters: [<param
+            name>, ...]}, ...]}.
+        """
         if not led_module.led_controller:
             return jsonify({"success": False, "error": "LED controller not available"})
 

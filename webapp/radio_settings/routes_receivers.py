@@ -46,6 +46,13 @@ def register(app: Flask, route_logger) -> None:
     @app.route("/api/radio/receivers", methods=["GET"])
     @cache.cached(timeout=15, key_prefix='receivers_list')
     def api_list_receivers() -> Any:
+        """List every configured SDR receiver. Cached for 15 seconds.
+
+        Returns:
+            200 with {receivers: [<receiver dict>, ...]} -- see
+            _receiver_to_dict() for the per-receiver shape (identifier,
+            display_name, driver, frequency_hz, sample_rate, gain, etc).
+        """
         ensure_radio_tables(route_logger)
         receivers = RadioReceiver.query.order_by(RadioReceiver.display_name.asc(), RadioReceiver.identifier.asc()).all()
         return jsonify({"receivers": [_receiver_to_dict(receiver) for receiver in receivers]})
@@ -53,6 +60,26 @@ def register(app: Flask, route_logger) -> None:
     @app.route("/api/radio/receivers", methods=["POST"])
     @require_permission('receivers.configure')
     def api_create_receiver() -> Any:
+        """Create a new SDR receiver and start it if the manager can.
+
+        Body:
+            identifier (str): Unique short name for this receiver.
+            display_name (str): Human-readable label.
+            driver (str): SoapySDR driver name (e.g. "rtlsdr", "airspy").
+            frequency_hz (number): Tuned center frequency in Hz.
+            sample_rate (int): IQ sample rate in Hz (the SDR hardware rate,
+                not the demodulated audio rate).
+            ...plus optional tuning parameters (gain, audio_sample_rate,
+            external_lna_db, channel, auto_start, enabled, notes, and more)
+            -- see _parse_receiver_payload() for the full accepted set.
+
+        Returns:
+            201 with {receiver: <receiver dict>, radio_manager: <sync
+            result>} on success.
+            400 if a required field is missing/invalid or the identifier is
+            already in use.
+            500 if the database write or manager sync fails.
+        """
         try:
             ensure_radio_tables(route_logger)
             payload = request.get_json(silent=True) or {}
@@ -116,6 +143,27 @@ def register(app: Flask, route_logger) -> None:
     @app.route("/api/radio/receivers/<int:receiver_id>", methods=["PUT", "PATCH"])
     @require_permission('receivers.configure')
     def api_update_receiver(receiver_id: int) -> Any:
+        """Update a receiver's configuration, partially or in full.
+
+        Only the fields present in the body are changed. When the only
+        change is frequency_hz on an already-enabled receiver, this
+        attempts a live retune command instead of a full reload/restart.
+
+        Body:
+            Any subset of the fields accepted by POST /api/radio/receivers
+            (identifier, display_name, driver, frequency_hz, sample_rate,
+            gain, audio_sample_rate, external_lna_db, channel, auto_start,
+            enabled, notes, ...). Unspecified fields are left unchanged.
+
+        Returns:
+            200 with {receiver: <receiver dict>, radio_manager: <sync
+            result, includes live_retune: true when a live retune was
+            used>}.
+            400 if a field is invalid or the new identifier collides with
+            another receiver.
+            404 if receiver_id doesn't exist.
+            500 if the database write fails.
+        """
         try:
             ensure_radio_tables(route_logger)
             receiver = RadioReceiver.query.get_or_404(receiver_id)
@@ -228,6 +276,13 @@ def register(app: Flask, route_logger) -> None:
     @app.route("/api/radio/receivers/<int:receiver_id>", methods=["DELETE"])
     @require_permission('receivers.configure')
     def api_delete_receiver(receiver_id: int) -> Any:
+        """Delete a receiver and stop it in the radio manager.
+
+        Returns:
+            200 with {success: true, radio_manager: <sync result>}.
+            404 if receiver_id doesn't exist.
+            500 if the database delete fails.
+        """
         ensure_radio_tables(route_logger)
         receiver = RadioReceiver.query.get_or_404(receiver_id)
 

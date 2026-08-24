@@ -33,7 +33,7 @@ from pathlib import Path
 import pytest
 from flask import Flask, jsonify
 
-from app_utils.api_reference import compute_api_reference
+from app_utils.api_reference import _parse_docstring_sections, compute_api_reference
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -71,6 +71,25 @@ def _build_test_app() -> Flask:
     permission_gated.eas_auth_requirement = {
         'mode': 'single', 'permissions': ('eas.cancel',),
     }
+
+    @app.route('/api/structured', methods=['POST'])
+    def structured():
+        """Do a thing with structured docs.
+
+        Longer prose paragraph explaining the thing.
+
+        Body:
+            name (str, required): The thing's name.
+            count (int, optional): How many. Default 1.
+
+        Query:
+            verbose (bool, optional): Include extra detail.
+
+        Returns:
+            200 with {success, id}.
+            404 if not found.
+        """
+        return jsonify({})
 
     return app
 
@@ -113,11 +132,76 @@ def test_auth_requirement_read_from_view_function_attribute():
 def test_totals_are_consistent_with_the_group_contents():
     ref = compute_api_reference(_build_test_app())
     all_routes = [r for group in ref['groups'].values() for r in group]
-    assert ref['total'] == len(all_routes) == 4
-    assert ref['documented'] == sum(1 for r in all_routes if r['summary'])
-    assert ref['gated'] == sum(1 for r in all_routes if r['auth'])
-    assert ref['documented'] == 3  # all but /api/no-docstring
-    assert ref['gated'] == 2  # auth-only + permission-gated
+    assert ref['total'] == len(all_routes) == 5
+    assert ref['documented'] == sum(1 for r in all_routes if r['summary']) == 4
+    assert ref['gated'] == sum(1 for r in all_routes if r['auth']) == 2
+
+
+# ---------------------------------------------------------------------------
+# Structured Body:/Query:/Path:/Returns: docstring sections
+# ---------------------------------------------------------------------------
+
+def test_parse_docstring_sections_splits_narrative_from_sections():
+    docstring = (
+        "One-line summary.\n"
+        "\n"
+        "Longer prose.\n"
+        "\n"
+        "Body:\n"
+        "    name (str, required): The thing's name.\n"
+        "\n"
+        "Returns:\n"
+        "    200 with {success}.\n"
+    )
+    narrative, sections = _parse_docstring_sections(docstring)
+    assert narrative == "One-line summary.\n\nLonger prose."
+    assert sections == {
+        'Body': "name (str, required): The thing's name.",
+        'Returns': '200 with {success}.',
+    }
+
+
+def test_parse_docstring_sections_handles_no_recognized_headers():
+    docstring = "Just prose.\n\nNo sections here."
+    narrative, sections = _parse_docstring_sections(docstring)
+    assert narrative == docstring
+    assert sections == {}
+
+
+def test_parse_docstring_sections_drops_empty_sections():
+    docstring = "Summary.\n\nBody:\n\nReturns:\n    200 OK.\n"
+    narrative, sections = _parse_docstring_sections(docstring)
+    assert 'Body' not in sections  # header present but body was blank
+    assert sections['Returns'] == '200 OK.'
+
+
+def test_parse_docstring_sections_preserves_header_order():
+    docstring = "S.\n\nReturns:\n    x\n\nBody:\n    y\n"
+    _narrative, sections = _parse_docstring_sections(docstring)
+    # SECTION_HEADERS orders Body before Returns regardless of source order.
+    assert list(sections.keys()) == ['Body', 'Returns']
+
+
+def test_compute_api_reference_exposes_narrative_and_sections():
+    ref = compute_api_reference(_build_test_app())
+    entries = {r['path']: r for group in ref['groups'].values() for r in group}
+    structured = entries['/api/structured']
+
+    assert structured['narrative'] == (
+        'Do a thing with structured docs.\n\n'
+        'Longer prose paragraph explaining the thing.'
+    )
+    assert structured['sections']['Body'] == (
+        "name (str, required): The thing's name.\n"
+        "count (int, optional): How many. Default 1."
+    )
+    assert structured['sections']['Query'] == 'verbose (bool, optional): Include extra detail.'
+    assert structured['sections']['Returns'] == '200 with {success, id}.\n404 if not found.'
+
+    # A route without sections must not carry stray empty-string entries.
+    plain = entries['/api/plain']
+    assert plain['sections'] == {}
+    assert plain['narrative'] == 'A plain, undecorated route.'
 
 
 def test_result_is_json_serialisable():
