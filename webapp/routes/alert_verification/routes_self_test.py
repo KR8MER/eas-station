@@ -82,6 +82,38 @@ def register(app: Flask, logger):
     @require_auth
     @require_role("Admin", "Operator")
     def run_alert_self_test():
+        """Decode a batch of sample SAME audio through the live alert pipeline.
+
+        Runs each given audio file through the same decode/duplicate/FIPS-
+        filter logic a real received alert goes through, without touching
+        the live air-chain -- useful for verifying the SAME decoder after a
+        configuration change.
+
+        Body:
+            audio_paths (list[str], optional): Server-side paths to WAV
+                samples to test. Defaults to the built-in sample set when
+                omitted.
+            use_default_samples (bool, optional): Force the built-in sample
+                set even if audio_paths is given. Defaults to true only
+                when audio_paths is empty.
+            duplicate_cooldown (number, optional): Seconds before an
+                identical header is treated as a fresh alert rather than a
+                duplicate. Default 30.
+            source_name (str, optional): Label attached to results, for
+                distinguishing concurrent self-test runs. Default
+                "self-test".
+            require_match (bool, optional): Fail the run if no sample
+                matches the configured FIPS codes. Default false.
+            fips_codes (list[str], optional): FIPS codes to filter against,
+                overriding the station's configured set for this run only.
+
+        Returns:
+            200 with {success, error, configured_fips, audio_samples,
+            duplicate_cooldown, source_name, results, forwarded_count,
+            decode_error_count, default_samples_used, timestamp}.
+            400 if duplicate_cooldown is non-numeric or an audio path is
+            invalid.
+        """
         payload = request.get_json(force=True, silent=True) or {}
 
         user_audio_paths = payload.get("audio_paths") or []

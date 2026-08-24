@@ -1324,10 +1324,38 @@ def calculate_coverage_percentages(alert_id, intersections):
 
 ### Flask Route Pattern
 
+Every `/api/*` route must have a docstring — `/api-reference` (live, computed
+from `app.url_map` on every request; see `app_utils/api_reference.py`) reads
+it via `inspect.getdoc()` to build the API reference, and a route with no
+docstring shows up there as "no description." A one-line summary is the
+minimum; a route that takes a JSON body, query params, or URL path params,
+or whose response shape isn't obvious from the summary, should add
+`Body:`/`Query:`/`Path:`/`Returns:` sections — the reference page parses
+and renders these automatically (`app_utils/api_reference.py::SECTION_HEADERS`).
+
+**Section header format is strict**: the header line must be exactly
+`Body:` (etc.) with nothing else on it — `Body (optional):` or
+`Body — optional:` are **not** recognized and the whole section silently
+falls back into the plain narrative text instead of rendering as a
+structured block. Put qualifiers like "optional" on the line(s) under the
+header instead.
+
 ```python
 @app.route('/api/my_endpoint', methods=['POST'])
 def my_endpoint():
-    """Brief description of what this endpoint does."""
+    """Brief one-line summary of what this endpoint does.
+
+    Longer prose paragraph if the summary alone doesn't explain the
+    behavior or any non-obvious side effects.
+
+    Body:
+        required_field (str, required): What it's for.
+        optional_field (int, optional): What it's for. Default 0.
+
+    Returns:
+        200 with {success, result}.
+        400 if required_field is missing.
+    """
     try:
         # 1. Validate input
         data = request.get_json()
@@ -2043,3 +2071,4 @@ Only suggest deployment/cache fixes if:
 - 2026-03-26: Documented the six valid `{% block %}` names defined in `base.html` after an agent wrote `{% block extra_js %}` (non-existent) instead of `{% block scripts %}`, causing Jinja2 to silently discard the entire JavaScript section of the TTS Pronunciation Dictionary page, making all save/edit/delete operations non-functional. Added a block-name reference table and explicit ❌/✅ example to the Template Standards section. Extended the pre-commit template-validation script to also flag unknown block names in child templates (`VALID_BASE_BLOCKS` check), producing a clear error message suggesting `scripts` when `extra_js` is found. Removed a stray duplicate of the validation script that had accumulated below the Pre-Commit Checklist.
 - 2026-08-01: Standardized page headers across the whole UI. `templates/components/page_header.html` is now the single canonical header component — pages set `header_icon`/`header_title`/`header_subtitle`/`header_actions` and include it. Converted 27 templates that hand-rolled `.page-header` markup, deleted the unused duplicate `templates/partials/page_header.html`, promoted the dashboard's header action-button polish into global `styles.css` (frosted icon tile, pill buttons with hover lift), and updated the Style Guide and the "Creating New Pages" checklist to require the component. Hero pages were standardized in the same pass: About/Attribution/Support now use `partials/hero.html` (new optional `hero_extra` slot) instead of hand-rolled `.about-hero` markup, the Admin panel moved to the standard gradient page header, dead `.about-hero*`/`.about-chip*` CSS aliases were removed, and a light-theme contrast bug (global `h1` color overriding the hero's white title) was fixed. A follow-up pass converted all 32 `templates/admin/*` pages plus the Security Center off the third `admin-page-header` system (dead CSS removed from `admin.css`), standardized Help/Privacy/SMS-Policy/Version on the hero component, deleted six orphaned templates, registered the missing `/style-guide` route, and added Yellow-theme dark-ink overrides for the standard page header. A CSS consolidation pass then promoted copy-pasted per-page rules into `styles.css` as shared utilities (`.status-badge` variants, inline `.spinner`, `.snr-s0`–`.snr-s5` scale) and deleted three more unused component templates (`status_badge`, `metric_card`, `stat_card`).
 - 2026-08-06: Replaced hand-written navigation with a declarative registry. `templates/components/navbar.html` (1268 lines, 48 inline `{% if can_view_* %}` permission tests), `templates/settings_hub.html` (393 lines of hardcoded cards) and `templates/site_navigation.html` (334 lines of hardcoded buttons) were three independent copies of the same menu that had drifted — the site map linked `/admin/users` while the hub linked `/admin/rbac`, the site map listed LED/VFD/OLED pages the navbar never showed, and the navbar gated items on `analytics_manage`, a permission that does not exist in `PermissionDefinition` and therefore always evaluated False. All three now render from `webapp/navigation/registry.py` via the `nav_sections` / `nav_user_menu` context processor; permission filtering happens once, in Python, and empty groups/sections are pruned automatically. The IA was reorganized at the same time: test pages that had been scattered across three dropdowns (Weekly Tests under Broadcast, Audio Tests and Alert Verification under Tools, SDR Diagnostics under Monitor) are consolidated into one **Diagnostics** section; the **Tools** junk drawer was split into **Diagnostics** and **Reports**; the two-item **Settings** dropdown became a direct link to the `/settings` hub, with Display Units moved to the user menu where per-browser personalization belongs. `templates/components/navbar_styles.html` and `navbar_scripts.html` were split out to bring the navbar template back under the size guidance. Regression tests live in `tests/test_navigation_registry.py` — they assert every link resolves to a real route, every permission name is real, and that hardcoded `href`s have not crept back into the three templates. **When adding a page, edit the registry, never the templates.**
+- 2026-08-24: Added a live `/api-reference` page (`app_utils/api_reference.py`) after discovering the project had no backend API documentation at all — `docs/README.md` pointed at `docs/frontend/JAVASCRIPT_API.md` and mislabeled it "REST API reference," but that file documents frontend JS globals, not the ~260 `/api/*` Flask routes. Computed from `app.url_map` on every request (never a hand-maintained file), it reads each route's docstring via `inspect.getdoc()` and its access requirement via a new `eas_auth_requirement` attribute the permission decorators (`require_auth`/`require_role`/`require_permission`/`require_any_permission`/`require_all_permissions`/`require_permission_or_setup_mode`) now stamp onto the wrapped view function. Closed the resulting 28-route docstring gap (0% → 100% documented) and added a `Body:`/`Query:`/`Path:`/`Returns:` structured-section convention the page parses and renders — documented in the Flask Route Pattern below. **Section headers must be exactly `Body:` etc. with no trailing text on the same line** (`Body (optional):` silently fails to parse) — two of the new docstrings got this wrong on the first pass and were caught by re-verifying against the live app rather than trusting the code alone.

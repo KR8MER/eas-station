@@ -118,6 +118,12 @@ def register(app: Flask, logger_arg, archive_dir: str = DEFAULT_ARCHIVE_DIR) -> 
 
     @app.route("/api/audio/archives/sources", methods=["GET"])
     def api_audio_archives_sources():
+        """List every configured audio source with its archive settings and disk usage.
+
+        Returns:
+            200 with {sources: [<source config dict> + disk_bytes,
+            disk_bytes_human, disk_files, newest_file_iso], archive_dir}.
+        """
         sources = all_sources_with_archive_config()
 
         for s in sources:
@@ -135,6 +141,12 @@ def register(app: Flask, logger_arg, archive_dir: str = DEFAULT_ARCHIVE_DIR) -> 
 
     @app.route("/api/audio/archives", methods=["GET"])
     def api_audio_archives_list():
+        """Disk-usage summary for every source's archive directory (no DB lookup).
+
+        Returns:
+            200 with {sources: [<source_disk_summary dict>, ...],
+            total_bytes, total_bytes_human, total_files, archive_dir}.
+        """
         sources: List[Dict[str, Any]] = []
         if archive_root.exists():
             for source_dir in sorted(archive_root.iterdir()):
@@ -159,6 +171,12 @@ def register(app: Flask, logger_arg, archive_dir: str = DEFAULT_ARCHIVE_DIR) -> 
 
     @app.route("/api/audio/archives/<source_name>/settings", methods=["GET"])
     def api_audio_archive_get_settings(source_name: str):
+        """Read the archiver settings for one source.
+
+        Returns:
+            200 with {source_name, archive: <config dict>}.
+            404 if source_name has no archive config.
+        """
         cfg = get_archive_config(source_name)
         if cfg is None:
             return jsonify({"error": f"Source '{source_name}' not found"}), 404
@@ -167,6 +185,29 @@ def register(app: Flask, logger_arg, archive_dir: str = DEFAULT_ARCHIVE_DIR) -> 
     @app.route("/api/audio/archives/<source_name>/settings", methods=["POST"])
     @require_permission('system.configure')
     def api_audio_archive_save_settings(source_name: str):
+        """Save archiver settings for one source. Does not start or stop the archiver.
+
+        Body:
+            Any subset of the following; unknown keys are dropped and
+            out-of-range values clamped rather than rejected.
+
+            enabled (bool, optional): Whether the archiver should run.
+            output_dir (str, optional): Archive directory for this source.
+            segment_duration_seconds (int, optional): Length of each
+                archived file.
+            retention_days (int, optional): Days to keep archived files
+                before purge.
+            max_disk_bytes (int, optional): Disk quota for this source's
+                archive (0 = unlimited).
+            format (str, optional): "wav" or "mp3".
+            bitrate (int, optional): MP3 encode bitrate.
+            silence_threshold (number, optional): RMS level below which
+                audio is treated as silence.
+
+        Returns:
+            200 with {source_name, archive: <saved config>, saved: true}.
+            500 if source_name doesn't exist or the save fails.
+        """
         body: Dict[str, Any] = request.get_json(silent=True) or {}
         if not save_archive_config(source_name, body):
             return jsonify({"error": f"Failed to save settings for '{source_name}'"}), 500
@@ -181,6 +222,21 @@ def register(app: Flask, logger_arg, archive_dir: str = DEFAULT_ARCHIVE_DIR) -> 
     @app.route("/api/audio/archives/<source_name>/start", methods=["POST"])
     @require_permission('system.configure')
     def api_audio_archive_start(source_name: str):
+        """Enable and start archiving for one source.
+
+        Merges the body into the source's existing archive settings, forces
+        enabled=true, persists it, then sends the matching start command to
+        the audio-service over Redis.
+
+        Body:
+            Optional. Any subset of the archive settings accepted by
+            POST /api/audio/archives/<source>/settings.
+
+        Returns:
+            200 with {source_name, result: <audio-service command result>}.
+            404 if source_name has no archive config yet.
+            500 if the settings save or the audio-service command fails.
+        """
         body: Dict[str, Any] = request.get_json(silent=True) or {}
 
         existing = get_archive_config(source_name)
@@ -213,6 +269,15 @@ def register(app: Flask, logger_arg, archive_dir: str = DEFAULT_ARCHIVE_DIR) -> 
     @app.route("/api/audio/archives/<source_name>/stop", methods=["POST"])
     @require_permission('system.configure')
     def api_audio_archive_stop(source_name: str):
+        """Disable and stop archiving for one source.
+
+        Persists enabled=false, then sends the matching stop command to the
+        audio-service over Redis.
+
+        Returns:
+            200 with {source_name, result: <audio-service command result>}.
+            500 if the audio-service command fails.
+        """
         save_archive_config(source_name, {"enabled": False})
 
         try:
@@ -234,6 +299,18 @@ def register(app: Flask, logger_arg, archive_dir: str = DEFAULT_ARCHIVE_DIR) -> 
     @app.route("/api/audio/archives/<source_name>/purge", methods=["POST"])
     @require_permission('system.configure')
     def api_audio_archive_purge(source_name: str):
+        """Delete archived files for one source.
+
+        Body:
+            days_older_than (int, optional): Only delete files older than
+                this many days. Default 0 (delete everything).
+
+        Returns:
+            200 with {..., bytes_freed, bytes_freed_human, error: null} on
+            success.
+            500 with the same shape (error set) if the purge fails partway
+            through.
+        """
         body: Dict[str, Any] = request.get_json(silent=True) or {}
         try:
             days_older_than = max(0, int(body.get("days_older_than", 0)))
@@ -255,6 +332,14 @@ def register(app: Flask, logger_arg, archive_dir: str = DEFAULT_ARCHIVE_DIR) -> 
 
     @app.route("/api/audio/archives/<source_name>/files", methods=["GET"])
     def api_audio_archive_files(source_name: str):
+        """List one source's archived audio files, grouped by date.
+
+        Returns:
+            200 with {source_name, dates: [{date, files: [{filename, date,
+            size_bytes, size_human, mtime, duration_seconds,
+            duration_human}, ...], total_duration_seconds,
+            total_duration_human}, ...]} (newest date first).
+        """
         source_dir = _source_dir(source_name)
         if not source_dir.exists():
             return jsonify({"source_name": source_name, "dates": []})
@@ -358,6 +443,18 @@ def register(app: Flask, logger_arg, archive_dir: str = DEFAULT_ARCHIVE_DIR) -> 
 
     @app.route("/api/audio/archives/<source_name>/files/<date>/<filename>", methods=["GET"])
     def api_audio_archive_serve(source_name: str, date: str, filename: str):
+        """Stream or download one archived audio file.
+
+        Query:
+            download (str, optional): Pass "1" to send as an attachment
+                (forces a browser download) instead of an inline stream.
+
+        Returns:
+            200 with the audio file (audio/wav or audio/mpeg), supporting
+            HTTP range requests for seeking.
+            403 if the file's extension isn't a served audio type.
+            404 if the file doesn't exist.
+        """
         # Prevent path traversal in every segment
         file_path = _source_dir(source_name) / Path(date).name / Path(filename).name
         if not file_path.exists() or not file_path.is_file():
@@ -381,6 +478,23 @@ def register(app: Flask, logger_arg, archive_dir: str = DEFAULT_ARCHIVE_DIR) -> 
 
     @app.route("/api/audio/archives/<source_name>/metadata-log", methods=["GET"])
     def api_audio_archive_metadata_log(source_name: str):
+        """List recent ICY now-playing (title/artist) history for one source.
+
+        Query:
+            limit (str, optional): Max rows, or "all"/"0" for unlimited
+                (capped at 10000). Default 100.
+            search (str, optional): Case-insensitive substring match across
+                title/artist/album/display/raw.
+            hide_junk (str, optional): "false" to include metadata rows
+                identified as junk (e.g. base64 blobs). Default true
+                (junk hidden).
+
+        Returns:
+            200 with {source_name, entries: [{id, timestamp, title, artist,
+            album, artwork_url, length, display, raw, stream_url}, ...],
+            total, junk_hidden}. Returns an empty list (still 200) rather
+            than an error status if the query fails.
+        """
         try:
             from sqlalchemy import or_
             from app_core.models import StreamMetadataLog
@@ -448,6 +562,12 @@ def register(app: Flask, logger_arg, archive_dir: str = DEFAULT_ARCHIVE_DIR) -> 
     @app.route("/api/audio/archives/<source_name>/metadata-log", methods=["DELETE"])
     @require_permission('system.configure')
     def api_audio_archive_metadata_log_clear(source_name: str):
+        """Delete the entire ICY now-playing history for one source.
+
+        Returns:
+            200 with {source_name, deleted: <row count>}.
+            500 with {error} on failure.
+        """
         try:
             from app_core.extensions import db
             from app_core.models import StreamMetadataLog
@@ -506,6 +626,17 @@ def register(app: Flask, logger_arg, archive_dir: str = DEFAULT_ARCHIVE_DIR) -> 
     @app.route("/api/audio/archives/resolve-stream-url", methods=["POST"])
     @require_permission('system.configure')
     def api_audio_archive_resolve_stream_url():
+        """Resolve an ad/stream URL (following VAST redirects) to a playable audio URL.
+
+        Body:
+            url (str, required): The stream or ad-tag URL to resolve.
+
+        Returns:
+            200 with the resolved result dict (shape depends on what was
+            resolved -- see resolve_stream_url()).
+            400 if url is missing or the resolver rejects it.
+            500 if fetching the URL fails.
+        """
         body = request.get_json(silent=True) or {}
         url = (body.get("url") or "").strip()
         if not url:

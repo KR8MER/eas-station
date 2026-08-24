@@ -496,6 +496,20 @@ def register(app: Flask, route_logger: logging.Logger) -> None:
     @app.route("/api/diagnostics/validate", methods=["POST"])
     @require_permission('system.configure')
     def validate_installation() -> Tuple[Any, int]:
+        """Run the full installation-health check suite and return the results.
+
+        Runs each check in CHECKS in turn (Services, Database, Environment,
+        Redis, Icecast, Audio Service, Audio Devices, NTP Sync, Recent
+        Logs) -- the same suite the Diagnostics page's "Run Validation"
+        button triggers. A check that raises is caught and reported as a
+        failure for that check rather than failing the whole request.
+
+        Returns:
+            200 with {success, checks: [{name, elapsed_ms, passed, warnings,
+            failed, info}, ...], passed: [...], warnings: [...],
+            failed: [...], info: [...]} -- the per-check summary counts plus
+            every individual finding message, pooled across all checks.
+        """
         all_results = _empty_result()
         per_check: List[Dict[str, Any]] = []
 

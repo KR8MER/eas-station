@@ -3,7 +3,13 @@
    Computed live from app.url_map on every request, the same idiom as
    /repo-stats: never a committed/generated file that can drift from what
    the app actually serves. Layout follows the same status-strip +
-   status-tile + card idiom repo-stats and System Health already use. #}
+   status-tile + card idiom repo-stats and System Health already use.
+
+   Each route renders as a compact card rather than a table row: once a
+   docstring carries Body/Query/Path/Returns sections (see
+   app_utils/api_reference.py's SECTION_HEADERS), cramming that into a
+   table cell reads worse than a stacked block does, and a card needs no
+   horizontal-scroll table wrapper on mobile either. #}
 {% set header_icon = 'fas fa-plug' %}
 {% set header_title = 'API Reference' %}
 {% set header_subtitle %}Every /api/* route, read live from this build &middot; not a hand-maintained list{% endset %}
@@ -54,9 +60,13 @@
         </div>
         <div class="card-body">
             <p class="text-secondary small mb-3">
-                Grouped by the Python module that defines each route. Expand a group to see its
-                routes; a route with no docstring shows <span class="api-ref-undocumented">no description</span>
-                instead of a summary &mdash; that gap is worth closing in the source file, not here.
+                Grouped by the Python module that defines each route. A route with no docstring
+                shows <span class="api-ref-undocumented">no description</span> instead of a
+                summary &mdash; that gap is worth closing in the source file, not here. A
+                docstring can add <code>Body:</code>, <code>Query:</code>, <code>Path:</code>, or
+                <code>Returns:</code> sections (one field per line, e.g.
+                <code>name (type, optional): description</code>) to document parameters and the
+                response shape; they render below the summary automatically.
             </p>
             <p id="apiRefNoResults" class="text-secondary small d-none">No routes match that filter.</p>
 
@@ -67,50 +77,48 @@
                     <code>{{ group_name }}</code>
                     <span class="badge bg-secondary rounded-pill ms-1">{{ routes | length }}</span>
                 </summary>
-                <div class="table-responsive mt-2">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th style="width: 1%;">Methods</th>
-                                <th>Path</th>
-                                <th>Summary</th>
-                                <th style="width: 1%;">Access</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for route in routes %}
-                            <tr class="api-ref-row"
-                                data-search="{{ (route.path ~ ' ' ~ route.methods|join(' ') ~ ' ' ~ route.summary ~ ' ' ~ route.endpoint) | lower }}">
-                                <td>
-                                    {% for method in route.methods %}
-                                    <span class="status-badge api-ref-method {{ 'success' if method == 'POST' else 'danger' if method == 'DELETE' else 'warning' if method in ('PUT', 'PATCH') else 'info' }}">{{ method }}</span>
-                                    {% endfor %}
-                                </td>
-                                <td class="api-ref-path text-break-anywhere">{{ route.path }}</td>
-                                <td>
-                                    {% if route.summary %}
-                                        {{ route.summary }}
+                <div class="api-ref-route-list mt-2">
+                    {% for route in routes %}
+                    <div class="api-ref-route api-ref-row"
+                         data-search="{{ (route.path ~ ' ' ~ route.methods|join(' ') ~ ' ' ~ route.summary ~ ' ' ~ route.endpoint) | lower }}">
+                        <div class="d-flex align-items-start gap-2 flex-wrap">
+                            <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                                {% for method in route.methods %}
+                                <span class="status-badge api-ref-method {{ 'success' if method == 'POST' else 'danger' if method == 'DELETE' else 'warning' if method in ('PUT', 'PATCH') else 'info' }}">{{ method }}</span>
+                                {% endfor %}
+                            </div>
+                            <code class="api-ref-path text-break-anywhere flex-grow-1">{{ route.path }}</code>
+                            <div class="flex-shrink-0">
+                                {% if route.auth %}
+                                    {% if route.auth.mode == 'auth_only' %}
+                                    <span class="status-badge secondary" title="Requires a logged-in session"><i class="fas fa-user-lock"></i> Login</span>
+                                    {% elif route.auth.mode == 'role' %}
+                                    <span class="status-badge secondary" title="Requires role: {{ route.auth.roles|join(', ') }}"><i class="fas fa-user-shield"></i> {{ route.auth.roles|join('/') }}</span>
                                     {% else %}
-                                        <span class="api-ref-undocumented">no description</span>
+                                    <span class="status-badge secondary" title="Requires permission ({{ route.auth.mode }}): {{ route.auth.permissions|join(', ') }}"><i class="fas fa-lock"></i> {{ route.auth.permissions|join(', ') }}</span>
                                     {% endif %}
-                                </td>
-                                <td>
-                                    {% if route.auth %}
-                                        {% if route.auth.mode == 'auth_only' %}
-                                        <span class="status-badge secondary" title="Requires a logged-in session"><i class="fas fa-user-lock"></i></span>
-                                        {% elif route.auth.mode == 'role' %}
-                                        <span class="status-badge secondary" title="Requires role: {{ route.auth.roles|join(', ') }}"><i class="fas fa-user-shield"></i></span>
-                                        {% else %}
-                                        <span class="status-badge secondary" title="Requires permission ({{ route.auth.mode }}): {{ route.auth.permissions|join(', ') }}"><i class="fas fa-lock"></i></span>
-                                        {% endif %}
-                                    {% else %}
-                                        <span class="text-secondary small" title="No auth/permission decorator found">&mdash;</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
+                                {% else %}
+                                    <span class="text-secondary small" title="No auth/permission decorator found">no auth required</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if route.narrative %}
+                        <div class="api-ref-narrative small mt-2">{{ route.narrative }}</div>
+                        {% else %}
+                        <div class="api-ref-undocumented small mt-2">no description</div>
+                        {% endif %}
+
+                        {% if route.sections %}
+                        <dl class="api-ref-sections small mt-2 mb-0">
+                            {% for name, body in route.sections.items() %}
+                            <dt>{{ name }}</dt>
+                            <dd class="api-ref-section-body">{{ body }}</dd>
                             {% endfor %}
-                        </tbody>
-                    </table>
+                        </dl>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
                 </div>
             </details>
             {% else %}

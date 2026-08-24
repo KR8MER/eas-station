@@ -8,6 +8,49 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.192.0] - 2026-08-24 - Close the API reference's docstring gap, add structured param docs
+
+Follow-up to 2.191.0's live `/api-reference` page. It shipped reporting
+89% documentation coverage (231 of 259 `/api/*` routes) and only a
+one-line summary per route, even for endpoints that take a JSON body or
+query params -- enough to say "this endpoint exists" but not enough for
+someone integrating against it to know what to send.
+
+### Added
+- **Structured `Body:`/`Query:`/`Path:`/`Returns:` docstring sections**,
+  parsed by `app_utils.api_reference._parse_docstring_sections()` and
+  rendered as a labeled block under each route's narrative on the
+  reference page. `Args:`/`Params:` are also recognized, since ~100
+  existing route docstrings already used one of those loosely before this
+  parser existed -- those routes get the richer rendering for free. A
+  section header must be exactly `Body:` (etc.) on its own line; trailing
+  qualifier text on the header line (`Body (optional):`) is not
+  recognized and falls back into plain narrative text -- documented in
+  `docs/development/AGENTS.md`'s Flask Route Pattern, along with the
+  section-header convention itself, so new routes follow it going
+  forward.
+
+### Fixed
+- **The 28 routes with no docstring at all now have one** -- audio
+  archive management (12 routes), the LED sign controller (9), SDR
+  receiver CRUD (4), the alert self-test harness, the diagnostics
+  validation suite, and the radio monitoring snapshot. Coverage is now
+  259/259 (100%), verified against the live app after every change
+  (`SKIP_DB_INIT=1` avoids needing a real database just to read
+  `app.url_map` and docstrings -- no HTTP request is made, so
+  `before_request`'s database initialization never runs).
+
+### Testing
+- New tests for `_parse_docstring_sections()` (narrative/section
+  splitting, header-order normalization, empty-section handling) and for
+  `compute_api_reference()` exposing `narrative`/`sections` per route.
+- Full local test suite: 2655 passed, 0 failed.
+- Re-verified against the live app's real `app.url_map` after fixing the
+  two docstrings that used the `Body (optional):` trailing-text mistake
+  the new AGENTS.md warning now calls out -- caught only because the
+  narrative/sections split was checked against real route data instead
+  of trusting the docstrings were written correctly.
+
 ## [2.191.0] - 2026-08-24 - Add a live REST API reference page
 
 There was no backend API reference at all: `docs/README.md` pointed at
