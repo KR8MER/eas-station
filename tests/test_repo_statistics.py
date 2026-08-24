@@ -226,13 +226,18 @@ def test_route_count_includes_named_blueprints():
 
 
 def test_git_history_reports_commits_and_contributors():
+    """Assert only >= 1, not some large threshold: CI checks out with
+    actions/checkout's default fetch-depth of 1, so `git log` there sees
+    exactly one commit regardless of the real repository's history. A
+    hardcoded '> 100' passed against a full local clone but failed CI every
+    time, silently, because nobody checked the run before merging."""
     stats = repo_stats.compute_stats()
     if stats['file_source'] != 'git':
         pytest.skip('not a git checkout in this environment')
 
     history = stats['git_history']
     assert history is not None
-    assert history['commits'] > 100
+    assert history['commits'] >= 1
     assert history['contributors'] >= 1
     assert history['last_commit_at'], 'expected an ISO-formatted commit date'
 
