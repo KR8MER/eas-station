@@ -42,7 +42,9 @@ Welcome to the documentation for EAS Station™ - an Emergency Alert System plat
 |-------|-------------------|
 | [Developer Guidelines](development/AGENTS.md) | Code standards, architecture, testing |
 | [Large File Refactor Plan](development/LARGE_FILE_REFACTOR_PLAN.md) | Which oversized modules are being split, how, and what has landed |
-| [JavaScript API](frontend/JAVASCRIPT_API.md) | REST API reference |
+| [JavaScript API](frontend/JAVASCRIPT_API.md) | Frontend JS globals (`EASApi`, `EASWebSocket`, ...) — not the backend REST API |
+| **API Reference** (in the running app, `/api-reference`) | Live reference of every `/api/*` route, generated from `app.url_map` on each request — never a stale hand-maintained list |
+| [API Key Management](guides/API_KEY_MANAGEMENT.md) | Planned key-based auth for external API access — **not yet implemented** |
 | [Contributing](process/CONTRIBUTING.md) | How to contribute |
 
 ---

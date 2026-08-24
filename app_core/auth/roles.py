@@ -417,6 +417,12 @@ def require_permission(permission_name: str):
                 )
                 return _permission_denied_response(permission_name)
             return f(*args, **kwargs)
+        # Introspectable by tooling (e.g. the live API reference page) that
+        # needs to know a route's access requirement without re-deriving it
+        # from source text -- @wraps copies __doc__ but not this.
+        decorated_function.eas_auth_requirement = {
+            'mode': 'single', 'permissions': (permission_name,),
+        }
         return decorated_function
     return decorator
 
@@ -445,6 +451,9 @@ def require_any_permission(*permission_names: str):
                 f"Permission denied: needs any of {permission_names} for user {session.get('user_id')}"
             )
             return _permission_denied_response(" or ".join(permission_names))
+        decorated_function.eas_auth_requirement = {
+            'mode': 'any', 'permissions': tuple(permission_names),
+        }
         return decorated_function
     return decorator
 
@@ -473,6 +482,9 @@ def require_all_permissions(*permission_names: str):
                 f"Permission denied: needs all of {permission_names} for user {session.get('user_id')}"
             )
             return _permission_denied_response(" and ".join(permission_names))
+        decorated_function.eas_auth_requirement = {
+            'mode': 'all', 'permissions': tuple(permission_names),
+        }
         return decorated_function
     return decorator
 

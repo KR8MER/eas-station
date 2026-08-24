@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}API Reference - EAS Station™{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<style>
+    .api-ref-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .api-ref-group summary {
+        cursor: pointer;
+        list-style: none;
+    }
+
+    .api-ref-group summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .api-ref-group summary .fa-chevron-right {
+        transition: transform 0.15s ease;
+    }
+
+    .api-ref-group[open] summary .fa-chevron-right {
+        transform: rotate(90deg);
+    }
+
+    .api-ref-path {
+        font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+        font-size: 0.85rem;
+    }
+
+    .api-ref-method {
+        min-width: 3.5rem;
+        display: inline-block;
+        text-align: center;
+        font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+    }
+
+    .api-ref-undocumented {
+        color: var(--text-muted);
+        font-style: italic;
+    }
+
+    .api-ref-row.is-hidden {
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include 'api_reference/_content.html' %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{% include 'api_reference/_scripts.html' %}
+{% endblock %}

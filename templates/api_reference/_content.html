@@ -1,0 +1,122 @@
+{# API Reference — page body. Data comes from app_utils/api_reference.py.
+
+   Computed live from app.url_map on every request, the same idiom as
+   /repo-stats: never a committed/generated file that can drift from what
+   the app actually serves. Layout follows the same status-strip +
+   status-tile + card idiom repo-stats and System Health already use. #}
+{% set header_icon = 'fas fa-plug' %}
+{% set header_title = 'API Reference' %}
+{% set header_subtitle %}Every /api/* route, read live from this build &middot; not a hand-maintained list{% endset %}
+{% set header_actions %}
+    <span class="status-pill info" title="When this snapshot was computed">
+        <i class="fas fa-clock"></i> {{ reference.generated_at }}
+    </span>
+    {% if current_user is defined and current_user and current_user.is_authenticated %}
+    <a href="/api/api-reference" class="btn btn-sm btn-outline-light" title="Same snapshot as JSON">
+        <i class="fas fa-code me-1"></i>JSON
+    </a>
+    {% endif %}
+{% endset %}
+{% include 'components/page_header.html' %}
+
+<div class="container-fluid mt-3">
+
+    <section class="status-strip status-strip-emphasis" aria-label="API reference at a glance">
+        <div class="status-tile is-primary sev-info">
+            <div class="lbl"><i class="fas fa-route"></i> Routes</div>
+            <div class="val">{{ '{:,}'.format(reference.total) }}</div>
+            <div class="sub">under /api/*</div>
+        </div>
+        <div class="status-tile sev-ok">
+            <div class="lbl"><i class="fas fa-book"></i> Documented</div>
+            <div class="val">{{ '{:,}'.format(reference.documented) }}</div>
+            {% set doc_pct = (reference.documented / reference.total * 100) if reference.total else 0 %}
+            <div class="sub">{{ '%.0f'|format(doc_pct) }}% have a docstring</div>
+        </div>
+        <div class="status-tile sev-warn">
+            <div class="lbl"><i class="fas fa-file-circle-question"></i> Undocumented</div>
+            <div class="val">{{ '{:,}'.format(reference.total - reference.documented) }}</div>
+            <div class="sub">no docstring on the view function</div>
+        </div>
+        <div class="status-tile sev-info">
+            <div class="lbl"><i class="fas fa-lock"></i> Access-Gated</div>
+            <div class="val">{{ '{:,}'.format(reference.gated) }}</div>
+            <div class="sub">require login or a permission</div>
+        </div>
+    </section>
+
+    <section class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h2 class="h6 mb-0"><i class="fas fa-diagram-project me-2"></i>Routes by Module</h2>
+            <input type="search" id="apiRefSearch" class="form-control form-control-sm"
+                   style="max-width: 320px;" placeholder="Filter by path, method, or text&hellip;"
+                   aria-label="Filter routes">
+        </div>
+        <div class="card-body">
+            <p class="text-secondary small mb-3">
+                Grouped by the Python module that defines each route. Expand a group to see its
+                routes; a route with no docstring shows <span class="api-ref-undocumented">no description</span>
+                instead of a summary &mdash; that gap is worth closing in the source file, not here.
+            </p>
+            <p id="apiRefNoResults" class="text-secondary small d-none">No routes match that filter.</p>
+
+            {% for group_name, routes in reference.groups.items() %}
+            <details class="api-ref-group" data-group-name="{{ group_name }}" open>
+                <summary class="d-flex align-items-center gap-2 py-2 border-bottom">
+                    <i class="fas fa-chevron-right text-secondary" aria-hidden="true"></i>
+                    <code>{{ group_name }}</code>
+                    <span class="badge bg-secondary rounded-pill ms-1">{{ routes | length }}</span>
+                </summary>
+                <div class="table-responsive mt-2">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 1%;">Methods</th>
+                                <th>Path</th>
+                                <th>Summary</th>
+                                <th style="width: 1%;">Access</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for route in routes %}
+                            <tr class="api-ref-row"
+                                data-search="{{ (route.path ~ ' ' ~ route.methods|join(' ') ~ ' ' ~ route.summary ~ ' ' ~ route.endpoint) | lower }}">
+                                <td>
+                                    {% for method in route.methods %}
+                                    <span class="status-badge api-ref-method {{ 'success' if method == 'POST' else 'danger' if method == 'DELETE' else 'warning' if method in ('PUT', 'PATCH') else 'info' }}">{{ method }}</span>
+                                    {% endfor %}
+                                </td>
+                                <td class="api-ref-path text-break-anywhere">{{ route.path }}</td>
+                                <td>
+                                    {% if route.summary %}
+                                        {{ route.summary }}
+                                    {% else %}
+                                        <span class="api-ref-undocumented">no description</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if route.auth %}
+                                        {% if route.auth.mode == 'auth_only' %}
+                                        <span class="status-badge secondary" title="Requires a logged-in session"><i class="fas fa-user-lock"></i></span>
+                                        {% elif route.auth.mode == 'role' %}
+                                        <span class="status-badge secondary" title="Requires role: {{ route.auth.roles|join(', ') }}"><i class="fas fa-user-shield"></i></span>
+                                        {% else %}
+                                        <span class="status-badge secondary" title="Requires permission ({{ route.auth.mode }}): {{ route.auth.permissions|join(', ') }}"><i class="fas fa-lock"></i></span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-secondary small" title="No auth/permission decorator found">&mdash;</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+            {% else %}
+            <p class="text-center text-secondary">No /api/* routes found.</p>
+            {% endfor %}
+        </div>
+    </section>
+
+</div>
