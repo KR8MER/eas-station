@@ -44,6 +44,57 @@ tracks releases under the 2.x series.
   raises mid-playout still writes both, flagged as a failure, and returns a
   non-zero exit code instead of looking like a silent success.
 
+## [2.190.1] - 2026-08-24 - Upgrade dependencies for security
+
+Bumped every pinned dependency in `requirements.txt` to its latest available
+version (37 packages: Flask/Werkzeug/Flask-SocketIO/Flask-WTF/Flask-Caching/
+Flask-Compress, SQLAlchemy/Alembic/GeoAlchemy2/psycopg2-binary/greenlet,
+requests/certifi/feedparser, redis/hiredis, gunicorn, pytz, psutil, pytest/
+pytest-asyncio, lxml/Pillow/scipy, and others) — most notably `certifi`
+(CA bundle freshness, required for IPAWS TLS) and `pytz` (timezone database
+freshness, called out in its own comment as "CRITICAL FOR PROPER TIME
+DISPLAY").
+
+### Changed
+- **`redis` 7.1.0 → 8.1.0** and **`gunicorn` 23.0.0 → 26.1.0** (both major
+  version jumps) were checked against their actual release notes before
+  bumping, not just pinned blindly: redis-py 8.0's headline change (RESP3
+  becomes the default wire protocol) explicitly preserves legacy RESP2
+  response shapes for existing code, and gunicorn 26's breaking change
+  (dropping the `eventlet` worker class) doesn't apply here since this
+  project runs `--worker-class gevent`, which gunicorn 26 still supports.
+  Verified redis-py 8.1.0 directly against a real local Redis server
+  (get/set/delete, `decode_responses`, pub/sub — the exact patterns
+  `app_utils/eas.py` and `app_core/audio/redis_commands.py` use) rather
+  than relying on mocked tests alone.
+- **`numpy` stays at 2.3.5**, not bumped to the latest 2.5.2: `numba`
+  carries a pre-existing, intentional `<0.64.0` cap (documented reason --
+  0.64+ pulls a new llvmlite requiring a 55 MB download, expensive on the
+  Raspberry Pi hardware this runs on), and every numba release under that
+  cap requires `numpy<2.4`. `pip install -r requirements.txt` outright
+  refuses to resolve `numpy==2.5.2` against that constraint -- this isn't a
+  judgment call, it's a real, reproducible dependency conflict. 2.3.5 is
+  the newest numpy release compatible with the existing numba pin.
+- Synced every version number this changed in `README.md`'s tech-stack
+  badges and dependency-attribution tables and
+  `templates/partials/tech_stack_badges.html`'s footer badges, including
+  several rows `tests/test_tech_stack_badges.py` doesn't cover (redis-py,
+  hiredis, Flask-SocketIO, Flask-WTF, Flask-Caching, GeoAlchemy2, gpiozero,
+  greenlet, orjson, psutil, psycopg2-binary, pyproj, pyshp, pytest,
+  pytest-asyncio, pytz, requests, ujson, luma.oled) -- found via a full
+  cross-reference sweep of `requirements.txt` pins against every README
+  table row mentioning each package, not just the ones the existing test
+  happened to check.
+
+### Testing
+- Full local test suite against a venv built from the fully upgraded
+  `requirements.txt`: 2634 passed, 267 skipped, 61 xfailed, 6 xpassed, 0
+  failed -- run twice (once mid-upgrade, once after the badge/table fixes)
+  to confirm no regression crept in between.
+- `redis` upgrade verified against a real, running local Redis server, not
+  only mocks (see above).
+- `gunicorn`'s `gevent` worker class confirmed importable under 26.1.0.
+
 ## [2.190.0] - 2026-08-24 - Hold to Abort Broadcast now stops injected Icecast audio too
 
 "Hold to Abort Broadcast" (the web button and the physical GPIO Dump/Abort

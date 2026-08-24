@@ -9,92 +9,101 @@
 # communicate with the external database instance.
 #
 # Core Flask dependencies
-Flask==3.1.2
+Flask==3.1.3
 Flask-SQLAlchemy==3.1.1
-Flask-Caching==2.3.1
-Flask-SocketIO==5.5.1
-Flask-WTF==1.2.2  # CSRF protection and form validation
+Flask-Caching==2.4.1
+Flask-SocketIO==5.6.1
+Flask-WTF==1.3.0  # CSRF protection and form validation
 Flask-Limiter==4.1.1  # Rate limiting with Redis/memory backend
-Flask-Compress==1.17  # gzip/brotli response compression for HTML/CSS/JS
+Flask-Compress==1.24  # gzip/brotli response compression for HTML/CSS/JS
 Brotli==1.2.0  # Brotli encoder used by Flask-Compress (preferred over gzip)
-Werkzeug==3.1.4
+Werkzeug==3.1.8
 
 # Web framework support dependencies
-python-socketio==5.15.0  # Socket.IO support for Flask-SocketIO
+python-socketio==5.16.4  # Socket.IO support for Flask-SocketIO
 jinja2==3.1.6  # Template rendering
 itsdangerous==2.2.0  # Secure session cookies and CSRF tokens
 
 # Database dependencies
-SQLAlchemy==2.0.45
-psycopg2-binary==2.9.11  # Sync PostgreSQL driver
-GeoAlchemy2==0.18.1
-Alembic==1.17.2
-greenlet==3.3.0  # Required for SQLAlchemy 2.0 sync operations with gevent
+SQLAlchemy==2.0.52
+psycopg2-binary==2.9.12  # Sync PostgreSQL driver
+GeoAlchemy2==0.20.0
+Alembic==1.19.1
+greenlet==3.5.5  # Required for SQLAlchemy 2.0 sync operations with gevent
 
 # HTTP client for API calls
-requests==2.32.5
-feedparser==6.0.11          # RSS/Atom feed parsing for LED sign RSS ticker
-certifi==2025.11.12  # Updated CA bundle for SSL certificate verification (required for IPAWS)
+requests==2.34.2
+feedparser==6.0.14          # RSS/Atom feed parsing for LED sign RSS ticker
+certifi==2026.7.22  # Updated CA bundle for SSL certificate verification (required for IPAWS)
 httpx==0.28.1  # Modern async HTTP client with connection pooling
 
 # Timezone handling (CRITICAL FOR PROPER TIME DISPLAY)
-pytz==2025.2
+pytz==2026.3.post1
 
 # System monitoring
-psutil==7.1.3
+psutil==7.2.2
 
 # Environment variables
-python-dotenv==1.2.1
+python-dotenv==1.2.3
 
 # Markdown rendering for documentation viewer
-mistune==3.1.4  # Fast, extensible markdown parser with full GFM support
+mistune==3.3.4  # Fast, extensible markdown parser with full GFM support
 
 # YAML parsing for compose file validation
 PyYAML==6.0.3
 
 # JSON handling - Optimized parsers for better performance
-orjson==3.11.5  # Fast C-based JSON parser (2-3x faster than stdlib)
-ujson==5.11.0  # Alternative fast JSON parser (fallback option)
+orjson==3.12.0  # Fast C-based JSON parser (2-3x faster than stdlib)
+ujson==5.13.0  # Alternative fast JSON parser (fallback option)
 
 # Datetime parsing - More robust than manual strptime
 python-dateutil==2.9.0.post0  # Flexible datetime string parsing
 
 # XML parsing - Optimized for CAP alert processing
-lxml==6.0.2  # Fast C-based XML parser (5-10x faster than ElementTree)
+lxml==6.1.2  # Fast C-based XML parser (5-10x faster than ElementTree)
 
 # Document and spreadsheet exports
 openpyxl==3.1.5
 
 # Production servers
-gunicorn==23.0.0  # WSGI server for Flask
+gunicorn==26.1.0  # WSGI server for Flask
 gevent>=25.9.1    # Async worker for Flask-SocketIO with Gunicorn (Python 3.13+ compatible)
 
 # Redis for state management and worker coordination
 # Replaces fragile file-based coordination with robust distributed state
-redis==7.1.0
-hiredis==3.3.0  # C parser for better Redis performance
+redis==8.1.0
+hiredis==3.4.1  # C parser for better Redis performance
 
 # Development and debugging (optional)
 # flask-debugtoolbar==0.13.1  # Uncomment for development
 
 # Testing framework (required for web UI test runner)
-pytest==9.0.2
-pytest-asyncio==1.3.0  # For async test support
+pytest==9.1.1
+pytest-asyncio==1.4.0  # For async test support
 
 # Optional speech synthesis support
 # azure-cognitiveservices-speech==1.38.0  # Required when enabling Azure AI voiceovers
 pyttsx3==2.99  # Offline text-to-speech engine for the pyttsx3 provider
 
 # Audio processing for EAS decoding
-scipy==1.16.3  # Optional: Advanced signal processing (not used for EAS resampling)
+scipy==1.17.1  # Optional: Advanced signal processing (not used for EAS resampling)
+# Note: scipy is capped below 1.18 -- that series requires Python >=3.12, and
+# this project's CI matrix (and supported install target) includes 3.11.
+# 1.17.1 is the newest release that still supports 3.11.
 pydub==0.25.1  # Audio stream decoding (MP3, AAC, OGG) for HTTP/Icecast streams
 numba>=0.61.0,<0.64.0  # JIT compilation for real-time FM demodulation (RBDS performance, 10-100x speedup). Requires 0.61.0+ for Python 3.13 support
 # Note: pydub requires ffmpeg to be installed via system packages (libavcodec, libavformat)
 # Note: EAS monitor uses numpy's linear interpolation for efficient resampling on Raspberry Pi
+# Note: numba's upper bound is intentional -- 0.64+ pulls a new llvmlite requiring a
+# 55 MB download, expensive on Raspberry Pi hardware. Do not bump past <0.64.0
+# without confirming a lighter llvmlite wheel is available for the target platform.
 
 # SDR support for radio receivers
 numpy==2.3.5  # Required for SoapySDR sample processing
 # Note: SoapySDR Python bindings are installed via system packages (python3-soapysdr)
+# Note: numpy is capped by numba's own numpy<2.4 requirement (see numba's pin
+# above) -- 2.3.5 is the newest release in that allowed range. Bumping numpy
+# further requires bumping numba past its own intentional <0.64.0 cap first.
 
 # VFD Display support (Noritake GU140x32F-7000B)
 pyserial==3.5  # Serial communication for VFD display and GPS HAT
@@ -105,13 +114,13 @@ zigpy-znp>=0.11.0   # Z-Stack (CC2652P / CC1352P) radio driver
 
 # GPS HAT support (Adafruit Ultimate GPS HAT #2324)
 pynmea2==1.19.0  # NMEA-0183 sentence parser for GPS receivers
-Pillow==12.0.0  # Image processing for VFD graphics rendering
+Pillow==12.3.0  # Image processing for VFD graphics rendering
 
 # OLED display support (Argon Industria SSD1306 module)
-luma.oled==3.14.0  # I2C SSD1306/SH1106 driver used by the Argon OLED
+luma.oled==3.15.0  # I2C SSD1306/SH1106 driver used by the Argon OLED
 
 # GPIO control for Raspberry Pi hardware
-gpiozero==2.0.1
+gpiozero==2.0.1.post3
 # Marker required: rpi-ws281x builds a C extension against Raspberry Pi headers
 # and cannot compile on x86 (contributor laptops, CI runners). Restricting it to
 # ARM keeps `pip install -r requirements.txt` working everywhere; the LED-strip
@@ -119,7 +128,7 @@ gpiozero==2.0.1
 rpi-ws281x>=0.0.5; platform_machine in "armv6l armv7l aarch64"  # NeoPixel/WS2812B addressable LED strip control (requires DMA/root on Pi)
 
 # Multi-Factor Authentication (MFA) support
-pyotp==2.9.0  # TOTP (Time-based One-Time Password) generation and verification
+pyotp==2.10.0  # TOTP (Time-based One-Time Password) generation and verification
 qrcode==8.2  # QR code generation for MFA enrollment
 
 # SMS notifications via Twilio
@@ -129,8 +138,8 @@ twilio>=9.0.0  # Twilio REST API client for SMS alert delivery
 pysnmp>=6.2.0  # SNMP v2c trap sender for compliance health alerts
 
 # Geospatial data processing
-pyshp==3.0.3  # Shapefile reader for converting boundary files to GeoJSON
-pyproj==3.7.1  # CRS reprojection from shapefile .prj to WGS84 (optional, gracefully degrades)
+pyshp==3.1.6  # Shapefile reader for converting boundary files to GeoJSON
+pyproj==3.7.2  # CRS reprojection from shapefile .prj to WGS84 (optional, gracefully degrades)
 
 # Country-level geolocation for the Traffic Analytics dashboard. Resolves public
 # visitor IPs to countries/flags from an operator-supplied MaxMind GeoLite2
