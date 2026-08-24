@@ -129,6 +129,10 @@ def require_auth(f: Callable) -> Callable:
             )
             return _build_login_redirect()
         return f(*args, **kwargs)
+    # Introspectable by tooling (e.g. the live API reference page) that needs
+    # to know a route's access requirement without re-deriving it from
+    # source text -- @wraps copies __doc__ but not this.
+    decorated_function.eas_auth_requirement = {'mode': 'auth_only', 'permissions': ()}
     return decorated_function
 
 
@@ -182,6 +186,9 @@ def require_role(*role_names: str) -> Callable:
                 return _role_denied_response(role_names)
 
             return f(*args, **kwargs)
+        decorated_function.eas_auth_requirement = {
+            'mode': 'role', 'permissions': (), 'roles': role_names,
+        }
         return decorated_function
     return decorator
 

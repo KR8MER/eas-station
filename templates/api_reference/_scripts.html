@@ -1,0 +1,37 @@
+<script>
+(function () {
+    var input = document.getElementById('apiRefSearch');
+    if (!input) return;
+
+    var groups = Array.prototype.slice.call(document.querySelectorAll('.api-ref-group'));
+    var noResults = document.getElementById('apiRefNoResults');
+
+    function applyFilter() {
+        var term = input.value.trim().toLowerCase();
+        var anyVisible = false;
+
+        groups.forEach(function (group) {
+            var rows = Array.prototype.slice.call(group.querySelectorAll('.api-ref-row'));
+            var groupHasMatch = false;
+
+            rows.forEach(function (row) {
+                var matches = !term || row.getAttribute('data-search').indexOf(term) !== -1;
+                row.classList.toggle('is-hidden', !matches);
+                if (matches) groupHasMatch = true;
+            });
+
+            group.classList.toggle('d-none', !groupHasMatch);
+            if (groupHasMatch) {
+                anyVisible = true;
+                // Force a matching group open while actively filtering, so a
+                // group the user collapsed earlier doesn't hide a match.
+                if (term) group.open = true;
+            }
+        });
+
+        if (noResults) noResults.classList.toggle('d-none', anyVisible || !term);
+    }
+
+    input.addEventListener('input', applyFilter);
+})();
+</script>

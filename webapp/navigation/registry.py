@@ -419,6 +419,12 @@ _REPORTS = NavSection(
                     href="/repo-stats",
                     description="Live code, route and component metrics for this build.",
                 ),
+                NavItem(
+                    label="API Reference",
+                    icon="fas fa-plug",
+                    href="/api-reference",
+                    description="Live reference of every /api/* route, generated from this build.",
+                ),
             ),
         ),
         NavGroup(

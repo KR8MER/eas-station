@@ -96,6 +96,11 @@ def require_permission_or_setup_mode(permission_name: str):
             
             # Otherwise, use normal permission check
             return require_permission(permission_name)(f)(*args, **kwargs)
+        # Introspectable by tooling (e.g. the live API reference page) --
+        # same convention as app_core.auth.roles's permission decorators.
+        decorated_function.eas_auth_requirement = {
+            'mode': 'single_or_setup_mode', 'permissions': (permission_name,),
+        }
         return decorated_function
     return decorator
 

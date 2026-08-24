@@ -522,5 +522,20 @@ def register_documentation_routes(app: Flask, logger_instance: Any) -> None:
 
         return jsonify(stats)
 
+    @app.route('/api-reference')
+    def api_reference():
+        """Render a live reference of every /api/* route on the running app."""
+        from app_utils.api_reference import compute_api_reference
+
+        reference = compute_api_reference(app)
+        return _render_no_cache('api_reference.html', reference=reference)
+
+    @app.route('/api/api-reference')
+    def api_reference_api():
+        """Return the same reference as JSON for tooling."""
+        from app_utils.api_reference import compute_api_reference
+
+        return jsonify(compute_api_reference(app))
+
 
 __all__ = ['register_documentation_routes']
