@@ -86,7 +86,10 @@ pytest-asyncio==1.4.0  # For async test support
 pyttsx3==2.99  # Offline text-to-speech engine for the pyttsx3 provider
 
 # Audio processing for EAS decoding
-scipy==1.18.1  # Optional: Advanced signal processing (not used for EAS resampling)
+scipy==1.17.1  # Optional: Advanced signal processing (not used for EAS resampling)
+# Note: scipy is capped below 1.18 -- that series requires Python >=3.12, and
+# this project's CI matrix (and supported install target) includes 3.11.
+# 1.17.1 is the newest release that still supports 3.11.
 pydub==0.25.1  # Audio stream decoding (MP3, AAC, OGG) for HTTP/Icecast streams
 numba>=0.61.0,<0.64.0  # JIT compilation for real-time FM demodulation (RBDS performance, 10-100x speedup). Requires 0.61.0+ for Python 3.13 support
 # Note: pydub requires ffmpeg to be installed via system packages (libavcodec, libavformat)

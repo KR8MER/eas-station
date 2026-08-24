@@ -25,7 +25,7 @@
 [![pydub](https://img.shields.io/badge/pydub-0.25.1-FF8A65?style=flat-square)](https://github.com/jiaaro/pydub)
 [![eSpeak NG](https://img.shields.io/badge/eSpeak%20NG-TTS-5C2D91?style=flat-square)](https://github.com/espeak-ng/espeak-ng)
 [![NumPy](https://img.shields.io/badge/NumPy-2.3.5-013243?style=flat-square&logo=numpy&logoColor=white)](https://numpy.org/)
-[![SciPy](https://img.shields.io/badge/SciPy-1.18.1-8CAAE6?style=flat-square&logo=scipy&logoColor=white)](https://scipy.org/)
+[![SciPy](https://img.shields.io/badge/SciPy-1.17.1-8CAAE6?style=flat-square&logo=scipy&logoColor=white)](https://scipy.org/)
 [![Numba](https://img.shields.io/badge/Numba-0.61%2B-00A3E0?style=flat-square&logo=numba&logoColor=white)](https://numba.pydata.org/)
 [![lxml](https://img.shields.io/badge/lxml-6.1.2-4A7EBB?style=flat-square)](https://lxml.de/)
 [![Pillow](https://img.shields.io/badge/Pillow-12.3.0-3776AB?style=flat-square)](https://python-pillow.org/)
@@ -526,7 +526,7 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 | Component | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
 | NumPy | 2.3.5 | BSD‑3‑Clause | Foundation for every IQ buffer, FM demod, FFT, and SAME bit slicer. Also drives the one‑click IQ capture (`numpy.save` to `.npy`). | https://numpy.org/ |
-| SciPy | 1.18.1 | BSD‑3‑Clause | DSP filter design (`signal.lfilter`, FIR/IIR design) for the interference notch, deemphasis, and channel filters. | https://scipy.org/ |
+| SciPy | 1.17.1 | BSD‑3‑Clause | DSP filter design (`signal.lfilter`, FIR/IIR design) for the interference notch, deemphasis, and channel filters. | https://scipy.org/ |
 | Numba | ≥ 0.61.0, < 0.64 | BSD‑2‑Clause | JIT‑compiles the inner SAME DLL and RBDS workers; ~6× faster real‑time demod on a Pi. | https://numba.pydata.org/ |
 | pydub | 0.25.1 | MIT | Decodes MP3/AAC/OGG Icecast streams for the EAS audio monitor. | https://github.com/jiaaro/pydub |
 | pyttsx3 | 2.99 | MPL‑2.0 | Offline TTS engine option for voice‑over narration of alert text. | https://github.com/nateshmbhat/pyttsx3 |
