@@ -117,6 +117,50 @@ def test_buckets_partition_all_files(sample_tree):
 
 
 # ---------------------------------------------------------------------------
+# Component inventory
+# ---------------------------------------------------------------------------
+
+def test_services_blueprints_and_models_are_counted(tmp_path):
+    """services/*/api.py defines real Blueprints; the scan must not skip them.
+
+    The bug the page shipped with: ``count_components`` only scanned
+    ``app_core/`` and ``webapp/``, so the zigbee/network/gps/displays
+    Blueprints -- the same modules whose routes the source-scan fallback
+    already counts -- never showed up in the Blueprints tile.
+    """
+    (tmp_path / 'services' / 'zigbee').mkdir(parents=True)
+    (tmp_path / 'services' / 'zigbee' / 'api.py').write_text(
+        'from flask import Blueprint\n'
+        'bp = Blueprint("zigbee_api", __name__)\n',
+        encoding='utf-8',
+    )
+    (tmp_path / 'app_core').mkdir()
+    (tmp_path / 'app_core' / 'models.py').write_text(
+        'class Widget(db.Model):\n    pass\n',
+        encoding='utf-8',
+    )
+
+    files, _ = repo_stats.discover_files(tmp_path)
+    components = repo_stats.count_components(tmp_path, files)
+
+    assert components['blueprints'] == 1
+    assert components['models'] == 1
+
+
+def test_root_level_operator_scripts_are_counted(tmp_path):
+    """install.sh/app.py etc. live at the repo root, not under scripts/."""
+    (tmp_path / 'install.sh').write_text('#!/bin/bash\necho hi\n', encoding='utf-8')
+    (tmp_path / 'app.py').write_text('print("hi")\n', encoding='utf-8')
+    (tmp_path / 'scripts').mkdir()
+    (tmp_path / 'scripts' / 'backfill.py').write_text('print("hi")\n', encoding='utf-8')
+
+    files, _ = repo_stats.discover_files(tmp_path)
+    components = repo_stats.count_components(tmp_path, files)
+
+    assert components['scripts'] == 3
+
+
+# ---------------------------------------------------------------------------
 # Line counting
 # ---------------------------------------------------------------------------
 
@@ -179,6 +223,26 @@ def test_route_count_includes_named_blueprints():
         'route count looks like the old @app|@bp-only regex'
     )
     assert stats['routes']['by_module'], 'expected a per-module breakdown'
+
+
+def test_git_history_reports_commits_and_contributors():
+    stats = repo_stats.compute_stats()
+    if stats['file_source'] != 'git':
+        pytest.skip('not a git checkout in this environment')
+
+    history = stats['git_history']
+    assert history is not None
+    assert history['commits'] > 100
+    assert history['contributors'] >= 1
+    assert history['last_commit_at'], 'expected an ISO-formatted commit date'
+
+
+def test_git_history_is_none_outside_a_git_checkout(tmp_path):
+    """A non-git tree must hide the tile, not render a misleading zero."""
+    (tmp_path / 'README.md').write_text('# hi\n', encoding='utf-8')
+    stats = repo_stats.compute_stats(root=tmp_path)
+    assert stats['file_source'] == 'walk'
+    assert stats['git_history'] is None
 
 
 def test_cache_is_reused_until_invalidated():

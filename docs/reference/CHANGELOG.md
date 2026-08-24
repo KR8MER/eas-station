@@ -8,6 +8,29 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.189.0] - 2026-08-24 - Fix undercounted stats and add git history to Repo Stats
+
+### Fixed
+- **Blueprints undercounted on `/repo-stats`.** `count_components()` only
+  scanned `app_core/` and `webapp/` for `= Blueprint(`, missing the four
+  production blueprints defined in `services/*/api.py` (zigbee, network,
+  gps, displays) -- the same modules whose *routes* the source-scan
+  fallback already counted, so the Routes and Blueprints tiles disagreed
+  with each other. The scan now covers `services/` too (37 -> 41).
+- **Scripts undercounted on `/repo-stats`.** The Scripts tile only counted
+  files under `scripts/`, missing every root-level operator entry point:
+  `install.sh`, `update.sh`, `uninstall.sh`, `diagnose.sh`, `app.py`,
+  `wsgi.py`, `eas_monitoring_service.py`, `sdr_hardware_service.py`. These
+  now count too (73 -> 81).
+
+### Added
+- **Git history tile on `/repo-stats`** -- commit count, distinct
+  contributor count, and the most recent commit date, read via `git log`
+  in `app_utils/repo_stats/scanner.py:git_history()`. Hidden automatically
+  when the checkout isn't a git repository (matches the existing
+  `git ls-files` vs. filesystem-walk fallback) rather than rendering
+  misleading zeroes.
+
 ## [2.188.1] - 2026-08-23 - Redirect /admin to Settings once an admin exists
 
 ### Changed

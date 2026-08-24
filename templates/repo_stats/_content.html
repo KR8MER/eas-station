@@ -283,6 +283,27 @@
         </div>
     </section>
 
+    {% if stats.git_history %}
+    <!-- Git history -->
+    <section class="status-strip" aria-label="Git history">
+        <div class="status-tile sev-info">
+            <div class="lbl"><i class="fas fa-code-commit"></i> Commits</div>
+            <div class="val">{{ '{:,}'.format(stats.git_history.commits) }}</div>
+            <div class="sub">on this branch</div>
+        </div>
+        <div class="status-tile sev-info">
+            <div class="lbl"><i class="fas fa-users"></i> Contributors</div>
+            <div class="val">{{ '{:,}'.format(stats.git_history.contributors) }}</div>
+            <div class="sub">distinct authors</div>
+        </div>
+        <div class="status-tile sev-info">
+            <div class="lbl"><i class="fas fa-clock-rotate-left"></i> Last Commit</div>
+            <div class="val">{{ stats.git_history.last_commit_at[:10] }}</div>
+            <div class="sub">most recent</div>
+        </div>
+    </section>
+    {% endif %}
+
 </div>
 
 <script id="repoStatsData" type="application/json">

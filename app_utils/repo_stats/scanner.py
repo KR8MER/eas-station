@@ -158,6 +158,47 @@ def discover_files(root: Path) -> Tuple[List[Path], str]:
     return _walked_files(root), 'walk'
 
 
+def git_history(root: Path) -> Optional[Dict[str, object]]:
+    """Return commit count, contributor count and the last commit's date.
+
+    Returns ``None`` when the tree isn't a git checkout (matching the
+    ``discover_files`` fallback), so callers can hide the tile entirely
+    rather than show zeroes.
+    """
+    try:
+        result = subprocess.run(
+            ['git', '-C', str(root), 'log', '--format=%an%x00%cI'],
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.debug('git log unavailable (%s)', exc)
+        return None
+
+    if result.returncode != 0:
+        logger.debug('git log exited %s', result.returncode)
+        return None
+
+    lines = result.stdout.decode('utf-8', errors='replace').splitlines()
+    if not lines:
+        return None
+
+    authors = set()
+    last_commit_at = None
+    for line in lines:
+        author, _, commit_date = line.partition('\x00')
+        authors.add(author)
+        if last_commit_at is None:
+            last_commit_at = commit_date  # log is newest-first
+
+    return {
+        'commits': len(lines),
+        'contributors': len(authors),
+        'last_commit_at': last_commit_at,
+    }
+
+
 def classify(rel_path: str) -> str:
     """Return the bucket ('project', 'docs' or 'vendored') for a path."""
     normalized = rel_path.replace('\\', '/')
@@ -267,5 +308,6 @@ __all__ = [
     'classify',
     'count_lines',
     'discover_files',
+    'git_history',
     'repo_root',
 ]

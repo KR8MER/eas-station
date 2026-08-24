@@ -24,6 +24,12 @@ _BLUEPRINT = re.compile(r'=\s*Blueprint\(')
 #: Directories scanned by the source-scan fallback.
 _ROUTE_DIRS = ('webapp', 'services', 'app_core', 'app_utils')
 
+#: Directories scanned for Blueprint/model definitions. Must stay a superset
+#: of what actually defines them -- ``services/*/api.py`` (zigbee, network,
+#: gps, displays) each define their own Blueprint, the same modules whose
+#: routes ``_ROUTE_DIRS`` above already counts.
+_COMPONENT_DIRS = ('app_core/', 'webapp/', 'services/')
+
 
 def routes_from_url_map(app) -> Optional[Dict[str, object]]:
     """Count registered routes from a live Flask URL map."""
@@ -108,11 +114,15 @@ def count_components(root: Path, files: Iterable[Path]) -> Dict[str, int]:
             counts['systemd_units'] += 1
         elif rel.startswith('scripts/') and rel.endswith(('.py', '.sh')):
             counts['scripts'] += 1
+        elif '/' not in rel and rel.endswith(('.py', '.sh')):
+            # Root-level operator entry points (install.sh, update.sh,
+            # app.py, wsgi.py, ...) are scripts too, just not under scripts/.
+            counts['scripts'] += 1
         elif rel.startswith('app_core/migrations/versions/') and rel.endswith('.py'):
             if name != '__init__.py':
                 counts['migrations'] += 1
 
-        if rel.endswith('.py') and rel.startswith(('app_core/', 'webapp/')):
+        if rel.endswith('.py') and rel.startswith(_COMPONENT_DIRS):
             try:
                 content = path.read_text(encoding='utf-8', errors='ignore')
             except OSError:
