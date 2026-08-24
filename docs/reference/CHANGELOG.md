@@ -8,6 +8,40 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.192.1] - 2026-08-24 - Fix stale version claims in tech-stack shields and docs
+
+A user asked "why is Redis showing version 7?" -- the footer badge and README
+had been advertising versions that no longer matched what's actually running,
+because `install.sh` doesn't pin these packages and nobody had gone back to
+re-check the shields since they were first written.
+
+### Fixed
+- **Redis**: badge/README claimed 7.1; the running server is 8.0.2
+  (`redis-cli INFO server`, `redis-server --version`). `install.sh` installs
+  `redis-server` via apt with no version pin, so the shield now reads Redis 8
+  and no longer implies a pin that doesn't exist.
+- **PostGIS**: badge/README/Mermaid diagrams/architecture docs claimed 3.4;
+  the actual extension is 3.5.2 (`SELECT postgis_full_version()`).
+  `install.sh` only targets the major series (`postgresql-${PG_MAJOR}-postgis-3`),
+  not a minor version.
+- **Nginx**: badge said "Alpine", implying a Docker `nginx:alpine` image.
+  The real deployment is a bare-metal `apt-get install nginx` package
+  (confirmed via `nginx -v` -> 1.26.3); there is no Dockerfile or
+  docker-compose anywhere in the project that uses `nginx:alpine`. Badge and
+  attribution table now say "system package" / "system (apt)" instead.
+- **Chart.js**: badge/README claimed a single version, 3.9.1. Two vendored
+  copies are actually in concurrent use --
+  `static/vendor/chartjs/chart-v3.min.js` (v3.9.1, used by 5 dashboard
+  templates) and `chart.min.js` (v4.4.0, used by `system_health.html` and
+  `repo_stats.html`) -- an unconsolidated dual-version situation, not simple
+  staleness. Badge and README now disclose both versions and both files.
+
+Updated surfaces: `templates/partials/tech_stack_badges.html`, `README.md`
+(top badge row, Mermaid diagram, infrastructure prose, attribution table),
+`docs/architecture/SYSTEM_ARCHITECTURE.md`,
+`docs/architecture/THEORY_OF_OPERATION.md`, and
+`docs/assets/diagrams/system-deployment-hardware.svg`.
+
 ## [2.192.0] - 2026-08-24 - Close the API reference's docstring gap, add structured param docs
 
 Follow-up to 2.191.0's live `/api-reference` page. It shipped reporting

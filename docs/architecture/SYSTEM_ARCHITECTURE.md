@@ -55,7 +55,7 @@ graph TB
 
         subgraph "Infrastructure"
             REDIS[(Redis<br>Cache + IPC)]
-            DB[(PostgreSQL 17<br>+ PostGIS 3.4)]
+            DB[(PostgreSQL 17<br>+ PostGIS 3.5)]
             ICECAST[Icecast<br>Audio Streaming]
             NGINX[nginx<br>Reverse Proxy<br>HTTPS]
         end
@@ -1033,7 +1033,7 @@ graph TB
                 APP_C[Web Application<br>Python 3.13 + Flask]
                 POLL_C[CAP Poller<br>Background Service]
                 IPAWS_C[IPAWS Poller<br>Background Service]
-                DB_C[PostgreSQL 17<br>PostGIS 3.4]
+                DB_C[PostgreSQL 17<br>PostGIS 3.5]
             end
         end
 
@@ -1089,7 +1089,7 @@ graph TB
 
     subgraph "Database Server"
         PG[PostgreSQL 17<br>Dedicated Server]
-        PGIS[PostGIS 3.4<br>Extension]
+        PGIS[PostGIS 3.5<br>Extension]
         BACKUP[Automated Backups<br>pg_dump]
     end
 

@@ -98,7 +98,7 @@ graph TB
 flowchart TD
     A[CAP Sources<br/>NOAA + IPAWS] -->|HTTP Polling<br/>noaa-poller<br/>ipaws-poller| B[Ingestion Pipeline]
     B -->|app_core/alerts.py| C[Persistence Layer]
-    C -->|PostgreSQL 17<br/>+ PostGIS 3.4| D[(Database<br/>alerts, boundaries<br/>receivers, configs)]
+    C -->|PostgreSQL 17<br/>+ PostGIS 3.5| D[(Database<br/>alerts, boundaries<br/>receivers, configs)]
     C -->|app_core/location.py<br/>app_core/boundaries.py| E[Spatial Intelligence]
     D -->|Flask webapp<br/>REST APIs| F[Operator Experience]
     B -->|auto_forward.py<br/>Automatic forwarding| G
@@ -200,7 +200,7 @@ erDiagram
     }
 ```
 
-- **Database** runs PostgreSQL 17 with PostGIS 3.4 extension
+- **Database** runs PostgreSQL 17 with PostGIS 3.5 extension
 - **ORM Models (`app_core/models.py`)** describe alerts, boundaries, receivers, audio sources, displays
 - **Spatial Processing** uses PostGIS `ST_Intersects` for geographic matching
 
