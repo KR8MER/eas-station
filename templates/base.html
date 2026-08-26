@@ -630,12 +630,21 @@
             if (els.btn) els.btn.disabled = true;
 
             fetch('/api/broadcast/abort', { method: 'POST' })
-                .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+                .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, status: r.status, data: data }; }); })
                 .then(function (result) {
                     if (result.ok && result.data && result.data.success) {
                         if (window.showToast) window.showToast('Broadcast aborted.', 'warning');
                         // The state poll/WebSocket push will hide the overlay
                         // once the marker clears -- no need to force it here.
+                    } else if (result.status === 409) {
+                        // Server says nothing is active -- the overlay is
+                        // stale (e.g. a missed broadcast_state_update while
+                        // this tab was backgrounded/asleep, common on
+                        // mobile). Trust the server and close it now rather
+                        // than leaving the operator stuck behind a modal
+                        // for a broadcast that already finished.
+                        if (window.showToast) window.showToast('Broadcast already ended.', 'info');
+                        _stopGbc();
                     } else {
                         var msg = (result.data && result.data.error) || 'Failed to abort broadcast.';
                         if (window.showToast) window.showToast(msg, 'danger');
@@ -705,6 +714,17 @@
                 }
             );
         }
+
+        // Reconcile with the server the moment this tab regains visibility.
+        // Mobile browsers throttle/suspend timers and can silently stall a
+        // WebSocket while backgrounded, so a broadcast that finished while
+        // the operator was away can leave this overlay stuck open (visible
+        // countdown at 0:00, "Sending EOM") with no push ever arriving to
+        // close it. Matches the pattern used on the GNSS dashboard / system
+        // health page.
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) _fetchBroadcastStateOnce();
+        });
     });
     </script>
 </body>

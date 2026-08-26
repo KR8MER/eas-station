@@ -8,23 +8,31 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.192.2] - 2026-08-26 - Add Maidenhead grid square to the GPS dashboard
+## [2.192.2] - 2026-08-26 - Fix the global broadcast overlay getting stuck open
 
-A user pointed out that `/admin/gps-dashboard` "doesn't really show your
-coordinates, or your maidenhead grid." The sky-view hero already had a
-`Position` field wired up to the live fix, but there was no grid-square
-locator anywhere on the page — that conversion only existed on the separate
-Hardware Settings page (`static/js/admin/hardware-settings.js`), buried in a
-collapsed diagnostics disclosure as a copy button rather than a visible
-field.
+A user watched the full-screen "EAS Alert Broadcasting" overlay stay stuck at
+`0:00 / Sending EOM` well after a resend had actually finished airing, and
+found that pressing "Hold to Abort Broadcast" appeared to do nothing. The
+server logs showed the abort *was* reaching the backend and being handled
+correctly -- `POST /api/broadcast/abort` returned 409 `"No broadcast is
+currently active"` both times -- the broadcast had genuinely already ended
+server-side, but the client-side overlay never got the memo and stayed on
+screen with a live-looking abort button.
 
-### Added
-- **Grid row on the GPS dashboard**: `templates/admin/gps_dashboard.html`
-  now shows a `Grid` field (6-character Maidenhead locator, e.g. `EN80la`)
-  next to `Position` in the sky-view overlay, computed client-side from the
-  live `latitude`/`longitude` fix via a `toMaidenhead()` helper mirroring
-  the existing implementation on the hardware settings page. Added a
-  matching `data-gps-help="grid"` tooltip entry explaining the format.
+### Fixed
+- **`templates/base.html`**: the overlay's local countdown timer reaching
+  `0:00` doesn't close it -- it always waited for a fresh
+  `broadcast_state_update` (WebSocket push or the 1.5 s polling fallback) to
+  set `active: false`. On a mobile browser that throttles/suspends timers
+  and can silently stall a WebSocket while backgrounded, that update can be
+  missed entirely, leaving the modal open indefinitely with no cue that it's
+  stale. Two fixes: (1) the abort handler now treats a 409 "nothing active"
+  response as authoritative and closes the overlay itself instead of just
+  toasting an error and leaving the modal in place; (2) a `visibilitychange`
+  listener re-fetches `/api/broadcast/state` the moment the tab regains
+  focus, matching the pattern already used on the GNSS dashboard and system
+  health page, so a stale overlay self-corrects even without the user
+  touching the abort button.
 
 ## [2.192.1] - 2026-08-24 - Fix stale version claims in tech-stack shields and docs
 
