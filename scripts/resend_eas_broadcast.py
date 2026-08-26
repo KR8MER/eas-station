@@ -98,6 +98,18 @@ def _run(message_id: int, operator: str | None) -> int:
         event_label = (
             event_info.get('name', event_code) if isinstance(event_info, dict) else event_code
         ) or 'EAS Alert'
+        # Prefer the original alert's headline when one is on file -- it's
+        # usually more specific than the generic event-type name ("Severe
+        # Thunderstorm Warning issued until 2:15 PM by NWS Cleveland" vs.
+        # just "Severe Thunderstorm Warning"), and this is what the
+        # countdown overlay and every Icecast stream's "now playing" title
+        # show for the duration of the resend (see
+        # _reconcile_broadcast_metadata() in eas_monitoring_service.py).
+        try:
+            if message.cap_alert and (message.cap_alert.headline or '').strip():
+                event_label = message.cap_alert.headline.strip()
+        except Exception:  # pragma: no cover - defensive, cap_alert_id may be stale/None
+            pass
 
         # Every other broadcast path (manual Send, RWT, live/auto-forward)
         # resolves the player command through load_eas_config()'s

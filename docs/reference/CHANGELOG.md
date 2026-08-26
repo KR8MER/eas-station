@@ -8,6 +8,57 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.193.1] - 2026-08-26 - Manual Send and RWT never reached the Icecast air-chain
+
+A user manually sent a Required Weekly Test and heard nothing on any
+Icecast stream. Auditing every broadcast-trigger code path (every call
+site of `set_broadcast_active()`/`play_broadcast_audio()`) found that
+**Manual Send and RWT (both the automated weekly test and the operator
+"Run Test Now" button/GPIO trigger) had never injected audio into Icecast
+at all** -- only Resend and live auto-forward/OTA-relay did. Both paths
+keyed GPIO and played audio locally via `audio_player_cmd` (e.g. `aplay`),
+but nothing pushed the composite WAV into the live stream queues. The
+weekly compliance test had been airing nowhere a stream listener could
+hear it.
+
+Also: a separate, smaller gap in the same audit -- only the live
+auto-forward path overrode each Icecast stream's "now playing" title with
+the alert text during a broadcast (`app_core.audio.alert_metadata`, an
+in-process-only singleton); every other path silently no-op'd if it tried
+the same call, since it doesn't share a process with the audio service's
+live `IcecastStreamer` objects.
+
+### Fixed
+- **`app_core/audio/redis_commands.py`**: added `inject_raw_eas_audio`, a
+  sibling of the existing `inject_eas_audio` (resend's mechanism) for
+  callers that have composite WAV bytes in hand but no `EASMessage` row to
+  reference by id -- Manual Send and RWT persist a `ManualEASActivation`,
+  not an `EASMessage`. Same base64-in-JSON pattern `abort_injected_audio`
+  already uses for its EOM burst.
+- **`webapp/eas/workflow.py`** (Manual Send) and **`app_core/rwt_scheduler.py`**
+  (`_drive_rwt_airchain`, shared by the automated weekly RWT, the "Run Test
+  Now" button, and the GPIO RWT trigger) now call `inject_raw_eas_audio`
+  right after keying the broadcast marker, mirroring exactly how
+  `scripts/resend_eas_broadcast.py` already does it. Best-effort and
+  non-fatal, same as every other injection call site -- a Redis/audio-service
+  hiccup can never block relay keying or local playback.
+- **`eas_monitoring_service.py`**: added `_reconcile_broadcast_metadata()`,
+  polled from the existing ~4 Hz main loop, which mirrors the Redis
+  broadcast-state marker's `label` onto every Icecast stream's title. Since
+  every broadcast path already writes that marker (to key the GPIO relay
+  and drive the countdown overlay), this covers Manual Send, RWT, Resend,
+  and auto-forward automatically -- no per-caller wiring, unlike the old
+  direct-call approach that only worked for auto-forward. The two direct
+  calls in `app_core/audio/auto_forward.py` were removed as redundant.
+- **`app_utils/eas.py`** (`EASBroadcaster.handle_alert`) and
+  **`scripts/resend_eas_broadcast.py`**: both now prefer the original
+  alert's `headline` over the generic event-type name for the broadcast
+  label when one is on file, matching what auto-forward's now-removed
+  direct call already did -- more specific text ("Severe Thunderstorm
+  Warning issued until 2:15 PM by NWS Cleveland" vs. just "Severe
+  Thunderstorm Warning") for both the countdown overlay and the new
+  stream-metadata override.
+
 ## [2.193.0] - 2026-08-26 - Split FM/AM demodulation into its own service
 
 A user watched a resend's EAS audio get injected into all three configured

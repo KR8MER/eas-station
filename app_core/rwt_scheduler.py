@@ -276,6 +276,37 @@ def _drive_rwt_airchain(
             eom_seconds=eom_seconds,
         )
 
+        # Inject into the live Icecast air-chain, same as every other
+        # broadcast path (live auto-forward, resend, manual Send -- see
+        # webapp/eas/workflow.py). This function drives BOTH the fully
+        # automated weekly RWT and the operator-triggered "Send Test RWT"
+        # button (both call _drive_rwt_airchain via _dispatch_rwt_airchain),
+        # and neither ever reached Icecast before this fix -- only
+        # audio_player_cmd (local aplay) playback below did. The weekly
+        # compliance test was airing nowhere a stream listener could hear
+        # it. This process (the gunicorn web worker) has no
+        # AudioIngestController of its own, so it asks the audio-service to
+        # inject over the Redis command channel, same as resend/manual Send.
+        try:
+            from app_core.audio.redis_commands import get_audio_command_publisher
+            inject_resp = get_audio_command_publisher().inject_raw_eas_audio(
+                audio_data, timeout=10.0,
+            )
+            if inject_resp.get('success'):
+                log.info(
+                    'RWT audio injected into air-chain for %s', alert_id,
+                )
+            else:
+                log.info(
+                    'RWT air-chain injection reported no audio for %s: %s',
+                    alert_id, inject_resp.get('message'),
+                )
+        except Exception as exc:
+            log.warning(
+                'RWT air-chain injection failed (non-fatal) for %s: %s',
+                alert_id, exc,
+            )
+
         audio_player_cmd = eas_config.get('audio_player_cmd')
         playout_start = time.monotonic()
         if audio_player_cmd:

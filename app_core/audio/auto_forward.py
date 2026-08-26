@@ -863,26 +863,15 @@ def auto_forward_cap_alert(
         payload['forwarding_decision'] = 'forwarded'
         payload['forwarded'] = True
 
-        # Push the alert text onto every active Icecast stream while the broadcast
-        # is on the air; clear it once handle_alert() returns so normal source
-        # metadata (song titles, etc.) resumes.
-        from app_core.audio.alert_metadata import (
-            clear_alert_metadata,
-            set_alert_metadata,
-        )
-
-        alert_title = (getattr(cap_alert, 'headline', '') or '').strip()
-        if not alert_title:
-            alert_title = (getattr(cap_alert, 'event', '') or '').strip()
-        if alert_title:
-            set_alert_metadata(alert_title)
-
+        # Icecast stream metadata (the "now playing" title) is overridden
+        # with the alert text for every broadcast path -- this one included
+        # -- by eas_monitoring_service.py's _reconcile_broadcast_metadata(),
+        # which mirrors whatever label handle_alert() below passes to
+        # set_broadcast_active() (see app_utils/eas.py). No separate call
+        # needed here anymore; see docs/reference/CHANGELOG.md for why this
+        # used to be a direct call in this one file only.
         try:
-            try:
-                broadcast_result = broadcaster.handle_alert(cap_alert, payload)
-            finally:
-                if alert_title:
-                    clear_alert_metadata()
+            broadcast_result = broadcaster.handle_alert(cap_alert, payload)
         except Exception as exc:
             reason = f"EASBroadcaster.handle_alert() failed: {exc}"
             log.error("Auto-forward failed for %s: %s", result['identifier'], reason, exc_info=True)
@@ -1291,24 +1280,12 @@ def auto_forward_ota_alert(
             log.error("OTA auto-forward failed: %s", result['reason'])
             return result
 
-        # Push the alert text onto every active Icecast stream while the broadcast
-        # is on the air; clear it once handle_alert() returns so normal source
-        # metadata resumes.
-        from app_core.audio.alert_metadata import (
-            clear_alert_metadata,
-            set_alert_metadata,
-        )
-
-        alert_title = (alert_object.headline or '').strip()
-        if alert_title:
-            set_alert_metadata(alert_title)
-
+        # Icecast stream metadata is overridden with the alert text for
+        # every broadcast path by eas_monitoring_service.py's
+        # _reconcile_broadcast_metadata() -- see the comment at the other
+        # handle_alert() call site in this file for the full explanation.
         try:
-            try:
-                broadcast_result = broadcaster.handle_alert(alert_object, payload)
-            finally:
-                if alert_title:
-                    clear_alert_metadata()
+            broadcast_result = broadcaster.handle_alert(alert_object, payload)
         except Exception as exc:
             result['reason'] = f"EASBroadcaster.handle_alert() failed: {exc}"
             log.error("OTA auto-forward failed: %s", result['reason'], exc_info=True)

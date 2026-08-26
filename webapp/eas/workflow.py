@@ -1361,6 +1361,44 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                 eom_seconds=eom_seconds,
             )
 
+            # Inject into the live Icecast air-chain, same as every other
+            # broadcast path (live auto-forward via EASBroadcaster.
+            # handle_alert(), resend via inject_eas_audio -- see
+            # scripts/resend_eas_broadcast.py). Manual Send used to only
+            # play locally via audio_player_cmd (e.g. aplay) and key GPIO,
+            # never reaching Icecast at all -- a manually-sent alert,
+            # including a hand-triggered Required Weekly Test, was
+            # inaudible to every stream listener. This process has no
+            # AudioIngestController of its own (same reason resend can't
+            # touch the queues directly), so it asks the audio-service to
+            # do the injection over the Redis command channel. Best-effort:
+            # a failure here must never block the relay keying or local
+            # playback above/below, same as resend's identical guard.
+            try:
+                from app_core.audio.redis_commands import get_audio_command_publisher
+                inject_resp = get_audio_command_publisher().inject_raw_eas_audio(
+                    audio_data, timeout=10.0,
+                )
+                send_result['audio_injected'] = bool(inject_resp.get('success'))
+                if send_result['audio_injected']:
+                    workflow_logger.info(
+                        'Manual EAS audio injected into air-chain for activation %s',
+                        event_id,
+                    )
+                else:
+                    workflow_logger.info(
+                        'Manual EAS air-chain injection reported no audio for '
+                        'activation %s: %s',
+                        event_id, inject_resp.get('message'),
+                    )
+            except Exception as exc:
+                send_result['audio_injected'] = False
+                workflow_logger.warning(
+                    'Manual EAS air-chain injection failed (non-fatal) for '
+                    'activation %s: %s',
+                    event_id, exc,
+                )
+
             # Play audio via configured player command. The broadcast marker must
             # stay set for the full composite duration regardless of whether the
             # player actually blocks for that long — on hosts without an audio

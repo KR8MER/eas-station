@@ -3997,6 +3997,18 @@ class EASBroadcaster:
         _event_label = (
             _event_info.get('name', event_code) if isinstance(_event_info, dict) else event_code
         ) or 'EAS Alert'
+        # Prefer the alert's own headline when available -- it's usually
+        # more specific than the generic event-type name ("Severe
+        # Thunderstorm Warning issued until 7:15 PM for Delaware County"
+        # vs. just "Severe Thunderstorm Warning") -- this is also what
+        # every connected page's countdown overlay and every Icecast
+        # stream's "now playing" title show for the duration of the
+        # broadcast (see _reconcile_broadcast_metadata() in
+        # eas_monitoring_service.py), so the more specific text is worth
+        # preferring here same as it always was for this one path.
+        _alert_headline = (getattr(alert, 'headline', '') or '').strip()
+        if _alert_headline:
+            _event_label = _alert_headline
         _bcast_source = 'forwarded' if is_forwarded else 'auto'
         # Phase breakpoints for the countdown overlay -- see
         # set_broadcast_active()'s docstring. This path has no chime

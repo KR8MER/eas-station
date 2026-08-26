@@ -1334,6 +1334,56 @@ def collect_metrics():
     return metrics
 
 
+#: Tracks the alert label currently applied to every Icecast stream's
+#: metadata, so _reconcile_broadcast_metadata() only calls
+#: set_alert_metadata()/clear_alert_metadata() on an actual transition
+#: rather than every 0.25s tick. None means "no override applied".
+_applied_broadcast_metadata_label = None
+
+
+def _reconcile_broadcast_metadata() -> None:
+    """Mirror the on-air broadcast marker onto every Icecast stream's title.
+
+    Every broadcast path in this project -- manual Send (webapp/eas/
+    workflow.py), RWT (app_core/rwt_scheduler.py), resend (scripts/
+    resend_eas_broadcast.py), and live auto-forward (app_core/audio/
+    auto_forward.py via EASBroadcaster.handle_alert() in app_utils/eas.py)
+    -- already calls set_broadcast_active()/clear_broadcast_active() to key
+    the GPIO relay and drive the countdown overlay. That marker already
+    carries a human-readable ``label`` for exactly this purpose. Polling it
+    here (from the one process that actually owns the live IcecastStreamer
+    objects) means every current and future broadcast path gets its stream
+    metadata overridden with the alert text automatically -- no per-caller
+    wiring needed, unlike the old approach where only auto_forward.py
+    called app_core.audio.alert_metadata directly (and could only do so
+    because it happens to run in this same process; RWT/manual-send/resend
+    run in the web process or a standalone script, where that call would
+    silently no-op -- alert_metadata's target is a module-level singleton
+    that only exists inside this process).
+
+    Called from the main loop's existing ~4 Hz tick (see metrics_interval
+    below) rather than its own thread/pub-sub subscription -- get_broadcast_
+    state() is one cheap Redis GET, so riding the loop that's already
+    ticking at this cadence is simpler than adding a second listener.
+    """
+    global _applied_broadcast_metadata_label
+    try:
+        from app_core.audio.alert_metadata import clear_alert_metadata, set_alert_metadata
+        from app_utils.eas import get_broadcast_state
+
+        state = get_broadcast_state() or {}
+        if state.get('active'):
+            label = (state.get('label') or state.get('event_code') or 'EAS Alert').strip()
+            if label and label != _applied_broadcast_metadata_label:
+                set_alert_metadata(label)
+                _applied_broadcast_metadata_label = label
+        elif _applied_broadcast_metadata_label is not None:
+            clear_alert_metadata()
+            _applied_broadcast_metadata_label = None
+    except Exception as exc:
+        logger.debug("Broadcast metadata reconcile failed: %s", exc)
+
+
 def publish_metrics_to_redis(metrics):
     """Publish metrics to Redis for web application.
 
@@ -2351,6 +2401,7 @@ def main():
                 if current_time - last_metrics_time >= metrics_interval:
                     metrics = collect_metrics()
                     publish_metrics_to_redis(metrics)
+                    _reconcile_broadcast_metadata()
                     last_metrics_time = current_time
 
                 # Snapshot AudioSourceMetrics to the DB at a slower ~1 Hz --
