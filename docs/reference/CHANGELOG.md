@@ -8,6 +8,60 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.193.8] - 2026-08-26 - Documentation renders and links cleanly, and CI now enforces it
+
+Auditing the published docs site (kr8mer.github.io/eas-station) for a
+reported footer whitespace issue turned up two real problems and a
+sizeable batch of broken links, none of which were previously caught by
+anything:
+
+- **GitHub Pages was misconfigured**: repo settings still pointed at the
+  legacy branch-build Pages source, which failed on every single push,
+  running alongside (and redundant with) the custom mkdocs Actions
+  workflow that actually publishes the site. Switched Pages' source to
+  "GitHub Actions" via the API so the failing legacy builder stops firing.
+- **A stray, unpaired closing ` ``` ` fence** in `docs/development/AGENTS.md`
+  (line 973, no matching open) silently turned the ~1,100 lines after it
+  into a mis-rendered code block on the live site — found by the new link
+  checker below, since it corrupted markdown-fence-stripping enough that
+  unrelated Python regex source lines started looking like broken links.
+- **61 broken links** (`mkdocs build --strict` WARNING-level) across 13
+  files: relative links from `docs/*.md` pages into source files
+  (`app_utils/eas.py`, `README.md`, `requirements.txt`, etc.) that resolve
+  fine in a raw repo checkout but 404 on the published site, since GitHub
+  Pages only serves the `docs/` tree. Converted to
+  `https://github.com/KR8MER/eas-station/blob/main/...` URLs (matching
+  the pattern already used elsewhere in these same docs), or `tree/main/`
+  for directory references.
+- **13 broken in-page/cross-page anchors** (INFO-level, not
+  strict-mode-blocking but still dead links in practice) — mostly stale
+  TOC entries that didn't track a heading rename, and GitHub/mkdocs's
+  actual em-dash/`&`/emoji slugification (single hyphen, not double)
+  being different from what was originally typed. Verified the fixed
+  anchors resolve correctly by checking generated heading `id`s in the
+  built HTML and click-testing several in a live browser.
+- The "repeated footer" screenshot that prompted this investigation
+  turned out to be a capture glitch from a flaky remote-browser
+  connection, not a real bug — confirmed via direct DOM query (exactly
+  one footer element, correctly positioned) rather than trusting the
+  screenshot.
+
+### Added
+- **`tests/test_docs_link_integrity.py`**: 4 tests enforcing no broken
+  local links in `docs/*.md` and perfect `mkdocs.yml` nav coverage in
+  both directions (every doc file reachable from nav; no nav entry points
+  at a missing file). Fenced code blocks are stripped before link-scanning
+  so example markdown syntax isn't mistaken for a real reference.
+- `.github/workflows/docs-pages.yml` now runs `mkdocs build --strict`
+  instead of a plain build, so a future broken link or bad anchor fails
+  the deploy loudly instead of silently shipping.
+
+### Verified
+- Live in Chromium: light and dark theme contrast/readability across
+  prose, syntax-highlighted code blocks, and callouts — no issues found.
+- `mkdocs build --strict` exits 0 (was 61 warnings + 13 info-level anchor
+  mismatches).
+
 ## [2.193.7] - 2026-08-26 - Remove the dormant direct-hardware SDRSourceAdapter
 
 Pre-v3 punch-list nice-to-have (#6): `app_core/audio/sources.py`'s

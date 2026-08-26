@@ -184,4 +184,4 @@ check each step in order:
 - [Icecast Streaming Setup](../guides/ICECAST_STREAMING_SETUP.md) — Setting up the Icecast server
 - [Data Flow Sequences](../architecture/DATA_FLOW_SEQUENCES.md) — CAP/IPAWS alert pipeline
 - [EAS Monitor V3 Architecture](../architecture/EAS_MONITOR_V3_ARCHITECTURE.md) — SAME decoder internals
-- [EAS Monitors README](../../app_core/audio/README_EAS_MONITORS.md) — Code-level monitor documentation
+- [EAS Monitors README](https://github.com/KR8MER/eas-station/blob/main/app_core/audio/README_EAS_MONITORS.md) — Code-level monitor documentation

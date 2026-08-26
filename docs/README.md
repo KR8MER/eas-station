@@ -8,7 +8,7 @@ Welcome to the documentation for EAS Station™ - an Emergency Alert System plat
 
 ## Getting Started
 
-1. **[Installation](../README.md#quick-start)** - One command to get running
+1. **[Installation](https://github.com/KR8MER/eas-station/blob/main/README.md#-quick-start)** - One command to get running
 2. **[Setup Wizard](guides/SETUP_INSTRUCTIONS.md)** - First-run configuration
 3. **[User Guide](guides/HELP.md)** - Daily operations
 
@@ -89,14 +89,14 @@ EAS Station™ integrates multiple alert sources (NOAA Weather, IPAWS Federal) a
 
 ### Setup & Configuration
 
-- [Install EAS Station™](../README.md#quick-start)
+- [Install EAS Station™](https://github.com/KR8MER/eas-station/blob/main/README.md#-quick-start)
 - [Configure SDR receivers](hardware/SDR_SETUP.md)
 - [Set up HTTPS](guides/HTTPS_SETUP.md)
 - [Connect to IPAWS](guides/ipaws_feed_integration.md)
 
 ### Daily Operations
 
-- [Monitor alerts](guides/HELP.md#monitoring-alerts)
+- [Monitor alerts](guides/HELP.md#monitoring-live-alerts)
 - [Manage boundaries](guides/HELP.md#managing-boundaries-and-alerts)
 - [View audio streams](audio/AUDIO_MONITORING.md)
 - [Check system health](guides/HELP.md#routine-operations)
@@ -127,13 +127,13 @@ EAS Station™ integrates multiple alert sources (NOAA Weather, IPAWS Federal) a
 |----------|------|
 | **About** | [Project Overview](reference/ABOUT.md) |
 | **Changelog** | [Version History](reference/CHANGELOG.md) |
-| **License** | [AGPL v3](../LICENSE) (Open Source) / [Commercial](../LICENSE-COMMERCIAL) |
+| **License** | [AGPL v3](https://github.com/KR8MER/eas-station/blob/main/LICENSE) (Open Source) / [Commercial](https://github.com/KR8MER/eas-station/blob/main/LICENSE-COMMERCIAL) |
 
 ### Legal & Compliance
 
 - [Terms of Use](policies/TERMS_OF_USE.md)
 - [Privacy Policy](policies/PRIVACY_POLICY.md)
-- [FCC Compliance Information](reference/ABOUT.md#legal--compliance)
+- [FCC Compliance Information](process/FCC_PART11_COMPLIANCE_MATRIX.md)
 
 ---
 
@@ -146,4 +146,4 @@ EAS Station™ integrates multiple alert sources (NOAA Weather, IPAWS Federal) a
 
 **Last Updated**: 2026-06-10
 
-**[Return to Main README](../README.md)**
+**[Return to Main README](https://github.com/KR8MER/eas-station/blob/main/README.md)**

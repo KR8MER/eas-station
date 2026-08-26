@@ -11,7 +11,7 @@ Complete setup instructions for connecting RS232/RS485 devices (LED signs, VFD d
 3. [Moxa NPort 5110 Serial Server](#moxa-nport-5110-serial-server)
 4. [Perle IOLAN SDS Serial Server](#perle-iolan-sds-serial-server)
 5. [Generic Serial-to-Ethernet Adapters](#generic-serial-to-ethernet-adapters)
-6. [EAS Station™ Configuration](#eas-station-configuration)
+6. [EAS Station™ Configuration](#eas-stationtm-configuration_4)
 7. [Troubleshooting](#troubleshooting)
 
 ---

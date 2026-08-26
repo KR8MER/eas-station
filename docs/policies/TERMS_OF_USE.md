@@ -145,7 +145,7 @@ See the [SMS Messaging Policy](SMS_MESSAGING.md) (served live at `/sms-complianc
 - Third-party libraries, firmware, container images, and hardware integrations are subject to their own licenses and warranties. You are responsible for reviewing and complying with those terms.
 
 ## 9. Licensing & Contributions
-- The EAS Station™ source code is dual-licensed under the [GNU Affero General Public License v3 (AGPL-3.0)](../../LICENSE) and a [Commercial License](../../LICENSE-COMMERCIAL). AGPL availability is not limited to non-commercial users; commercial users may also use AGPL if they comply with its terms. Copyright remains with EAS Station, LLC (KR8MER).
+- The EAS Station™ source code is dual-licensed under the [GNU Affero General Public License v3 (AGPL-3.0)](https://github.com/KR8MER/eas-station/blob/main/LICENSE) and a [Commercial License](https://github.com/KR8MER/eas-station/blob/main/LICENSE-COMMERCIAL). AGPL availability is not limited to non-commercial users; commercial users may also use AGPL if they comply with its terms. Copyright remains with EAS Station, LLC (KR8MER).
 - By submitting code, documentation, or other content, contributors agree that their work is provided under the AGPL-3.0 license unless a separate commercial agreement is in place.
 - All commits must include a Developer Certificate of Origin (DCO) sign-off line (`Signed-off-by`) affirming that the contributor has the right to submit the work under the project license. Instructions are provided in [CONTRIBUTING.md](../process/CONTRIBUTING.md).
 
@@ -173,7 +173,7 @@ See the [SMS Messaging Policy](SMS_MESSAGING.md) (served live at `/sms-complianc
 ## 14. Relationship to Software Licenses
 - These Terms of Use govern access to and use of the website, documentation, and related resources.
 - These Terms of Use do **not** replace, modify, or override the software copyright licenses.
-- Use, modification, and distribution of source code are governed by the [AGPL-3.0 License](../../LICENSE) or the [Commercial License](../../LICENSE-COMMERCIAL), as applicable.
+- Use, modification, and distribution of source code are governed by the [AGPL-3.0 License](https://github.com/KR8MER/eas-station/blob/main/LICENSE) or the [Commercial License](https://github.com/KR8MER/eas-station/blob/main/LICENSE-COMMERCIAL), as applicable.
 
 ## 15. AMPR Network (44.0.0.0/8) — Non-Commercial Use
 

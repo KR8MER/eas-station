@@ -19,7 +19,7 @@ All frontend libraries are vendored locally under `static/vendor/` (no CDN depen
 | jsPDF | 4.2.1 | `static/vendor/jspdf/jspdf.umd.min.js` | Client-side PDF generation (Statistics dashboard report) |
 | html2canvas | 1.4.1 | `static/vendor/jspdf/html2canvas.min.js` | DOM → canvas snapshots for PDF sections that aren't `<canvas>` |
 
-> When adding a new vendored frontend library, also update this table, the [About page](../../templates/about.html) Software Stack section, and the project [README](../../README.md) so the dependency is discoverable.
+> When adding a new vendored frontend library, also update this table, the [About page](https://github.com/KR8MER/eas-station/blob/main/templates/about.html) Software Stack section, and the project [README](https://github.com/KR8MER/eas-station/blob/main/README.md) so the dependency is discoverable.
 
 ## 🎯 Component Categories
 

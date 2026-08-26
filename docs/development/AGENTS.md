@@ -12,7 +12,7 @@ This document provides coding standards and guidelines for AI agents (including 
 2. **Preserve Existing Patterns**: Follow the established code style and architecture
 3. **Frontend-First Philosophy**: ALL system management, configuration, and monitoring MUST be accessible through the web UI. Users should NEVER need CLI access. Any feature requiring CLI commands must have a web UI equivalent.
 4. **Test Before Commit**: Always verify changes work on bare metal before committing
-5. **Address ALL Issues Raised**: When a problem statement lists multiple concerns, every concern MUST be addressed. Never hyperfocus on a single item while ignoring others. Read the full problem statement before writing a single line of code, list every distinct issue, and confirm each one is resolved before closing the session. See [Address All Issues — Never Hyperfocus](#-address-all-issues--never-hyperfocus) for the required workflow.
+5. **Address ALL Issues Raised**: When a problem statement lists multiple concerns, every concern MUST be addressed. Never hyperfocus on a single item while ignoring others. Read the full problem statement before writing a single line of code, list every distinct issue, and confirm each one is resolved before closing the session. See [Address All Issues — Never Hyperfocus](#address-all-issues-never-hyperfocus) for the required workflow.
 6. **Focused Changes**: Keep fixes targeted to the specific issue
 7. **Document Changes**: Update relevant documentation when adding features
 8. **Check Bug Screenshots**: When discussing bugs, always check the `/bugs` directory first for screenshots
@@ -970,7 +970,6 @@ curl http://localhost:5000/health
 2. Variables loaded from `/opt/eas-station/.env` (persistent config)
 3. Variables from `.env` in repository root (development/fallback only)
 4. Hardcoded defaults in Python code
-```
 
 #### Auto-Detected vs User-Configured Variables
 

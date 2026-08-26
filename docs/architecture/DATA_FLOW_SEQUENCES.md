@@ -14,7 +14,7 @@ This document provides detailed sequence diagrams showing how data flows through
 
 1. [Alert Processing Data Flow](#alert-processing-data-flow)
 2. [SDR Continuous Monitoring Data Flow](#sdr-continuous-monitoring-data-flow)
-3. [Multi-Source Audio Ingest Data Flow](#multi-source-audio-ingest-data-flow)
+3. [Multi-Source Audio Ingest Data Flow](#multi-source-audio-ingest-data-flow-separated-architecture)
 4. [Radio Capture Coordination Data Flow](#radio-capture-coordination-data-flow)
 5. [EAS Message Generation Data Flow](#eas-message-generation-data-flow)
 6. [Complete Alert-to-Broadcast Pipeline](#complete-alert-to-broadcast-pipeline)

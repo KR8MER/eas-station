@@ -8,9 +8,9 @@ Be respectful and constructive. EAS Station™ is maintained by volunteers suppo
 
 ## Licensing and Copyright
 
-- The EAS Station™ source code is dual-licensed under the [GNU Affero General Public License v3 (AGPL-3.0)](../../LICENSE) for open-source use and a [Commercial License](../../LICENSE-COMMERCIAL) for proprietary use. EAS Station, LLC (KR8MER) retains the project copyright.
+- The EAS Station™ source code is dual-licensed under the [GNU Affero General Public License v3 (AGPL-3.0)](https://github.com/KR8MER/eas-station/blob/main/LICENSE) for open-source use and a [Commercial License](https://github.com/KR8MER/eas-station/blob/main/LICENSE-COMMERCIAL) for proprietary use. EAS Station, LLC (KR8MER) retains the project copyright.
 - By contributing, you agree that your submissions will be licensed under the AGPL-3.0 license and may be redistributed under those terms.
-- **Commercial relicensing grant:** Because EAS Station™ is dual-licensed, by submitting a contribution you also grant EAS Station, LLC (KR8MER) a perpetual, worldwide, irrevocable, royalty-free, non-exclusive right to relicense and distribute your contribution under the [Commercial License](../../LICENSE-COMMERCIAL) (and any future versions of it), in addition to the AGPL-3.0. You retain copyright in your contribution. This grant lets the project keep offering a commercial license for the combined work without requiring a separate agreement for each contribution.
+- **Commercial relicensing grant:** Because EAS Station™ is dual-licensed, by submitting a contribution you also grant EAS Station, LLC (KR8MER) a perpetual, worldwide, irrevocable, royalty-free, non-exclusive right to relicense and distribute your contribution under the [Commercial License](https://github.com/KR8MER/eas-station/blob/main/LICENSE-COMMERCIAL) (and any future versions of it), in addition to the AGPL-3.0. You retain copyright in your contribution. This grant lets the project keep offering a commercial license for the combined work without requiring a separate agreement for each contribution.
 
 ## Developer Certificate of Origin (DCO)
 
@@ -35,8 +35,8 @@ If you contribute on behalf of an organization, ensure you have the necessary au
 1. **Fork the repository** and create a topic branch (`feature/...`, `fix/...`, or `docs/...`).
 2. **Follow the development guidelines** in [`AGENTS.md`](../development/AGENTS.md) and existing code patterns.
 3. **Add tests or documentation** that cover your changes when possible.
-4. **Update release metadata.** Append notes under the `[Unreleased]` heading in [`CHANGELOG.md`](../reference/CHANGELOG.md) and bump the root [`VERSION`](../../VERSION) file (plus `.env.example`) when behaviour changes. The guardrail test `tests/test_release_metadata.py` enforces this alignment. After a `VERSION` bump lands on `main`, a maintainer manually runs the release workflow (*Actions → Release → Run workflow*) to tag it and publish a signed GitHub Release — see [RELEASING.md](RELEASING.md).
-5. **Keep tech-stack attributions in sync.** If you bump or add a Python dependency in [`requirements.txt`](../../requirements.txt), also update the matching shield in **both** of the canonical surfaces below — they cannot be allowed to drift:
+4. **Update release metadata.** Append notes under the `[Unreleased]` heading in [`CHANGELOG.md`](../reference/CHANGELOG.md) and bump the root [`VERSION`](https://github.com/KR8MER/eas-station/blob/main/VERSION) file (plus `.env.example`) when behaviour changes. The guardrail test `tests/test_release_metadata.py` enforces this alignment. After a `VERSION` bump lands on `main`, a maintainer manually runs the release workflow (*Actions → Release → Run workflow*) to tag it and publish a signed GitHub Release — see [RELEASING.md](RELEASING.md).
+5. **Keep tech-stack attributions in sync.** If you bump or add a Python dependency in [`requirements.txt`](https://github.com/KR8MER/eas-station/blob/main/requirements.txt), also update the matching shield in **both** of the canonical surfaces below — they cannot be allowed to drift:
    - `templates/partials/tech_stack_badges.html` — the live page footer badge strip (single source of truth, included by `templates/base.html`).
    - `README.md` — the curated badge block at the top **and** the exhaustive `## 📚 Attributions & Open-Source Credits` table further down.
 
