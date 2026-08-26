@@ -8,6 +8,29 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.193.4] - 2026-08-26 - Structural audit test: every airchain trigger must reach Icecast
+
+Twice in the 2.193.x investigation, a broadcast-trigger function was found
+that keyed the GPIO relay and played audio locally but never pushed audio
+into the live Icecast stream queues at all (Manual Send in 2.193.1, and
+implicitly the same class of bug the 2.193.3 Audio Archive fix guards
+against). Both were only caught because a user noticed silence and asked
+pointed questions -- nothing in the test suite would have caught a future
+regression of the same shape.
+
+### Added
+- **`tests/test_broadcast_reaches_icecast_audit.py`**: an AST-based
+  structural regression test that walks every function under `app_core`,
+  `app_utils`, `webapp`, and `scripts` calling `set_broadcast_active()`
+  and asserts the same function also calls `inject_eas_audio()` or
+  `inject_raw_eas_audio()`. `app_core/rwt_scheduler.py::trigger_rwt_broadcast`
+  is exempted via a documented `KNOWN_DELEGATING_TRIGGERS` allowlist -- it
+  sets the marker synchronously for instant overlay display, then delegates
+  actual playout/injection to `_drive_rwt_airchain()` on a background
+  thread, which the audit scans (and passes) on its own. A second test
+  pins a minimum count of known broadcast-trigger functions so the audit
+  can't silently go blind if `set_broadcast_active()` is renamed or moved.
+
 ## [2.193.3] - 2026-08-26 - Resends now show up in Audio Archive
 
 Audio Archive (`/audio`, "Browse and manage EAS broadcast recordings")
