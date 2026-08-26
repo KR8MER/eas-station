@@ -341,8 +341,8 @@ sequenceDiagram
 
 - **[Data Flow Sequences](DATA_FLOW_SEQUENCES.md)** — Complete CAP alert ingest pipeline
 - **[System Architecture](SYSTEM_ARCHITECTURE.md)** — High-level component overview
-- **[`webapp/admin/coverage.py`](../../webapp/admin/coverage.py)** — Geometry resolution implementation
-- **[`poller/cap_poller.py`](../../poller/cap_poller.py)** — Poll-cycle geometry preservation
+- **[`webapp/admin/coverage.py`](https://github.com/KR8MER/eas-station/blob/main/webapp/admin/coverage.py)** — Geometry resolution implementation
+- **[`poller/cap_poller.py`](https://github.com/KR8MER/eas-station/blob/main/poller/cap_poller.py)** — Poll-cycle geometry preservation
 
 ---
 

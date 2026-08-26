@@ -31,7 +31,7 @@ commonly considered alternatives both have problems:
 A separate stdlib-only daemon with an enumerated command registry is
 the cheapest way to keep the privileged surface auditable: every
 action is a Python function in
-[`bin/eas-station-hwsetup`](../../bin/eas-station-hwsetup), and a
+[`bin/eas-station-hwsetup`](https://github.com/KR8MER/eas-station/blob/main/bin/eas-station-hwsetup), and a
 compromise of the web tier cannot reach root by inventing new actions
 — the helper rejects anything not in `COMMANDS`.
 

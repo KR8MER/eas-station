@@ -6,11 +6,11 @@ are signed, and how anyone can verify a download before trusting it.
 ## How a release happens
 
 Releases are cut by the
-[`release.yml`](../../.github/workflows/release.yml) GitHub Actions workflow,
+[`release.yml`](https://github.com/KR8MER/eas-station/blob/main/.github/workflows/release.yml) GitHub Actions workflow,
 which is **triggered manually**. There is no manual tagging, uploading, or
 signing step — but publishing the release is a deliberate, on-demand action.
 
-1. **Bump the version.** Update the root [`VERSION`](../../VERSION) file and
+1. **Bump the version.** Update the root [`VERSION`](https://github.com/KR8MER/eas-station/blob/main/VERSION) file and
    move the corresponding notes in
    [`CHANGELOG.md`](../reference/CHANGELOG.md) from `[Unreleased]` into a new
    `## [X.Y.Z]` heading. The `tests/test_release_metadata.py` guardrail (run

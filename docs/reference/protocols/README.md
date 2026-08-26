@@ -9,7 +9,7 @@ this codebase.
 These documents are aimed at developers and operators who need to debug
 waveforms, verify implementations against external decoders, or extend the
 protocol support. Operator-facing setup instructions live under
-[`docs/guides/`](../../guides/) instead.
+[`docs/guides/`](../../guides/SETUP_INSTRUCTIONS.md) instead.
 
 | Protocol | Document | Modulation | Implementation |
 |---|---|---|---|
@@ -57,4 +57,4 @@ listed in `app_utils/eas.ALERT_CHIME_PROFILES` (`bell`, `beep`, `three_tone`,
 op-code preset is `ptt_id_pre` (the default), the post side automatically
 substitutes `ptt_id_post` so subscriber radios see a complete bookend pair.
 This is what enables the **two-way LMR forwarding** use case described in
-[`MDC1200.md`](MDC1200.md#use-case-feeding-eas-into-an-lmr-system).
+[`MDC1200.md`](MDC1200.md#1-use-case-feeding-eas-into-an-lmr-system).

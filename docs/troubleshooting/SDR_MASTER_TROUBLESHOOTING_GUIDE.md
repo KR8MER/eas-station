@@ -23,7 +23,7 @@ This will check:
 ## Table of Contents
 
 1. [Quick Diagnostic Checklist](#quick-diagnostic-checklist)
-2. [Common Issues & Solutions](#common-issues--solutions)
+2. [Common Issues & Solutions](#common-issues-solutions)
 3. [Step-by-Step Troubleshooting](#step-by-step-troubleshooting)
 4. [Collecting Diagnostic Information](#collecting-diagnostic-information)
 5. [Hardware-Specific Issues](#hardware-specific-issues)
@@ -853,7 +853,7 @@ When asking for help, include:
 - **[SDR Setup Guide](../hardware/SDR_SETUP.md)** - Initial SDR configuration
 - **[SDR Service Architecture](../architecture/SDR_SERVICE_ARCHITECTURE.md)** - How SDR service works
 - **[SDR Frequency Validation](../frontend/SDR_FREQUENCY_VALIDATION.md)** - Frequency/sample-rate constraints
-- **[Diagnostic Scripts README](../../scripts/diagnostics/README.md)** - Available diagnostic tools
+- **[Diagnostic Scripts README](https://github.com/KR8MER/eas-station/blob/main/scripts/diagnostics/README.md)** - Available diagnostic tools
 
 ---
 

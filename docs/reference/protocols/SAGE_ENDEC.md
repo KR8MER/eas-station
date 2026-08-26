@@ -6,11 +6,11 @@
 > [sagealertingsystems.com/docs/digital_endec_1_0.pdf](https://www.sagealertingsystems.com/docs/digital_endec_1_0.pdf)
 >
 > **EAS Station implementation referenced below:**
-> [`app_utils/eas_fsk.py`](../../../app_utils/eas_fsk.py),
-> [`app_utils/eas.py`](../../../app_utils/eas.py),
-> [`app_utils/eas_decode.py`](../../../app_utils/eas_decode.py),
-> [`app_core/audio/auto_forward.py`](../../../app_core/audio/auto_forward.py),
-> [`app_core/audio/eas_monitor.py`](../../../app_core/audio/eas_monitor.py).
+> [`app_utils/eas_fsk.py`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas_fsk.py),
+> [`app_utils/eas.py`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas.py),
+> [`app_utils/eas_decode.py`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas_decode.py),
+> [`app_core/audio/auto_forward.py`](https://github.com/KR8MER/eas-station/blob/main/app_core/audio/auto_forward.py),
+> [`app_core/audio/eas_monitor.py`](https://github.com/KR8MER/eas-station/blob/main/app_core/audio/eas_monitor.py).
 >
 > **Related:** [SAME.md](SAME.md) (our on-air signalling),
 > [`../NRSC4B_SAME_STANDARD.md`](../NRSC4B_SAME_STANDARD.md) (the underlying standard).
@@ -32,11 +32,11 @@ owners.
 **Contents**
 
 1. [On-air wire format](#1-on-air-wire-format-as-documented-by-sage)
-2. [Serial / network device protocols](#2-serial--network-device-protocols)
-3. [Incoming-alert filtering & priority model](#3-incoming-alert-filtering--priority-model-manual-54)
+2. [Serial / network device protocols](#2-serial-network-device-protocols)
+3. [Incoming-alert filtering & priority model](#3-incoming-alert-filtering-priority-model-manual-54)
 4. [Operational notes worth keeping](#4-operational-notes-worth-keeping)
-5. [Gap analysis — EAS Station vs. Sage](#5-gap-analysis--eas-station-vs-sage-digital-endec)
-6. [Sources, attribution & IP basis](#6-sources-attribution--ip-basis)
+5. [Gap analysis — EAS Station vs. Sage](#5-gap-analysis-eas-station-vs-sage-digital-endec)
+6. [Sources, attribution & IP basis](#6-sources-attribution-ip-basis)
 
 ---
 
@@ -131,7 +131,7 @@ plain-language phrase. The full table (abbreviated to code → English phrase):
 
 > The manual predates NWSI 10-1712 (April 2022); EAS Station already tracks the
 > newer **EWW, SSW, SSA, BLU** codes in
-> [`app_utils/event_codes.py`](../../../app_utils/event_codes.py). The Spanish
+> [`app_utils/event_codes.py`](https://github.com/KR8MER/eas-station/blob/main/app_utils/event_codes.py). The Spanish
 > phrase column is the gap (see §5).
 
 ---
@@ -358,38 +358,38 @@ Measured against the codebase as of this writing. ✅ = parity/better,
 
 | Aspect | Sage | EAS Station | Where |
 |---|---|---|---|
-| Baud | 520.83 | `SAME_BAUD = Fraction(3125, 6)` | [`eas_fsk.py:28`](../../../app_utils/eas_fsk.py) |
-| Mark / space | 2083.3 / 1562.5 Hz | `SAME_BAUD*4` / `SAME_BAUD*3` | [`eas_fsk.py:29-30`](../../../app_utils/eas_fsk.py) |
-| Preamble | `0xAB` ×16 | `SAME_PREAMBLE_BYTE=0xAB`, `…REPETITIONS=16` | [`eas_fsk.py:31-32`](../../../app_utils/eas_fsk.py) |
-| Header / EOM ×3 | yes | `NRSC4B_BURST_COUNT = 3` | [`eas.py:680`](../../../app_utils/eas.py) |
-| Two-tone | 853 + 960 Hz | `(853.0, 960.0)` | [`eas.py:2701`](../../../app_utils/eas.py), [`:3095`](../../../app_utils/eas.py) |
-| ≤31 locations | yes | `NRSC4B_MAX_LOCATIONS = 31` (enforced) | [`eas.py:660`](../../../app_utils/eas.py) |
-| Duration `+TTTT` | HHMM | `_duration_code()` | [`eas.py:1084`](../../../app_utils/eas.py) |
-| Time `JJJHHMM` UTC | Julian + UTC | `_julian_time()` | [`eas.py:1078`](../../../app_utils/eas.py) |
-| Header build | `ZCZC-…` | `build_same_header()` | [`eas.py:1160`](../../../app_utils/eas.py) |
+| Baud | 520.83 | `SAME_BAUD = Fraction(3125, 6)` | [`eas_fsk.py:28`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas_fsk.py) |
+| Mark / space | 2083.3 / 1562.5 Hz | `SAME_BAUD*4` / `SAME_BAUD*3` | [`eas_fsk.py:29-30`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas_fsk.py) |
+| Preamble | `0xAB` ×16 | `SAME_PREAMBLE_BYTE=0xAB`, `…REPETITIONS=16` | [`eas_fsk.py:31-32`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas_fsk.py) |
+| Header / EOM ×3 | yes | `NRSC4B_BURST_COUNT = 3` | [`eas.py:680`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas.py) |
+| Two-tone | 853 + 960 Hz | `(853.0, 960.0)` | [`eas.py:2701`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas.py), [`:3095`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas.py) |
+| ≤31 locations | yes | `NRSC4B_MAX_LOCATIONS = 31` (enforced) | [`eas.py:660`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas.py) |
+| Duration `+TTTT` | HHMM | `_duration_code()` | [`eas.py:1084`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas.py) |
+| Time `JJJHHMM` UTC | Julian + UTC | `_julian_time()` | [`eas.py:1078`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas.py) |
+| Header build | `ZCZC-…` | `build_same_header()` | [`eas.py:1160`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas.py) |
 
 > EAS Station additionally supports the **1050 Hz NWR single tone**
-> ([`eas.py:2699`](../../../app_utils/eas.py), [`:3092`](../../../app_utils/eas.py)),
+> ([`eas.py:2699`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas.py), [`:3092`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas.py)),
 > which the Sage manual does not document on the broadcast path.
 
 ### 5.2 Two-tone-on-RWT suppression — parity ✅ (and stricter)
 
 Sage says the two-tone is *not required* for weekly tests. EAS Station goes
 further and **prohibits** it: RWT relay forces `relay_tone_profile = 'none'`
-([`auto_forward.py:960-963`](../../../app_core/audio/auto_forward.py), citing
+([`auto_forward.py:960-963`](https://github.com/KR8MER/eas-station/blob/main/app_core/audio/auto_forward.py), citing
 FCC §11.61), and RWT is suppressed from forwarding entirely unless the operator
 opts in via `forwarded_event_codes`
-([`auto_forward.py:579`](../../../app_core/audio/auto_forward.py),
-[`:846`](../../../app_core/audio/auto_forward.py)).
+([`auto_forward.py:579`](https://github.com/KR8MER/eas-station/blob/main/app_core/audio/auto_forward.py),
+[`:846`](https://github.com/KR8MER/eas-station/blob/main/app_core/audio/auto_forward.py)).
 
 ### 5.3 Filtering — present, but a *different model* ⚠️
 
 | Sage concept | EAS Station |
 |---|---|
-| Originator + event + location filter match | Location/FIPS match in [`eas_monitor.py`](../../../app_core/audio/eas_monitor.py) + event-code allowlist `forwarded_event_codes` ([`auto_forward.py:575`](../../../app_core/audio/auto_forward.py)) |
-| Numeric priority 0–63, highest wins | ❌ No numeric priority. Closest analog is the **Must-Carry** boolean (`EAS-Must-Carry`, ECIG §3.4.1.7) at [`auto_forward.py:104`](../../../app_core/audio/auto_forward.py) |
+| Originator + event + location filter match | Location/FIPS match in [`eas_monitor.py`](https://github.com/KR8MER/eas-station/blob/main/app_core/audio/eas_monitor.py) + event-code allowlist `forwarded_event_codes` ([`auto_forward.py:575`](https://github.com/KR8MER/eas-station/blob/main/app_core/audio/auto_forward.py)) |
+| Numeric priority 0–63, highest wins | ❌ No numeric priority. Closest analog is the **Must-Carry** boolean (`EAS-Must-Carry`, ECIG §3.4.1.7) at [`auto_forward.py:104`](https://github.com/KR8MER/eas-station/blob/main/app_core/audio/auto_forward.py) |
 | Action codes (Auto / Timed Relay / Timed Ignore / Manual / Log Only) | ❌ Effectively Auto-Relay vs. drop; **no timed-relay/timed-ignore hold window** |
-| Duplicate detection (`dup:`) | ✅ **Stronger** — 3-tier dedup (header-key, issuer-identity, full-FIPS-set) in `is_duplicate_broadcast()` ([`auto_forward.py:240`](../../../app_core/audio/auto_forward.py)) |
+| Duplicate detection (`dup:`) | ✅ **Stronger** — 3-tier dedup (header-key, issuer-identity, full-FIPS-set) in `is_duplicate_broadcast()` ([`auto_forward.py:240`](https://github.com/KR8MER/eas-station/blob/main/app_core/audio/auto_forward.py)) |
 
 ### 5.4 Hold-off / commercial tally / day-night — not implemented ❌
 
@@ -404,10 +404,10 @@ All four Sage device-feed formats are now emitted over TCP by the
 
 | Sage device | EAS Station | Where |
 |---|---|---|
-| Generic CGEN `<STX><sev><text><ETX>` | ✅ | [`endec_feeds.py:format_generic_cgen`](../../../app_utils/endec_feeds.py) |
-| News Feed `<ENDECSTART>…<ENDECEND>` | ✅ | [`endec_feeds.py:format_news_feed`](../../../app_utils/endec_feeds.py) |
-| Decoder status `local:`/`match:`/`nomatch:`/`dup:` | ✅ | [`endec_feeds.py:format_decoder_status`](../../../app_utils/endec_feeds.py) |
-| Raw EAS Encoder byte mirror (`0xAB`-framed) | ✅ (outgoing) | [`endec_feeds.py:format_raw_encoder`](../../../app_utils/endec_feeds.py) |
+| Generic CGEN `<STX><sev><text><ETX>` | ✅ | [`endec_feeds.py:format_generic_cgen`](https://github.com/KR8MER/eas-station/blob/main/app_utils/endec_feeds.py) |
+| News Feed `<ENDECSTART>…<ENDECEND>` | ✅ | [`endec_feeds.py:format_news_feed`](https://github.com/KR8MER/eas-station/blob/main/app_utils/endec_feeds.py) |
+| Decoder status `local:`/`match:`/`nomatch:`/`dup:` | ✅ | [`endec_feeds.py:format_decoder_status`](https://github.com/KR8MER/eas-station/blob/main/app_utils/endec_feeds.py) |
+| Raw EAS Encoder byte mirror (`0xAB`-framed) | ✅ (outgoing) | [`endec_feeds.py:format_raw_encoder`](https://github.com/KR8MER/eas-station/blob/main/app_utils/endec_feeds.py) |
 
 ```mermaid
 flowchart LR
@@ -438,23 +438,23 @@ flowchart LR
 
 **Architecture:** the detection/forwarding pipeline publishes a feed event to
 Redis (`eas:endec_feed`) at four points — `match`/`nomatch` in
-[`eas_monitor.py`](../../../app_core/audio/eas_monitor.py) and `dup`/`local` in
-[`auto_forward.py`](../../../app_core/audio/auto_forward.py) — via
-[`endec_feed_publisher.py`](../../../app_core/audio/endec_feed_publisher.py).
-The [`services.endec_feeds`](../../../services/endec_feeds/) daemon subscribes,
+[`eas_monitor.py`](https://github.com/KR8MER/eas-station/blob/main/app_core/audio/eas_monitor.py) and `dup`/`local` in
+[`auto_forward.py`](https://github.com/KR8MER/eas-station/blob/main/app_core/audio/auto_forward.py) — via
+[`endec_feed_publisher.py`](https://github.com/KR8MER/eas-station/blob/main/app_core/audio/endec_feed_publisher.py).
+The [`services.endec_feeds`](https://github.com/KR8MER/eas-station/tree/main/services/endec_feeds) daemon subscribes,
 renders each event into every configured feed's wire format, and fans the bytes
 out to connected TCP clients (one listener per feed/port). Saving the admin
 form hot-reloads the daemon over a Redis control channel. Unlike Sage's
 RS-232 ports, the transport is TCP (connect with a character generator,
 newsroom system, or `nc <host> <port>`). The pre-existing structured JSON to
 Redis (`eas:alerts:received`) and webhooks
-([`alert_forwarding.py`](../../../app_core/audio/alert_forwarding.py)) remain
+([`alert_forwarding.py`](https://github.com/KR8MER/eas-station/blob/main/app_core/audio/alert_forwarding.py)) remain
 available alongside these byte-stream feeds.
 
 ### 5.6 Plain-language text — English yes, Spanish no ⚠️
 
 `build_plain_language_summary()`
-([`eas_decode.py:207`](../../../app_utils/eas_decode.py)) produces readable
+([`eas_decode.py:207`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas_decode.py)) produces readable
 English. There is **no Spanish** generator or bilingual event-phrase table,
 which Sage carries for all 53 codes (manual Table 5-1).
 

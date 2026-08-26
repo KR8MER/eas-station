@@ -8,10 +8,10 @@
 ## Table of Contents
 
 1. [System Overview](#system-overview)
-2. [Ohio EAS Authority & Structure](#ohio-eas-authority--structure)
+2. [Ohio EAS Authority & Structure](#ohio-eas-authority-structure)
 3. [Event Codes Reference](#event-codes-reference)
 4. [Ohio EAS Structure](#ohio-eas-structure)
-5. [State & Local Primary Stations](#state--local-primary-stations)
+5. [State & Local Primary Stations](#state-local-primary-stations)
 6. [Ohio EAS Monitoring Network](#ohio-eas-monitoring-network)
 7. [Notification Procedures](#notification-procedures)
 8. [Committee Contacts](#committee-contacts)

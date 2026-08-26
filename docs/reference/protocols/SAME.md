@@ -1,11 +1,11 @@
 # SAME — Specific Area Message Encoding
 
 > **Implementation:**
-> [`app_utils/eas_fsk.py`](../../../app_utils/eas_fsk.py) (encoder primitives)
-> · [`app_utils/eas.py`](../../../app_utils/eas.py) (`EASAudioGenerator`,
+> [`app_utils/eas_fsk.py`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas_fsk.py) (encoder primitives)
+> · [`app_utils/eas.py`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas.py) (`EASAudioGenerator`,
 > header construction, attention tone, EOM)
-> · [`app_utils/eas_decode.py`](../../../app_utils/eas_decode.py) (offline decoder)
-> · [`app_utils/eas_demod.py`](../../../app_utils/eas_demod.py) (live AFSK demodulator)
+> · [`app_utils/eas_decode.py`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas_decode.py) (offline decoder)
+> · [`app_utils/eas_demod.py`](https://github.com/KR8MER/eas-station/blob/main/app_utils/eas_demod.py) (live AFSK demodulator)
 >
 > **Standards:**
 > FCC 47 CFR §11.31 (regulatory definition)
@@ -303,11 +303,11 @@ provide the originator/event code lookup tables used both during decode
 
 | Test file | What it pins down |
 |---|---|
-| [`test_eas_fsk.py`](../../../tests/test_eas_fsk.py) | Bit-encoding (LSB-first 7+1, preamble, terminator), AFSK sample count and phase continuity |
-| [`test_eas_build_same_header.py`](../../../tests/test_eas_build_same_header.py) | Header field assembly: ORG, EEE, location-code list, time, station ID |
-| [`test_eas_decode.py`](../../../tests/test_eas_decode.py) | Round-trip encode → decode of representative alerts |
-| [`test_eas_sample_rate_evaluation.py`](../../../tests/test_eas_sample_rate_evaluation.py) | Bit-timing accuracy across 8 / 16 / 22.05 / 44.1 / 48 kHz |
-| [`test_eas_monitor_*.py`](../../../tests/) | Live-monitor duplicate handling, FIPS matching, runtime consistency |
+| [`test_eas_fsk.py`](https://github.com/KR8MER/eas-station/blob/main/tests/test_eas_fsk.py) | Bit-encoding (LSB-first 7+1, preamble, terminator), AFSK sample count and phase continuity |
+| [`test_eas_build_same_header.py`](https://github.com/KR8MER/eas-station/blob/main/tests/test_eas_build_same_header.py) | Header field assembly: ORG, EEE, location-code list, time, station ID |
+| [`test_eas_decode.py`](https://github.com/KR8MER/eas-station/blob/main/tests/test_eas_decode.py) | Round-trip encode → decode of representative alerts |
+| [`test_eas_sample_rate_evaluation.py`](https://github.com/KR8MER/eas-station/blob/main/tests/test_eas_sample_rate_evaluation.py) | Bit-timing accuracy across 8 / 16 / 22.05 / 44.1 / 48 kHz |
+| [`test_eas_monitor_*.py`](https://github.com/KR8MER/eas-station/tree/main/tests) | Live-monitor duplicate handling, FIPS matching, runtime consistency |
 
 ---
 

@@ -90,7 +90,7 @@ EAS Station™ relies on publicly available geographic data to enable spatial fi
 - **NOAA National Weather Service** - Weather forecast zone boundaries and definitions
   - Public Domain federal data
 
-For complete attribution details, see the `## 📚 Attributions & Open-Source Credits` section of the repository [`README.md`](../../README.md).
+For complete attribution details, see the `## 📚 Attributions & Open-Source Credits` section of the repository [`README.md`](https://github.com/KR8MER/eas-station/blob/main/README.md).
 
 ## Governance and Support
 - **Issue Tracking:** Use GitHub issues for bug reports and feature requests.

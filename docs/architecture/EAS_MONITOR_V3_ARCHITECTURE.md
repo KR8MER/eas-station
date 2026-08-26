@@ -559,7 +559,7 @@ If needed, rollback is simple:
 - [System Architecture](SYSTEM_ARCHITECTURE.md)
 - [Theory of Operation](THEORY_OF_OPERATION.md)
 - [EAS Decoding Summary](EAS_DECODING_SUMMARY.md)
-- [EAS Monitoring README](../../app_core/audio/README_EAS_MONITORS.md)
+- [EAS Monitoring README](https://github.com/KR8MER/eas-station/blob/main/app_core/audio/README_EAS_MONITORS.md)
 
 ### Code Files
 

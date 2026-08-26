@@ -7,7 +7,7 @@ This document provides comprehensive architectural diagrams and flowcharts for t
 **Related Documents:**
 - [Data Flow Sequences](DATA_FLOW_SEQUENCES.md) - Detailed sequence diagrams showing data processing paths ⭐ NEW
 - [Theory of Operation](THEORY_OF_OPERATION.md) - Conceptual overview and protocol details
-- [Audio Ingest Documentation](../audio) - Audio ingest system specifics
+- [Audio Ingest Documentation](../audio/AUDIO_MONITORING.md) - Audio ingest system specifics
 - [Help Guide](../guides/HELP.md) - Operational procedures
 
 ---
