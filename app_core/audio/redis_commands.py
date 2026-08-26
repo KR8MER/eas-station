@@ -480,6 +480,88 @@ class AudioCommandSubscriber:
             logger.error('inject_eas_audio: failed to load EASMessage #%s: %s', message_id, exc)
             return None
 
+    def _remove_source_everywhere(self, source_name: str) -> None:
+        """Tear down *source_name* from the EAS monitor, Icecast, and the
+        audio controller -- the full removal used by both the 'source_delete'
+        Redis command and reconcile_orphaned_radio_sources()."""
+        if self.eas_monitor and hasattr(self.eas_monitor, 'remove_monitor_for_source'):
+            try:
+                self.eas_monitor.remove_monitor_for_source(source_name)
+            except Exception as e:
+                logger.debug(f"Error removing EAS monitor for {source_name}: {e}")
+
+        if self.auto_streaming_service:
+            try:
+                self.auto_streaming_service.remove_source(source_name)
+            except Exception as e:
+                logger.debug(f"Error removing {source_name} from Icecast: {e}")
+
+        self.audio_controller.remove_source(source_name)
+
+    def reconcile_orphaned_radio_sources(self) -> int:
+        """Remove any radio-managed SDR source with no backing DB row.
+
+        Deleting a RadioReceiver sends a single, best-effort 'source_delete'
+        Redis command (webapp/admin/audio_ingest/radio_sources.py) to tear
+        the source down here. If that one-shot notification is ever missed
+        (this process briefly unreachable, a dropped pub/sub message), the
+        source has no other way to learn it should stop existing: it isn't
+        in AudioSourceConfigDB any more, but the running RedisSDRSourceAdapter
+        stays registered in self.audio_controller and its stall-supervisor
+        (app_core/audio/ingest.py's _monitor_loop) just quarantine-retries it
+        forever -- since demod service never publishes audio for a receiver
+        id nothing references, every retry stalls immediately. Found live:
+        an orphaned 'sdr-wxmon' source cycling run/stall/quarantine every
+        ~30s-4min, respawning its FFmpeg/Icecast connection each time.
+
+        Called periodically from the main loop (a low-frequency safety net,
+        not the primary removal path) so this self-heals within one cycle
+        instead of requiring an eas-station-audio.service restart.
+
+        Returns the number of orphaned sources removed.
+        """
+        from app_core.audio.redis_sdr_adapter import RedisSDRSourceAdapter
+
+        candidates = [
+            name for name, adapter in self.audio_controller.get_all_sources().items()
+            if isinstance(adapter, RedisSDRSourceAdapter)
+        ]
+        if not candidates:
+            return 0
+
+        if self.app is None:
+            return 0
+
+        try:
+            with self.app.app_context():
+                from app_core.models import AudioSourceConfigDB
+                valid_names = {
+                    config.name for config in AudioSourceConfigDB.query.filter_by(source_type='sdr').all()
+                    if (config.config_params or {}).get('managed_by') == 'radio'
+                }
+        except Exception as exc:
+            logger.debug("reconcile_orphaned_radio_sources: DB lookup failed, skipping: %s", exc)
+            return 0
+
+        removed = 0
+        for name in candidates:
+            if name in valid_names:
+                continue
+            logger.warning(
+                "Removing orphaned radio-managed audio source '%s' -- no "
+                "matching enabled receiver/AudioSourceConfigDB row (its "
+                "deletion notification was likely missed); self-healing so "
+                "it stops quarantine-retrying forever.",
+                name,
+            )
+            try:
+                self._remove_source_everywhere(name)
+                removed += 1
+            except Exception as exc:
+                logger.error("Failed to remove orphaned source '%s': %s", name, exc)
+
+        return removed
+
     def _execute_command(self, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a command on the audio controller.
@@ -672,22 +754,7 @@ class AudioCommandSubscriber:
 
             elif command == 'source_delete':
                 source_name = params['source_name']
-
-                # Remove EAS monitor for this source
-                if self.eas_monitor and hasattr(self.eas_monitor, 'remove_monitor_for_source'):
-                    try:
-                        self.eas_monitor.remove_monitor_for_source(source_name)
-                    except Exception as e:
-                        logger.debug(f"Error removing EAS monitor for {source_name}: {e}")
-
-                # Remove source from Icecast streaming if service is available
-                if self.auto_streaming_service:
-                    try:
-                        self.auto_streaming_service.remove_source(source_name)
-                    except Exception as e:
-                        logger.debug(f"Error removing {source_name} from Icecast: {e}")
-
-                self.audio_controller.remove_source(source_name)
+                self._remove_source_everywhere(source_name)
                 return {'success': True, 'message': f'Deleted source {source_name}'}
 
             elif command == 'streaming_start':

@@ -179,6 +179,21 @@ class BroadcastAudioAdapter:
             self._total_reads += 1
 
             # Try to fill buffer if we don't have enough samples
+            #
+            # NOTE on "Underrun" log noise for internet-stream sources (e.g.
+            # eas-unified-WNCI/ERN-LUC): the SAME decoder's read_timeout is a
+            # tight 0.1s (see the read_timeout docstring above), so this loop
+            # frequently times out waiting for just the last chunk needed to
+            # reach num_samples even when the buffer is otherwise near-full
+            # (buffer=1400+/1600 samples in the warning is typical, not
+            # buffer=0). Investigated 2026-08-26: AudioArchiver wrote
+            # continuous, full-length files for both sources across this
+            # window with no gaps, confirming these are a noisy detection
+            # threshold, not real audio loss reaching the SAME decoder or
+            # Icecast. A source that's *actually* starved logs buffer=0
+            # repeatedly (see the genuinely-broken-source case this same
+            # investigation found and fixed:
+            # AudioCommandSubscriber.reconcile_orphaned_radio_sources()).
             while self._chunk_total_samples < num_samples:
                 try:
                     # Use configurable timeout for better adaptability to different environments
