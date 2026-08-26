@@ -33,6 +33,19 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+class _FakeDemodulatorStatus:
+    """Picklable stand-in for app_core.radio.demod.types.DemodulatorStatus.
+
+    A MagicMock can't cross a real pickle round-trip (which is exactly
+    what _get_remote_status() does against the bytes eas-station-demod.
+    service publishes), so these tests need a plain, module-level,
+    picklable object instead.
+    """
+
+    def __init__(self, stereo_pilot_locked: bool = False):
+        self.stereo_pilot_locked = stereo_pilot_locked
+
+
 class TestRedisSdrAdapter(unittest.TestCase):
     """Test Redis SDR source adapter."""
 
@@ -73,7 +86,13 @@ class TestRedisSdrAdapter(unittest.TestCase):
             self.assertEqual(adapter._receiver_id, "test-receiver")
 
     def test_iq_sample_decoding(self):
-        """Test IQ sample decoding from Redis message."""
+        """Test IQ sample decoding from Redis message.
+
+        This encode/decode pair now runs in services/demod (sdr-service ->
+        demod-service hop) rather than in this adapter -- kept here because
+        it documents the wire format eas-station-sdr.service actually
+        publishes, which services/demod/worker.py's DemodWorker consumes.
+        """
         # Create sample IQ data
         iq_samples = np.random.randn(1000) + 1j * np.random.randn(1000)
         iq_samples = iq_samples.astype(np.complex64)
@@ -93,6 +112,102 @@ class TestRedisSdrAdapter(unittest.TestCase):
 
         # Verify data integrity
         np.testing.assert_array_almost_equal(iq_samples, iq_back)
+
+    def _make_adapter(self):
+        """Construct a RedisSDRSourceAdapter without going through
+        _start_capture() (which would try a real Redis connection) --
+        these tests exercise post-startup behavior directly instead."""
+        from app_core.audio.redis_sdr_adapter import RedisSDRSourceAdapter
+
+        adapter = RedisSDRSourceAdapter(self.config)
+        adapter._receiver_id = 'test-receiver'
+        return adapter
+
+    def test_get_remote_status_unpickles_and_caches(self):
+        """_get_remote_status() replaces self._demodulator.get_last_status()
+        now that the demodulator lives in eas-station-demod.service --
+        verify it fetches+unpickles the status key and reuses it within the
+        cache TTL instead of round-tripping Redis on every call."""
+        import pickle
+
+        adapter = self._make_adapter()
+
+        status_obj = _FakeDemodulatorStatus(stereo_pilot_locked=True)
+        mock_redis = MagicMock()
+        mock_redis.get.return_value = pickle.dumps(status_obj)
+        adapter._redis_client = mock_redis
+
+        first = adapter._get_remote_status()
+        second = adapter._get_remote_status()
+
+        # Unpickling produces a new (but equal-by-value) object -- check
+        # content, not identity, against the original.
+        self.assertTrue(first.stereo_pilot_locked)
+        # The cache returns the literal object from the first unpickle.
+        self.assertIs(second, first)
+        # Cached within _STATUS_CACHE_TTL_S -- only one Redis round-trip.
+        self.assertEqual(mock_redis.get.call_count, 1)
+        mock_redis.get.assert_called_with('demod:status:test-receiver')
+
+    def test_get_remote_status_keeps_last_known_on_ttl_gap(self):
+        """A missing key (TTL lapsed between demod publishes) should not
+        flap the UI to blank -- keep showing the last-known status, same
+        behavior the old in-process path had while a demodulator was
+        between decode cycles."""
+        import pickle
+        from app_core.audio.redis_sdr_adapter import _STATUS_CACHE_TTL_S
+
+        adapter = self._make_adapter()
+
+        status_obj = _FakeDemodulatorStatus()
+        mock_redis = MagicMock()
+        mock_redis.get.return_value = pickle.dumps(status_obj)
+        adapter._redis_client = mock_redis
+
+        first = adapter._get_remote_status()
+        self.assertIsNotNone(first)
+
+        # Force the cache to be stale, then simulate the key expiring.
+        adapter._status_cache_at -= (_STATUS_CACHE_TTL_S + 1.0)
+        mock_redis.get.return_value = None
+
+        second = adapter._get_remote_status()
+        self.assertIs(second, first)  # last-known, not None
+
+    def test_subscriber_loop_unpacks_binary_audio_envelope(self):
+        """The subscriber thread no longer parses JSON or calls a
+        demodulator -- it unpacks the binary envelope published by
+        services/demod/worker.py and enqueues the audio directly."""
+        from services.demod.worker import _pack_audio_envelope
+
+        adapter = self._make_adapter()
+
+        audio = np.random.randn(200).astype(np.float32)
+        envelope = _pack_audio_envelope(audio.tobytes(), 250000, 93900000)
+
+        # First get_message() call returns the one envelope; the second
+        # sets _stop_event so _redis_subscriber_loop() exits cleanly
+        # instead of blocking on a real Redis connection.
+        call_count = {'n': 0}
+
+        def _get_message(*_args, **_kwargs):
+            call_count['n'] += 1
+            if call_count['n'] == 1:
+                return {'type': 'message', 'data': envelope}
+            adapter._stop_event.set()
+            return None
+
+        mock_pubsub = MagicMock()
+        mock_pubsub.get_message.side_effect = _get_message
+        adapter._pubsub = mock_pubsub
+        adapter._stop_event.clear()
+
+        adapter._redis_subscriber_loop()
+
+        self.assertEqual(adapter._iq_sample_rate, 250000)
+        self.assertEqual(adapter._center_frequency, 93900000)
+        queued = adapter._audio_chunk_queue.get_nowait()
+        np.testing.assert_array_almost_equal(queued, audio)
 
 
 class TestAudioService(unittest.TestCase):

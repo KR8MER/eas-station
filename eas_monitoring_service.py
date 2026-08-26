@@ -753,11 +753,24 @@ def _snapshot_audio_metrics_once(flask_app) -> None:
                     continue
 
                 # peak/rms are true dB (can be -inf for digital silence);
-                # 10 ** (-inf / 20) evaluates to 0.0 in Python, no special
-                # case needed. A missing metrics_obj value (None) is the
-                # only case that would break the NOT NULL float columns.
-                peak_db = metrics_obj.peak_level_db if metrics_obj.peak_level_db is not None else -120.0
-                rms_db = metrics_obj.rms_level_db if metrics_obj.rms_level_db is not None else -120.0
+                # 10 ** (-inf / 20) evaluates to 0.0, no special case needed.
+                # A missing metrics_obj value (None) is the only case that
+                # would break the NOT NULL float columns.
+                #
+                # metrics_obj is computed from numpy arrays (see
+                # AudioSourceAdapter._update_metrics in app_core/audio/ingest.py:
+                # `20 * np.log10(...)`, `-np.inf` defaults, etc.), so every
+                # field here -- not just the two dB values -- can arrive as a
+                # numpy scalar (np.float32/np.float64/np.int64) rather than a
+                # native Python type. psycopg2 cannot adapt those directly
+                # ("can't adapt type 'numpy.float32'"), which silently failed
+                # this entire commit -- and therefore this whole snapshot,
+                # every second, since this writer was added: the
+                # audio_source_metrics table has never actually been
+                # populated in production. float()/int() below force native
+                # types before they ever reach SQLAlchemy.
+                peak_db = float(metrics_obj.peak_level_db) if metrics_obj.peak_level_db is not None else -120.0
+                rms_db = float(metrics_obj.rms_level_db) if metrics_obj.rms_level_db is not None else -120.0
 
                 source_type = getattr(getattr(source, "config", None), "source_type", None)
                 source_type_value = source_type.value if hasattr(source_type, "value") else str(source_type or "unknown")
@@ -767,13 +780,13 @@ def _snapshot_audio_metrics_once(flask_app) -> None:
                     source_type=source_type_value,
                     peak_level_db=peak_db,
                     rms_level_db=rms_db,
-                    peak_level_linear=10 ** (peak_db / 20.0),
-                    rms_level_linear=10 ** (rms_db / 20.0),
-                    sample_rate=getattr(metrics_obj, "sample_rate", None) or 0,
-                    channels=getattr(metrics_obj, "channels", None) or 0,
-                    frames_captured=getattr(metrics_obj, "frames_captured", None) or 0,
+                    peak_level_linear=float(10 ** (peak_db / 20.0)),
+                    rms_level_linear=float(10 ** (rms_db / 20.0)),
+                    sample_rate=int(getattr(metrics_obj, "sample_rate", None) or 0),
+                    channels=int(getattr(metrics_obj, "channels", None) or 0),
+                    frames_captured=int(getattr(metrics_obj, "frames_captured", None) or 0),
                     silence_detected=bool(getattr(metrics_obj, "silence_detected", False)),
-                    buffer_utilization=getattr(metrics_obj, "buffer_utilization", None) or 0.0,
+                    buffer_utilization=float(getattr(metrics_obj, "buffer_utilization", None) or 0.0),
                     source_metadata=_sanitize_value(getattr(metrics_obj, "metadata", None)),
                 ))
             db.session.commit()

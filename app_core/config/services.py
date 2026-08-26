@@ -137,11 +137,18 @@ def get_gpio_service() -> str:
 #   * 5103  gps        (GPS manager + trend archive)
 #   * 5104  displays   (OLED/LED/VFD push endpoint)
 #   * 5105  gpio       (relays + alert indicators — no HTTP API beyond /health)
+#
+# demod (port 5106) is a peer of sdr/audio in the dataflow (SDR capture ->
+# demod -> audio/EAS), not a hardware.target member — split out of the
+# audio service so FM/AM demodulation (scipy FFT-heavy DSP) can never again
+# share a GIL with the audio service's real-time Icecast feeder threads.
+# Like gpio, it has no HTTP API beyond /health — it's purely Redis-driven.
 NETWORK_SERVICE_URL = os.environ.get('NETWORK_SERVICE_URL', 'http://127.0.0.1:5101')
 ZIGBEE_SERVICE_URL = os.environ.get('ZIGBEE_SERVICE_URL', 'http://127.0.0.1:5102')
 GPS_SERVICE_URL = os.environ.get('GPS_SERVICE_URL', 'http://127.0.0.1:5103')
 DISPLAYS_SERVICE_URL = os.environ.get('DISPLAYS_SERVICE_URL', 'http://127.0.0.1:5104')
 GPIO_SERVICE_URL = os.environ.get('GPIO_SERVICE_URL', 'http://127.0.0.1:5105')
+DEMOD_SERVICE_URL = os.environ.get('DEMOD_SERVICE_URL', 'http://127.0.0.1:5106')
 AUDIO_SERVICE_URL = os.environ.get('AUDIO_SERVICE_URL', 'http://127.0.0.1:5002')
 SDR_SERVICE_URL = os.environ.get('SDR_SERVICE_URL', 'http://127.0.0.1:5003')
 REDIS_URL = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/0')

@@ -1,15 +1,12 @@
 [Unit]
-Description=EAS Station Audio Processing Service
+Description=EAS Station Demod Subsystem (FM/AM demodulation)
 Documentation=https://github.com/KR8MER/eas-station
 PartOf=eas-station.target
-After=network.target redis.service eas-station-sdr.service eas-station-demod.service
+After=network.target redis.service eas-station-sdr.service
 Requires=redis.service
-Wants=eas-station-sdr.service eas-station-demod.service
+Wants=eas-station-sdr.service
 
 # Fire a recovery hook if this unit ever ends up in 'failed' state.
-# Notably covers crashes that happen while a stop job is already in
-# flight (e.g. mid-shutdown during a full-stack restart), where
-# Restart=always does not re-trigger on its own.
 OnFailure=eas-station-failure-recovery@%N.service
 
 [Service]
@@ -18,22 +15,18 @@ NotifyAccess=main
 WatchdogSec=60
 User=eas-station
 Group=eas-station
-# Additional group for audio device access
-SupplementaryGroups=audio
 
 WorkingDirectory=/opt/eas-station
 Environment="PATH=/opt/eas-station/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Environment="PYTHONPATH=/opt/eas-station"
-# Pi 5 requires lgpio for GPIO access - prevents gpiozero auto-detection hangs
-Environment="GPIOZERO_PIN_FACTORY=lgpio"
 EnvironmentFile=/opt/eas-station/.env
 
 # Logging to systemd journal
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=eas-station-audio
+SyslogIdentifier=eas-station-demod
 
-ExecStart=/opt/eas-station/venv/bin/python eas_monitoring_service.py
+ExecStart=/opt/eas-station/venv/bin/python -m services.demod
 
 # Service management
 Restart=always
@@ -54,6 +47,9 @@ ReadWritePaths=/opt/eas-station /var/log/eas-station
 
 # Resource limits
 LimitNOFILE=65536
+# Same numpy/scipy/numba import floor every subsystem service hits
+# (see eas-station-gpio.service's own comment on this) -- this one also
+# holds live IQ/audio buffers per receiver, so give it a bit more.
 MemoryMax=512M
 
 [Install]

@@ -8,6 +8,56 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.193.0] - 2026-08-26 - Split FM/AM demodulation into its own service
+
+A user watched a resend's EAS audio get injected into all three configured
+Icecast mounts ("EAS stream injector: pushed 73.9s of EAS audio ... to
+source 'X' broadcast queue" -- confirmed in the logs) yet reported never
+having heard a clean one air. `journalctl` showed why: all three mounts
+hit "Icecast buffer running low" / "buffer completely empty -- Audio
+source starved" every 10-30 seconds, continuously, all day -- not just
+during EAS injections, interrupting normal programming too.
+
+Profiling the live `eas-station-audio.service` with `py-spy record --gil`
+(non-blocking, 15s @ 30Hz) found the cause: the `redis-sdr-*` thread that
+receives IQ samples from `eas-station-sdr.service` dominated GIL-held
+samples. On every incoming IQ chunk it ran several
+`scipy.signal.oaconvolve` FFT convolutions inline (stereo pilot detection,
+RBDS extraction -- `app_core/radio/demod/fm.py`), starving the audio
+service's three real-time Icecast feeder threads sharing the same
+interpreter, each of which needs to wake roughly every 50ms to keep its
+buffer fed.
+
+### Added
+- **`services/demod/`**: a new `eas-station-demod.service` subprocess that
+  owns FM/AM demodulation, mirroring the queue + dedicated-worker-thread
+  pattern `app_core/radio/demod/rbds_worker.py` already used for RBDS
+  decoding (a demodulator is stateful/order-dependent and must never be
+  called from more than one thread or on out-of-order chunks). Subscribes
+  to `sdr:samples:<receiver_id>`, publishes demodulated PCM audio to
+  `demod:audio:<receiver_id>` and decoder status (stereo lock, RBDS
+  PS/PI/radiotext) to `demod:status:<receiver_id>`. Listens on port 5106,
+  matching the existing per-subsystem-service pattern
+  (`docs/architecture/SDR_SERVICE_ARCHITECTURE.md`,
+  `docs/troubleshooting/FIREWALL_REQUIREMENTS.md`).
+
+### Fixed
+- **`app_core/audio/redis_sdr_adapter.py`**: `RedisSDRSourceAdapter` no
+  longer runs a demodulator inline -- it's now a thin consumer of the
+  demod service's `demod:audio:*` channel, so the DSP work that was
+  starving the Icecast feeders can never again share a GIL with them.
+  RBDS/stereo metadata (the ~300-line block `_update_metrics()` builds
+  for the UI) is unchanged; it now reads a pickled `DemodulatorStatus`
+  snapshot from `demod:status:*` instead of a local demodulator reference.
+- **`eas_monitoring_service.py`**: a `numpy.float32` -> psycopg2
+  type-adapter failure (`can't adapt type 'numpy.float32'`) was silently
+  breaking every `audio_source_metrics` write, once a second, since the
+  writer was added -- the table had never actually been populated in
+  production. `peak_level_db`/`rms_level_db`/`sample_rate`/etc. are now
+  coerced to native Python types before reaching SQLAlchemy. Found during
+  the same investigation; confirmed via `py-spy` that it was not the cause
+  of the Icecast starvation (a separate, real bug worth fixing anyway).
+
 ## [2.192.1] - 2026-08-24 - Fix stale version claims in tech-stack shields and docs
 
 A user asked "why is Redis showing version 7?" -- the footer badge and README

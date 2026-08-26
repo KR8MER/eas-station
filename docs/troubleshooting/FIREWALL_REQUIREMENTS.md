@@ -29,6 +29,7 @@ These ports are used internally between services and should **not** be exposed t
 | **5103** | TCP | GPS Subsystem | GPS manager + PPS trend archive. Requires `X-Hardware-Auth` — see below. |
 | **5104** | TCP | Displays Subsystem | OLED / VFD / LED rendering. Requires `X-Hardware-Auth` — see below. |
 | **5105** | TCP | GPIO Subsystem | Relays + alert indicators (health endpoint only). |
+| **5106** | TCP | Demod Subsystem | FM/AM demodulation, split out of the audio service (health endpoint only — purely Redis-driven, same as GPIO). |
 | **5432** | TCP | PostgreSQL | Database (embedded profile or external). |
 | **6379** | TCP | Redis | In-memory cache for real-time updates. |
 | **8000** | TCP | Icecast (listen port) | Icecast listen port — expose directly or front it with a proxy. |
