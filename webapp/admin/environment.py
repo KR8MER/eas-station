@@ -843,6 +843,7 @@ def restart_services():
         'web': 'eas-station-web.service',
         'poller': 'eas-station-poller.service',
         'sdr': 'eas-station-sdr.service',
+        'demod': 'eas-station-demod.service',
         'audio': 'eas-station-audio.service',
     }
     

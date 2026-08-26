@@ -40,6 +40,7 @@ SERVICE_PREFIX = os.environ.get('EAS_SERVICE_PREFIX', 'eas-station')
 EAS_SERVICES = [
     f'{SERVICE_PREFIX}-web.service',
     f'{SERVICE_PREFIX}-sdr.service',
+    f'{SERVICE_PREFIX}-demod.service',
     f'{SERVICE_PREFIX}-audio.service',
     f'{SERVICE_PREFIX}-network.service',
     f'{SERVICE_PREFIX}-zigbee.service',
@@ -84,6 +85,11 @@ def get_web_service() -> str:
 def get_sdr_service() -> str:
     """Get the SDR service name."""
     return f'{SERVICE_PREFIX}-sdr.service'
+
+
+def get_demod_service() -> str:
+    """Get the demod subsystem service name (FM/AM demodulation, port 5106)."""
+    return f'{SERVICE_PREFIX}-demod.service'
 
 
 def get_audio_service() -> str:
