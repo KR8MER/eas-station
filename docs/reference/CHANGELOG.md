@@ -8,6 +8,24 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.192.2] - 2026-08-26 - Add Maidenhead grid square to the GPS dashboard
+
+A user pointed out that `/admin/gps-dashboard` "doesn't really show your
+coordinates, or your maidenhead grid." The sky-view hero already had a
+`Position` field wired up to the live fix, but there was no grid-square
+locator anywhere on the page — that conversion only existed on the separate
+Hardware Settings page (`static/js/admin/hardware-settings.js`), buried in a
+collapsed diagnostics disclosure as a copy button rather than a visible
+field.
+
+### Added
+- **Grid row on the GPS dashboard**: `templates/admin/gps_dashboard.html`
+  now shows a `Grid` field (6-character Maidenhead locator, e.g. `EN80la`)
+  next to `Position` in the sky-view overlay, computed client-side from the
+  live `latitude`/`longitude` fix via a `toMaidenhead()` helper mirroring
+  the existing implementation on the hardware settings page. Added a
+  matching `data-gps-help="grid"` tooltip entry explaining the format.
+
 ## [2.192.1] - 2026-08-24 - Fix stale version claims in tech-stack shields and docs
 
 A user asked "why is Redis showing version 7?" -- the footer badge and README
