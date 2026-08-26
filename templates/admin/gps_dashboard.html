@@ -1553,6 +1553,7 @@
             <div class="gps-overlay gps-overlay-bl">
                 <dl class="gps-skyview-info">
                     <dt data-gps-help="position">Position</dt>   <dd id="g-pos">—</dd>
+                    <dt data-gps-help="grid">Grid</dt>            <dd id="g-grid">—</dd>
                     <dt data-gps-help="altitude">Altitude</dt>   <dd id="g-alt">—</dd>
                     <dt data-gps-help="dop">DOP(H/V/P/T)</dt> <dd id="g-dop">—</dd>
                     <dt data-gps-help="hardware">Hardware</dt>   <dd id="g-hw">—</dd>
@@ -4128,6 +4129,23 @@
         });
     }
 
+    // 6-character Maidenhead grid locator (e.g. EN80la) — matches the
+    // implementation in static/js/admin/hardware-settings.js.
+    function toMaidenhead(lat, lon) {
+        if (lat === null || lat === undefined || lon === null || lon === undefined) return '—';
+        var adjLon = lon + 180;
+        var adjLat = lat + 90;
+        var fLon = Math.floor(adjLon / 20);
+        var fLat = Math.floor(adjLat / 10);
+        var sLon = Math.floor((adjLon % 20) / 2);
+        var sLat = Math.floor(adjLat % 10);
+        var subLon = Math.floor((adjLon - 20 * fLon - 2 * sLon) * 12);
+        var subLat = Math.floor((adjLat - 10 * fLat -     sLat) * 24);
+        return String.fromCharCode(65 + fLon) + String.fromCharCode(65 + fLat)
+            + sLon + sLat
+            + String.fromCharCode(97 + subLon) + String.fromCharCode(97 + subLat);
+    }
+
     // ── GPS hero overlay + receiver-status side card.
     function renderGpsSummary(gps) {
         var U = window.EASUnits;
@@ -4137,6 +4155,10 @@
                 ? gps.latitude.toFixed(6) + '°, ' + gps.longitude.toFixed(6) + '°'
                 : '—');
         setText('g-pos', pos);
+        var grid = (gps && gps.latitude != null && gps.longitude != null)
+            ? toMaidenhead(gps.latitude, gps.longitude)
+            : '—';
+        setText('g-grid', grid);
         var alt = (U && gps)
             ? U.fmtAltitude(gps.altitude_m)
             : (gps && gps.altitude_m != null ? gps.altitude_m.toFixed(1) + ' m' : '—');
@@ -7162,6 +7184,16 @@
                 'No 3D fix yet (cold start)',
                 'Multipath bouncing off nearby buildings',
                 'Spoofing'
+            ]
+        },
+        'grid': {
+            title: 'Grid',
+            acronyms: 'maidenhead grid square locator',
+            means: 'The 6-character Maidenhead grid square (e.g. EN80la) computed from the current fix — the locator format amateur radio operators exchange for VHF/UHF contacts, APRS, and satellite work.',
+            matters: 'Handy for ham radio use without doing the lat/lon-to-grid conversion by hand.',
+            ranges: [],
+            causes: [
+                'No 3D fix yet (cold start) — shown as "—" until a position is available'
             ]
         },
         'altitude': {
