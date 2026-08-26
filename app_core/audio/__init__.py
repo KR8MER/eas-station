@@ -26,7 +26,7 @@ metering, monitoring, and diagnostics capabilities.
 """
 
 from .ingest import AudioIngestController, AudioSourceAdapter
-from .sources import SDRSourceAdapter, ALSASourceAdapter, FileSourceAdapter
+from .sources import ALSASourceAdapter, FileSourceAdapter
 from .metering import AudioMeter, SilenceDetector
 from .eas_monitor import (
     EASMonitor,
@@ -41,7 +41,6 @@ from .archiver import AudioArchiver, AudioArchiverConfig
 __all__ = [
     'AudioIngestController',
     'AudioSourceAdapter',
-    'SDRSourceAdapter',
     'ALSASourceAdapter',
     'FileSourceAdapter',
     'AudioMeter',

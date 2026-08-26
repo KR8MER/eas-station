@@ -159,7 +159,7 @@ def _describe_stall(adapter: "AudioSourceAdapter", now: float, last_update: floa
         if url:
             parts.append(f"url={url}")
 
-    # SDR-source-specific signals — exposed by SDRSourceAdapter.
+    # SDR-source-specific signals — exposed by RedisSDRSourceAdapter.
     receiver_id = getattr(adapter, "_receiver_id", None)
     if receiver_id:
         parts.append(f"receiver={receiver_id}")

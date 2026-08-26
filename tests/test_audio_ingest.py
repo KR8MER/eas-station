@@ -414,17 +414,24 @@ class TestAudioSourceAdapter:
         assert adapter.status == AudioSourceStatus.STOPPED
 
     def test_unsupported_source_type(self):
-        """Test error handling for unsupported source types."""
+        """create_audio_source() must reject source_type='sdr' unconditionally.
+
+        The direct-hardware SDRSourceAdapter this factory used to construct
+        was removed as dead code: every SDR-backed AudioSourceConfigDB row
+        is created exclusively by webapp/admin/audio_ingest/radio_sources.py
+        with managed_by='radio', which eas_monitoring_service.py's loader
+        short-circuits on to build a RedisSDRSourceAdapter directly, never
+        reaching this factory -- see app_core/audio/sources.py's
+        create_audio_source() for the full rationale.
+        """
         config = AudioSourceConfig(
             source_type=AudioSourceType.SDR,
             name="test",
             device_params={"receiver_id": "test"}
         )
-        
-        # Mock radio manager as unavailable
-        with patch('app_core.audio.sources.RADIO_AVAILABLE', False):
-            with pytest.raises(RuntimeError, match="SDR source not available"):
-                create_audio_source(config)
+
+        with pytest.raises(RuntimeError, match="SDR sources are managed via"):
+            create_audio_source(config)
 
 
 class TestAudioIngestController:

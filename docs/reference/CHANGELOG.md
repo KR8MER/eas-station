@@ -8,7 +8,32 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.193.6] - 2026-08-26 - Capacity and sizing documentation
+## [2.193.7] - 2026-08-26 - Remove the dormant direct-hardware SDRSourceAdapter
+
+Pre-v3 punch-list nice-to-have (#6): `app_core/audio/sources.py`'s
+`SDRSourceAdapter` (~430 lines) was the pre-separated-architecture way to
+read SDR audio directly via a local `RadioManager`, inline demodulation
+included -- the same "demod running inline in the audio-service process"
+smell that 2.193.0's `services/demod` split fixed for the adapter that's
+actually used. Confirmed genuinely unreachable: every SDR-backed
+`AudioSourceConfigDB` row is created exclusively by
+`webapp/admin/audio_ingest/radio_sources.py`, which always sets
+`managed_by='radio'`; `eas_monitoring_service.py`'s loader short-circuits
+on that flag and constructs a `RedisSDRSourceAdapter` directly, never
+reaching the factory function that would have instantiated this class.
+The web UI's manual "Add Audio Source" form already excludes `sdr` as a
+selectable type for the same reason (its template has a comment: "SDR
+sources should be added via Settings > Radio page").
+
+### Removed
+- **`SDRSourceAdapter`** and its exclusive `RADIO_AVAILABLE`/`RadioManager`
+  import (`app_core/audio/sources.py`, 1855 → 1428 lines). The
+  `create_audio_source()` factory's `'sdr'` branch now raises a clear
+  `RuntimeError` explaining SDR sources are managed via
+  `RedisSDRSourceAdapter` instead of silently constructing dead code.
+  `RBDS_PROGRAM_TYPES` (still imported by the live `redis_sdr_adapter.py`)
+  is untouched.
+ - 2026-08-26 - Capacity and sizing documentation
 
 Pre-v3 punch-list item: document how much CPU/RAM/thermal headroom a
 given SDR-receiver/EAS-monitor configuration actually needs, using a real
