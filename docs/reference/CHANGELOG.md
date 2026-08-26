@@ -8,6 +8,41 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.193.5] - 2026-08-26 - Orphaned SDR audio sources no longer thrash forever
+
+Investigating the punch-list item on eas-unified-WNCI/ERN-LUC "Underrun"
+log noise turned up a live, unrelated bug: a deleted radio receiver's
+audio source (`sdr-wxmon`, from a receiver identifier no longer in the
+database) had been quarantine-retrying every ~30s-4min for hours in
+`eas-station-audio.service`, respawning its FFmpeg process and Icecast
+connection each cycle. Deleting a receiver sends one best-effort
+`source_delete` Redis command to tear the source down; if that single
+notification is ever missed (process briefly unreachable, a dropped
+pub/sub message) there was no other mechanism to remove it -- the adapter
+stayed registered in `AudioIngestController` and its stall supervisor just
+kept retrying a source that can never succeed (nothing publishes audio for
+a receiver id the database no longer has).
+
+### Added
+- **`AudioCommandSubscriber.reconcile_orphaned_radio_sources()`**
+  (`app_core/audio/redis_commands.py`): removes any `RedisSDRSourceAdapter`
+  with no matching `AudioSourceConfigDB(source_type='sdr',
+  managed_by='radio')` row, via the same EAS-monitor/Icecast/controller
+  teardown the `source_delete` command already used (extracted into a
+  shared `_remove_source_everywhere()` helper). Runs every 5 minutes from
+  `eas_monitoring_service.py`'s main loop as a self-healing safety net --
+  the one-shot Redis notification stays the primary removal path.
+
+### Investigated
+- The WNCI/ERN-LUC "Underrun" warnings themselves are confirmed benign: the
+  SAME-decoder tap's 0.1s read timeout is tight enough to time out waiting
+  for the last chunk of a read even when its buffer is 1400+/1600 samples
+  full, and `AudioArchiver` wrote continuous, gap-free files for both
+  sources throughout the investigation window. Documented in a code
+  comment at the warning site (`app_core/audio/broadcast_adapter.py`) so
+  this isn't re-investigated from scratch later. A source that's *actually*
+  starved logs `buffer=0` on every read, as `sdr-wxmon` did above.
+
 ## [2.193.4] - 2026-08-26 - Structural audit test: every airchain trigger must reach Icecast
 
 Twice in the 2.193.x investigation, a broadcast-trigger function was found

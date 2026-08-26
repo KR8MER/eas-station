@@ -2392,6 +2392,8 @@ def main():
         metrics_interval = 0.25
         last_db_snapshot_time = 0
         db_snapshot_interval = 1.0
+        last_orphan_reconcile_time = 0
+        orphan_reconcile_interval = 300.0
 
         while _running:
             try:
@@ -2427,6 +2429,23 @@ def main():
                             samples = eas_metrics.get("samples_processed", 0)
                             running = eas_metrics.get("running", False)
                             logger.debug(f"EAS Monitor: running={running}, samples={samples}")
+
+                # Self-heal orphaned radio-managed SDR sources every 5 min --
+                # see AudioCommandSubscriber.reconcile_orphaned_radio_sources()
+                # for why this exists (a missed one-shot 'source_delete'
+                # notification otherwise leaves a source quarantine-retrying
+                # forever). Low frequency and cheap (one DB query, only runs
+                # teardown when it finds something), so it's fine on the main
+                # loop rather than its own thread.
+                if (
+                    command_subscriber is not None
+                    and current_time - last_orphan_reconcile_time >= orphan_reconcile_interval
+                ):
+                    try:
+                        command_subscriber.reconcile_orphaned_radio_sources()
+                    except Exception as exc:
+                        logger.debug("reconcile_orphaned_radio_sources failed: %s", exc)
+                    last_orphan_reconcile_time = current_time
 
                 # Sleep briefly. Command handling runs on its own Redis
                 # pub/sub subscriber thread, not this loop -- this sleep only
