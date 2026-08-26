@@ -8,7 +8,7 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.193.2] - 2026-08-26 - Resends now show up in Audio Archive
+## [2.193.3] - 2026-08-26 - Resends now show up in Audio Archive
 
 Audio Archive (`/audio`, "Browse and manage EAS broadcast recordings")
 lists one row per `EASMessage`. A resend replayed the *original* row in
