@@ -302,6 +302,11 @@ fetch('/api/environment/restart-services', {
 - **I2C enabled** for OLED (raspi-config → Interface Options → I2C)
 - **Network access** for network-based devices
 
+For how much board/RAM/thermal headroom a given number of SDR receivers
+and EAS monitor sources actually needs, see
+[Capacity and Sizing](../hardware/CAPACITY_AND_SIZING.md) — this section
+only covers peripheral compatibility, not CPU/RAM planning.
+
 ## Quick Reference
 
 ### Default Settings

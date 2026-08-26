@@ -156,6 +156,7 @@ nav:
       - Audio Monitoring Dashboard: audio/AUDIO_MONITORING.md
       - EAS Test Signal Pipeline: audio/EAS_TEST_SIGNAL_PIPELINE.md
   - Hardware:
+      - Capacity and Sizing: hardware/CAPACITY_AND_SIZING.md
       - SDR Setup Guide: hardware/SDR_SETUP.md
       - GPIO Guide: hardware/GPIO_GUIDE.md
       - Alpha LED Sign Guide: hardware/ALPHA_LED_GUIDE.md
