@@ -8,6 +8,22 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.193.6] - 2026-08-26 - Capacity and sizing documentation
+
+Pre-v3 punch-list item: document how much CPU/RAM/thermal headroom a
+given SDR-receiver/EAS-monitor configuration actually needs, using a real
+labeled snapshot from a production reference deployment rather than a
+synthetic benchmark.
+
+### Added
+- **`docs/hardware/CAPACITY_AND_SIZING.md`**: reference-deployment
+  snapshot (Pi 5, load average, memory/swap, thermal, disk) plus a sizing
+  table by configuration (web-only, +1 SDR receiver, +stream monitors,
+  2+ receivers). Linked from `docs/README.md` and
+  `docs/guides/HARDWARE_QUICKSTART.md`'s Requirements section, which
+  previously covered only peripheral (GPIO/I2C) compatibility, not
+  CPU/RAM planning.
+
 ## [2.193.5] - 2026-08-26 - Orphaned SDR audio sources no longer thrash forever
 
 Investigating the punch-list item on eas-unified-WNCI/ERN-LUC "Underrun"

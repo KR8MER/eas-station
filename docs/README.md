@@ -31,6 +31,7 @@ Welcome to the documentation for EAS Station™ - an Emergency Alert System plat
 | Guide | What You'll Learn |
 |-------|-------------------|
 | [Installation Guide](installation/QUICKSTART.md) | Bare metal deployment |
+| [Capacity and Sizing](hardware/CAPACITY_AND_SIZING.md) | CPU/RAM/thermal planning by receiver/source count |
 | [SDR Setup](hardware/SDR_SETUP.md) | Radio receiver configuration |
 | [Firewall Requirements](troubleshooting/FIREWALL_REQUIREMENTS.md) | Network port configuration |
 | [Application Settings](guides/APPLICATION_SETTINGS.md) | Logging, storage paths, branding, password policy |
