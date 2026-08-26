@@ -128,6 +128,18 @@ class RedisChannels:
     SDR_METRICS_KEY = "sdr:metrics"
     SDR_SAMPLES_PREFIX = "sdr:samples:"  # + receiver_id
 
+    # Demod service -- FM demodulation runs here, in its own process, so
+    # the oaconvolve/FFT-heavy DSP work (stereo pilot detection, L+R/L-R
+    # extraction) can never share a GIL with the audio service's real-time
+    # Icecast feeder threads. See docs/architecture/SDR_SERVICE_ARCHITECTURE.md.
+    # Audio is published per-chunk on the pub/sub channel; status (RBDS
+    # PS/PI/radiotext, stereo lock, etc.) changes far less often, so it
+    # rides a separately-updated SETEX key instead of riding every chunk.
+    DEMOD_AUDIO_PREFIX = "demod:audio:"  # + receiver_id
+    DEMOD_STATUS_PREFIX = "demod:status:"  # + receiver_id
+    DEMOD_STATUS_TTL_SECONDS = 10
+    DEMOD_METRICS_KEY = "demod:metrics"
+
     # Audio streaming
     AUDIO_SAMPLES_PREFIX = "audio:samples:"  # + source_name
 

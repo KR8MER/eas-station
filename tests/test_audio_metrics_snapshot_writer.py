@@ -177,3 +177,44 @@ def test_no_controller_does_not_raise(snapshot_app, monkeypatch):
 
     with snapshot_app.app_context():
         assert AudioSourceMetrics.query.count() == 0
+
+
+def test_numpy_scalar_metrics_are_coerced_to_native_types(snapshot_app, monkeypatch):
+    """Regression test: production always feeds this writer numpy scalars.
+
+    AudioSourceAdapter._update_metrics (app_core/audio/ingest.py) computes
+    peak/rms dB via ``20 * np.log10(...)`` and defaults them to ``-np.inf``,
+    so every field on the real ``AudioMetrics`` object is a numpy scalar
+    (np.float32/np.float64/np.int64), never a plain Python ``float``/``int``
+    like the fixtures above use. SQLite's loose typing let that slide
+    silently, but psycopg2 raises ``can't adapt type 'numpy.float32'`` and
+    the whole commit -- therefore the whole snapshot, every source, every
+    second -- was silently failing in production. This reproduces that
+    exact input shape and asserts both that the write succeeds and that
+    what lands in the DB is a native Python type, not a numpy one.
+    """
+    np = pytest.importorskip("numpy")
+
+    sources = {
+        "sdr-wbks": _FakeSource(
+            status=AudioSourceStatus.RUNNING,
+            metrics=_FakeMetrics(
+                peak_level_db=np.float32(-6.0),
+                rms_level_db=np.float32(-18.0),
+                sample_rate=np.int64(44100),
+                channels=np.int64(1),
+                frames_captured=np.int64(12345),
+                buffer_utilization=np.float64(0.5),
+            ),
+            config=_FakeConfig(source_type=AudioSourceType.SDR),
+        ),
+    }
+    _run_snapshot(snapshot_app, sources, monkeypatch)
+
+    with snapshot_app.app_context():
+        row = AudioSourceMetrics.query.one()
+        assert row.peak_level_db == pytest.approx(-6.0)
+        assert type(row.peak_level_linear) is float
+        assert type(row.rms_level_linear) is float
+        assert type(row.sample_rate) is int
+        assert type(row.buffer_utilization) is float

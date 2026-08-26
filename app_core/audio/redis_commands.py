@@ -283,6 +283,38 @@ class AudioCommandPublisher:
             timeout=timeout,
         )
 
+    def inject_raw_eas_audio(self, audio_wav: bytes, timeout: float = 20.0) -> Dict[str, Any]:
+        """Inject in-memory WAV bytes into the live Icecast air-chain.
+
+        Sibling of :meth:`inject_eas_audio` for callers that have composite
+        audio in hand but no ``EASMessage`` row to reference by id -- namely
+        ``webapp/eas/workflow.py``'s manual Send path (which persists a
+        ``ManualEASActivation``, not an ``EASMessage``, so it has nothing to
+        pass ``inject_eas_audio(message_id=...)``). Manual Send previously
+        only played audio locally via the configured ``audio_player_cmd``
+        (e.g. ``aplay``) and keyed GPIO -- it never reached Icecast at all,
+        so a manually-sent alert (including a Required Weekly Test sent by
+        hand) was inaudible to any stream listener. This closes that gap
+        using the same base64-in-JSON pattern :meth:`abort_injected_audio`
+        already uses for its EOM burst -- fine for a rare, human-triggered
+        action; the per-chunk real-time audio path (services/demod) avoids
+        this overhead deliberately, this one doesn't need to.
+
+        Args:
+            audio_wav: Composite WAV bytes (SAME header + narration + EOM).
+            timeout: How long to wait for the audio-service to confirm.
+
+        Returns:
+            Response dict with 'success', 'message', and optional 'data'.
+        """
+        import base64
+        return self._publish_command(
+            'inject_raw_eas_audio',
+            {'audio_b64': base64.b64encode(audio_wav).decode('ascii')},
+            wait_for_response=True,
+            timeout=timeout,
+        )
+
     def abort_injected_audio(self, eom_wav: Optional[bytes] = None, timeout: float = 10.0) -> Dict[str, Any]:
         """Purge any EAS audio already queued into the live Icecast air-chain.
 
@@ -795,6 +827,36 @@ class AudioCommandSubscriber:
                 # No running source queues (or no controller) — non-fatal: the
                 # resend still keys GPIO and holds the air-chain.  Report it so
                 # the caller can log that no Icecast listeners received audio.
+                return {
+                    'success': False,
+                    'message': 'No active source queues to inject into',
+                    'data': {'injected': False},
+                }
+
+            elif command == 'inject_raw_eas_audio':
+                import base64
+                audio_b64 = params.get('audio_b64')
+                if not audio_b64:
+                    return {'success': False, 'message': 'audio_b64 is required'}
+                try:
+                    wav_bytes = base64.b64decode(audio_b64)
+                except Exception as exc:
+                    return {'success': False, 'message': f'Invalid audio_b64: {exc}'}
+                if not wav_bytes:
+                    return {
+                        'success': False,
+                        'message': 'Decoded audio is empty',
+                        'data': {'injected': False},
+                    }
+
+                from app_core.audio.eas_stream_injector import inject_eas_audio as _inject_eas_audio
+                injected = _inject_eas_audio(wav_bytes)
+                if injected:
+                    return {
+                        'success': True,
+                        'message': 'EAS audio injected into air-chain',
+                        'data': {'injected': True},
+                    }
                 return {
                     'success': False,
                     'message': 'No active source queues to inject into',

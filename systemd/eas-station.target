@@ -10,6 +10,7 @@ After=postgresql.service redis.service nginx.service
 # Phase 4 of the hardware_service.py split.
 Wants=eas-station-web.service \
       eas-station-sdr.service \
+      eas-station-demod.service \
       eas-station-audio.service \
       eas-station-endec-feeds.service \
       eas-station-hardware.target \

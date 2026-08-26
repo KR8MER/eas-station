@@ -98,6 +98,18 @@ def _run(message_id: int, operator: str | None) -> int:
         event_label = (
             event_info.get('name', event_code) if isinstance(event_info, dict) else event_code
         ) or 'EAS Alert'
+        # Prefer the original alert's headline when one is on file -- it's
+        # usually more specific than the generic event-type name ("Severe
+        # Thunderstorm Warning issued until 2:15 PM by NWS Cleveland" vs.
+        # just "Severe Thunderstorm Warning"), and this is what the
+        # countdown overlay and every Icecast stream's "now playing" title
+        # show for the duration of the resend (see
+        # _reconcile_broadcast_metadata() in eas_monitoring_service.py).
+        try:
+            if message.cap_alert and (message.cap_alert.headline or '').strip():
+                event_label = message.cap_alert.headline.strip()
+        except Exception:  # pragma: no cover - defensive, cap_alert_id may be stale/None
+            pass
 
         # Every other broadcast path (manual Send, RWT, live/auto-forward)
         # resolves the player command through load_eas_config()'s
@@ -240,18 +252,73 @@ def _run(message_id: int, operator: str | None) -> int:
         except Exception:
             db.session.rollback()
 
+        # Audio Archive (webapp/admin/audio/history.py's /audio page) lists
+        # one row per EASMessage -- a resend used to replay the original row
+        # in place rather than inserting a new one, so a retransmission never
+        # showed up there at all; only the original generation event did.
+        # For a compliance log ("browse and manage EAS broadcast recordings")
+        # that's a real gap -- a retransmission is itself a loggable airchain
+        # event. Clone the original row (same audio blobs -- there is no
+        # blob-dedup mechanism on this model, so this does duplicate storage,
+        # which is an acceptable tradeoff for a rare, human/scheduled-
+        # triggered action, not a hot path) with a fresh created_at so it
+        # sorts and displays exactly like a new send. Written unconditionally,
+        # same rationale as the SystemLog/audit-ledger entries above: even a
+        # failed resend attempt is a real event worth a record, not something
+        # that should silently vanish.
+        try:
+            resend_message = EASMessage(
+                cap_alert_id=message.cap_alert_id,
+                alert_identifier=message.alert_identifier,
+                same_header=message.same_header,
+                audio_filename=message.audio_filename,
+                text_filename=message.text_filename,
+                audio_data=message.audio_data,
+                eom_audio_data=message.eom_audio_data,
+                same_audio_data=message.same_audio_data,
+                attention_audio_data=message.attention_audio_data,
+                tts_audio_data=message.tts_audio_data,
+                buffer_audio_data=message.buffer_audio_data,
+                tts_warning=message.tts_warning,
+                tts_provider=message.tts_provider,
+                text_payload=message.text_payload,
+                metadata_payload={
+                    **(message.metadata_payload or {}),
+                    'resend': True,
+                    'resend_of_message_id': message_id,
+                    'resent_by': operator,
+                    'airchain_signalled': airchain_signalled,
+                    'audio_injected': audio_injected,
+                    'resend_error': str(resend_error) if resend_error else None,
+                },
+            )
+            db.session.add(resend_message)
+            db.session.commit()
+            logger.info(
+                'Resend recorded in Audio Archive as EASMessage #%s (source #%s)',
+                resend_message.id, message_id,
+            )
+        except Exception as exc:
+            db.session.rollback()
+            logger.error(
+                'Failed to record resend of EASMessage #%s in Audio Archive: %s',
+                message_id, exc,
+            )
+
         # A resend is a transmission event just like a fresh manual "Send" or
         # RWT airchain -- webapp/eas/workflow.py writes an EAS_BROADCAST audit
-        # entry for its transmissions, but this script only ever wrote the
-        # SystemLog row above. A resend never inserts a new EASMessage row (it
-        # replays the existing one), so the SQLAlchemy after_insert listener
-        # that normally fires EAS_BROADCAST for a new message never runs
-        # either -- leaving resends with zero audit-ledger trail. Record it
-        # explicitly here, same action/shape as the manual Send path (and
-        # unconditionally -- even a failed resend attempt -- so "who resent
-        # which message, when, and whether it worked" is always captured for
-        # compliance review rather than silently vanishing along with this
-        # detached process's DEVNULL-redirected stderr).
+        # entry for its transmissions. The Audio Archive clone just above
+        # also fires the standard after_insert audit listener for the new
+        # EASMessage row (generic, no operator attribution), but that alone
+        # isn't enough: it doesn't carry who triggered the resend or whether
+        # it actually reached the air, so this explicit entry -- same
+        # action/shape as the manual Send path, keyed to the *original*
+        # message_id rather than the new clone -- still records that richer
+        # detail. Written unconditionally -- even a failed resend attempt --
+        # so "who resent which message, when, and whether it worked" is
+        # always captured for compliance review rather than silently
+        # vanishing along with this detached process's DEVNULL-redirected
+        # stderr.
         try:
             AuditLogger.log(
                 action=AuditAction.EAS_BROADCAST,

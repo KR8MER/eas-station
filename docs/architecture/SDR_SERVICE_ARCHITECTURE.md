@@ -28,21 +28,27 @@ flowchart TB
 
     subgraph redis["REDIS"]
         direction LR
-        channels["Channels<br/>• <code>sdr:samples:{receiver_id}</code>"]
-        keys["Keys<br/>• <code>sdr:metrics</code> (health)<br/>• <code>eas:spectrum:{id}</code> (waterfall/scope, 5s TTL)<br/>• <code>sdr:ring_buffer:{id}</code> (stats)<br/>• <code>sdr:heartbeat</code><br/>• <code>sdr:trends:{id}</code> / <code>sdr:trends:{id}:5m</code> (historical archive)<br/>• <code>sdr:commands</code> (control queue)<br/>• <code>sdr:command_result:{id}</code>"]
+        channels["Channels<br/>• <code>sdr:samples:{receiver_id}</code><br/>• <code>demod:audio:{receiver_id}</code>"]
+        keys["Keys<br/>• <code>sdr:metrics</code> (health)<br/>• <code>eas:spectrum:{id}</code> (waterfall/scope, 5s TTL)<br/>• <code>sdr:ring_buffer:{id}</code> (stats)<br/>• <code>sdr:heartbeat</code><br/>• <code>sdr:trends:{id}</code> / <code>sdr:trends:{id}:5m</code> (historical archive)<br/>• <code>sdr:commands</code> (control queue)<br/>• <code>sdr:command_result:{id}</code><br/>• <code>demod:status:{id}</code> (RBDS/stereo, 10s TTL)<br/>• <code>demod:metrics</code> (health)"]
     end
 
-    subgraph audio["EAS MONITORING SERVICE — <code>eas_monitoring_service.py</code><br/>No USB access required — receives samples via Redis"]
+    subgraph demodsvc["DEMOD SERVICE — <code>services/demod/</code><br/>Own process — a demodulator can never again share a GIL with the audio service's real-time feeders"]
         direction LR
-        demod["Demodulation<br/>(FM, AM, …)"]
+        demod["Demodulation<br/>(FM, AM, …)<br/>one worker thread per receiver"]
+    end
+
+    subgraph audio["EAS MONITORING SERVICE — <code>eas_monitoring_service.py</code><br/>No USB access required — receives demodulated audio via Redis"]
+        direction LR
         decoder["EAS / SAME<br/>Decoder"]
         icecast["Icecast<br/>Streaming"]
-        demod --> decoder --> icecast
+        decoder --> icecast
     end
 
     usb -- "USB passthrough" --> reader
     pub -- "Redis pub/sub<br/>(zlib compressed, base64 encoded)" --> channels
     keys --> demod
+    demod -- "Redis pub/sub<br/>(binary PCM)" --> channels
+    channels --> decoder
 ```
 
 ## Components
@@ -101,13 +107,55 @@ buffer_size = sample_rate * 1.0
 ~~1. USB Reader Thread (Producer) - read from hardware~~
 ~~2. Processing Thread (Consumer) - FFT and analysis~~
 
-### 4. EAS Monitoring Service (`eas_monitoring_service.py`)
+### 4. Demod Service (`services/demod/`)
+
+**Purpose:** FM/AM demodulation, split out of the audio service.
+
+**Why a separate process:** demodulation used to run inline inside the
+audio service's own Redis-subscriber thread. A `py-spy record --gil`
+profile of the live process showed that thread dominating GIL-held time —
+several `scipy.signal.oaconvolve` FFT convolutions per IQ chunk (stereo
+pilot detection, RBDS extraction — see `app_core/radio/demod/fm.py`) were
+starving the audio service's three real-time Icecast feeder threads
+sharing the same interpreter, each of which needs to wake roughly every
+50ms to keep its buffer fed. Moving the DSP work to its own OS process
+means it can never again share a GIL with anything real-time — the same
+reasoning that already split network/zigbee/gps/displays/gpio into their
+own processes (`docs/architecture/SYSTEM_ARCHITECTURE.md`).
+
+**Responsibilities:**
+- Subscribe to `sdr:samples:{receiver_id}` (one lightweight subscriber
+  thread per receiver — parse JSON, hand off, nothing else)
+- Own the actual `FMDemodulator`/`AMDemodulator` per receiver, each behind
+  its own dedicated worker thread (mirrors
+  `app_core/radio/demod/rbds_worker.py`'s queue + single-consumer-thread
+  pattern — a demodulator is stateful/order-dependent and must never be
+  called from more than one thread or on out-of-order chunks)
+- Publish demodulated PCM audio to `demod:audio:{receiver_id}` and decoder
+  status (stereo lock, RBDS PS/PI/radiotext, ...) to
+  `demod:status:{receiver_id}`
+- Read per-receiver demod settings (modulation type, stereo, RBDS,
+  de-emphasis) from the `RadioReceiver` table — the same source of truth
+  this service's own hardware tuning already reads from
+
+**Runtime Requirements:**
+- Runs as the `eas-station-demod.service` systemd unit (see `systemd/`),
+  peer of `sdr`/`audio` in `eas-station.target` (not a `hardware.target`
+  member — see `app_core/config/services.py`'s port-allocation comment)
+- No USB access needed
+- Redis + database connectivity (database only to read `RadioReceiver`
+  rows — see `services/demod/__main__.py::_discover_receiver_configs`)
+- No HTTP control API beyond `/health` on port 5106 — purely Redis-driven,
+  same as the `gpio` subsystem
+
+### 5. EAS Monitoring Service (`eas_monitoring_service.py`)
 
 **Purpose:** Audio processing and EAS decoding.
 
 **Responsibilities:**
-- Subscribe to SDR sample channels
-- Demodulation (FM, AM, etc.)
+- Subscribe to the demod service's `demod:audio:{receiver_id}` channel
+  (`app_core/audio/redis_sdr_adapter.py::RedisSDRSourceAdapter` — a thin
+  consumer now; it no longer touches a demodulator itself)
 - EAS/SAME header detection
 - Icecast streaming output
 - Web audio streaming
@@ -115,11 +163,11 @@ buffer_size = sample_rate * 1.0
 **Runtime Requirements:**
 - Runs as the `eas-station-audio.service` systemd unit (see `systemd/`).
 - No USB access needed
-- Redis connectivity only (publishes/subscribes on the channels listed above)
+- Redis connectivity only (publishes/subscribes on the channels listed below)
 
 ## Redis Data Flow
 
-### Sample Publishing
+### Sample Publishing (SDR -> Demod)
 
 ```
 Channel: sdr:samples:{receiver_id}
@@ -134,6 +182,21 @@ Format: JSON with zlib+base64 encoded samples
   "encoding": "zlib+base64",
   "samples": "<base64 encoded zlib compressed interleaved float32>"
 }
+```
+
+### Demodulated Audio (Demod -> Audio)
+
+```
+Channel: demod:audio:{receiver_id}
+Format: binary -- 4-byte big-endian IQ sample rate + 4-byte big-endian
+        center frequency + raw float32 PCM, already at the receiver's
+        configured audio_sample_rate (no JSON/base64/zlib -- this hop is
+        same-process-trusted and sits on the audio service's real-time
+        feeder path, so it stays a single unpack call)
+
+Key: demod:status:{receiver_id}  (SETEX, 10s TTL)
+Value: pickle.dumps(DemodulatorStatus) -- stereo lock, RBDS PS/PI/
+       radiotext/etc. See app_core/radio/demod/types.py::DemodulatorStatus.
 ```
 
 ### Spectrum Data (Waterfall / Spectrum Scope)

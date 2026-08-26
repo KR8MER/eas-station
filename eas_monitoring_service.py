@@ -753,11 +753,24 @@ def _snapshot_audio_metrics_once(flask_app) -> None:
                     continue
 
                 # peak/rms are true dB (can be -inf for digital silence);
-                # 10 ** (-inf / 20) evaluates to 0.0 in Python, no special
-                # case needed. A missing metrics_obj value (None) is the
-                # only case that would break the NOT NULL float columns.
-                peak_db = metrics_obj.peak_level_db if metrics_obj.peak_level_db is not None else -120.0
-                rms_db = metrics_obj.rms_level_db if metrics_obj.rms_level_db is not None else -120.0
+                # 10 ** (-inf / 20) evaluates to 0.0, no special case needed.
+                # A missing metrics_obj value (None) is the only case that
+                # would break the NOT NULL float columns.
+                #
+                # metrics_obj is computed from numpy arrays (see
+                # AudioSourceAdapter._update_metrics in app_core/audio/ingest.py:
+                # `20 * np.log10(...)`, `-np.inf` defaults, etc.), so every
+                # field here -- not just the two dB values -- can arrive as a
+                # numpy scalar (np.float32/np.float64/np.int64) rather than a
+                # native Python type. psycopg2 cannot adapt those directly
+                # ("can't adapt type 'numpy.float32'"), which silently failed
+                # this entire commit -- and therefore this whole snapshot,
+                # every second, since this writer was added: the
+                # audio_source_metrics table has never actually been
+                # populated in production. float()/int() below force native
+                # types before they ever reach SQLAlchemy.
+                peak_db = float(metrics_obj.peak_level_db) if metrics_obj.peak_level_db is not None else -120.0
+                rms_db = float(metrics_obj.rms_level_db) if metrics_obj.rms_level_db is not None else -120.0
 
                 source_type = getattr(getattr(source, "config", None), "source_type", None)
                 source_type_value = source_type.value if hasattr(source_type, "value") else str(source_type or "unknown")
@@ -767,13 +780,13 @@ def _snapshot_audio_metrics_once(flask_app) -> None:
                     source_type=source_type_value,
                     peak_level_db=peak_db,
                     rms_level_db=rms_db,
-                    peak_level_linear=10 ** (peak_db / 20.0),
-                    rms_level_linear=10 ** (rms_db / 20.0),
-                    sample_rate=getattr(metrics_obj, "sample_rate", None) or 0,
-                    channels=getattr(metrics_obj, "channels", None) or 0,
-                    frames_captured=getattr(metrics_obj, "frames_captured", None) or 0,
+                    peak_level_linear=float(10 ** (peak_db / 20.0)),
+                    rms_level_linear=float(10 ** (rms_db / 20.0)),
+                    sample_rate=int(getattr(metrics_obj, "sample_rate", None) or 0),
+                    channels=int(getattr(metrics_obj, "channels", None) or 0),
+                    frames_captured=int(getattr(metrics_obj, "frames_captured", None) or 0),
                     silence_detected=bool(getattr(metrics_obj, "silence_detected", False)),
-                    buffer_utilization=getattr(metrics_obj, "buffer_utilization", None) or 0.0,
+                    buffer_utilization=float(getattr(metrics_obj, "buffer_utilization", None) or 0.0),
                     source_metadata=_sanitize_value(getattr(metrics_obj, "metadata", None)),
                 ))
             db.session.commit()
@@ -1319,6 +1332,56 @@ def collect_metrics():
         logger.error(f"Error collecting metrics: {e}")
 
     return metrics
+
+
+#: Tracks the alert label currently applied to every Icecast stream's
+#: metadata, so _reconcile_broadcast_metadata() only calls
+#: set_alert_metadata()/clear_alert_metadata() on an actual transition
+#: rather than every 0.25s tick. None means "no override applied".
+_applied_broadcast_metadata_label = None
+
+
+def _reconcile_broadcast_metadata() -> None:
+    """Mirror the on-air broadcast marker onto every Icecast stream's title.
+
+    Every broadcast path in this project -- manual Send (webapp/eas/
+    workflow.py), RWT (app_core/rwt_scheduler.py), resend (scripts/
+    resend_eas_broadcast.py), and live auto-forward (app_core/audio/
+    auto_forward.py via EASBroadcaster.handle_alert() in app_utils/eas.py)
+    -- already calls set_broadcast_active()/clear_broadcast_active() to key
+    the GPIO relay and drive the countdown overlay. That marker already
+    carries a human-readable ``label`` for exactly this purpose. Polling it
+    here (from the one process that actually owns the live IcecastStreamer
+    objects) means every current and future broadcast path gets its stream
+    metadata overridden with the alert text automatically -- no per-caller
+    wiring needed, unlike the old approach where only auto_forward.py
+    called app_core.audio.alert_metadata directly (and could only do so
+    because it happens to run in this same process; RWT/manual-send/resend
+    run in the web process or a standalone script, where that call would
+    silently no-op -- alert_metadata's target is a module-level singleton
+    that only exists inside this process).
+
+    Called from the main loop's existing ~4 Hz tick (see metrics_interval
+    below) rather than its own thread/pub-sub subscription -- get_broadcast_
+    state() is one cheap Redis GET, so riding the loop that's already
+    ticking at this cadence is simpler than adding a second listener.
+    """
+    global _applied_broadcast_metadata_label
+    try:
+        from app_core.audio.alert_metadata import clear_alert_metadata, set_alert_metadata
+        from app_utils.eas import get_broadcast_state
+
+        state = get_broadcast_state() or {}
+        if state.get('active'):
+            label = (state.get('label') or state.get('event_code') or 'EAS Alert').strip()
+            if label and label != _applied_broadcast_metadata_label:
+                set_alert_metadata(label)
+                _applied_broadcast_metadata_label = label
+        elif _applied_broadcast_metadata_label is not None:
+            clear_alert_metadata()
+            _applied_broadcast_metadata_label = None
+    except Exception as exc:
+        logger.debug("Broadcast metadata reconcile failed: %s", exc)
 
 
 def publish_metrics_to_redis(metrics):
@@ -2338,6 +2401,7 @@ def main():
                 if current_time - last_metrics_time >= metrics_interval:
                     metrics = collect_metrics()
                     publish_metrics_to_redis(metrics)
+                    _reconcile_broadcast_metadata()
                     last_metrics_time = current_time
 
                 # Snapshot AudioSourceMetrics to the DB at a slower ~1 Hz --

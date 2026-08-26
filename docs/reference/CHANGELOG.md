@@ -8,31 +8,128 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.192.2] - 2026-08-26 - Fix the global broadcast overlay getting stuck open
+## [2.193.3] - 2026-08-26 - Resends now show up in Audio Archive
 
-A user watched the full-screen "EAS Alert Broadcasting" overlay stay stuck at
-`0:00 / Sending EOM` well after a resend had actually finished airing, and
-found that pressing "Hold to Abort Broadcast" appeared to do nothing. The
-server logs showed the abort *was* reaching the backend and being handled
-correctly -- `POST /api/broadcast/abort` returned 409 `"No broadcast is
-currently active"` both times -- the broadcast had genuinely already ended
-server-side, but the client-side overlay never got the memo and stayed on
-screen with a live-looking abort button.
+Audio Archive (`/audio`, "Browse and manage EAS broadcast recordings")
+lists one row per `EASMessage`. A resend replayed the *original* row in
+place instead of inserting a new one, so a retransmission was invisible
+there -- only the original generation event ever showed up, even though
+the resend keyed GPIO and injected real audio into the live air-chain (see
+2.193.1). For a compliance log, a retransmission is itself a loggable
+event.
+
+### Added
+- **`scripts/resend_eas_broadcast.py`**: each resend now clones the source
+  `EASMessage` row (audio blobs, `same_header`, CAP-alert link, etc.) into
+  a new row with a fresh `created_at`, tagged
+  `metadata_payload: {resend: true, resend_of_message_id, resent_by}`. It
+  sorts, filters, and downloads exactly like an original send on the Audio
+  Archive page. Written unconditionally -- even a failed resend attempt --
+  matching the SystemLog/audit-ledger entries already written there for
+  the same reason: a real event shouldn't silently vanish. Storage is
+  duplicated per resend (there's no blob-dedup mechanism on this model);
+  acceptable for a rare, human/scheduled-triggered action.
+
+## [2.193.1] - 2026-08-26 - Manual Send and RWT never reached the Icecast air-chain
+
+A user manually sent a Required Weekly Test and heard nothing on any
+Icecast stream. Auditing every broadcast-trigger code path (every call
+site of `set_broadcast_active()`/`play_broadcast_audio()`) found that
+**Manual Send and RWT (both the automated weekly test and the operator
+"Run Test Now" button/GPIO trigger) had never injected audio into Icecast
+at all** -- only Resend and live auto-forward/OTA-relay did. Both paths
+keyed GPIO and played audio locally via `audio_player_cmd` (e.g. `aplay`),
+but nothing pushed the composite WAV into the live stream queues. The
+weekly compliance test had been airing nowhere a stream listener could
+hear it.
+
+Also: a separate, smaller gap in the same audit -- only the live
+auto-forward path overrode each Icecast stream's "now playing" title with
+the alert text during a broadcast (`app_core.audio.alert_metadata`, an
+in-process-only singleton); every other path silently no-op'd if it tried
+the same call, since it doesn't share a process with the audio service's
+live `IcecastStreamer` objects.
 
 ### Fixed
-- **`templates/base.html`**: the overlay's local countdown timer reaching
-  `0:00` doesn't close it -- it always waited for a fresh
-  `broadcast_state_update` (WebSocket push or the 1.5 s polling fallback) to
-  set `active: false`. On a mobile browser that throttles/suspends timers
-  and can silently stall a WebSocket while backgrounded, that update can be
-  missed entirely, leaving the modal open indefinitely with no cue that it's
-  stale. Two fixes: (1) the abort handler now treats a 409 "nothing active"
-  response as authoritative and closes the overlay itself instead of just
-  toasting an error and leaving the modal in place; (2) a `visibilitychange`
-  listener re-fetches `/api/broadcast/state` the moment the tab regains
-  focus, matching the pattern already used on the GNSS dashboard and system
-  health page, so a stale overlay self-corrects even without the user
-  touching the abort button.
+- **`app_core/audio/redis_commands.py`**: added `inject_raw_eas_audio`, a
+  sibling of the existing `inject_eas_audio` (resend's mechanism) for
+  callers that have composite WAV bytes in hand but no `EASMessage` row to
+  reference by id -- Manual Send and RWT persist a `ManualEASActivation`,
+  not an `EASMessage`. Same base64-in-JSON pattern `abort_injected_audio`
+  already uses for its EOM burst.
+- **`webapp/eas/workflow.py`** (Manual Send) and **`app_core/rwt_scheduler.py`**
+  (`_drive_rwt_airchain`, shared by the automated weekly RWT, the "Run Test
+  Now" button, and the GPIO RWT trigger) now call `inject_raw_eas_audio`
+  right after keying the broadcast marker, mirroring exactly how
+  `scripts/resend_eas_broadcast.py` already does it. Best-effort and
+  non-fatal, same as every other injection call site -- a Redis/audio-service
+  hiccup can never block relay keying or local playback.
+- **`eas_monitoring_service.py`**: added `_reconcile_broadcast_metadata()`,
+  polled from the existing ~4 Hz main loop, which mirrors the Redis
+  broadcast-state marker's `label` onto every Icecast stream's title. Since
+  every broadcast path already writes that marker (to key the GPIO relay
+  and drive the countdown overlay), this covers Manual Send, RWT, Resend,
+  and auto-forward automatically -- no per-caller wiring, unlike the old
+  direct-call approach that only worked for auto-forward. The two direct
+  calls in `app_core/audio/auto_forward.py` were removed as redundant.
+- **`app_utils/eas.py`** (`EASBroadcaster.handle_alert`) and
+  **`scripts/resend_eas_broadcast.py`**: both now prefer the original
+  alert's `headline` over the generic event-type name for the broadcast
+  label when one is on file, matching what auto-forward's now-removed
+  direct call already did -- more specific text ("Severe Thunderstorm
+  Warning issued until 2:15 PM by NWS Cleveland" vs. just "Severe
+  Thunderstorm Warning") for both the countdown overlay and the new
+  stream-metadata override.
+
+## [2.193.0] - 2026-08-26 - Split FM/AM demodulation into its own service
+
+A user watched a resend's EAS audio get injected into all three configured
+Icecast mounts ("EAS stream injector: pushed 73.9s of EAS audio ... to
+source 'X' broadcast queue" -- confirmed in the logs) yet reported never
+having heard a clean one air. `journalctl` showed why: all three mounts
+hit "Icecast buffer running low" / "buffer completely empty -- Audio
+source starved" every 10-30 seconds, continuously, all day -- not just
+during EAS injections, interrupting normal programming too.
+
+Profiling the live `eas-station-audio.service` with `py-spy record --gil`
+(non-blocking, 15s @ 30Hz) found the cause: the `redis-sdr-*` thread that
+receives IQ samples from `eas-station-sdr.service` dominated GIL-held
+samples. On every incoming IQ chunk it ran several
+`scipy.signal.oaconvolve` FFT convolutions inline (stereo pilot detection,
+RBDS extraction -- `app_core/radio/demod/fm.py`), starving the audio
+service's three real-time Icecast feeder threads sharing the same
+interpreter, each of which needs to wake roughly every 50ms to keep its
+buffer fed.
+
+### Added
+- **`services/demod/`**: a new `eas-station-demod.service` subprocess that
+  owns FM/AM demodulation, mirroring the queue + dedicated-worker-thread
+  pattern `app_core/radio/demod/rbds_worker.py` already used for RBDS
+  decoding (a demodulator is stateful/order-dependent and must never be
+  called from more than one thread or on out-of-order chunks). Subscribes
+  to `sdr:samples:<receiver_id>`, publishes demodulated PCM audio to
+  `demod:audio:<receiver_id>` and decoder status (stereo lock, RBDS
+  PS/PI/radiotext) to `demod:status:<receiver_id>`. Listens on port 5106,
+  matching the existing per-subsystem-service pattern
+  (`docs/architecture/SDR_SERVICE_ARCHITECTURE.md`,
+  `docs/troubleshooting/FIREWALL_REQUIREMENTS.md`).
+
+### Fixed
+- **`app_core/audio/redis_sdr_adapter.py`**: `RedisSDRSourceAdapter` no
+  longer runs a demodulator inline -- it's now a thin consumer of the
+  demod service's `demod:audio:*` channel, so the DSP work that was
+  starving the Icecast feeders can never again share a GIL with them.
+  RBDS/stereo metadata (the ~300-line block `_update_metrics()` builds
+  for the UI) is unchanged; it now reads a pickled `DemodulatorStatus`
+  snapshot from `demod:status:*` instead of a local demodulator reference.
+- **`eas_monitoring_service.py`**: a `numpy.float32` -> psycopg2
+  type-adapter failure (`can't adapt type 'numpy.float32'`) was silently
+  breaking every `audio_source_metrics` write, once a second, since the
+  writer was added -- the table had never actually been populated in
+  production. `peak_level_db`/`rms_level_db`/`sample_rate`/etc. are now
+  coerced to native Python types before reaching SQLAlchemy. Found during
+  the same investigation; confirmed via `py-spy` that it was not the cause
+  of the Icecast starvation (a separate, real bug worth fixing anyway).
 
 ## [2.192.1] - 2026-08-24 - Fix stale version claims in tech-stack shields and docs
 
