@@ -44,6 +44,7 @@ again share a GIL with anything real-time. See
 ``services/demod/worker.py`` for the full design.
 """
 
+import base64
 import logging
 import queue
 import threading
@@ -201,11 +202,20 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
 
                 try:
                     messages_received += 1
-                    payload = message['data']
-                    if isinstance(payload, str):
-                        payload = payload.encode('latin-1')
-                    if not payload or len(payload) < 8:
-                        logger.warning(f"Empty/short audio envelope from demod for {self._receiver_id}")
+                    raw = message['data']
+                    if not raw:
+                        logger.warning(f"Empty audio envelope from demod for {self._receiver_id}")
+                        continue
+                    # base64-decoded, not raw bytes -- see the matching
+                    # comment in services/demod/worker.py::DemodWorker._publish
+                    # for why: the shared Redis client decodes every
+                    # pub/sub payload as UTF-8, which crashes outright on
+                    # a raw binary payload before this code ever runs.
+                    if isinstance(raw, bytes):
+                        raw = raw.decode('ascii')
+                    payload = base64.b64decode(raw)
+                    if len(payload) < 8:
+                        logger.warning(f"Short audio envelope from demod for {self._receiver_id}")
                         continue
 
                     sample_rate, center_frequency, audio_samples = _unpack_audio_envelope(payload)
@@ -268,9 +278,14 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
             raw = self._redis_client.get(f"{RedisChannels.DEMOD_STATUS_PREFIX}{self._receiver_id}")
             if raw is None:
                 return self._status_cache  # keep last-known rather than flapping to None on a TTL gap
-            if isinstance(raw, str):
-                raw = raw.encode('latin-1')
-            status = pickle.loads(raw)
+            # base64-decoded, not raw bytes -- see the matching comment in
+            # services/demod/worker.py::DemodWorker._publish for why: the
+            # shared Redis client's decode_responses=True UTF-8-decodes
+            # every value it reads back, and a pickle stream is not valid
+            # UTF-8.
+            if isinstance(raw, bytes):
+                raw = raw.decode('ascii')
+            status = pickle.loads(base64.b64decode(raw))
             self._status_cache = status
             self._status_cache_at = now
             return status

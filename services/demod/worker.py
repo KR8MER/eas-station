@@ -267,20 +267,33 @@ class DemodWorker:
         audio_bytes = audio_samples.astype(np.float32).tobytes()
         channel = f"{RedisChannels.DEMOD_AUDIO_PREFIX}{self.receiver_id}"
         try:
-            self._redis_client.publish(
-                channel,
-                _pack_audio_envelope(audio_bytes, self._iq_sample_rate, self._center_frequency),
-            )
+            envelope = _pack_audio_envelope(audio_bytes, self._iq_sample_rate, self._center_frequency)
+            # base64-encoded, not raw bytes: the shared Redis client (see
+            # app_core/redis_client.get_redis_client) is constructed with
+            # decode_responses=True everywhere else in this codebase, and
+            # redis-py applies that UTF-8 decode to every pub/sub payload
+            # it reads off the socket -- including this one -- before our
+            # code ever sees it. A raw (non-UTF-8) binary payload crashed
+            # the subscriber's read loop outright
+            # (UnicodeDecodeError: 'utf-8' codec can't decode byte ...),
+            # confirmed live when this was first deployed. base64 keeps
+            # the payload valid UTF-8/ASCII without needing a second,
+            # separately-configured Redis connection just for this channel.
+            self._redis_client.publish(channel, base64.b64encode(envelope).decode('ascii'))
         except Exception as exc:
             logger.debug("demod worker %s: audio publish failed: %s", self.receiver_id, exc)
 
         if status is not None:
             try:
                 status_key = f"{RedisChannels.DEMOD_STATUS_PREFIX}{self.receiver_id}"
+                # base64 for the same reason as the audio envelope above --
+                # GET/SETEX go through the same decode_responses=True UTF-8
+                # decode as pub/sub, and a pickle stream is not valid UTF-8.
+                encoded = base64.b64encode(pickle.dumps(status)).decode('ascii')
                 self._redis_client.setex(
                     status_key,
                     RedisChannels.DEMOD_STATUS_TTL_SECONDS,
-                    pickle.dumps(status),
+                    encoded,
                 )
             except Exception as exc:
                 logger.debug("demod worker %s: status publish failed: %s", self.receiver_id, exc)

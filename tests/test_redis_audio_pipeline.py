@@ -134,7 +134,7 @@ class TestRedisSdrAdapter(unittest.TestCase):
 
         status_obj = _FakeDemodulatorStatus(stereo_pilot_locked=True)
         mock_redis = MagicMock()
-        mock_redis.get.return_value = pickle.dumps(status_obj)
+        mock_redis.get.return_value = base64.b64encode(pickle.dumps(status_obj)).decode('ascii')
         adapter._redis_client = mock_redis
 
         first = adapter._get_remote_status()
@@ -161,7 +161,7 @@ class TestRedisSdrAdapter(unittest.TestCase):
 
         status_obj = _FakeDemodulatorStatus()
         mock_redis = MagicMock()
-        mock_redis.get.return_value = pickle.dumps(status_obj)
+        mock_redis.get.return_value = base64.b64encode(pickle.dumps(status_obj)).decode('ascii')
         adapter._redis_client = mock_redis
 
         first = adapter._get_remote_status()
@@ -183,7 +183,9 @@ class TestRedisSdrAdapter(unittest.TestCase):
         adapter = self._make_adapter()
 
         audio = np.random.randn(200).astype(np.float32)
-        envelope = _pack_audio_envelope(audio.tobytes(), 250000, 93900000)
+        envelope = base64.b64encode(
+            _pack_audio_envelope(audio.tobytes(), 250000, 93900000)
+        ).decode('ascii')
 
         # First get_message() call returns the one envelope; the second
         # sets _stop_event so _redis_subscriber_loop() exits cleanly
