@@ -87,11 +87,28 @@ class _FakeSystemLog:
         self.kwargs = kwargs
 
 
+class _FakeEASMessageCls:
+    """Callable stub: EASMessage.query.get(mid) for the lookup, and
+    EASMessage(**kwargs) for the Audio Archive clone _run() now creates."""
+
+    query = None  # set per-instance below so each test's `message` fixture wins
+
+    def __init__(self, **kwargs):
+        self.id = 999  # sentinel id for the cloned row
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+
 def _install_stub_modules(monkeypatch, *, message):
     fake_app_module = types.ModuleType('app')
     fake_app_module.app = _FakeApp()
     fake_app_module.db = SimpleNamespace(session=_FakeSession())
-    fake_app_module.EASMessage = SimpleNamespace(query=SimpleNamespace(get=lambda mid: message))
+
+    fake_eas_message_cls = type(
+        '_FakeEASMessageCls', (_FakeEASMessageCls,),
+        {'query': SimpleNamespace(get=lambda mid: message)},
+    )
+    fake_app_module.EASMessage = fake_eas_message_cls
     monkeypatch.setitem(sys.modules, 'app', fake_app_module)
 
     fake_models = types.ModuleType('app_core.models')
@@ -128,9 +145,20 @@ def _install_stub_modules(monkeypatch, *, message):
 def message():
     return SimpleNamespace(
         id=194,
+        cap_alert_id=42,
+        alert_identifier='NWS-TEST-001',
+        same_header='ZCZC-WXR-RWT-000000+0030-2381027-KR8MER-',
+        audio_filename='eas_194.wav',
+        text_filename='eas_194.json',
         audio_data=b'RIFFfakewavdata',
         eom_audio_data=None,
         same_audio_data=None,
+        attention_audio_data=None,
+        tts_audio_data=None,
+        buffer_audio_data=None,
+        tts_warning=None,
+        tts_provider=None,
+        text_payload=None,
         metadata_payload={'event_code': 'RWT', 'playback_duration_seconds': 0.01},
     )
 
@@ -183,8 +211,10 @@ def test_resend_writes_audit_log_entry_on_success(monkeypatch, message):
     assert call['resource_id'] == '194'
     assert call['details']['resend'] is True
 
-    # The plain operational SystemLog row must still be written too.
-    assert len(stubs.db.session.added) == 1
+    # The plain operational SystemLog row must still be written too, plus
+    # the new Audio Archive clone (see test_resend_clones_into_audio_archive
+    # below for the clone's own field assertions).
+    assert len(stubs.db.session.added) == 2
     assert stubs.db.session.added[0].kwargs['level'] == 'INFO'
 
 
@@ -209,7 +239,49 @@ def test_resend_writes_failure_audit_entry_when_playout_raises(monkeypatch, mess
     assert call['success'] is False
     assert 'redis unavailable' in call['details']['error']
 
-    assert len(stubs.db.session.added) == 1
+    # Even a failed resend still gets its Audio Archive clone -- same
+    # "unconditional" rationale as the SystemLog/audit-ledger entries.
+    assert len(stubs.db.session.added) == 2
     system_log = stubs.db.session.added[0]
     assert system_log.kwargs['level'] == 'ERROR'
     assert 'redis unavailable' in system_log.kwargs['details']['error']
+
+    clone = stubs.db.session.added[1]
+    assert clone.metadata_payload['resend_error'] is not None
+    assert 'redis unavailable' in clone.metadata_payload['resend_error']
+
+
+def test_resend_clones_into_audio_archive(monkeypatch, message):
+    """The clone must carry the original's audio blobs and CAP-alert link
+    (so it joins correctly on the Audio Archive page -- see
+    webapp/admin/audio/history.py's EASMessage/CAPAlert join) and be
+    tagged as a resend, distinct from the source row it was cloned from."""
+    stubs = _install_stub_modules(monkeypatch, message=message)
+    monkeypatch.setattr(eas_module, 'set_broadcast_active', lambda **kw: True)
+    monkeypatch.setattr(eas_module, 'clear_broadcast_active', lambda **kw: None)
+    monkeypatch.setattr(eas_module, 'load_eas_config', lambda base_path: {'audio_player_cmd': None})
+
+    rc = resend_module._run(194, 'kr8mer')
+
+    assert rc == 0
+    assert len(stubs.db.session.added) == 2
+    clone = stubs.db.session.added[1]
+
+    # A genuinely new row, not the original object re-added.
+    assert clone is not message
+    assert clone.id != message.id
+
+    # Same underlying alert and audio -- this is what makes it render
+    # correctly on the Audio Archive page and remain listenable.
+    assert clone.cap_alert_id == message.cap_alert_id
+    assert clone.same_header == message.same_header
+    assert clone.audio_data == message.audio_data
+
+    # Tagged so it's identifiable as a resend, not mistaken for a second
+    # original generation of the same alert.
+    assert clone.metadata_payload['resend'] is True
+    assert clone.metadata_payload['resend_of_message_id'] == 194
+    assert clone.metadata_payload['resent_by'] == 'kr8mer'
+    # The original message's own metadata (event_code etc.) must still be
+    # present -- the clone extends it, not replaces it.
+    assert clone.metadata_payload['event_code'] == 'RWT'

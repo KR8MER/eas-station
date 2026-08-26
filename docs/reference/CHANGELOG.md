@@ -8,6 +8,28 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.193.2] - 2026-08-26 - Resends now show up in Audio Archive
+
+Audio Archive (`/audio`, "Browse and manage EAS broadcast recordings")
+lists one row per `EASMessage`. A resend replayed the *original* row in
+place instead of inserting a new one, so a retransmission was invisible
+there -- only the original generation event ever showed up, even though
+the resend keyed GPIO and injected real audio into the live air-chain (see
+2.193.1). For a compliance log, a retransmission is itself a loggable
+event.
+
+### Added
+- **`scripts/resend_eas_broadcast.py`**: each resend now clones the source
+  `EASMessage` row (audio blobs, `same_header`, CAP-alert link, etc.) into
+  a new row with a fresh `created_at`, tagged
+  `metadata_payload: {resend: true, resend_of_message_id, resent_by}`. It
+  sorts, filters, and downloads exactly like an original send on the Audio
+  Archive page. Written unconditionally -- even a failed resend attempt --
+  matching the SystemLog/audit-ledger entries already written there for
+  the same reason: a real event shouldn't silently vanish. Storage is
+  duplicated per resend (there's no blob-dedup mechanism on this model);
+  acceptable for a rare, human/scheduled-triggered action.
+
 ## [2.193.1] - 2026-08-26 - Manual Send and RWT never reached the Icecast air-chain
 
 A user manually sent a Required Weekly Test and heard nothing on any
