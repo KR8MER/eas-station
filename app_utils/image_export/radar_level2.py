@@ -43,7 +43,7 @@ import math
 import os
 import tempfile
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 import requests
