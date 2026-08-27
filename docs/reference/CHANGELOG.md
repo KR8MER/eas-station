@@ -8,6 +8,24 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.193.10] - 2026-08-27 - Fix VAST ad resolution never finding a playable MediaFile
+
+Following up on 2.193.9's fix for iHeart ad metadata display: the Audio
+Archives Song History page's "resolve and play" button on an ad entry
+always reported "No playable audio found," even for VAST ad tags that
+contained a perfectly good `audio/mpeg` `MediaFile`. Root cause:
+`resolve_stream_url()` (`webapp/audio_archive/metadata.py`) searched for
+`root.iter("MediaFile")`, but real-world VAST responses (VAST 3.0+, which
+is standard — confirmed against live iHeartRadio/Triton ad-server
+responses) declare a default XML namespace on the `<VAST>` root element, so
+ElementTree parses every descendant's tag as
+`{http://www.iab.com/VAST}MediaFile` — the bare-string search silently
+matched nothing, regardless of whether the ad actually had playable audio.
+Fixed with a namespace-agnostic element search. Also now extracts `AdTitle`,
+`AdSystem`, and `Duration` from the VAST payload when present, and the
+player bar shows them instead of the generic "Ad URL" placeholder when
+available. Added `tests/test_audio_archive_vast_resolve.py`.
+
 ## [2.193.9] - 2026-08-27 - Fix OLED init file-descriptor leak and iHeart ad-break metadata display
 
 Investigated a report that `eas-station-displays` was consuming 8.9 GB RSS

@@ -105,6 +105,37 @@ def _is_public_url(url: str) -> bool:
     )
 
 
+def _local_tag(tag: str) -> str:
+    """Strip a namespace URI from an ElementTree tag.
+
+    e.g. '{http://www.iab.com/VAST}MediaFile' -> 'MediaFile'.
+    """
+    return tag.rsplit('}', 1)[-1] if '}' in tag else tag
+
+
+def _iter_local(root: ET.Element, name: str):
+    """``root.iter(name)`` that ignores XML namespaces.
+
+    Real-world VAST responses almost universally declare a default
+    ``xmlns`` (e.g. ``xmlns="http://www.iab.com/VAST"``, standard since
+    VAST 3.0). ElementTree folds that into every descendant's tag --
+    ``<MediaFile>`` parses as ``{http://www.iab.com/VAST}MediaFile`` -- so a
+    bare ``root.iter("MediaFile")`` silently matches nothing. That was the
+    actual reason "resolve ad" always reported "no audio MediaFile found",
+    even for VAST payloads that had a perfectly playable audio/mpeg
+    MediaFile sitting right there.
+    """
+    return (el for el in root.iter() if _local_tag(el.tag) == name)
+
+
+def _first_text_local(root: ET.Element, name: str) -> Optional[str]:
+    for el in _iter_local(root, name):
+        text = (el.text or "").strip()
+        if text:
+            return text
+    return None
+
+
 def resolve_stream_url(url: str) -> Dict[str, Any]:
     """Resolve an ad/stream URL to a directly playable audio URL.
 
@@ -146,18 +177,32 @@ def resolve_stream_url(url: str) -> Dict[str, Any]:
         except ET.ParseError as exc:
             return {"error": f"XML parse error: {exc}", "type": "xml_error", "original_url": url}
 
-        for media_file in root.iter("MediaFile"):
+        # AdTitle/AdSystem/Duration are informational, not required for
+        # playback -- extract best-effort so the UI can show more than just
+        # "Ad URL" when the ad server actually provides them.
+        ad_title = _first_text_local(root, "AdTitle")
+        ad_system = _first_text_local(root, "AdSystem")
+        duration = _first_text_local(root, "Duration")
+
+        for media_file in _iter_local(root, "MediaFile"):
             mime = (media_file.get("type") or "").lower().strip()
             audio_url = (media_file.text or "").strip()
             if audio_url.startswith(("http://", "https://")) and (
                 mime in _AUDIO_MIMES or mime.startswith("audio/")
             ):
-                return {
+                result: Dict[str, Any] = {
                     "audio_url": audio_url,
                     "type": "vast",
                     "mime": mime,
                     "original_url": url,
                 }
+                if ad_title:
+                    result["ad_title"] = ad_title
+                if ad_system:
+                    result["ad_system"] = ad_system
+                if duration:
+                    result["duration"] = duration
+                return result
         return {
             "error": "VAST parsed but no audio MediaFile found",
             "type": "vast_no_audio",

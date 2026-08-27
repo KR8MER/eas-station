@@ -45,6 +45,13 @@
     }
 
     const fmtTs = (iso) => (iso ? new Date(iso).toLocaleString() : '—');
+
+    /** VAST <Duration> is "HH:MM:SS(.mmm)" -- convert to seconds for fmtDuration(). */
+    function vastDurationToSecs(d) {
+        const m = /^(\d+):(\d{2}):(\d{2})/.exec(d || '');
+        if (!m) return null;
+        return parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60 + parseInt(m[3], 10);
+    }
     const gbToBytes = (gb) => Math.round(parseFloat(gb || 0) * 1073741824);
     const bytesToGb = (b) => (b / 1073741824).toFixed(2);
 
@@ -678,7 +685,14 @@
         try {
             const r = await api('POST', '/api/audio/archives/resolve-stream-url', { url });
             if (r.audio_url) {
-                play(r.audio_url, label + (r.type === 'vast' ? ' (VAST)' : ''));
+                // Prefer the ad server's own title when it gave us one --
+                // some (e.g. Triton) only return an internal creative ID,
+                // but others return a genuinely useful name, so use it when
+                // present rather than the generic "Ad URL" placeholder.
+                let playLabel = r.ad_title ? `Ad: ${r.ad_title}` : label;
+                const secs = vastDurationToSecs(r.duration);
+                if (secs !== null) playLabel += ` (${fmtDuration(secs)})`;
+                play(r.audio_url, playLabel);
             } else {
                 notify(r.error || 'No playable audio found at that URL', false);
             }
