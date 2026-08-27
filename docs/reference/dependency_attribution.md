@@ -63,6 +63,11 @@ licenses at the time of writing; consult each project for authoritative terms.
 | **pyshp** | ESRI Shapefile reader for boundary conversion | MIT |
 | **pyproj** | CRS reprojection from shapefile `.prj` to WGS84 | MIT |
 | **geoip2** / **maxminddb** | Country-level visitor geolocation (Traffic Analytics) | Apache-2.0 / MIT |
+| **Py-ART** (`arm_pyart`) | NEXRAD Level II radar decode + geographic PPI rendering for the weather-alert radar overlay (`app_utils/image_export/radar_level2.py`) | BSD-3-Clause |
+| **boto3** | Anonymous read access to NOAA's public Level II archive on AWS Open Data | Apache-2.0 |
+| **Cartopy** | Web Mercator projection for the radar overlay, matching the OSM basemap tiles it composites onto | BSD-3-Clause |
+| **cmweather** | Registers the `NWSRef` reflectivity colormap (the standard NWS scale) used to color the radar overlay | MIT |
+| **Matplotlib** | Rendering backend (headless Agg) for the radar overlay's geographic PPI plot | Matplotlib License (BSD-style) |
 
 ### Networking, Parsing & I/O
 
@@ -164,13 +169,20 @@ licenses at the time of writing; consult each project for authoritative terms.
 | **FEMA IPAWS / IPAWS-OPEN** | Authenticated alert aggregation | U.S. Government public data |
 | **U.S. Census Bureau TIGER/Line** | County/zone boundary geometry | U.S. Government public domain |
 | **FIPS / SAME location codes** | Geographic targeting (see `FIPS_DATA_SOURCES.md`) | U.S. Government public domain |
-| **Iowa Environmental Mesonet** ([mesonet.agron.iastate.edu](https://mesonet.agron.iastate.edu/ogc/)) | NEXRAD Level III base reflectivity (WMS-T mosaic) for the weather-alert radar overlay | Public data, Iowa State University |
+| **Iowa Environmental Mesonet** ([mesonet.agron.iastate.edu](https://mesonet.agron.iastate.edu/ogc/)) | NEXRAD Level III base reflectivity (WMS-T mosaic), the radar overlay's fallback when Level II isn't available | Public data, Iowa State University |
+| **NOAA Level II Archive on AWS Open Data** ([registry.opendata.aws/noaa-nexrad](https://registry.opendata.aws/noaa-nexrad/)) | Raw per-site NEXRAD volume scans for the radar overlay's primary (finer-detail) source | U.S. Government public data |
+| **NWS Radar Stations API** ([api.weather.gov/radar/stations](https://www.weather.gov/documentation/services-web-api)) | WSR-88D site coordinates, for picking the nearest radar to an alert | U.S. Government public data |
 | **MaxMind GeoLite2** (operator-supplied) | Visitor geolocation in Traffic Analytics | CC BY-SA 4.0 (operator obtains DB) |
 | **NRSC-4-B / SAME, NWS VTEC, RBDS standards** | Protocol implementation references | Published industry standards |
 | **multimon-ng** | Decoding-parity cross-check (not bundled) | GPL-2.0 |
 
 GeoLite2 data is **not** distributed with EAS Station — operators supply their
 own MaxMind database. See `app_core/analytics/geo.py`.
+
+Py-ART citation, as its own import banner requests: JJ Helmus and SM Collis,
+(2016) "The Python ARM Radar Toolkit (Py-ART), a Library for Working with
+Weather Radar Data in the Python Programming Language." *Journal of Open
+Research Software*. 4(1), p.e25. DOI: [10.5334/jors.119](https://doi.org/10.5334/jors.119).
 
 ---
 

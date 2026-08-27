@@ -161,6 +161,10 @@
                         <span class="stack-item-ico" style="background: linear-gradient(135deg, var(--vibrant-orange), var(--vibrant-yellow)); color: #1a1a1a;"><i class="fas fa-draw-polygon"></i></span>
                         <div><div class="stack-item-name">pyshp · pyproj</div><div class="stack-item-desc">Shapefile reading &amp; CRS reprojection for boundaries {{ lic('MIT') }}</div></div>
                     </div>
+                    <div class="stack-item">
+                        <span class="stack-item-ico" style="background: linear-gradient(135deg, var(--vibrant-teal), var(--vibrant-indigo));"><i class="fas fa-satellite-dish"></i></span>
+                        <div><div class="stack-item-name">Py-ART · boto3 · Cartopy · cmweather · Matplotlib</div><div class="stack-item-desc">NEXRAD Level II radar decode, AWS Open Data access, and geographic PPI rendering for the weather-alert radar overlay {{ lic('BSD-3-Clause / Apache-2.0 / MIT / Matplotlib License') }}</div></div>
+                    </div>
                 </div>
                 <h6 class="text-uppercase text-muted small fw-bold mb-2" style="letter-spacing: 0.06em;">Networking &amp; Parsing</h6>
                 <div class="stack-grid mb-3">
@@ -380,7 +384,9 @@
                             <tr><td><strong>FEMA IPAWS / IPAWS-OPEN</strong></td><td class="d-none d-sm-table-cell">Authenticated alert aggregation</td><td class="text-break-anywhere">U.S. Gov. public data</td></tr>
                             <tr><td><strong>U.S. Census TIGER/Line</strong></td><td class="d-none d-sm-table-cell">County/zone boundary geometry</td><td class="text-break-anywhere">Public domain</td></tr>
                             <tr><td><strong>FIPS / SAME location codes</strong></td><td class="d-none d-sm-table-cell">Geographic alert targeting</td><td class="text-break-anywhere">Public domain</td></tr>
-                            <tr><td><strong>Iowa Environmental Mesonet</strong></td><td class="d-none d-sm-table-cell">NEXRAD Level III base reflectivity (WMS-T mosaic) for the weather-alert radar overlay</td><td class="text-break-anywhere">Public data, ISU</td></tr>
+                            <tr><td><strong>Iowa Environmental Mesonet</strong></td><td class="d-none d-sm-table-cell">NEXRAD Level III base reflectivity (WMS-T mosaic), the radar overlay's fallback when Level II isn't available</td><td class="text-break-anywhere">Public data, ISU</td></tr>
+                            <tr><td><strong>NOAA Level II Archive (AWS Open Data)</strong></td><td class="d-none d-sm-table-cell">Raw per-site NEXRAD volume scans, the radar overlay's primary source</td><td class="text-break-anywhere">U.S. Gov. public data</td></tr>
+                            <tr><td><strong>NWS Radar Stations API</strong></td><td class="d-none d-sm-table-cell">WSR-88D site coordinates, for picking the nearest radar to an alert</td><td class="text-break-anywhere">U.S. Gov. public data</td></tr>
                             <tr><td><strong>MaxMind GeoLite2</strong></td><td class="d-none d-sm-table-cell">Visitor geolocation (operator-supplied DB)</td><td class="text-break-anywhere">CC BY-SA 4.0</td></tr>
                             <tr><td><strong>NRSC-4-B · VTEC · RBDS</strong></td><td class="d-none d-sm-table-cell">Protocol implementation references</td><td class="text-break-anywhere">Industry standards</td></tr>
                             <tr><td><strong>multimon-ng</strong></td><td class="d-none d-sm-table-cell">Decoding-parity cross-check (not bundled)</td><td class="text-break-anywhere">GPL-2.0</td></tr>

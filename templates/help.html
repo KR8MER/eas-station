@@ -375,8 +375,16 @@
                                         disk-cached sequence of frames spanning the alert's full
                                         duration (5-minute cadence, capped around 3 hours), so you can
                                         step or play through how the weather actually moved rather
-                                        than seeing only one frozen moment. The first generation takes
-                                        a few seconds; it's instant on every view after that.
+                                        than seeing only one frozen moment. Loop frames prefer raw
+                                        NEXRAD <strong>Level II</strong> data (from NOAA's public
+                                        archive, decoded on the appliance) when the alert falls within
+                                        range of a radar site &mdash; a noticeably finer-grained image
+                                        than the Level III mosaic, closest to that site and gradually
+                                        blending toward it at longer range, since beam width genuinely
+                                        grows with distance. Falls back to the Level III mosaic
+                                        automatically wherever Level II isn't available. First
+                                        generation takes up to 30 seconds per frame; instant on every
+                                        view after that.
                                     </p>
                                 </div>
                             </div>

@@ -8,6 +8,84 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.196.1] - 2026-08-27 - Fix Level II projection mismatch and coarse color banding
+
+2.196.0's Level II renderer (`pyart.map.grid_from_radars`) turned out to
+smooth real gate detail into blurry blobs -- confirmed by requesting the
+same bbox at increasing pixel counts and finding no new detail appeared,
+the same test that had earlier confirmed the Level III mosaic's
+blockiness was its native resolution, not under-sampling. Replaced with
+`RadarMapDisplay.plot_ppi_map`, which draws each gate as its true
+azimuth/range quadrilateral via matplotlib `pcolormesh` -- no
+interpolation.
+
+That swap surfaced two more real bugs, found by drawing the actual
+stored alert polygon directly onto a live radar image and checking pixel
+data rather than eyeballing screenshots:
+
+- **Projection mismatch**: `plot_ppi_map` was rendering in plain
+  lat/lon (`ccrs.PlateCarree`), while the basemap tiles and hazard
+  polygon it composites onto are Web Mercator -- different north-south
+  scale at non-equatorial latitudes, misaligning the overlay. Switched
+  to `ccrs.epsg(3857)` to match.
+- **Coarse color banding**: the hand-rolled 6-color ramp was flattening
+  real storm structure into solid blocks ("paint by numbers"). Replaced
+  with `cmweather`'s `NWSRef` colormap -- the ~15-band standard NWS
+  reflectivity scale most radar apps use -- confirmed side-by-side
+  against IEM's own archived radar image for the same storm at the same
+  timestamp: same core position, same hook-like notch, same secondary
+  cell.
+
+Also added a light alpha-premultiplied Gaussian blur
+(`_soften_beam_edges`) at typical alert-polygon zoom, where a real
+beam-to-beam gap (confirmed genuine, not a rasterization artifact, via
+the same 4x-pixel-density test) can span 15-20 pixels and read as a hard
+picket-fence pattern -- softens the seams without blurring away real
+gradient structure the way the discarded `grid_from_radars` approach did.
+
+New explicit dependencies (previously only transitive through
+`arm_pyart`, now imported directly): `cartopy`, `cmweather`,
+`matplotlib`. Attribution updated in `about.html`, `attribution.html`,
+and `dependency_attribution.md`.
+
+## [2.196.0] - 2026-08-27 - NEXRAD Level II radar for the weather-alert overlay
+
+The radar overlay shipped in 2.195.0 used only NEXRAD Level III (IEM's
+WMS-T national mosaic, ~1km resolution) -- visibly blocky at close zoom,
+confirmed by requesting the same bbox at 256px through 2048px and finding
+the "chunk" size identical throughout: that's the mosaic's native
+resolution, not an under-sampling bug. `app_utils/image_export/radar_level2.py`
+(new) now tries raw Level II first -- the actual per-site volume scan
+(~250m gate resolution near the radar, the fine detail public radar apps
+show), falling back to the Level III mosaic wherever Level II isn't
+available (alert far outside every site's ~230km nominal range, no volume
+within tolerance of the requested time, a download/decode error). Both
+composite through the same `_render_map` pipeline and share one
+`REFLECTIVITY_LEGEND` color ramp, so a viewer can't tell which source
+produced a given frame from color alone.
+
+- **Site selection**: nearest WSR-88D site by haversine distance, from the
+  live NWS radar-stations API (cached 6h), capped at nominal
+  base-reflectivity range -- returns nothing for a genuine coverage gap
+  rather than guessing.
+- **Data source**: NOAA's public Level II archive on AWS Open Data
+  (`unidata-nexrad-level2`, no credentials needed), decoded with Py-ART.
+  Verified live for both a fresh alert and one 8+ months old -- the
+  archive goes back that far for the sites tested.
+- **Cost, accepted deliberately**: `arm_pyart` pulls in a heavy transitive
+  chain (cartopy, xarray, dask, pandas, matplotlib, netCDF4, h5py,
+  shapely on top of the numpy/scipy/pyproj already required) -- a real
+  departure from this project's normal minimal-dependency posture, with
+  no lighter-weight NEXRAD Archive II decoder available in the Python
+  ecosystem. A Level II frame costs ~15-30s (S3 download + decode + grid)
+  versus one lightweight WMS GetMap call, so `RADAR_LOOP_MAX_RENDER_PER_CALL`
+  dropped from 6 to 2 to keep a single request comfortably under
+  Gunicorn's 300s worker timeout.
+- Attribution added throughout (`about.html`, `attribution.html`,
+  `dependency_attribution.md`, `help.html`): the AWS Open Data archive,
+  the NWS radar-stations API, and Py-ART's own requested citation
+  (Helmus & Collis, JORS 2016, doi:10.5334/jors.119).
+
 ## [2.195.2] - 2026-08-27 - Radar overlay screenshot for the README tour
 
 AGENTS.md's Documentation Requirements also call for a screenshot showing
