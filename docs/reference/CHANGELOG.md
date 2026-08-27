@@ -8,6 +8,16 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.195.1] - 2026-08-27 - Document the radar overlay feature
+
+2.195.0 shipped the radar reflectivity toggle and Radar Loop card without
+touching `templates/help.html` or `templates/about.html`, missing the
+"Documentation Updates Required" step in `docs/development/AGENTS.md`.
+Added a description of both to the Help page's "Monitoring Live Alerts"
+section, and credited Iowa Environmental Mesonet (the data source) in
+`about.html`'s acknowledgments, `attribution.html`'s Data Sources table,
+and `docs/reference/dependency_attribution.md`.
+
 ## [2.195.0] - 2026-08-27 - Radar reflectivity overlay for weather alerts
 
 Weather (`category='Met'`) alert pages and the dashboard map now have a

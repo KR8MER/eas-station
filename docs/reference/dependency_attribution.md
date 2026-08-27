@@ -164,6 +164,7 @@ licenses at the time of writing; consult each project for authoritative terms.
 | **FEMA IPAWS / IPAWS-OPEN** | Authenticated alert aggregation | U.S. Government public data |
 | **U.S. Census Bureau TIGER/Line** | County/zone boundary geometry | U.S. Government public domain |
 | **FIPS / SAME location codes** | Geographic targeting (see `FIPS_DATA_SOURCES.md`) | U.S. Government public domain |
+| **Iowa Environmental Mesonet** ([mesonet.agron.iastate.edu](https://mesonet.agron.iastate.edu/ogc/)) | NEXRAD Level III base reflectivity (WMS-T mosaic) for the weather-alert radar overlay | Public data, Iowa State University |
 | **MaxMind GeoLite2** (operator-supplied) | Visitor geolocation in Traffic Analytics | CC BY-SA 4.0 (operator obtains DB) |
 | **NRSC-4-B / SAME, NWS VTEC, RBDS standards** | Protocol implementation references | Published industry standards |
 | **multimon-ng** | Decoding-parity cross-check (not bundled) | GPL-2.0 |
