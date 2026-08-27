@@ -68,3 +68,38 @@ def test_icy_metadata_extracts_artist_from_text_attribute_prefix():
     assert icy_fields.get('text') == 'Golden'
     assert icy_fields.get('artist') == 'Huntr/X'
     assert icy_fields.get('length') == '00:03:11'
+
+
+def test_icy_metadata_resolves_ihheart_ad_context_to_vast_url():
+    """iHeartRadio ad breaks send StreamTitle=adContext="<base64 VAST url>".
+
+    Before this fix, none of the text=/title=/song=/artist= patterns
+    matched (it's a single unrecognised attribute), and it wasn't treated
+    as a decodable base64 blob either because it's wrapped in
+    `adContext="..."` rather than being a bare blob -- so the raw,
+    undecoded attribute (quotes and all) was stored as the song title and
+    shown verbatim in the Song History UI. It should instead resolve to a
+    stream_url so the UI's existing "Ad URL" badge/resolve button appears,
+    and 'song'/'display' should stay unset rather than showing raw junk.
+    """
+
+    config = AudioSourceConfig(
+        source_type=AudioSourceType.STREAM,
+        name="Test Stream",
+        device_params={'stream_url': 'http://example.com/stream'},
+    )
+    adapter = StreamSourceAdapter(config)
+
+    vast_url = "https://n05b-e2.revma.ihrhls.com/cache/vast/e1884975-f69f-38a5-a857-2e59e7630348"
+    import base64
+    encoded = base64.b64encode(vast_url.encode()).decode()
+
+    metadata_text = f'StreamTitle=\'adContext="{encoded}"\';'
+
+    adapter._handle_icy_metadata(metadata_text)
+
+    metadata = adapter.metrics.metadata
+    assert metadata is not None
+    assert metadata.get('stream_url') == vast_url
+    assert metadata.get('song') is None
+    assert 'adContext=' not in (metadata.get('song') or '')
