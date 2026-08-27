@@ -89,10 +89,10 @@ def _mock_response(content_type: str, body: bytes):
 
 def test_resolve_finds_media_file_in_namespaced_vast():
     """The bug: xmlns="..." on <VAST> broke the bare root.iter("MediaFile") lookup."""
-    from webapp.audio_archive.metadata import resolve_stream_url
+    from app_core.audio.vast_resolve import resolve_stream_url
 
-    with patch("webapp.audio_archive.metadata._is_public_url", return_value=True), \
-         patch("webapp.audio_archive.metadata.urllib.request.urlopen",
+    with patch("app_core.audio.vast_resolve._is_public_url", return_value=True), \
+         patch("app_core.audio.vast_resolve.urllib.request.urlopen",
                return_value=_mock_response("application/xml", _NAMESPACED_VAST)):
         result = resolve_stream_url("https://example.com/vast/123")
 
@@ -106,10 +106,10 @@ def test_resolve_finds_media_file_in_namespaced_vast():
 
 def test_resolve_still_works_without_a_namespace():
     """Some legacy/simple ad servers omit the xmlns -- must keep working too."""
-    from webapp.audio_archive.metadata import resolve_stream_url
+    from app_core.audio.vast_resolve import resolve_stream_url
 
-    with patch("webapp.audio_archive.metadata._is_public_url", return_value=True), \
-         patch("webapp.audio_archive.metadata.urllib.request.urlopen",
+    with patch("app_core.audio.vast_resolve._is_public_url", return_value=True), \
+         patch("app_core.audio.vast_resolve.urllib.request.urlopen",
                return_value=_mock_response("application/xml", _UNNAMESPACED_VAST)):
         result = resolve_stream_url("https://example.com/vast/456")
 
@@ -120,14 +120,14 @@ def test_resolve_still_works_without_a_namespace():
 
 def test_resolve_reports_no_audio_when_vast_has_no_media_file():
     """A VAST Wrapper (or an InLine with no audio Creative) has nothing to play."""
-    from webapp.audio_archive.metadata import resolve_stream_url
+    from app_core.audio.vast_resolve import resolve_stream_url
 
     empty_vast = b"""<VAST version="4.3" xmlns="http://www.iab.com/VAST">
       <Ad id="1"><InLine><AdSystem>Empty</AdSystem></InLine></Ad>
     </VAST>"""
 
-    with patch("webapp.audio_archive.metadata._is_public_url", return_value=True), \
-         patch("webapp.audio_archive.metadata.urllib.request.urlopen",
+    with patch("app_core.audio.vast_resolve._is_public_url", return_value=True), \
+         patch("app_core.audio.vast_resolve.urllib.request.urlopen",
                return_value=_mock_response("application/xml", empty_vast)):
         result = resolve_stream_url("https://example.com/vast/789")
 

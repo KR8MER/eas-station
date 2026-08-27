@@ -49,6 +49,14 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 _controller = None  # AudioIngestController (set at startup)
 
+#: Silence pushed to each source's broadcast queue immediately after the EAS
+#: sequence finishes, before the gate is released and live program audio can
+#: resume. Without this, the gate cleared the instant the last EAS sample was
+#: queued, so listeners heard the EOM tone cut directly into music/talk with
+#: no break at all -- real stations always leave a clear beat of dead air
+#: between the end of an EAS message and the return to regular programming.
+POST_EAS_SILENCE_SECONDS = 1.0
+
 
 def set_controller(controller) -> None:
     """Register the global AudioIngestController.
@@ -179,6 +187,18 @@ def inject_eas_audio(wav_bytes: Optional[bytes]) -> bool:
                 if len(chunk) > 0:
                     broadcast_queue.publish(chunk)
                     published += 1
+
+            # Hold the gate a moment longer and push silence -- releasing it
+            # the instant the last EAS sample is queued means the capture
+            # loop's very next iteration can publish live program audio,
+            # cutting straight from the EOM tone into music/talk with no
+            # break at all.
+            silence_chunk = np.zeros(chunk_size, dtype=resampled.dtype)
+            silence_samples = int(target_rate * POST_EAS_SILENCE_SECONDS)
+            silence_chunks_published = 0
+            for _ in range(0, silence_samples, chunk_size):
+                broadcast_queue.publish(silence_chunk)
+                silence_chunks_published += 1
         finally:
             # Always release the gate, even if publishing raised an exception.
             if gate is not None:
@@ -186,9 +206,10 @@ def inject_eas_audio(wav_bytes: Optional[bytes]) -> bool:
 
         duration_s = len(resampled) / target_rate
         logger.info(
-            "EAS stream injector: pushed %.1f s of EAS audio (%d chunks, %d Hz) "
-            "to source '%s' broadcast queue",
-            duration_s, published, target_rate, source_name,
+            "EAS stream injector: pushed %.1f s of EAS audio + %.1f s of "
+            "trailing silence (%d + %d chunks, %d Hz) to source '%s' broadcast queue",
+            duration_s, POST_EAS_SILENCE_SECONDS, published, silence_chunks_published,
+            target_rate, source_name,
         )
         injected_any = True
 

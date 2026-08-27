@@ -1349,6 +1349,39 @@ class StreamSourceAdapter(AudioSourceAdapter):
             else:
                 updates['song'] = stream_title
 
+            # An ad-tag URL (VAST) resolved above is only valid for a few
+            # minutes -- iHeartRadio's ad server discards the cache entry
+            # almost immediately (observed in production: every entry
+            # checked more than ~20 minutes after being logged already
+            # 404s). An operator browsing Song History later and clicking
+            # "resolve" is nearly always too late. Resolve it to the
+            # underlying creative's URL right now, while the ad is still
+            # playing and the tag is still fresh, and store THAT instead --
+            # the creative file is a stable, reused CDN asset (not a
+            # per-impression token), so it stays valid far longer than the
+            # VAST wrapper. Runs on this source's dedicated metadata thread,
+            # never the real-time audio capture path, so a slow/failed
+            # fetch can't cause an audio underrun.
+            ad_tag_url = updates.get('stream_url')
+            if ad_tag_url:
+                try:
+                    from app_core.audio.vast_resolve import resolve_stream_url
+                    resolved = resolve_stream_url(ad_tag_url, timeout=5.0)
+                    if resolved.get('audio_url'):
+                        updates['stream_url'] = resolved['audio_url']
+                        if resolved.get('ad_title'):
+                            updates.setdefault('song', f"Ad: {resolved['ad_title']}")
+                    else:
+                        logger.debug(
+                            "%s: could not resolve ad tag %s: %s",
+                            self.config.name, ad_tag_url, resolved.get('error'),
+                        )
+                except Exception as exc:
+                    logger.debug(
+                        "%s: ad tag resolve raised for %s: %s",
+                        self.config.name, ad_tag_url, exc,
+                    )
+
             # Log metadata change at INFO level so stream activity is visible in logs
             logger.info(
                 "%s: now playing — %s",
