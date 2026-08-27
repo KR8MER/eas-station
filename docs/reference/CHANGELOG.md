@@ -8,6 +8,45 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.194.1] - 2026-08-27 - Five independent "is this alert active" checks never excluded Cancelled
+
+Following up on 2.194.0's CAP `<references>` fix: an alert correctly marked
+`status='Cancelled'` was still displayed as active on the dashboard's navbar
+stack light and the physical tower light. The 2.194.0 fix was necessary but
+not sufficient — it made the data correct, but at least five call sites
+across the codebase independently reimplemented "is this alert active"
+with their own ad-hoc `expires > now` check that predated
+`app_core.alerts.get_active_alerts_query()` (the canonical, already
+well-tested definition — see `tests/test_alert_active_expired_partition.py`)
+and never adopted its `status.notin_(("Expired", "Cancelled"))` /
+`superseded_by_id.is_(None)` exclusions:
+
+- `services/gpio/__main__.py::_make_active_alert_counter` — drives the
+  physical USB tower light.
+- `webapp/routes_monitoring.py::api_broadcast_state` (`/api/broadcast/state`)
+  — the page-load fallback for the navbar stack light.
+- `app_core/websocket_push.py::_emit_broadcast_state_update` — the
+  continuously-running WebSocket push that is the *primary* channel
+  driving the stack light in an already-connected browser, and the
+  dominant reason the light stayed lit even after the REST route was
+  checked.
+- `app_core/websocket_push.py::_emit_alerts_update` — feeds the
+  active-alerts page and dashboard widgets.
+- `scripts/screen_manager.py::_has_active_alerts` — the OLED/LED display's
+  alert screen.
+
+All five now delegate to `get_active_alerts_query()` instead of
+reimplementing it. Also fixed the public `/alerts` page and its PDF export
+(`webapp/public/alerts_page/query.py`, `pdf_export.py`), which excluded
+`status == "Expired"` but never `"Cancelled"` from the default view.
+
+Manually corrected the one alert this actually happened to in production
+(confirmed cancelled via an independent PBS WARN report) since the CAP
+`<references>` Cancel message it depended on had already scrolled out of
+FEMA's IPAWS feed before today's fix existed — code changes alone can't
+retroactively catch a message that's no longer there to catch. Added
+`tests/test_public_alerts_page_hides_cancelled.py`.
+
 ## [2.194.0] - 2026-08-27 - CAP <references>-based Cancel/Update linking, and a post-EAS silence gap
 
 Investigated a report that a "Local Area Emergency" alert (OHDOT) shown as

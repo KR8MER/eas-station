@@ -1614,14 +1614,15 @@ class ScreenManager:
             True if there are active alerts
         """
         try:
-            from app_core.models import CAPAlert
-            from datetime import datetime, timezone
+            # Must agree with app_core.alerts.get_active_alerts_query() (the
+            # dashboard's canonical "is this alert active" definition) --
+            # this used to be its own ad-hoc `expires > now` count, which
+            # ignored status='Cancelled'/'Expired' and superseded_by_id
+            # entirely, so a cancelled-but-not-yet-expired alert kept the
+            # OLED/LED display's alert screen showing indefinitely.
+            from app_core.alerts import get_active_alerts_query
 
-            count = CAPAlert.query.filter(
-                CAPAlert.expires > datetime.now(timezone.utc)
-            ).count()
-
-            return count > 0
+            return get_active_alerts_query().count() > 0
 
         except Exception as e:
             logger.error(f"Error checking active alerts: {e}")
