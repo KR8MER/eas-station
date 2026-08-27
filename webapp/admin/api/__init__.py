@@ -74,6 +74,7 @@ from . import (  # noqa: F401  - imported for their side effect of registering r
     routes_alerts_list,
     routes_boundaries,
     routes_geometry,
+    routes_radar_loop,
     routes_smart,
     routes_system,
     routes_system_history,

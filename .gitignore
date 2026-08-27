@@ -20,6 +20,7 @@ __pycache__/
 logs/
 *.log
 static/eas_messages/
+static/radar_loops/
 *.sqlite3
 
 # Certbot certificates and data (contains private keys)

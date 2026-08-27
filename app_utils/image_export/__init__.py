@@ -59,6 +59,7 @@ This package was split out of the former single-file
     storm_overlay  fonts, layout, tiles
     maps        fonts, layout, map_data, map_style, palette,
                 storm_overlay, theme, tiles
+    radar_loop  maps
     panels_text drawing, fonts, nws_text, palette, text
     panels      drawing, fonts, icons, nws_text, palette, panels_text
     render      drawing, fonts, layout, logo, maps, palette, panels,
@@ -153,6 +154,10 @@ from .storm_overlay import (  # noqa: F401
 from .maps import (  # noqa: F401
     _SCALE_BAR_MILES, _crop_window, _draw_scale_bar, _nice_scale_miles,
     _render_map,
+)
+
+from .radar_loop import (  # noqa: F401
+    build_radar_loop, RADAR_LOOP_CADENCE_MINUTES, RADAR_LOOP_MAX_FRAMES,
 )
 
 from .icons import (  # noqa: F401

@@ -26,11 +26,14 @@ lookups in :mod:`map_data`; both are re-exported here so existing
 ``from .maps import ...`` imports keep resolving.
 """
 
+import io
 import json
 import logging
 import math
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+import requests as _http
 from PIL import Image, ImageDraw, ImageFilter
 
 from .layout import (
@@ -63,6 +66,156 @@ _SCALE_BAR_MILES = [
     0.1, 0.2, 0.25, 0.5, 1, 2, 3, 5, 10, 15, 20, 25, 50, 75,
     100, 150, 200, 300, 500, 1000,
 ]
+
+# ─── Radar reflectivity overlay (weather alerts only) ───────────────────────
+# NWS WSR-88D Level III base reflectivity (product N0Q) as a CONUS mosaic
+# from Iowa Environmental Mesonet's WMS-T service -- the classic
+# green/yellow/red radar image. See static/js/core/map_theme.js's
+# radarLayer() for the browser-side twin; both point at the same service so
+# the in-app map and the share card agree on what "the radar" looked like.
+_RADAR_WMS_URL = 'https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0q-t.cgi'
+_RADAR_WMS_LAYER = 'nexrad-n0q-wmst'
+# 0.65 blended correctly (verified pixel-by-pixel) but still read as a solid
+# weather-radar image over a wide, intense cell -- the toned basemap's road
+# lines and terrain all but disappeared underneath it. Lower value keeps the
+# basemap legible under the overlay.
+_RADAR_OPACITY = 0.45
+
+# EPSG:3857 (Web Mercator) world extent in meters -- a fixed square,
+# independent of zoom.
+_MERCATOR_EXTENT_M = 20037508.342789244
+
+
+def _tile_bbox_to_3857(
+    tx_min: int, ty_min: int, tx_max: int, ty_max: int, z: int,
+) -> Tuple[float, float, float, float]:
+    """Convert an inclusive tile-index bounding box to an EPSG:3857 meters bbox.
+
+    Closed-form from tile indices rather than round-tripping through
+    lon/lat -- exact, and it guarantees the result lines up pixel-for-pixel
+    with the basemap tile mosaic built from the same (tx, ty, z) range.
+    """
+    tiles_per_side = 2 ** z
+    tile_size_m = (2 * _MERCATOR_EXTENT_M) / tiles_per_side
+    x_min = tx_min * tile_size_m - _MERCATOR_EXTENT_M
+    x_max = (tx_max + 1) * tile_size_m - _MERCATOR_EXTENT_M
+    y_max = _MERCATOR_EXTENT_M - ty_min * tile_size_m
+    y_min = _MERCATOR_EXTENT_M - (ty_max + 1) * tile_size_m
+    return x_min, y_min, x_max, y_max
+
+
+def _floor_to_5min(dt: datetime) -> datetime:
+    """Round down to the WMS-T service's PT5M cadence (see map_theme.js's
+    radarLayer() for why: its capabilities document does not advertise
+    nearest-value snapping, so an arbitrary timestamp between two real
+    scans can come back empty)."""
+    dt = dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    return dt.replace(minute=(dt.minute // 5) * 5, second=0, microsecond=0)
+
+
+def _fetch_radar_overlay(
+    tx_min: int, ty_min: int, tx_max: int, ty_max: int, z: int,
+    canvas_w: int, canvas_h: int, when: Optional[datetime],
+) -> Optional[Image.Image]:
+    """Fetch a radar reflectivity image covering the exact bbox/size of the
+    basemap tile mosaic, at *when* (or "now" if None), pre-scaled to
+    ``_RADAR_OPACITY`` so it stays legible under the hazard polygon.
+
+    Best-effort: returns None on any failure. A missing radar layer must
+    never break the share card, which already renders fine without it.
+    """
+    x_min, y_min, x_max, y_max = _tile_bbox_to_3857(tx_min, ty_min, tx_max, ty_max, z)
+    ts = _floor_to_5min(when or datetime.now(timezone.utc))
+
+    params = {
+        'SERVICE': 'WMS', 'VERSION': '1.1.1', 'REQUEST': 'GetMap',
+        'LAYERS': _RADAR_WMS_LAYER, 'STYLES': '', 'SRS': 'EPSG:3857',
+        'BBOX': f'{x_min},{y_min},{x_max},{y_max}',
+        'WIDTH': canvas_w, 'HEIGHT': canvas_h,
+        'FORMAT': 'image/png', 'TRANSPARENT': 'TRUE',
+        'TIME': ts.strftime('%Y-%m-%dT%H:%M:%SZ'),
+    }
+    try:
+        r = _http.get(
+            _RADAR_WMS_URL, params=params, timeout=6,
+            headers={'User-Agent': 'EASStation/1.0 (+https://github.com/KR8MER/eas-station)'},
+        )
+        if r.status_code != 200 or not r.headers.get('Content-Type', '').startswith('image/'):
+            logger.debug("Radar overlay fetch returned %s (%s)", r.status_code, r.headers.get('Content-Type'))
+            return None
+        radar_img = Image.open(io.BytesIO(r.content)).convert('RGBA')
+        red, green, blue, alpha = radar_img.split()
+        alpha = alpha.point(lambda v: int(v * _RADAR_OPACITY))
+        return Image.merge('RGBA', (red, green, blue, alpha))
+    except Exception as exc:
+        logger.debug("Radar overlay fetch failed: %s", exc)
+        return None
+
+
+# Standard NWS Level III base reflectivity (dBZ) color ramp -- a long-
+# standing, publicly documented government standard reproduced identically
+# across virtually every public radar display, not something specific to
+# IEM's rendering. Drawn here as a reference scale ("what does green vs red
+# generally mean"), not a sampled readout of the exact palette baked into
+# the fetched tiles.
+_REFLECTIVITY_LEGEND = [
+    ('5',   (100, 200, 100)),
+    ('20',  (40, 160, 40)),
+    ('30',  (240, 230, 60)),
+    ('40',  (250, 160, 40)),
+    ('50',  (220, 40, 40)),
+    ('60+', (200, 60, 200)),
+]
+
+
+def _draw_radar_legend(img: Image.Image, fonts: Dict) -> Tuple[int, int, int, int]:
+    """Draw a small reflectivity (dBZ) color-scale reference, upper-right.
+
+    Without this, "green vs red" on the radar overlay means nothing to a
+    reader who doesn't already read weather radar -- this is the same
+    reasoning as the distance scale bar, just for color instead of size.
+    Both bottom corners are already spoken for (the scale bar lower-left,
+    the required OSM attribution lower-right -- see the bottom of this
+    function's caller), so this sits upper-right instead of colliding with
+    either.
+
+    Returns the drawn box (x0, y0, x1, y1) so the caller can add it to the
+    county-label keep-out list -- this is drawn *before* labels are placed
+    (see _render_map), so without that a county name could land right on
+    top of it.
+    """
+    map_w, map_h = img.size
+    chip_w, chip_h = 20, 12
+    pad = 6
+    fnt = fonts.get('tiny', fonts.get('small'))
+    title = 'REFLECTIVITY (dBZ)'
+    n = len(_REFLECTIVITY_LEGEND)
+    bar_w = chip_w * n
+    label_h = max(_th(fnt, label) for label, _ in _REFLECTIVITY_LEGEND)
+    title_h = _th(fnt, title)
+
+    box_w = bar_w + pad * 2
+    box_h = title_h + 4 + chip_h + 2 + label_h + pad * 2
+    x0 = map_w - box_w - 10
+    y0 = 10
+
+    backing = Image.new('RGBA', (box_w, box_h), (0, 0, 0, 0))
+    bd = ImageDraw.Draw(backing)
+    bd.rounded_rectangle((0, 0, box_w - 1, box_h - 1), radius=5,
+                         fill=(10, 14, 22, 165))
+    base = img.convert('RGBA')
+    base.alpha_composite(backing, dest=(x0, y0))
+    img.paste(base.convert('RGB'))
+
+    d = ImageDraw.Draw(img)
+    d.text((x0 + pad, y0 + pad), title, font=fnt, fill=(220, 225, 235))
+    chips_y = y0 + pad + title_h + 4
+    for i, (label, color) in enumerate(_REFLECTIVITY_LEGEND):
+        cx = x0 + pad + i * chip_w
+        d.rectangle((cx, chips_y, cx + chip_w - 1, chips_y + chip_h - 1), fill=color)
+        d.text((cx, chips_y + chip_h + 2), label, font=fnt, fill=(220, 225, 235))
+
+    return (x0, y0, x0 + box_w, y0 + box_h)
 
 
 def _nice_scale_miles(max_miles: float) -> float:
@@ -198,13 +351,19 @@ def _render_map(geom: Dict, severity: str,
                 storm_motion: Optional[Dict] = None,
                 theme: Optional[_Theme] = None,
                 *, map_w: int = MAP_W, map_h: int = MAP_H,
-                db_session: Any = None) -> Image.Image:
+                db_session: Any = None,
+                category: Optional[str] = None,
+                sent: Optional[datetime] = None) -> Image.Image:
     """Return a *map_w*×*map_h* RGB map image with the alert polygon overlaid.
 
     *theme* drives the polygon stroke / storm-motion accent colours; if
     omitted we fall back to the severity palette (legacy behaviour).
     *db_session* is forwarded to the county-outline lookup so callers
     without a Flask application context still get county borders.
+    *category* == 'Met' (CAP Meteorological) additionally draws a radar
+    reflectivity layer as of *sent* (or "now" if omitted) -- see
+    _fetch_radar_overlay(). Any other category skips it: radar context
+    doesn't mean anything on a road-closure or gas-leak share card.
 
     On top of the OSM tiles the map renders muted county reference
     outlines, the alert polygon (plus optional storm-motion overlay), and
@@ -268,6 +427,22 @@ def _render_map(geom: Dict, severity: str,
     # the polygon, storm cone and labels keep their full intensity and are
     # the only saturated things on the map.
     canvas = tone_basemap(canvas)
+
+    # ── Radar reflectivity overlay (weather alerts only) ──────────────────
+    # Composited above the toned basemap but below the hazard polygon and
+    # county reference outlines, matching the in-app map's pane order
+    # (static/js/core/map_theme.js). category != 'Met' or a fetch failure
+    # both just skip this -- never a reason to break the share card.
+    radar_drawn = False
+    if category == 'Met':
+        radar_img = _fetch_radar_overlay(
+            tx_min, ty_min, tx_max, ty_max, z, canvas_w, canvas_h, sent,
+        )
+        if radar_img is not None:
+            canvas = canvas.convert('RGBA')
+            canvas.alpha_composite(radar_img)
+            canvas = canvas.convert('RGB')
+            radar_drawn = True
 
     # ── Crop window, computed up front ────────────────────────────────────
     # Overlays are drawn in canvas pixels but the canvas is resampled to the
@@ -444,6 +619,14 @@ def _render_map(geom: Dict, severity: str,
     except Exception:
         pass
 
+    # ── Radar reflectivity legend (upper-right, only when radar was drawn) ────
+    radar_legend_box = None
+    if radar_drawn:
+        try:
+            radar_legend_box = _draw_radar_legend(cropped, fonts)
+        except Exception:
+            pass
+
     # ── Vignette ──────────────────────────────────────────────────────────────
     # Darken the edges so the inset fades into the card instead of ending in
     # four hard bright borders, and so the eye is pulled to the framed hazard.
@@ -462,6 +645,8 @@ def _render_map(geom: Dict, severity: str,
             (0, map_h - 44, 190, map_h),               # scale bar (lower-left)
             (map_w - 210, map_h - 26, map_w, map_h),   # attribution (lower-right)
         ]
+        if radar_legend_box is not None:
+            keep_out.append(radar_legend_box)          # radar legend (upper-right)
         ordered = sorted(county_labels, key=lambda c: not c[1])
         anchors = [
             (name, (int(round((px - x1) * sx)), int(round((py - y1) * sy))))

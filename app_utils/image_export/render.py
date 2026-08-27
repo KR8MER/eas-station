@@ -356,7 +356,9 @@ def generate_alert_image(
                                       storm_motion=storm_motion,
                                       theme=theme,
                                       map_w=map_w, map_h=map_h,
-                                      db_session=session)
+                                      db_session=session,
+                                      category=getattr(alert, 'category', None),
+                                      sent=getattr(alert, 'sent', None))
     except Exception as exc:
         # The card is still rendered with a "Map not available" slot, but
         # leave a trace — a context/session error here is why an email or
