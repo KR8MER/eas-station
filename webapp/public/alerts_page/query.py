@@ -92,9 +92,13 @@ def apply_visibility(query, filters: AlertFilters):
     would render it full of holes.
     """
     if not filters.show_expired and not filters.vtec_active:
+        # status.notin_ (not just != "Expired") because a Cancel/Update
+        # arriving before the original expires time sets status='Cancelled'
+        # without touching expires -- that alert must hide here too, or it
+        # keeps showing as current on the public page indefinitely.
         query = query.filter(
             or_(CAPAlert.expires.is_(None), CAPAlert.expires > utc_now())
-        ).filter(CAPAlert.status != "Expired")
+        ).filter(CAPAlert.status.notin_(("Expired", "Cancelled")))
 
     # Hide superseded alerts by default; they are shown when the operator
     # explicitly requests them or is browsing a VTEC event chain.

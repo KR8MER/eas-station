@@ -67,11 +67,14 @@ def build_export_query(args):
             query = query.filter(column == value)
 
     # Expired alerts filter: By default, exclude expired alerts
-    # This matches the default behavior of the /alerts page
+    # This matches the default behavior of the /alerts page (see
+    # apply_visibility() in query.py for why status.notin_ rather than
+    # != "Expired" -- a Cancel/Update can set status='Cancelled' before
+    # the original expires time, and that must be excluded here too).
     if str(args.get("show_expired", "")).lower() not in TRUTHY:
         query = query.filter(
             or_(CAPAlert.expires.is_(None), CAPAlert.expires > utc_now())
-        ).filter(CAPAlert.status != "Expired")
+        ).filter(CAPAlert.status.notin_(("Expired", "Cancelled")))
 
     return query.order_by(CAPAlert.sent.desc())
 

@@ -911,21 +911,27 @@ def _emit_alerts_update(
     means "no change, leave the previous signature in place".
     """
     import hashlib
-    from datetime import datetime, timezone
 
     try:
         from app_core.models import CAPAlert
+        from app_core.alerts import get_active_alerts_query
     except Exception as e:
         logger.debug(f"alerts_update unavailable: {e}")
         return None
 
     try:
-        now_utc = datetime.now(timezone.utc)
+        # Must agree with get_active_alerts_query()'s canonical "is this
+        # alert active" definition -- this used to be its own ad-hoc
+        # `expires > now` filter, which ignored status='Cancelled'/'Expired'
+        # and superseded_by_id entirely, so a cancelled-but-not-yet-expired
+        # alert kept showing on the active-alerts page and dashboard widgets
+        # this push feeds.
+        #
         # Pushed every ALERTS_UPDATE_INTERVAL seconds, so this query is a
         # standing background load. It reads eight small columns; deferring
         # the geometry and raw CAP payload keeps each push cheap.
         rows = (
-            CAPAlert.query
+            get_active_alerts_query()
             .options(
                 defer(CAPAlert.geom),
                 defer(CAPAlert.raw_json),
@@ -934,7 +940,6 @@ def _emit_alerts_update(
                 defer(CAPAlert.instruction),
                 defer(CAPAlert.area_desc),
             )
-            .filter(CAPAlert.expires > now_utc)
             .order_by(CAPAlert.received_at.desc())
             .limit(50)
             .all()
@@ -1036,17 +1041,21 @@ def _emit_broadcast_state_update(socketio: 'SocketIO') -> None:
         from app_utils.eas import get_broadcast_state
         state = get_broadcast_state()
 
-        # Count active unexpired alerts for the blue stack-light indicator
+        # Count active alerts for the blue stack-light indicator. Must agree
+        # with app_core.alerts.get_active_alerts_query() (the dashboard's
+        # canonical "is this alert active" definition) -- this used to be
+        # its own ad-hoc `expires > now` count, which ignored
+        # status='Cancelled'/'Expired' and superseded_by_id entirely, so a
+        # cancelled-but-not-yet-expired alert kept the stack light on
+        # indefinitely even though every other view on the site correctly
+        # showed it as no longer active. This push fires continuously and
+        # is the primary channel driving the light in a connected browser
+        # (the /api/broadcast/state REST route is only the page-load
+        # fallback), so this was the dominant reason the light stayed lit.
         active_alert_count = 0
         try:
-            from datetime import datetime, timezone as _tz
-            from app_core.models import CAPAlert
-            now_utc = datetime.now(_tz.utc)
-            active_alert_count = (
-                CAPAlert.query
-                .filter(CAPAlert.expires > now_utc)
-                .count()
-            )
+            from app_core.alerts import get_active_alerts_query
+            active_alert_count = get_active_alerts_query().count()
         except Exception:
             pass
 

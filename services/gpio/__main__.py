@@ -185,14 +185,17 @@ def _make_active_alert_counter(flask_app):
         if now - cache["ts"] < ACTIVE_ALERT_COUNT_TTL_S:
             return cache["value"]
         try:
-            from datetime import datetime, timezone
-            from app_core.models import CAPAlert
+            # Must agree with app_core.alerts.get_active_alerts_query() (the
+            # dashboard's canonical "is this alert active" definition) --
+            # this used to be its own ad-hoc `expires > now` count, which
+            # ignored status='Cancelled'/'Expired' and superseded_by_id
+            # entirely. A cancelled-but-not-yet-expired alert then kept the
+            # physical tower light red indefinitely even though every other
+            # view on the site correctly showed it as no longer active.
+            from app_core.alerts import get_active_alerts_query
 
             with flask_app.app_context():
-                now_utc = datetime.now(timezone.utc)
-                cache["value"] = int(
-                    CAPAlert.query.filter(CAPAlert.expires > now_utc).count()
-                )
+                cache["value"] = int(get_active_alerts_query().count())
         except Exception as exc:  # pragma: no cover - defensive
             logging.getLogger(__name__).debug("active alert count failed: %s", exc)
         cache["ts"] = now

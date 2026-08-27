@@ -443,12 +443,15 @@ def register(app: Flask, logger) -> None:
 
         active_alert_count = 0
         try:
-            from datetime import datetime, timezone as _tz
-            from app_core.models import CAPAlert
-            now_utc = datetime.now(_tz.utc)
-            active_alert_count = (
-                CAPAlert.query.filter(CAPAlert.expires > now_utc).count()
-            )
+            # Must agree with app_core.alerts.get_active_alerts_query() (the
+            # dashboard's canonical "is this alert active" definition) --
+            # this used to be its own ad-hoc `expires > now` count, which
+            # ignored status='Cancelled'/'Expired' and superseded_by_id
+            # entirely. A cancelled-but-not-yet-expired alert then kept the
+            # navbar stack light red indefinitely even though every other
+            # view on the site correctly showed it as no longer active.
+            from app_core.alerts import get_active_alerts_query
+            active_alert_count = get_active_alerts_query().count()
         except Exception as exc:  # pragma: no cover - defensive
             route_logger.debug("active alert count failed: %s", exc)
 
