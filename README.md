@@ -86,9 +86,11 @@ A few of the web dashboards, captured from a running instance with sample alert 
 | [![Broadcast Builder console for composing manual SAME activations](docs/screenshots/broadcast-builder.jpg)](docs/screenshots/broadcast-builder.jpg) | [![Theme selector modal showing a grid of the 20 built-in themes with light/dark labels](docs/screenshots/theme-gallery.jpg)](docs/screenshots/theme-gallery.jpg) |
 | **Broadcast Builder** — compose manual SAME activations, generate the audio package and review recent transmissions, with the station's originator / station ID / attention-tone settings shown inline. | **Themes** — 20 built-in themes (11 light, 9 dark), each WCAG-AA audited; import/export custom themes as JSON. |
 
-**Radar reflectivity overlay** — weather alerts get a live "Radar (at time of alert)" toggle on the Coverage Map, pulling NEXRAD Level III base reflectivity from Iowa Environmental Mesonet's public WMS-T mosaic (historical for a past alert, live for one still active), plus a Radar Loop card below that steps through the alert's full duration at 5-minute cadence:
+**Radar reflectivity overlay** — weather alerts get a live "Radar (at time of alert)" toggle on the Coverage Map, pulling NEXRAD Level III base reflectivity from Iowa Environmental Mesonet's public WMS-T mosaic (historical for a past alert, live for one still active), plus a Radar Loop card below that steps through the alert's full duration at 5-minute cadence. The loop prefers raw NEXRAD **Level II** data (NOAA's public archive, decoded on the appliance via Py-ART) whenever the alert falls within range of a radar site — each gate drawn at its true resolution, not interpolated, sharpest close to the site and gradually coarser at range as the hardware's own beam width grows with distance:
 
-[![Alert Coverage Map with the radar reflectivity toggle on, showing NEXRAD base reflectivity under a Tornado Warning polygon](docs/screenshots/radar-overlay.jpg)](docs/screenshots/radar-overlay.jpg)
+| Live toggle (Level III mosaic) | Radar Loop (Level II, ~90 miles from its site) |
+|---|---|
+| [![Alert Coverage Map with the radar reflectivity toggle on, showing NEXRAD base reflectivity under a Tornado Warning polygon](docs/screenshots/radar-overlay.jpg)](docs/screenshots/radar-overlay.jpg) | [![Radar Loop card showing NEXRAD Level II base reflectivity under a Tornado Warning polygon](docs/screenshots/radar-loop.jpg)](docs/screenshots/radar-loop.jpg) |
 
 ### Physical Displays
 
