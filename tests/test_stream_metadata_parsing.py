@@ -21,6 +21,7 @@ Repository: https://github.com/KR8MER/eas-station
 
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -81,6 +82,11 @@ def test_icy_metadata_resolves_ihheart_ad_context_to_vast_url():
     shown verbatim in the Song History UI. It should instead resolve to a
     stream_url so the UI's existing "Ad URL" badge/resolve button appears,
     and 'song'/'display' should stay unset rather than showing raw junk.
+
+    The immediate ad-tag resolve attempt (see test below) is mocked to fail
+    here -- this test is only about the adContext= parsing, not the resolve
+    network call, and a failed resolve must leave the parsed VAST url as
+    stream_url rather than clearing it.
     """
 
     config = AudioSourceConfig(
@@ -96,10 +102,53 @@ def test_icy_metadata_resolves_ihheart_ad_context_to_vast_url():
 
     metadata_text = f'StreamTitle=\'adContext="{encoded}"\';'
 
-    adapter._handle_icy_metadata(metadata_text)
+    with patch(
+        'app_core.audio.vast_resolve.resolve_stream_url',
+        return_value={'error': 'no network in test', 'type': 'fetch_error'},
+    ):
+        adapter._handle_icy_metadata(metadata_text)
 
     metadata = adapter.metrics.metadata
     assert metadata is not None
     assert metadata.get('stream_url') == vast_url
     assert metadata.get('song') is None
     assert 'adContext=' not in (metadata.get('song') or '')
+
+
+def test_icy_metadata_immediate_resolve_replaces_vast_url_with_creative_url():
+    """When the immediate resolve succeeds, stream_url becomes the durable
+    creative URL (not the ephemeral VAST wrapper), and a friendly ad title
+    is used for 'song' when the ad server provides one.
+
+    This is the actual fix for VAST cache entries expiring within minutes:
+    resolving while the tag is still fresh and storing the underlying CDN
+    URL means "resolve and play" still works much later, long after the
+    original VAST wrapper has 404'd.
+    """
+
+    config = AudioSourceConfig(
+        source_type=AudioSourceType.STREAM,
+        name="Test Stream",
+        device_params={'stream_url': 'http://example.com/stream'},
+    )
+    adapter = StreamSourceAdapter(config)
+
+    vast_url = "https://n05b-e2.revma.ihrhls.com/cache/vast/e1884975-f69f-38a5-a857-2e59e7630348"
+    creative_url = "https://d1ij4yeu6n1gu0.cloudfront.net/prod/example/ad.mp3"
+    import base64
+    encoded = base64.b64encode(vast_url.encode()).decode()
+    metadata_text = f'StreamTitle=\'adContext="{encoded}"\';'
+
+    with patch(
+        'app_core.audio.vast_resolve.resolve_stream_url',
+        return_value={
+            'audio_url': creative_url,
+            'type': 'vast',
+            'ad_title': 'Back to School Sale',
+        },
+    ):
+        adapter._handle_icy_metadata(metadata_text)
+
+    metadata = adapter.metrics.metadata
+    assert metadata.get('stream_url') == creative_url
+    assert metadata.get('song') == 'Ad: Back to School Sale'

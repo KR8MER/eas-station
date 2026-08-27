@@ -206,6 +206,24 @@ def parse_nws_datetime(dt_string):
     return util_parse_nws_datetime(dt_string, logger=logging.getLogger(__name__))
 
 
+def parse_cap_reference_identifiers(references: Optional[str]) -> List[str]:
+    """Extract the identifier from each triple in a CAP <references> value.
+
+    Per CAP 1.2 sec 3.3.2.3, ``references`` is a space-separated list of one
+    or more ``sender,identifier,sent`` triples naming earlier message(s) this
+    one relates to. Used by both Cancel (marks the referenced alert
+    cancelled) and Update (marks it superseded) handling -- a Cancel or
+    Update product gets its own new identifier per spec rather than reusing
+    the original's, so this is the only way to know what it refers to.
+    """
+    identifiers: List[str] = []
+    for triple in (references or '').split():
+        parts = triple.split(',')
+        if len(parts) >= 2 and parts[1].strip():
+            identifiers.append(parts[1].strip())
+    return identifiers
+
+
 def format_local_datetime(dt, include_utc=True):
     return util_format_local_datetime(dt, include_utc=include_utc)
 
@@ -1385,6 +1403,14 @@ class CAPPoller:
             'status': get_text(alert_elem, 'cap:status', 'Unknown') or 'Unknown',
             'messageType': get_text(alert_elem, 'cap:msgType', 'Unknown') or 'Unknown',
             'scope': get_text(alert_elem, 'cap:scope', 'Unknown') or 'Unknown',
+            # Per CAP 1.2 sec 3.3.2.3, a Cancel/Update message gets its OWN
+            # unique identifier and points back at the message(s) it affects
+            # via <references> (space-separated "sender,identifier,sent"
+            # triples) -- it is not required to reuse the original
+            # identifier. A Cancel commonly carries no <info> block at all
+            # (nothing to cancel *to*, just a notice that a prior alert is
+            # over), so this is the only way to know what it refers to.
+            'references': get_text(alert_elem, 'cap:references'),
             'category': get_text(info_elem, 'cap:category', 'Unknown') or 'Unknown',
             'event': get_text(info_elem, 'cap:event', 'Unknown') or 'Unknown',
             'responseType': get_text(info_elem, 'cap:responseType'),
@@ -2999,6 +3025,23 @@ class CAPPoller:
                     new_alert.identifier, exc,
                 )
 
+        # A CAP Update gets its own new identifier and points back at the
+        # alert(s) it updates via <references> rather than reusing theirs --
+        # for sources with no VTEC identity (state DOTs, etc.), this is the
+        # only way to link an Update back to what it updates. See
+        # _mark_cap_references_superseded's docstring.
+        if (new_alert.message_type or '').strip().lower() == 'update':
+            try:
+                update_properties = raw_json.get('properties', {}) if isinstance(raw_json, dict) else {}
+                self._mark_cap_references_superseded(
+                    new_alert, update_properties.get('references')
+                )
+            except Exception as exc:
+                self.logger.warning(
+                    "Failed to mark CAP <references> alerts superseded for %s: %s",
+                    new_alert.identifier, exc,
+                )
+
         # Build geometry before the forwarding decision: the notification
         # email's coverage map renders from new_alert.geom at send time, and
         # _try_build_geometry_from_same_codes is internally guarded (returns
@@ -3112,6 +3155,78 @@ class CAPPoller:
         self.logger.info(f"Saved new alert: {new_alert.identifier} - {new_alert.event}")
         return True, new_alert, None
 
+    def _process_cap_references_cancellation(self, alert_data: Dict) -> bool:
+        """Handle a CAP ``msgType=Cancel`` message that refers to prior alerts
+        via ``<references>`` instead of reusing their identifier.
+
+        Per CAP 1.2 sec 3.3.2.3, a Cancel message is required to have its own
+        unique ``identifier`` — it is NOT supposed to reuse the identifier of
+        the alert it cancels (that's what ``_apply_cancellation_status``
+        handles, for feeds that don't follow the spec strictly). The
+        standard-compliant way to say "this cancels that" is
+        ``<references>sender,identifier,sent ...</references>``, a
+        space-separated list of one or more triples.
+
+        Such a Cancel commonly carries no ``<info>`` block at all (there's
+        nothing left to describe — no event, no area), which meant it always
+        parsed as event="Unknown" with empty area codes and got silently
+        dropped by the geographic-relevance filter before ever reaching any
+        cancellation logic. That's why a real, confirmed Cancel could arrive
+        in the feed and the alert it cancelled would keep showing as active
+        in the UI indefinitely (observed 2026-08-27: OHDOT cancelled a Local
+        Area Emergency; the Cancel message arrived a few minutes later but
+        was rejected as "not specific enough" before this fix existed).
+
+        Returns True if this message was a Cancel-by-reference (handled here,
+        whether or not a matching stored alert existed) — the caller should
+        skip normal relevance filtering/saving for it either way, since a
+        Cancel with no <info> block has nothing useful to save on its own.
+        """
+        properties = alert_data.get('properties', {})
+        message_type = properties.get('messageType')
+        references = (properties.get('references') or '').strip()
+
+        if not is_cancellation(message_type, None) or not references:
+            return False
+
+        cancel_identifier = properties.get('identifier', '?')
+        cancel_sent_raw = properties.get('sent')
+        cancel_sent = parse_nws_datetime(cancel_sent_raw) if cancel_sent_raw else None
+        cancelled_at = cancel_sent or utc_now()
+
+        referenced_identifiers = parse_cap_reference_identifiers(references)
+
+        if not referenced_identifiers:
+            self.logger.warning(
+                "Cancel message %s has <references> but no parseable identifiers: %r",
+                cancel_identifier, references,
+            )
+            return True
+
+        matched = 0
+        for ref_id in referenced_identifiers:
+            alert = self.db_session.query(CAPAlert).filter_by(identifier=ref_id).first()
+            if alert is None:
+                self.logger.info(
+                    "Cancel message %s references %s, which we never stored (not relevant to our area) -- nothing to cancel",
+                    cancel_identifier, ref_id,
+                )
+                continue
+            if alert.cancelled_at is not None:
+                continue
+            alert.status = 'Cancelled'
+            alert.cancelled_at = cancelled_at
+            matched += 1
+            self.logger.info(
+                "Cancelled alert %s (%s) via CAP <references> from cancellation message %s",
+                ref_id, alert.event, cancel_identifier,
+            )
+
+        if matched:
+            self.db_session.commit()
+
+        return True
+
     def _apply_cancellation_status(self, alert: CAPAlert) -> bool:
         """Mark *alert* as Cancelled when it is an explicit cancellation product.
 
@@ -3137,6 +3252,43 @@ class CAPPoller:
         if getattr(alert, 'cancelled_at', None) is None:
             alert.cancelled_at = utc_now()
         return True
+
+    def _mark_cap_references_superseded(self, new_alert: CAPAlert, references: Optional[str]) -> int:
+        """Mark prior alert(s) referenced by a CAP Update as superseded by it.
+
+        Mirrors ``_mark_vtec_chain_superseded``, but keyed off CAP
+        ``<references>`` instead of the VTEC event tuple. VTEC linking only
+        works for NWS products that carry VTEC identity at all -- an alert
+        source with no VTEC data (a state DOT's IPAWS feed, for example) has
+        no other way to say "this new alert replaces that old one", since
+        per CAP 1.2 sec 3.3.2.3 an Update gets its own new ``identifier``
+        rather than reusing the original's.
+
+        Without this, an Update's referenced original just sat in the
+        database unchanged and unlinked: both the stale original and the
+        new Update showed up as separate active alerts on the dashboard.
+        """
+        referenced_identifiers = parse_cap_reference_identifiers(references)
+        if not referenced_identifiers:
+            return 0
+
+        updated = 0
+        for ref_id in referenced_identifiers:
+            if ref_id == new_alert.identifier:
+                continue
+            prior = self.db_session.query(CAPAlert).filter_by(identifier=ref_id).first()
+            if prior is None or prior.id == new_alert.id or prior.superseded_by_id is not None:
+                continue
+            prior.superseded_by_id = new_alert.id
+            updated += 1
+            self.logger.info(
+                "Marked alert %s (%s) superseded by CAP Update %s via <references>",
+                ref_id, prior.event, new_alert.identifier,
+            )
+
+        if updated:
+            self.db_session.commit()
+        return updated
 
     def _mark_vtec_chain_superseded(self, new_alert: CAPAlert) -> int:
         """Mark all un-superseded prior alerts in the same VTEC event chain as
@@ -3956,7 +4108,8 @@ class CAPPoller:
 
         stats = {
             'alerts_fetched': 0, 'alerts_new': 0, 'alerts_updated': 0,
-            'alerts_filtered': 0, 'alerts_accepted': 0, 'intersections_calculated': 0,
+            'alerts_filtered': 0, 'alerts_accepted': 0, 'alerts_cancelled_by_reference': 0,
+            'intersections_calculated': 0,
             'execution_time_ms': 0, 'status': 'SUCCESS', 'error_message': None,
             'zone': f"{'/'.join(self.location_settings['zone_codes'])} ({self.location_name}) - STRICT FILTERING",
             'poll_time_utc': poll_start_utc.isoformat(),
@@ -4086,7 +4239,7 @@ class CAPPoller:
                     certainty = props.get('certainty', 'Unknown')
                     area_desc = props.get('areaDesc', 'Unknown')
                     headline = props.get('headline', '')
-                    
+
                     self.logger.info(f"  ├─ Full ID: {alert_id}")
                     self.logger.info(f"  ├─ Event: {event}")
                     self.logger.info(f"  ├─ Sent: {sent}")
@@ -4098,6 +4251,20 @@ class CAPPoller:
                         self.logger.info(f"  └─ Headline: {headline}")
                     else:
                         self.logger.info(f"  └─ (No headline)")
+
+                # A CAP Cancel commonly carries no <info> block (nothing left
+                # to describe) and refers to prior alerts via <references>
+                # rather than reusing their identifier -- handle that BEFORE
+                # the relevance filter below, which would otherwise reject it
+                # as event="Unknown" with no area codes and silently drop a
+                # real cancellation on the floor (see
+                # _process_cap_references_cancellation's docstring).
+                if self._process_cap_references_cancellation(alert_data):
+                    alert_summary['status'] = 'cancelled_by_reference'
+                    alert_summary['reason'] = 'CAP <references> cancellation applied to referenced alert(s)'
+                    stats['alerts_cancelled_by_reference'] += 1
+                    stats['fetched_alerts'].append(alert_summary)
+                    continue
 
                 relevance = self.get_alert_relevance_details(alert_data)
                 log_entry = relevance.get('log') or {}

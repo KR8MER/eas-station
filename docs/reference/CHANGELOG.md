@@ -8,6 +8,64 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.194.0] - 2026-08-27 - CAP <references>-based Cancel/Update linking, and a post-EAS silence gap
+
+Investigated a report that a "Local Area Emergency" alert (OHDOT) shown as
+cancelled on PBS WARN was still displaying active on the dashboard. Root
+cause: per CAP 1.2 sec 3.3.2.3, a Cancel or Update message gets its own
+unique `identifier` and points back at the alert(s) it affects via
+`<references>` rather than reusing the original's — our poller never
+extracted or acted on `<references>` at all. Worse, a Cancel commonly
+carries no `<info>` block whatsoever (there's nothing left to describe), so
+it parsed as `event="Unknown"` with empty area codes and was silently
+dropped by the geographic-relevance filter before ever being looked at as a
+cancellation. Confirmed live: OHDOT's Cancel message reached our poller
+within minutes of being issued and was logged as "not specific enough" —
+the original alert then stayed "active" indefinitely with nothing to ever
+mark it otherwise.
+
+Added `poller.cap_poller.parse_cap_reference_identifiers()` plus two new
+code paths: `_process_cap_references_cancellation()` intercepts a Cancel
+carrying `<references>` *before* the relevance filter (there's nothing else
+worth saving from it) and marks the referenced alert(s) `Cancelled`.
+`_mark_cap_references_superseded()` handles the CAP Update case — an
+Update *does* carry real content and still gets saved as its own alert
+normally, but previously nothing ever linked it back to the alert it
+updates unless that alert carried NWS VTEC identity (which a state DOT's
+IPAWS feed never does); now the referenced original is marked
+`superseded_by_id`, the same mechanism the VTEC chain already uses, so a
+stale original and its Update don't both show up as separate active
+alerts. Checked the CAP `msgType` enum for other exposure: `Ack`/`Error`
+are network-handshake types public feeds don't emit in practice, so they
+weren't specifically handled. Added `tests/test_cap_references_cancellation.py`
+and `tests/test_cap_update_supersede.py`.
+
+Also fixed: `inject_eas_audio()` released the air-chain gate the instant the
+last EAS sample was queued, so listeners heard the EOM tone cut directly
+into music/talk with zero break. `POST_EAS_SILENCE_SECONDS` (1.0s) is now
+queued as trailing silence before the gate clears, matching how a real
+station hands the air chain back to regular programming. Added
+`tests/test_eas_stream_injector_trailing_silence.py`.
+
+One more layer on the 2.193.10/2.193.11 ad-metadata work: even with those
+fixes, "resolve and play" on an ad in Song History almost always still
+failed — every VAST cache URL checked more than ~20 minutes after being
+logged already 404s. iHeartRadio's ad server (Triton) discards these
+per-impression cache entries within minutes; an operator browsing history
+later and clicking "resolve" is nearly always too late, and no amount of
+client-side fixing can resolve a link the ad network has already deleted.
+Moved the VAST-fetch/parse logic out of `webapp/audio_archive/metadata.py`
+into `app_core/audio/vast_resolve.py` (a Flask-free leaf module) so
+`_handle_icy_metadata()` (`app_core/audio/sources.py`) can resolve an ad
+tag immediately, on its own dedicated metadata thread, the moment the
+StreamTitle arrives — while the tag is still fresh — and store the
+underlying creative's durable CDN URL instead of the ephemeral VAST
+wrapper. That CDN file is a stable, reused asset, not a per-impression
+token, so "resolve and play" keeps working long after the original tag
+would have expired. `webapp/audio_archive/metadata.py` now just re-exports
+`resolve_stream_url` for the existing manual "resolve" API route. Added
+regression cases to `tests/test_stream_metadata_parsing.py`.
+
 ## [2.193.11] - 2026-08-27 - Fix "Ad URL" title text not actually being clickable
 
 Following up on 2.193.10's VAST namespace fix: after that fix landed,
