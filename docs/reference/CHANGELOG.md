@@ -8,6 +8,14 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.195.2] - 2026-08-27 - Radar overlay screenshot for the README tour
+
+AGENTS.md's Documentation Requirements also call for a screenshot showing
+how to access a new feature, which 2.195.1 didn't add. Captured a real
+Alert Coverage Map with the radar toggle on (Tornado Warning over
+northwest Ohio, verified live against the deployed instance) and added it
+to the README's Screenshot Tour as `docs/screenshots/radar-overlay.jpg`.
+
 ## [2.195.1] - 2026-08-27 - Document the radar overlay feature
 
 2.195.0 shipped the radar reflectivity toggle and Radar Loop card without
