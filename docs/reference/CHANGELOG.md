@@ -8,6 +8,21 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.193.11] - 2026-08-27 - Fix "Ad URL" title text not actually being clickable
+
+Following up on 2.193.10's VAST namespace fix: after that fix landed,
+resolving an ad still appeared to do nothing when clicked, and the
+`eas-station-web` access log showed zero requests ever reaching
+`/api/audio/archives/resolve-stream-url`. Root cause was a second,
+independent bug: the Audio Archives Song History page renders "Ad URL" as
+the row's title (styled like a link, with an ad icon, right where a song
+title normally goes -- the obvious thing to click), but it was a plain
+`<span>` with no click handler. The actual working "resolve and play"
+button was a separate, tiny icon-only button off in the row's far-right
+action column, easy to miss and not visually connected to the "Ad URL"
+text at all. The title cell's "Ad URL" is now itself the clickable
+trigger.
+
 ## [2.193.10] - 2026-08-27 - Fix VAST ad resolution never finding a playable MediaFile
 
 Following up on 2.193.9's fix for iHeart ad metadata display: the Audio
