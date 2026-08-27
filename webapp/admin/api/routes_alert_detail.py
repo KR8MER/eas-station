@@ -315,6 +315,8 @@ def alert_detail(alert_id):
                     'Could not load related alerts for %s: %s', alert.identifier, _rel_exc
                 )
 
+        from app_utils.image_export.radar_loop import RADAR_LOOP_MAX_FRAMES
+
         return render_template(
             'alert_detail.html',
             alert=alert,
@@ -329,6 +331,7 @@ def alert_detail(alert_id):
             eas_audio_web_url=eas_audio_web_url,
             related_alerts=related_alerts,
             vtec_chain=vtec_chain,
+            radar_loop_max_frames=RADAR_LOOP_MAX_FRAMES,
         )
 
     except Exception as exc:

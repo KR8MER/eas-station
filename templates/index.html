@@ -629,6 +629,12 @@
                             <span>Interactive Emergency Alert Map</span>
                         </h5>
                         <span class="badge bg-success" id="map-status-badge">Loading...</span>
+                        <div class="form-check form-switch mb-0 ms-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="dashboardRadarToggle">
+                            <label class="form-check-label" for="dashboardRadarToggle">
+                                <i class="fas fa-cloud-showers-heavy me-1"></i>Radar
+                            </label>
+                        </div>
                     </div>
                     <div class="map-refresh-meta" aria-live="polite">
                         <div class="meta-row">
@@ -700,6 +706,19 @@
                                 <p class="text-uppercase small text-muted fw-semibold mb-2">Boundaries & Layers</p>
                                 <div id="legend-boundary-layers" class="legend-dynamic"></div>
                                 <div id="legend-boundary-empty" class="text-muted small">Layers will appear when data is loaded.</div>
+                            </div>
+                        </div>
+                        <div class="row mt-3" id="radar-legend-section" style="display: none;">
+                            <div class="col-12">
+                                <p class="text-uppercase small text-muted fw-semibold mb-2">
+                                    <i class="fas fa-cloud-showers-heavy me-1"></i>Reflectivity (dBZ)
+                                </p>
+                                <span class="badge" style="background: rgb(100,200,100); color: #123;">5</span>
+                                <span class="badge" style="background: rgb(40,160,40);">20</span>
+                                <span class="badge" style="background: rgb(240,230,60); color: #123;">30</span>
+                                <span class="badge" style="background: rgb(250,160,40);">40</span>
+                                <span class="badge" style="background: rgb(220,40,40);">50</span>
+                                <span class="badge" style="background: rgb(200,60,200);">60+</span>
                             </div>
                         </div>
                         <div class="row mt-3" id="alert-summary-row">
@@ -995,6 +1014,7 @@ async function initMap() {
 
         console.log('✅ Map initialized successfully');
         updateMapStatus('Ready', 'success');
+        initDashboardRadarToggle();
 
         // Load initial data
         await Promise.all([
@@ -1012,6 +1032,48 @@ async function initMap() {
         showMapError('Failed to initialize map: ' + error.message);
         updateMapStatus('Error', 'danger');
     }
+}
+
+// ---------------------------------------------------------------------
+// Live radar toggle. Unlike the alert-detail page's "at time of alert"
+// snapshot, this always shows current reflectivity, so the layer is
+// recreated on a timer while enabled -- EASMap.radarLayer() resolves
+// "now" once at creation time, it does not update on its own.
+// ---------------------------------------------------------------------
+let dashboardRadarLayer = null;
+let dashboardRadarRefreshTimer = null;
+const DASHBOARD_RADAR_REFRESH_MS = 5 * 60 * 1000; // matches the WMS-T service's own cadence
+
+function initDashboardRadarToggle() {
+    const toggle = document.getElementById('dashboardRadarToggle');
+    const legendSection = document.getElementById('radar-legend-section');
+    if (!toggle) {
+        return;
+    }
+    toggle.addEventListener('change', function() {
+        if (toggle.checked) {
+            refreshDashboardRadarLayer();
+            dashboardRadarRefreshTimer = setInterval(refreshDashboardRadarLayer, DASHBOARD_RADAR_REFRESH_MS);
+            if (legendSection) legendSection.style.display = '';
+        } else {
+            if (dashboardRadarLayer) {
+                map.removeLayer(dashboardRadarLayer);
+                dashboardRadarLayer = null;
+            }
+            if (dashboardRadarRefreshTimer) {
+                clearInterval(dashboardRadarRefreshTimer);
+                dashboardRadarRefreshTimer = null;
+            }
+            if (legendSection) legendSection.style.display = 'none';
+        }
+    });
+}
+
+function refreshDashboardRadarLayer() {
+    if (dashboardRadarLayer) {
+        map.removeLayer(dashboardRadarLayer);
+    }
+    dashboardRadarLayer = EASMap.radarLayer({}).addTo(map);
 }
 
 // Load alerts from API

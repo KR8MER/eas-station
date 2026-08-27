@@ -8,6 +8,33 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.195.0] - 2026-08-27 - Radar reflectivity overlay for weather alerts
+
+Weather (`category='Met'`) alert pages and the dashboard map now have a
+"Radar (at time of alert)" toggle, pulling NEXRAD Level III base
+reflectivity (product N0Q) from Iowa Environmental Mesonet's public WMS-T
+mosaic — historical for past alerts, live for active ones. The alert detail
+page also gets a "Radar Loop" card: a lazily-generated, disk-cached
+sequence of frames spanning the alert's duration (5-minute cadence, capped
+at 36 frames / ~3 hours), so a completed alert can be replayed rather than
+only showing one frozen moment. The share-image renderer composites the
+same overlay onto weather alert graphics.
+
+Both the client-side toggle (`static/js/core/map_theme.js`) and the
+server-side share/loop renderer (`app_utils/image_export/maps.py`) shared
+one bug: `_RADAR_OPACITY` at 0.65 blended mathematically correctly (traced
+pixel-by-pixel to confirm) but still read as a solid weather-radar image
+over a wide, intense cell, with the toned basemap and road detail
+essentially invisible underneath. Lowered to 0.45 in both places so the
+basemap stays legible.
+
+- `app_utils/image_export/radar_loop.py` (new) — lazy, disk-cached frame
+  generation; `webapp/admin/api/routes_radar_loop.py` (new) —
+  `GET /api/alerts/<id>/radar-loop`.
+- `static/js/core/map_theme.js` — new `easRadar` pane and `EASMap.radarLayer()`.
+- `app_utils/image_export/maps.py` — radar overlay + legend on the share-card renderer.
+- `templates/alert_detail.html`, `templates/index.html` — toggle, legend, and (alert detail only) the Radar Loop player.
+
 ## [2.194.1] - 2026-08-27 - Five independent "is this alert active" checks never excluded Cancelled
 
 Following up on 2.194.0's CAP `<references>` fix: an alert correctly marked

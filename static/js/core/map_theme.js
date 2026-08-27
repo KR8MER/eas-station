@@ -27,14 +27,26 @@
 (function (window, document) {
     'use strict';
 
-    /** Leaflet pane z-indexes. Both sit inside the map pane so they pan and
-     *  zoom with the map; the ordering puts context lines under the hazard
-     *  and the hazard under markers/tooltips, matching the share card's
-     *  draw order (county outlines → glow → fill → casing → core). */
+    /** Leaflet pane z-indexes. All three sit inside the map pane so they pan
+     *  and zoom with the map. Radar sits above the basemap tile pane
+     *  (z=200) but below reference/hazard, so the alert polygon and county
+     *  outlines stay legible drawn on top of it; reference sits under the
+     *  hazard and the hazard under markers/tooltips, matching the share
+     *  card's draw order (county outlines → glow → fill → casing → core). */
+    var PANE_RADAR = 'easRadar';
     var PANE_REFERENCE = 'easReference';
     var PANE_HAZARD = 'easHazard';
+    var Z_RADAR = 350;
     var Z_REFERENCE = 410;
     var Z_HAZARD = 430;
+
+    /** IEM's WMS-T mosaic of NWS WSR-88D Level III base reflectivity
+     *  (product N0Q), 5-minute cadence back to 2011-02-16. See
+     *  https://mesonet.agron.iastate.edu/ogc/ -- "nexrad-n0q-wmst" is the
+     *  actual data layer (there's also a non-image "time_idx" helper layer
+     *  at the same capabilities level; don't request that one). */
+    var RADAR_WMS_URL = 'https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0q-t.cgi';
+    var RADAR_WMS_LAYER = 'nexrad-n0q-wmst';
 
     /** Fallbacks used only when the stylesheet has not loaded (or a CSS
      *  variable was renamed) — they mirror `palette._SEVERITY`. */
@@ -154,6 +166,9 @@
             container.classList.add('eas-map--flat');
         }
 
+        if (!map.getPane(PANE_RADAR)) {
+            map.createPane(PANE_RADAR).style.zIndex = Z_RADAR;
+        }
         if (!map.getPane(PANE_REFERENCE)) {
             map.createPane(PANE_REFERENCE).style.zIndex = Z_REFERENCE;
         }
@@ -350,6 +365,55 @@
         });
     }
 
+    // ── Radar overlay ───────────────────────────────────────────────────
+
+    /**
+     * Round a Date down to the nearest 5-minute mark, matching the WMS-T
+     * service's PT5M cadence. The service's `nearestValue` flag is off (its
+     * capabilities document does not advertise automatic snapping), so an
+     * arbitrary timestamp between two real scans can come back empty rather
+     * than returning the nearest one.
+     */
+    function _floorTo5Min(date) {
+        var d = new Date(date.getTime());
+        d.setUTCSeconds(0, 0);
+        d.setUTCMinutes(Math.floor(d.getUTCMinutes() / 5) * 5);
+        return d;
+    }
+
+    /**
+     * NWS WSR-88D Level III base reflectivity (product N0Q), as a CONUS
+     * mosaic from IEM's WMS-T service -- the classic green/yellow/red radar
+     * image. Not raw Level II moments (reflectivity/velocity/spectrum width
+     * per gate); that needs volume-scan decoding this doesn't attempt.
+     *
+     * @param {Object} [options]
+     * @param {Date|string} [options.time] UTC time to show radar as-of
+     *        (rounded down to the nearest 5 min). Omit for the current scan.
+     * @param {number} [options.opacity=0.65] Layer opacity -- overlays drawn
+     *        in the hazard/reference panes stay legible on top of it.
+     * @returns {L.TileLayer.WMS}
+     */
+    function radarLayer(options) {
+        var opts = options || {};
+        var when = opts.time ? new Date(opts.time) : new Date();
+        var timeParam = _floorTo5Min(when).toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+        return L.tileLayer.wms(RADAR_WMS_URL, {
+            pane: PANE_RADAR,
+            layers: RADAR_WMS_LAYER,
+            format: 'image/png',
+            transparent: true,
+            version: '1.1.1',
+            // 0.65 blended correctly but read as a solid weather-radar image
+            // over a wide, intense cell -- lowered to keep the basemap
+            // legible underneath (matches _RADAR_OPACITY in maps.py).
+            opacity: opts.opacity === undefined ? 0.45 : opts.opacity,
+            attribution: 'Radar: Iowa Environmental Mesonet / NWS WSR-88D',
+            time: timeParam
+        });
+    }
+
     // ── Theme switching ─────────────────────────────────────────────────
 
     function startListening() {
@@ -398,6 +462,7 @@
     window.EASMap = {
         PANE_HAZARD: PANE_HAZARD,
         PANE_REFERENCE: PANE_REFERENCE,
+        PANE_RADAR: PANE_RADAR,
         isDark: isDark,
         cssVar: cssVar,
         withAlpha: withAlpha,
@@ -409,6 +474,7 @@
         hazardLayer: hazardLayer,
         referenceStyle: referenceStyle,
         referenceLayer: referenceLayer,
+        radarLayer: radarLayer,
         onThemeChange: onThemeChange
     };
 })(window, document);

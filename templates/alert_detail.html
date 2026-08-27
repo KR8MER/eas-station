@@ -619,10 +619,18 @@
 
                     <!-- Alert Coverage Map -->
                     <div class="card mb-4">
-                        <div class="card-header">
+                        <div class="card-header d-flex justify-content-between align-items-center">
                             <h5 class="mb-0">
                                 <i class="fas fa-map"></i> Alert Coverage Map
                             </h5>
+                            {% if alert.category == 'Met' %}
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" role="switch" id="radarToggle">
+                                <label class="form-check-label" for="radarToggle">
+                                    <i class="fas fa-cloud-showers-heavy me-1"></i>Radar (at time of alert)
+                                </label>
+                            </div>
+                            {% endif %}
                         </div>
                         <div class="card-body">
                             {# Frame, ground colour and radius come from the
@@ -636,6 +644,19 @@
                                     </div>
                                 </div>
                             </div>
+                            {% if alert.category == 'Met' %}
+                            <div class="mt-2" id="radar-legend" style="display: none;">
+                                <small class="text-muted d-block mb-1">Reflectivity (dBZ):</small>
+                                <small>
+                                    <span class="badge" style="background: rgb(100,200,100); color: #123;">5</span>
+                                    <span class="badge" style="background: rgb(40,160,40);">20</span>
+                                    <span class="badge" style="background: rgb(240,230,60); color: #123;">30</span>
+                                    <span class="badge" style="background: rgb(250,160,40);">40</span>
+                                    <span class="badge" style="background: rgb(220,40,40);">50</span>
+                                    <span class="badge" style="background: rgb(200,60,200);">60+</span>
+                                </small>
+                            </div>
+                            {% endif %}
                             <div class="d-flex justify-content-between align-items-center mt-3">
                                 <div class="map-legend" id="map-legend">
                                     <small>
@@ -654,6 +675,40 @@
                             </div>
                         </div>
                     </div>
+
+                    {% if alert.category == 'Met' %}
+                    <!-- Radar Loop -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="fas fa-satellite-dish"></i> Radar Loop
+                            </h5>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="radarLoopBuildBtn">
+                                <i class="fas fa-film me-1"></i>Generate Loop
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="radarLoopEmpty" class="text-muted small">
+                                Renders radar reflectivity frames from when this alert was issued
+                                through when it ended (or now, if still active), from IEM's radar
+                                archive — up to {{ radar_loop_max_frames }} frames at 5-minute intervals (~3 hours).
+                                First generation takes a few seconds; cached after that.
+                            </div>
+                            <div id="radarLoopProgress" class="small text-muted mb-2" style="display: none;"></div>
+                            <div id="radarLoopPlayer" style="display: none;">
+                                <img id="radarLoopFrame" src="" alt="Radar loop frame"
+                                     style="max-width: 100%; border-radius: var(--radius-md, 6px);">
+                                <div class="d-flex align-items-center gap-2 mt-2">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="radarLoopPlayPause">
+                                        <i class="fas fa-pause"></i>
+                                    </button>
+                                    <input type="range" class="form-range flex-grow-1" id="radarLoopScrub" min="0" value="0" step="1">
+                                    <small class="text-muted text-nowrap" id="radarLoopTime">--</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
 
                     <!-- Timing & Technical Details (side by side) -->
                     <div class="row g-3 mb-4">
@@ -2122,6 +2177,8 @@ const alertData = {
     severity: {{ alert.severity|tojson }},
     status: {{ alert.status|tojson }},
     identifier: {{ alert.identifier|tojson }},
+    category: {{ alert.category|tojson }},
+    sent: {{ alert.sent.isoformat()|tojson if alert.sent else 'null' }},
     // Use coverage data instead of text-based detection
     is_county_wide: {% if coverage_data and coverage_data.get('county') and coverage_data['county']['coverage_percentage'] >= 95 %}true{% else %}false{% endif %},
     stormMotion: {% if ipaws_data and ipaws_data.storm_motion %}{{ ipaws_data.storm_motion | tojson }}{% else %}null{% endif %}
@@ -2133,6 +2190,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize map after a short delay
     setTimeout(initializeMap, 1000);
+    initRadarLoop(); // Standalone <img> player, doesn't need the Leaflet map.
 });
 
 function initializeMap() {
@@ -2149,10 +2207,140 @@ function initializeMap() {
         // Load alert data and boundaries
         loadAlertData();
         loadBoundaries();
+        initRadarToggle();
 
     } catch (error) {
         console.error('Error initializing map:', error);
         showMapError('Error initializing map: ' + error.message);
+    }
+}
+
+let radarLayer = null;
+
+function initRadarToggle() {
+    const toggle = document.getElementById('radarToggle');
+    const legend = document.getElementById('radar-legend');
+    if (!toggle) {
+        return; // Not a Met-category alert -- see the card-header Jinja condition in the template.
+    }
+    toggle.addEventListener('change', function() {
+        if (toggle.checked) {
+            radarLayer = EASMap.radarLayer({ time: alertData.sent }).addTo(map);
+            if (legend) legend.style.display = '';
+        } else if (radarLayer) {
+            map.removeLayer(radarLayer);
+            radarLayer = null;
+            if (legend) legend.style.display = 'none';
+        }
+    });
+}
+
+// ---------------------------------------------------------------------
+// Radar loop: pre-rendered PNG frames from /api/alerts/<id>/radar-loop,
+// polled until fully cached, then played back as a simple image cycler.
+// Standalone from the Leaflet map above -- these are flat composited
+// images (basemap + polygon + radar + legend baked in via _render_map),
+// not interactive map tiles.
+// ---------------------------------------------------------------------
+let radarLoopFrames = [];
+let radarLoopIndex = 0;
+let radarLoopTimer = null;
+let radarLoopPlaying = false;
+let radarLoopPlayerShown = false;
+
+function initRadarLoop() {
+    const buildBtn = document.getElementById('radarLoopBuildBtn');
+    if (!buildBtn) {
+        return; // Not a Met-category alert -- see the card's Jinja condition in the template.
+    }
+
+    buildBtn.addEventListener('click', function() {
+        buildBtn.disabled = true;
+        document.getElementById('radarLoopEmpty').style.display = 'none';
+        pollRadarLoop();
+    });
+
+    document.getElementById('radarLoopPlayPause').addEventListener('click', function() {
+        setRadarLoopPlaying(!radarLoopPlaying);
+    });
+
+    document.getElementById('radarLoopScrub').addEventListener('input', function() {
+        setRadarLoopPlaying(false); // Scrubbing pauses so the chosen frame sticks.
+        showRadarLoopFrame(parseInt(this.value, 10));
+    });
+}
+
+async function pollRadarLoop() {
+    const progress = document.getElementById('radarLoopProgress');
+    progress.style.display = '';
+    let data;
+    try {
+        const resp = await fetch(`/api/alerts/${alertData.id}/radar-loop`);
+        data = await resp.json();
+    } catch (err) {
+        progress.textContent = 'Error building radar loop: ' + err;
+        return;
+    }
+    if (data.error) {
+        progress.textContent = 'Could not build radar loop: ' + data.error;
+        return;
+    }
+
+    radarLoopFrames = data.frames;
+    const done = data.total - data.pending;
+    progress.textContent = `Rendering radar frames… (${done}/${data.total})`;
+
+    if (radarLoopFrames.length > 0) {
+        const scrub = document.getElementById('radarLoopScrub');
+        scrub.max = Math.max(0, radarLoopFrames.length - 1);
+        if (!radarLoopPlayerShown) {
+            radarLoopPlayerShown = true;
+            document.getElementById('radarLoopPlayer').style.display = '';
+        }
+        // Keep showing the newest frame while more are still rendering, so
+        // the wait doesn't look dead.
+        showRadarLoopFrame(radarLoopFrames.length - 1);
+    }
+
+    if (data.pending > 0) {
+        setTimeout(pollRadarLoop, 500);
+        return;
+    }
+
+    progress.style.display = 'none';
+    document.getElementById('radarLoopBuildBtn').style.display = 'none';
+    if (radarLoopFrames.length === 0) {
+        progress.style.display = '';
+        progress.textContent = 'No radar frames available for this alert.';
+        return;
+    }
+    setRadarLoopPlaying(true);
+}
+
+function showRadarLoopFrame(i) {
+    const frame = radarLoopFrames[i];
+    if (!frame) {
+        return;
+    }
+    radarLoopIndex = i;
+    document.getElementById('radarLoopFrame').src = frame.url;
+    document.getElementById('radarLoopScrub').value = i;
+    document.getElementById('radarLoopTime').textContent =
+        new Date(frame.time).toLocaleTimeString();
+}
+
+function setRadarLoopPlaying(playing) {
+    radarLoopPlaying = playing;
+    document.getElementById('radarLoopPlayPause').innerHTML =
+        playing ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
+    if (radarLoopTimer) {
+        clearInterval(radarLoopTimer);
+        radarLoopTimer = null;
+    }
+    if (playing && radarLoopFrames.length > 1) {
+        radarLoopTimer = setInterval(function() {
+            showRadarLoopFrame((radarLoopIndex + 1) % radarLoopFrames.length);
+        }, 400);
     }
 }
 
