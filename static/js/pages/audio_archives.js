@@ -436,6 +436,14 @@
 
         for (const e of entries) {
             const label = e.title ? `Ad: ${e.title}` : 'Ad URL';
+            // The action-column icon button below is a secondary/duplicate
+            // trigger -- the primary one is the "Ad URL" text itself in the
+            // title cell (see the no-title branch below), since that's the
+            // prominent, obviously-labeled element a user actually clicks.
+            // Before this fix the title cell only rendered a plain <span>
+            // with no click handler at all, so clicking the visible "Ad
+            // URL" text did nothing; this tiny icon, easy to miss off in
+            // its own column, was the only thing that actually worked.
             const adBtn = e.stream_url
                 ? `<button type="button" class="btn btn-sm btn-link p-1 text-warning" title="Resolve and play this ad/stream URL"
                            data-action="resolve" data-url="${esc(e.stream_url)}" data-label="${esc(label)}">
@@ -448,7 +456,10 @@
             } else if (e.display) {
                 title = `<em>${esc(e.display)}</em>`;
             } else if (e.stream_url) {
-                title = `<span class="text-warning"><i class="fas fa-ad me-1"></i>Ad URL</span>`;
+                title = `<button type="button" class="btn btn-sm btn-link p-0 text-warning text-decoration-none" title="Resolve and play this ad/stream URL"
+                                 data-action="resolve" data-url="${esc(e.stream_url)}" data-label="${esc(label)}">
+                             <i class="fas fa-ad me-1"></i>Ad URL
+                           </button>`;
             } else {
                 title = '<span class="text-muted">—</span>';
             }
