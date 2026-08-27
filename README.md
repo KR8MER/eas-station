@@ -2,7 +2,7 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-2.195.1-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.195.2-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -85,6 +85,10 @@ A few of the web dashboards, captured from a running instance with sample alert 
 |---|---|
 | [![Broadcast Builder console for composing manual SAME activations](docs/screenshots/broadcast-builder.jpg)](docs/screenshots/broadcast-builder.jpg) | [![Theme selector modal showing a grid of the 20 built-in themes with light/dark labels](docs/screenshots/theme-gallery.jpg)](docs/screenshots/theme-gallery.jpg) |
 | **Broadcast Builder** — compose manual SAME activations, generate the audio package and review recent transmissions, with the station's originator / station ID / attention-tone settings shown inline. | **Themes** — 20 built-in themes (11 light, 9 dark), each WCAG-AA audited; import/export custom themes as JSON. |
+
+**Radar reflectivity overlay** — weather alerts get a live "Radar (at time of alert)" toggle on the Coverage Map, pulling NEXRAD Level III base reflectivity from Iowa Environmental Mesonet's public WMS-T mosaic (historical for a past alert, live for one still active), plus a Radar Loop card below that steps through the alert's full duration at 5-minute cadence:
+
+[![Alert Coverage Map with the radar reflectivity toggle on, showing NEXRAD base reflectivity under a Tornado Warning polygon](docs/screenshots/radar-overlay.jpg)](docs/screenshots/radar-overlay.jpg)
 
 ### Physical Displays
 
