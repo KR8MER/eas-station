@@ -58,6 +58,7 @@ from .map_data import (  # noqa: F401  (re-exported for compatibility)
     _alert_same_codes, _fetch_county_outlines, _fetch_same_union_geom,
 )
 from .storm_overlay import _draw_storm_track  # noqa: F401
+from . import radar_level2 as _radar_level2
 
 logger = logging.getLogger(__name__)
 
@@ -152,20 +153,14 @@ def _fetch_radar_overlay(
         return None
 
 
-# Standard NWS Level III base reflectivity (dBZ) color ramp -- a long-
-# standing, publicly documented government standard reproduced identically
-# across virtually every public radar display, not something specific to
-# IEM's rendering. Drawn here as a reference scale ("what does green vs red
-# generally mean"), not a sampled readout of the exact palette baked into
-# the fetched tiles.
-_REFLECTIVITY_LEGEND = [
-    ('5',   (100, 200, 100)),
-    ('20',  (40, 160, 40)),
-    ('30',  (240, 230, 60)),
-    ('40',  (250, 160, 40)),
-    ('50',  (220, 40, 40)),
-    ('60+', (200, 60, 200)),
-]
+# Standard NWS base reflectivity (dBZ) color ramp -- a long-standing,
+# publicly documented government standard reproduced identically across
+# virtually every public radar display, not something specific to either
+# data source below. Defined once in radar_level2.py (which also uses it
+# to colorize raw dBZ values -- the WMS mosaic arrives pre-colored, so it
+# only needs this as a reference scale) and imported here so the legend
+# always matches what either source actually drew.
+_REFLECTIVITY_LEGEND = _radar_level2.REFLECTIVITY_LEGEND
 
 
 def _draw_radar_legend(img: Image.Image, fonts: Dict) -> Tuple[int, int, int, int]:
@@ -433,11 +428,34 @@ def _render_map(geom: Dict, severity: str,
     # county reference outlines, matching the in-app map's pane order
     # (static/js/core/map_theme.js). category != 'Met' or a fetch failure
     # both just skip this -- never a reason to break the share card.
+    #
+    # Level II (raw per-site volume scan, radar_level2.py) is tried first
+    # for the fine-grained look near a radar site; the Level III WMS
+    # mosaic (_fetch_radar_overlay, ~1km, blocky at close zoom) is the
+    # fallback whenever Level II can't produce a frame -- no site within
+    # range, no volume near *sent*, a download/decode hiccup. Both draw
+    # from the same _REFLECTIVITY_LEGEND ramp, so a viewer can't tell
+    # which source produced a given frame from color alone.
     radar_drawn = False
     if category == 'Met':
-        radar_img = _fetch_radar_overlay(
-            tx_min, ty_min, tx_max, ty_max, z, canvas_w, canvas_h, sent,
+        center_lat = (min_lat + max_lat) / 2
+        center_lon = (min_lon + max_lon) / 2
+        half_width_m = max(
+            math.radians(max_lat - min_lat) * 6371000 / 2,
+            math.radians(max_lon - min_lon) * 6371000 * math.cos(math.radians(center_lat)) / 2,
         )
+        try:
+            radar_img = _radar_level2.render_frame(
+                center_lat, center_lon, sent, half_width_m, canvas_w, canvas_h,
+                opacity=_RADAR_OPACITY,
+            )
+        except Exception as exc:
+            logger.debug("Level II radar render raised, falling back to WMS: %s", exc)
+            radar_img = None
+        if radar_img is None:
+            radar_img = _fetch_radar_overlay(
+                tx_min, ty_min, tx_max, ty_max, z, canvas_w, canvas_h, sent,
+            )
         if radar_img is not None:
             canvas = canvas.convert('RGBA')
             canvas.alpha_composite(radar_img)

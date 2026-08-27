@@ -22,10 +22,11 @@ from __future__ import annotations
 """``/api/alerts/<id>/radar-loop`` — lazily-rendered, disk-cached radar frames.
 
 Renders a bounded number of not-yet-cached frames per call (a long
-severe-weather episode can need dozens of WMS fetches, too slow for one
-request) and reports how many are still pending. The frontend is expected
-to poll this until ``pending`` reaches 0. See
-app_utils.image_export.radar_loop for why this needs no background job.
+severe-weather episode can need dozens of frames, each a real Level II
+decode when available, too slow for one request) and reports how many are
+still pending. The frontend is expected to poll this until ``pending``
+reaches 0. See app_utils.image_export.radar_loop for why this needs no
+background job.
 """
 
 import json

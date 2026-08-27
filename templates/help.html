@@ -375,9 +375,30 @@
                                         disk-cached sequence of frames spanning the alert's full
                                         duration (5-minute cadence, capped around 3 hours), so you can
                                         step or play through how the weather actually moved rather
-                                        than seeing only one frozen moment. The first generation takes
-                                        a few seconds; it's instant on every view after that.
+                                        than seeing only one frozen moment. Loop frames prefer raw
+                                        NEXRAD <strong>Level II</strong> data (from NOAA's public
+                                        archive, decoded on the appliance) when the alert falls within
+                                        range of a radar site &mdash; a noticeably finer-grained image
+                                        than the Level III mosaic, closest to that site and gradually
+                                        blending toward it at longer range, since beam width genuinely
+                                        grows with distance. Falls back to the Level III mosaic
+                                        automatically wherever Level II isn't available. First
+                                        generation takes up to 30 seconds per frame; instant on every
+                                        view after that.
                                     </p>
+                                    <figure class="mt-3 mb-0">
+                                        <img src="{{ url_for('static', filename='img/radar-loop-distance-example.jpg') }}"
+                                             class="img-fluid rounded border" alt="Radar Loop card for a Tornado Warning roughly 90 miles from its radar site, showing real reflectivity structure with some beam-to-beam banding softened by the renderer's smoothing pass">
+                                        <figcaption class="text-muted small mt-1">
+                                            A real example, ~90 miles from its radar site &mdash; distance
+                                            from the transmitter is the dominant factor in how sharp a
+                                            frame looks. Near a site, expect crisp, RadarScope-like
+                                            detail; at range like this, expect a somewhat softer image
+                                            (a light smoothing pass keeps real beam-to-beam gaps from
+                                            reading as a harsh grid) &mdash; both are genuine Level II
+                                            data, not a rendering shortcut.
+                                        </figcaption>
+                                    </figure>
                                 </div>
                             </div>
                         </div>
