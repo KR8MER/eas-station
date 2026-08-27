@@ -8,6 +8,32 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.193.9] - 2026-08-27 - Fix OLED init file-descriptor leak and iHeart ad-break metadata display
+
+Investigated a report that `eas-station-displays` was consuming 8.9 GB RSS
+after ~4 days of uptime (every other service stayed under 1 GB over the same
+window). Root cause: `ArgonOLEDController.__init__` (`app_core/oled.py`)
+opens the I2C bus via `smbus2.SMBus` (a raw file descriptor with no
+`__del__`) *before* the `ssd1306` handshake; on a host with no OLED
+physically attached, that handshake always fails, and the just-opened
+handle was never closed on the exception path. `initialise_oled_display()`
+retries this every 5 seconds indefinitely, so over ~4 days it leaked roughly
+30,000 `/dev/i2c-1` file descriptors (confirmed via `/proc/<pid>/fd`), which
+is what actually drove the RSS growth despite the existing glibc
+malloc-arena tuning. Fixed by closing the I2C handle before re-raising.
+Added `tests/test_oled_init_fd_leak.py`.
+
+Also fixed: iHeartRadio ad breaks send `StreamTitle=adContext="<base64 VAST
+url>"`, which didn't match any of the known `text=`/`title=`/`song=`/
+`artist=` attribute patterns and wasn't recognized as a decodable base64
+blob either (it's wrapped in an attribute, not a bare blob), so the raw,
+undecoded string was stored and displayed verbatim in the Audio Archives
+Song History page. `_handle_icy_metadata` (`app_core/audio/sources.py`) now
+scans quoted attributes for a base64 value that decodes to an http(s) URL
+and resolves it into the existing `stream_url` field, which the Song
+History UI already renders as a clickable "Ad URL" badge. Added a
+regression test to `tests/test_stream_metadata_parsing.py`.
+
 ## [2.193.8] - 2026-08-26 - Documentation renders and links cleanly, and CI now enforces it
 
 Auditing the published docs site (kr8mer.github.io/eas-station) for a

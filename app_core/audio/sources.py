@@ -1296,6 +1296,29 @@ class StreamSourceAdapter(AudioSourceAdapter):
             if url_match:
                 updates.setdefault('stream_url', url_match.group(1).strip())
 
+            # --- Step 5b: ad-tag / VAST context URLs ---
+            # iHeartRadio (and possibly other automation systems) mark ad
+            # breaks with a StreamTitle that is just one attribute, e.g.
+            # adContext="aHR0cHM6Ly9uMDViLWUyLnJldm1hLmlocmhscy5jb20vY2FjaGUv..."
+            # which base64-decodes to a VAST ad-tag URL such as
+            # https://n05b-e2.revma.ihrhls.com/cache/vast/<id>. This doesn't
+            # match text=/title=/song=/artist= above, and it isn't a *bare*
+            # base64 blob either (it's wrapped in `adContext="..."`), so
+            # without this step it fell through to the raw-string branch
+            # below and the undecoded attribute (quotes and all) was stored
+            # as the song title. Scan any quoted attribute for a base64
+            # value that decodes to an http(s) URL -- this covers adContext=
+            # today and any similarly-shaped ad-tag attribute a station adds
+            # later, without hardcoding the key name.
+            if not explicit_match and not updates.get('stream_url'):
+                for attr_match in re.finditer(r'\b(\w+)="([^"]+)"', stream_title):
+                    attr_value = attr_match.group(2)
+                    if _looks_like_base64_blob(attr_value):
+                        decoded_url = _decode_base64_url(attr_value)
+                        if decoded_url:
+                            updates['stream_url'] = decoded_url
+                            break
+
             # --- Step 6: build display_song now that all fields are settled ---
             # Guard against the case where title was never updated (stays as the raw
             # stream_title string) — don't use it as a display value in that case.
@@ -1311,6 +1334,12 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
             if display_song:
                 updates['song'] = display_song
+            elif updates.get('stream_url'):
+                # Step 5/5b already resolved a playable/ad-tag URL (a bare
+                # base64 blob, a url="" attribute, or an adContext="" VAST
+                # tag). Leave 'song' unset so the UI shows its dedicated
+                # "Ad URL" badge instead of clobbering it with raw junk text.
+                pass
             elif _looks_like_base64_blob(stream_title):
                 # Try to decode the base64 blob as a playable URL (e.g. a VAST ad tag).
                 decoded_url = _decode_base64_url(stream_title)

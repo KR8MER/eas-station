@@ -334,7 +334,22 @@ class ArgonOLEDController:
         # Set dtparam=i2c_arm_baudrate=400000 for fast 400kHz speed to eliminate
         # visible column-by-column refresh (default 100kHz causes "curtain" effect)
         serial = i2c(port=i2c_bus, address=i2c_address)
-        self.device = ssd1306(serial, width=width, height=height, rotate=rotate)
+        try:
+            self.device = ssd1306(serial, width=width, height=height, rotate=rotate)
+        except Exception:
+            # serial (luma.core's i2c wrapper) already opened /dev/i2c-N via
+            # smbus2.SMBus, which owns a raw fd with no __del__ -- if the
+            # ssd1306 handshake below fails (e.g. no device ACKs at this
+            # address), that fd is never closed unless we do it here.
+            # initialise_oled_display() retries this every 5s forever when no
+            # OLED is attached, so an unclosed fd here leaks one file
+            # descriptor per retry indefinitely (observed: ~30k leaked fds
+            # and 8.9GB RSS after ~4 days on a host with no OLED hardware).
+            try:
+                serial.cleanup()
+            except Exception:
+                pass
+            raise
         if contrast is not None:
             try:
                 self.device.contrast(max(0, min(255, contrast)))
