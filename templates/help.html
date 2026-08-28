@@ -467,6 +467,22 @@
                                             system logs afterward to confirm it landed. Take a backup first.
                                         </li>
                                         <li>
+                                            <strong>USB sound card auto-configuration</strong>: every Raspberry Pi's
+                                            onboard audio (the HDMI outputs) is playback-only &mdash; there is no
+                                            line-in or mic on the board, so it can never be an ingest source. When
+                                            exactly one USB sound card (a DAC such as an HS100B, a HAT, etc.) is
+                                            plugged in and nothing has been configured yet, the station wires it up
+                                            automatically at startup: an ALSA source named
+                                            <code>usb-audio-&lt;card&gt;</code> appears under <strong>Monitor &rarr;
+                                            Audio &amp; Radio &rarr; Audio Ingestion</strong> (manage or remove it
+                                            there like any other source), and it becomes the target for local EAS
+                                            alert playback (<strong>Settings &rarr; EAS Settings &rarr; Audio
+                                            Player</strong>) if that field was still at its untouched default. If
+                                            more than one external card is present, or a source/output is already
+                                            configured, nothing is changed automatically &mdash; add or edit it
+                                            manually instead.
+                                        </li>
+                                        <li>
                                             <strong>Clock sync monitoring</strong> (<strong>System Health</strong>):
                                             SAME timing and Required Weekly Test scheduling both depend on correct
                                             system time. The Clock Sync card shows chrony/NTP synchronization status
