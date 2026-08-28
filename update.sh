@@ -247,8 +247,19 @@ if [ -d ".git" ]; then
     # Git-based update
     echo_info "Using git to update..."
 
-    # Fix git ownership warning when running as root
-    git config --global --add safe.directory "$INSTALL_DIR" 2>/dev/null || true
+    # Fix git's dubious-ownership check for both identities that touch this
+    # repo: update.sh itself runs git as root (this line), but almost every
+    # git call below is `sudo -u "$SERVICE_USER" git ...` -- a separate
+    # identity with its own $HOME/.gitconfig that this exact line, prior to
+    # this fix, never configured. Found by an end-to-end non-interactive run
+    # failing at the very next git command with "fatal: detected dubious
+    # ownership in repository" -- root's own config being satisfied didn't
+    # help the eas-station-identity calls at all.
+    # --replace-all rather than --add: this line runs on every single
+    # upgrade, and --add has no dedup, so the alternative is one more
+    # identical line appended to .gitconfig forever.
+    git config --global --replace-all safe.directory "$INSTALL_DIR" 2>/dev/null || true
+    sudo -u "$SERVICE_USER" git config --global --replace-all safe.directory "$INSTALL_DIR" 2>/dev/null || true
 
     # Check git directory ownership - critical for sudo -u eas-station to work
     echo_progress "Checking git directory ownership..."
