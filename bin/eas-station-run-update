@@ -47,6 +47,23 @@
 # (potentially the whole multi-minute upgrade) for it to finish -- a
 # Type=oneshot unit's start job is not considered done until the script
 # exits, and this wrapper's caller does not want to sit on that.
+#
+# --property=Environment=HOME=/root: unlike `sudo`, which sets $HOME from
+# the target user's passwd entry, a plain systemd-run transient unit does
+# not set $HOME for the process it launches AT ALL -- confirmed directly on
+# hardware (`env` inside an otherwise-identical transient unit shows no HOME
+# entry whatsoever). update.sh runs as root, and with $HOME unset, every
+# plain `git` command it runs (not the `sudo -u eas-station git ...` ones,
+# which already get a correct $HOME from sudo) can't locate root's own
+# global gitconfig at all: git's own error for that case is not "no such
+# file", it's "fatal: $HOME not set", immediately followed by the exact
+# same "detected dubious ownership" fatal every git subcommand emits when
+# it can't establish the exception is configured -- indistinguishable from
+# the config genuinely missing the entry, which is what made this so slow
+# to track down: `git branch --show-current`, called bare (no `sudo -u`,
+# no `-c safe.directory=`) moments into the "Downloading Latest Version"
+# step, was failing on a check that every isolated repro of the *next*
+# command in the script kept passing.
 set -euo pipefail
 
 exec systemd-run \
@@ -54,4 +71,5 @@ exec systemd-run \
     --collect \
     --no-block \
     --property=Type=oneshot \
+    --property=Environment=HOME=/root \
     -- /opt/eas-station/update.sh "$@"
