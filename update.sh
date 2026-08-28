@@ -284,8 +284,8 @@ if [ -d ".git" ]; then
     if [ -n "$CHECKOUT_REF" ] && [ "${EAS_SKIP_PULL:-}" != "true" ]; then
         echo_progress "Checking out $CHECKOUT_REF..."
         set +e
-        CHECKOUT_OUTPUT=$(sudo -u "$SERVICE_USER" git fetch origin --tags --prune 2>&1 \
-            && sudo -u "$SERVICE_USER" git checkout "$CHECKOUT_REF" 2>&1)
+        CHECKOUT_OUTPUT=$(sudo -u "$SERVICE_USER" git -c safe.directory="$INSTALL_DIR" fetch origin --tags --prune 2>&1 \
+            && sudo -u "$SERVICE_USER" git -c safe.directory="$INSTALL_DIR" checkout "$CHECKOUT_REF" 2>&1)
         CHECKOUT_STATUS=$?
         set -e
         if [ $CHECKOUT_STATUS -eq 0 ]; then
@@ -323,7 +323,7 @@ if [ -d ".git" ]; then
         # Capture git fetch output to show detailed errors if needed
         # Explicitly fetch the current branch to handle shallow clones and limited refspecs
         set +e  # Temporarily disable exit-on-error to capture git fetch failure
-        FETCH_OUTPUT=$(sudo -u "$SERVICE_USER" git fetch origin "$CURRENT_BRANCH:refs/remotes/origin/$CURRENT_BRANCH" 2>&1)
+        FETCH_OUTPUT=$(sudo -u "$SERVICE_USER" git -c safe.directory="$INSTALL_DIR" fetch origin "$CURRENT_BRANCH:refs/remotes/origin/$CURRENT_BRANCH" 2>&1)
         FETCH_STATUS=$?
         set -e  # Re-enable exit-on-error
     
@@ -342,7 +342,7 @@ if [ -d ".git" ]; then
         echo ""
 
         set +e
-        sudo -u "$SERVICE_USER" git checkout main 2>&1
+        sudo -u "$SERVICE_USER" git -c safe.directory="$INSTALL_DIR" checkout main 2>&1
         CHECKOUT_STATUS=$?
         set -e
 
@@ -358,7 +358,7 @@ if [ -d ".git" ]; then
         echo_success "Switched to main"
 
         set +e
-        FETCH_OUTPUT=$(sudo -u "$SERVICE_USER" git fetch origin "$CURRENT_BRANCH:refs/remotes/origin/$CURRENT_BRANCH" 2>&1)
+        FETCH_OUTPUT=$(sudo -u "$SERVICE_USER" git -c safe.directory="$INSTALL_DIR" fetch origin "$CURRENT_BRANCH:refs/remotes/origin/$CURRENT_BRANCH" 2>&1)
         FETCH_STATUS=$?
         set -e
 
@@ -423,7 +423,7 @@ if [ -d ".git" ]; then
         git status --short 2>/dev/null | head -20
         echo ""
         echo_info "These changes will be stashed to allow update"
-        sudo -u "$SERVICE_USER" git stash push -m "Auto-stash before update $(date +%Y%m%d-%H%M%S)" 2>&1 || true
+        sudo -u "$SERVICE_USER" git -c safe.directory="$INSTALL_DIR" stash push -m "Auto-stash before update $(date +%Y%m%d-%H%M%S)" 2>&1 || true
         echo_success "Changes stashed (can be restored with 'git stash pop')"
     fi
     
@@ -445,7 +445,7 @@ if [ -d ".git" ]; then
 
     # Capture git reset output to show detailed errors if needed
     set +e  # Temporarily disable exit-on-error to capture git reset failure
-    RESET_OUTPUT=$(sudo -u "$SERVICE_USER" git reset --hard "origin/$CURRENT_BRANCH" 2>&1)
+    RESET_OUTPUT=$(sudo -u "$SERVICE_USER" git -c safe.directory="$INSTALL_DIR" reset --hard "origin/$CURRENT_BRANCH" 2>&1)
     RESET_STATUS=$?
     set -e  # Re-enable exit-on-error
 
