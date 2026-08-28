@@ -835,8 +835,96 @@ def _load_db_settings_into_config() -> None:
         )
 
 
+def _detect_external_alsa_card() -> Optional[str]:
+    """Return the name of the sole non-onboard ALSA card, or None.
+
+    Every Raspberry Pi board's onboard audio (the ``vc4hdmi*`` cards) is
+    output-only -- there is no line-in or mic on the board, so it can never
+    appear as a capture device; any other card is necessarily external (a
+    USB DAC such as an HS100B, a HAT, etc). Returns None when zero or more
+    than one such card is present -- ambiguous cases are left for the
+    operator to resolve in the UI rather than guessed at.
+    """
+    try:
+        import alsaaudio
+    except ImportError:
+        return None
+
+    try:
+        cards = [c for c in alsaaudio.cards() if not c.startswith('vc4hdmi')]
+    except Exception as exc:
+        logger.debug("Could not enumerate ALSA cards for auto-configuration: %s", exc)
+        return None
+
+    if len(cards) != 1:
+        return None
+
+    return cards[0]
+
+
+def _auto_configure_usb_audio_device() -> None:
+    """Auto-provision an external (USB) sound card as an audio source and output.
+
+    When exactly one external ALSA card is present (see
+    ``_detect_external_alsa_card``) and nothing has been configured yet,
+    wire it up automatically so it works as both an ingest source and the
+    local alert-playback output without a trip through Admin -> Audio
+    Ingest. Runs once per process start.
+    """
+    card_name = _detect_external_alsa_card()
+    if not card_name:
+        return
+
+    device_id = f'plughw:CARD={card_name},DEV=0'
+
+    try:
+        from app_core.extensions import db
+        from app_core.models import AudioSourceConfigDB, EASSettings
+
+        with app.app_context():
+            if AudioSourceConfigDB.query.filter_by(source_type='alsa').first() is None:
+                db.session.add(AudioSourceConfigDB(
+                    name=f'usb-audio-{card_name.lower()}',
+                    source_type='alsa',
+                    config_params={
+                        'sample_rate': 44100,
+                        'channels': 1,
+                        'buffer_size': 4096,
+                        'device_params': {'device_name': device_id},
+                    },
+                    priority=200,
+                    enabled=True,
+                    auto_start=True,
+                    description=f"Auto-detected USB sound card ('{card_name}') at first startup.",
+                ))
+                logger.info(
+                    "Auto-configured USB sound card '%s' as audio source (%s)",
+                    card_name, device_id,
+                )
+
+            eas_settings = EASSettings.query.first()
+            if eas_settings and eas_settings.audio_player == 'aplay':
+                eas_settings.audio_player = f'aplay -D {device_id}'
+                logger.info(
+                    "Auto-configured USB sound card '%s' as local alert playback output",
+                    card_name,
+                )
+
+            db.session.commit()
+    except Exception as exc:
+        try:
+            from app_core.extensions import db as _db
+            _db.session.rollback()
+        except Exception:
+            pass
+        logger.debug(
+            "Could not auto-configure USB audio device (tables may not exist yet): %s", exc
+        )
+
+
 if not app.config.get('SETUP_MODE'):
     _load_db_settings_into_config()
+    _auto_configure_usb_audio_device()
 
 
 # Configure EAS output integration

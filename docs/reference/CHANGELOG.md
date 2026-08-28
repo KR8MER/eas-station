@@ -8,6 +8,21 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.197.0] - 2026-08-28 - Auto-configure a USB sound card as an audio source and output
+
+Every Raspberry Pi board's onboard audio (the `vc4hdmi*` ALSA cards) is
+output-only -- there is no line-in or mic on the board, so it can never be
+an ingest source. A plugged-in USB DAC (e.g. an HS100B) previously required
+a manual trip through Admin -> Audio Ingest to become a source, and Admin ->
+EAS Settings to become the local alert-playback output, even though it was
+the only sensible device available. `app.py` now runs
+`_auto_configure_usb_audio_device()` once per process start: when exactly
+one non-onboard ALSA card is present, it creates an enabled `alsa`-type
+`AudioSourceConfigDB` row (unless one already exists) and points
+`EASSettings.audio_player` at the same device (unless it has already been
+customized away from its `aplay` default). Zero or more than one external
+card is left alone as ambiguous. Documented in help.html.
+
 ## [2.196.3] - 2026-08-28 - Fix the one-click upgrade button, remove unsupported Docker code paths, and fix Admin Operations navigation
 
 The one-click "System Upgrade" button (Admin -> Operations) ran
