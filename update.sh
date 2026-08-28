@@ -18,6 +18,40 @@ START_TIME=$(date +%s)
 # Title used by the shared cleanup_on_exit trap when something fails.
 FAILURE_TITLE="Update Failed"
 
+# ── Command-line flags ──────────────────────────────────────────────────────
+# --non-interactive: for automated callers (the Admin -> Operations "System
+#   Upgrade" button runs this via systemd-run). Every whiptail confirmation
+#   or pause below is skipped in favor of a sane default, but every
+#   echo_step/echo_info/echo_success/echo_warning/echo_error line still goes
+#   to the log exactly as it does interactively -- that plain-text stream is
+#   what the web UI tails and renders as live progress.
+# --skip-backup: skip the pre-update tar.gz backup (default: create one).
+#   Independent of the one-click "Backup Operations" panel on the same page.
+# --checkout <ref>: git checkout this branch/tag before pulling.
+NON_INTERACTIVE=false
+SKIP_BACKUP=false
+CHECKOUT_REF=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --non-interactive)
+            NON_INTERACTIVE=true
+            shift
+            ;;
+        --skip-backup)
+            SKIP_BACKUP=true
+            shift
+            ;;
+        --checkout)
+            CHECKOUT_REF="${2:-}"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 2
+            ;;
+    esac
+done
+
 # Resolve script dir before sourcing the UI library.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -114,8 +148,11 @@ else
     echo_info "Installation is not a git repository"
 fi
 
-# Show welcome dialog — skip on self-restart so the user is not asked to confirm twice.
-if [ "${EAS_UPDATE_RESTARTED:-}" != "true" ]; then
+# Show welcome dialog — skip on self-restart so the user is not asked to confirm twice,
+# and skip entirely in --non-interactive mode (nobody is at a terminal to answer it).
+if [ "$NON_INTERACTIVE" = "true" ]; then
+    echo_info "Non-interactive mode — proceeding without confirmation"
+elif [ "${EAS_UPDATE_RESTARTED:-}" != "true" ]; then
     VERSION_LINE=""
     if [ -n "$CURRENT_VERSION" ]; then
         VERSION_LINE="  Version: $CURRENT_VERSION\n"
@@ -131,11 +168,17 @@ fi # End of EAS_UPDATE_RESTARTED check
 
 # Create backup (skip if restarting after self-update)
 BACKUP_FILE="none"
-if [ "${EAS_SKIP_BACKUP:-}" != "true" ]; then
+if [ "${EAS_SKIP_BACKUP:-}" != "true" ] && [ "$SKIP_BACKUP" != "true" ]; then
 echo_step "Creating Backup"
 
 DO_BACKUP=false
-if whiptail --title "Create Backup?" --backtitle "$(whiptail_footer)" --yesno "Would you like to create a backup before updating?\n\nThis will create a compressed archive of your current installation.\nBackups are saved to: $BACKUP_DIR\n\nRecommended if you have local customizations." 14 65 --defaultno; then
+if [ "$NON_INTERACTIVE" = "true" ]; then
+    # No one to ask -- default to safe (create it), unlike the interactive
+    # wizard's --defaultno, since there is no operator here to notice and
+    # override a silently-skipped backup.
+    DO_BACKUP=true
+    echo_info "Non-interactive mode — creating a backup before updating"
+elif whiptail --title "Create Backup?" --backtitle "$(whiptail_footer)" --yesno "Would you like to create a backup before updating?\n\nThis will create a compressed archive of your current installation.\nBackups are saved to: $BACKUP_DIR\n\nRecommended if you have local customizations." 14 65 --defaultno; then
     DO_BACKUP=true
 fi
 
@@ -144,7 +187,24 @@ if [ "$DO_BACKUP" = true ]; then
     BACKUP_FILE="$BACKUP_DIR/eas-station-$(date +%Y%m%d-%H%M%S).tar.gz"
 
     echo_progress "Creating backup archive..."
-    if tar -czf "$BACKUP_FILE" -C "$INSTALL_DIR" . 2>/dev/null; then
+    # Exclude the big, regenerable-or-already-preserved-elsewhere directories:
+    # venv/venv-sdr rebuild from requirements*.txt in minutes; .git duplicates
+    # what's already on the remote; archives/ is recorded audio (tens of GB
+    # on a station that's been running a while -- backing it up on every
+    # single upgrade turns a few-second step into a multi-minute one for no
+    # reason a code/config backup needs); backups/ is this very script's own
+    # output directory when it lives under INSTALL_DIR -- without excluding
+    # it, every new backup would also contain every backup before it,
+    # growing without bound across repeated upgrades.
+    if tar -czf "$BACKUP_FILE" \
+        --exclude=./venv \
+        --exclude=./venv-sdr \
+        --exclude=./.git \
+        --exclude=./archives \
+        --exclude=./backups \
+        --exclude='*/__pycache__' \
+        --exclude='*.pyc' \
+        -C "$INSTALL_DIR" . 2>/dev/null; then
         BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
         echo_success "Backup created: $BACKUP_FILE (${BACKUP_SIZE})"
     else
@@ -187,8 +247,19 @@ if [ -d ".git" ]; then
     # Git-based update
     echo_info "Using git to update..."
 
-    # Fix git ownership warning when running as root
-    git config --global --add safe.directory "$INSTALL_DIR" 2>/dev/null || true
+    # Fix git's dubious-ownership check for both identities that touch this
+    # repo: update.sh itself runs git as root (this line), but almost every
+    # git call below is `sudo -u "$SERVICE_USER" git ...` -- a separate
+    # identity with its own $HOME/.gitconfig that this exact line, prior to
+    # this fix, never configured. Found by an end-to-end non-interactive run
+    # failing at the very next git command with "fatal: detected dubious
+    # ownership in repository" -- root's own config being satisfied didn't
+    # help the eas-station-identity calls at all.
+    # --replace-all rather than --add: this line runs on every single
+    # upgrade, and --add has no dedup, so the alternative is one more
+    # identical line appended to .gitconfig forever.
+    git config --global --replace-all safe.directory "$INSTALL_DIR" 2>/dev/null || true
+    sudo -u "$SERVICE_USER" git config --global --replace-all safe.directory "$INSTALL_DIR" 2>/dev/null || true
 
     # Check git directory ownership - critical for sudo -u eas-station to work
     echo_progress "Checking git directory ownership..."
@@ -207,6 +278,22 @@ if [ -d ".git" ]; then
         fi
     else
         echo_success "Git directory ownership is correct ($SERVICE_USER)"
+    fi
+
+    # Optional: check out a specific branch/tag before pulling.
+    if [ -n "$CHECKOUT_REF" ] && [ "${EAS_SKIP_PULL:-}" != "true" ]; then
+        echo_progress "Checking out $CHECKOUT_REF..."
+        set +e
+        CHECKOUT_OUTPUT=$(sudo -u "$SERVICE_USER" git -c safe.directory="$INSTALL_DIR" fetch origin --tags --prune 2>&1 \
+            && sudo -u "$SERVICE_USER" git -c safe.directory="$INSTALL_DIR" checkout "$CHECKOUT_REF" 2>&1)
+        CHECKOUT_STATUS=$?
+        set -e
+        if [ $CHECKOUT_STATUS -eq 0 ]; then
+            echo_success "Checked out $CHECKOUT_REF"
+        else
+            echo "$CHECKOUT_OUTPUT" | head -20 | _tty_block
+            echo_error "Failed to check out '$CHECKOUT_REF' - continuing on the current branch"
+        fi
     fi
 
     # Check if we should skip git pull (e.g., after update.sh self-restart)
@@ -236,7 +323,7 @@ if [ -d ".git" ]; then
         # Capture git fetch output to show detailed errors if needed
         # Explicitly fetch the current branch to handle shallow clones and limited refspecs
         set +e  # Temporarily disable exit-on-error to capture git fetch failure
-        FETCH_OUTPUT=$(sudo -u "$SERVICE_USER" git fetch origin "$CURRENT_BRANCH:refs/remotes/origin/$CURRENT_BRANCH" 2>&1)
+        FETCH_OUTPUT=$(sudo -u "$SERVICE_USER" git -c safe.directory="$INSTALL_DIR" fetch origin "$CURRENT_BRANCH:refs/remotes/origin/$CURRENT_BRANCH" 2>&1)
         FETCH_STATUS=$?
         set -e  # Re-enable exit-on-error
     
@@ -255,7 +342,7 @@ if [ -d ".git" ]; then
         echo ""
 
         set +e
-        sudo -u "$SERVICE_USER" git checkout main 2>&1
+        sudo -u "$SERVICE_USER" git -c safe.directory="$INSTALL_DIR" checkout main 2>&1
         CHECKOUT_STATUS=$?
         set -e
 
@@ -271,7 +358,7 @@ if [ -d ".git" ]; then
         echo_success "Switched to main"
 
         set +e
-        FETCH_OUTPUT=$(sudo -u "$SERVICE_USER" git fetch origin "$CURRENT_BRANCH:refs/remotes/origin/$CURRENT_BRANCH" 2>&1)
+        FETCH_OUTPUT=$(sudo -u "$SERVICE_USER" git -c safe.directory="$INSTALL_DIR" fetch origin "$CURRENT_BRANCH:refs/remotes/origin/$CURRENT_BRANCH" 2>&1)
         FETCH_STATUS=$?
         set -e
 
@@ -336,7 +423,7 @@ if [ -d ".git" ]; then
         git status --short 2>/dev/null | head -20
         echo ""
         echo_info "These changes will be stashed to allow update"
-        sudo -u "$SERVICE_USER" git stash push -m "Auto-stash before update $(date +%Y%m%d-%H%M%S)" 2>&1 || true
+        sudo -u "$SERVICE_USER" git -c safe.directory="$INSTALL_DIR" stash push -m "Auto-stash before update $(date +%Y%m%d-%H%M%S)" 2>&1 || true
         echo_success "Changes stashed (can be restored with 'git stash pop')"
     fi
     
@@ -358,7 +445,7 @@ if [ -d ".git" ]; then
 
     # Capture git reset output to show detailed errors if needed
     set +e  # Temporarily disable exit-on-error to capture git reset failure
-    RESET_OUTPUT=$(sudo -u "$SERVICE_USER" git reset --hard "origin/$CURRENT_BRANCH" 2>&1)
+    RESET_OUTPUT=$(sudo -u "$SERVICE_USER" git -c safe.directory="$INSTALL_DIR" reset --hard "origin/$CURRENT_BRANCH" 2>&1)
     RESET_STATUS=$?
     set -e  # Re-enable exit-on-error
 
@@ -450,7 +537,19 @@ if [ -d ".git" ]; then
             export EAS_UPDATE_RESTARTED=true
             export EAS_SKIP_BACKUP=true
             export EAS_SKIP_PULL=true
-            exec "$INSTALL_DIR/update.sh"
+            # exec with no arguments silently dropped --non-interactive for
+            # the rest of the run on every single test of this PR (update.sh
+            # modifies itself in nearly every commit, so this branch fires
+            # on every run): the re-exec'd process's arg-parsing loop never
+            # runs at all with nothing to parse, so NON_INTERACTIVE reverts
+            # to its `false` default -- every whiptail call downstream of
+            # here, unguarded again, was blowing up under `set -e` for a
+            # session with no controlling terminal exactly the way the
+            # welcome dialog would have if EAS_UPDATE_RESTARTED didn't
+            # already special-case it.
+            RESTART_ARGS=()
+            [ "$NON_INTERACTIVE" = "true" ] && RESTART_ARGS+=(--non-interactive)
+            exec "$INSTALL_DIR/update.sh" "${RESTART_ARGS[@]}"
         fi
     fi
     
@@ -1219,10 +1318,12 @@ with app.app_context():
         MIGRATION_ERR_MSG+="\n  sudo -u $SERVICE_USER \\\\"
         MIGRATION_ERR_MSG+="\n    $INSTALL_DIR/venv/bin/python \\\\"
         MIGRATION_ERR_MSG+="\n    $INSTALL_DIR/scripts/database/recover_split_location_settings.py"
-        whiptail --title "Migration Warning" \
-            --backtitle "$(whiptail_footer)" \
-            --msgbox "$MIGRATION_ERR_MSG" \
-            26 78
+        if [ "$NON_INTERACTIVE" != "true" ]; then
+            whiptail --title "Migration Warning" \
+                --backtitle "$(whiptail_footer)" \
+                --msgbox "$MIGRATION_ERR_MSG" \
+                26 78
+        fi
     fi
 
     # Independent recovery pass: even if alembic itself succeeded, a previous
@@ -1476,8 +1577,16 @@ fi
 
 # Display success summary
 # Don't clear screen if migration failed - user needs to see the errors
+#
+# clear needs $TERM to look up how to clear the screen via terminfo; a
+# systemd-run transient unit sets neither $TERM nor $HOME for the process
+# it launches (see bin/eas-station-run-update's $HOME fix for the same
+# class of gap). Unguarded, this was the one command standing between a
+# fully successful non-interactive run and `set -e` aborting it right at
+# the finish line, exit 1, after every real step had already succeeded --
+# `clear`'s only job here is cosmetic.
 if [ "$MIGRATION_FAILED" != "true" ]; then
-    clear
+    clear 2>/dev/null || true
 fi
 echo_header "Update Complete!"
 
@@ -1503,9 +1612,16 @@ SUMMARY+="• View logs: journalctl -u eas-station-web -f\n"
 SUMMARY+="• Check status: systemctl status eas-station.target\n"
 SUMMARY+="• Web interface: https://$(hostname -I | awk '{print $1}')\n"
 
-# Only show whiptail success dialog if update completed without errors
+# Every run prints the plain-text summary to the log unconditionally --
+# that's what the web UI's progress feed reads its final result from. The
+# whiptail dialog on top of it is only for someone actually watching a
+# terminal.
 if [ "$SERVICE_STATUS" = "running" ] && [ "$NGINX_STATUS" = "ok" ]; then
-    whiptail --title "Update Complete" --backtitle "$(whiptail_footer)" --msgbox "$SUMMARY" 24 75
+    echo "=== UPDATE RESULT: SUCCESS ==="
+    echo -e "$SUMMARY"
+    if [ "$NON_INTERACTIVE" != "true" ]; then
+        whiptail --title "Update Complete" --backtitle "$(whiptail_footer)" --msgbox "$SUMMARY" 24 75
+    fi
 else
     # Show error dialog instead
     ERROR_MSG="Update completed with errors:\n\n"
@@ -1519,17 +1635,33 @@ else
         ERROR_MSG+="  Check: sudo systemctl status eas-station.target\n"
         ERROR_MSG+="  Logs: sudo journalctl -u eas-station-web -n 100\n\n"
     fi
-    ERROR_MSG+="Review the console output above for details.\n"
-    ERROR_MSG+="Press OK to continue..."
+    ERROR_MSG+="Review the console output above for details."
 
-    whiptail --title "Update Issues Detected" --backtitle "$(whiptail_footer)" --msgbox "$ERROR_MSG" 20 75
+    echo "=== UPDATE RESULT: ISSUES DETECTED ==="
+    echo -e "$ERROR_MSG"
+    if [ "$NON_INTERACTIVE" != "true" ]; then
+        ERROR_MSG_DIALOG="$ERROR_MSG"
+        ERROR_MSG_DIALOG+="\nPress OK to continue..."
+        whiptail --title "Update Issues Detected" --backtitle "$(whiptail_footer)" --msgbox "$ERROR_MSG_DIALOG" 20 75
+    fi
 fi
 
 # Console summary
 echo ""
 
-# Show celebration animation
-show_celebration "Update completed successfully!" "*** UPDATE COMPLETE ***"
+# Show celebration animation -- purely decorative for a human watching a
+# terminal, so skip it in --non-interactive mode. Its own whiptail call is
+# guarded (`2>/dev/null || true`) and an isolated repro of that exact call
+# doesn't abort the shell, yet on hardware, in a real end-to-end run inside
+# this script, it still took the whole script down right here with the
+# same "/dev/tty: No such device or address" -> exit 1 signature as every
+# other TTY-only call in this script -- after every real step (backup,
+# services, git pull, deps, migrations, restart) had already succeeded.
+# Not worth chasing the exact mechanism further for a screen nobody
+# watching a log file will ever see.
+if [ "$NON_INTERACTIVE" != "true" ]; then
+    show_celebration "Update completed successfully!" "*** UPDATE COMPLETE ***"
+fi
 
 # Show elapsed time
 show_elapsed_time
@@ -1585,3 +1717,4 @@ echo -e "   ${RED}If you still see old pages after hard refresh, fully clear bro
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
+# Trivial touch to exercise the self-restart path in the next end-to-end test.

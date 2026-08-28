@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+#
+# EAS Station - Emergency Alert System
+# Copyright (c) 2025-2026 EAS Station, LLC (KR8MER)
+#
+# This file is part of EAS Station.
+#
+# EAS Station is dual-licensed software:
+# - GNU Affero General Public License v3 (AGPL-3.0) for open-source use
+# - Commercial License for proprietary use
+#
+# You should have received a copy of both licenses with this software.
+# For more information, see LICENSE and LICENSE-COMMERCIAL files.
+#
+# IMPORTANT: This software cannot be rebranded or have attribution removed.
+# See NOTICE file for complete terms.
+#
+# Repository: https://github.com/KR8MER/eas-station
+#
+# Launches update.sh as an independent transient systemd unit rather than as
+# a direct child process.
+#
+# Why this indirection exists: the one-click "System Upgrade" button in
+# Admin -> Operations runs as a subprocess of eas-station-web.service. If
+# update.sh ran as a direct descendant of that process, it would sit in
+# eas-station-web.service's own cgroup -- and update.sh's own "Restarting
+# Services" step (systemctl restart eas-station.target) would kill it
+# mid-run along with the web worker that launched it, well before the
+# script reaches its final summary. systemd-run gives update.sh its own
+# unit, in its own cgroup, unaffected by that restart: it keeps running
+# right through it, and its output keeps landing in the journal the whole
+# time under a fixed, well-known unit name the web UI can poll with
+# `journalctl -u eas-station-update` and `systemctl show
+# eas-station-update.service` across the restart, from whichever worker
+# process happens to answer the request next.
+#
+# --collect: the transient unit is garbage-collected once it exits (success
+# or failure) instead of lingering as a "failed" unit that would block the
+# next run from reusing the same name. That collection happens within
+# seconds of exit -- fast enough that `systemctl show` on this unit cannot
+# be trusted to still find it by the time anyone polls, success or failure.
+# The web UI's progress endpoint deliberately treats the journal (which
+# does not get cleaned up) as authoritative and only uses the live unit
+# state as a "still running" signal.
+#
+# --no-block: return as soon as the unit is queued rather than waiting
+# (potentially the whole multi-minute upgrade) for it to finish -- a
+# Type=oneshot unit's start job is not considered done until the script
+# exits, and this wrapper's caller does not want to sit on that.
+#
+# --property=Environment=HOME=/root: unlike `sudo`, which sets $HOME from
+# the target user's passwd entry, a plain systemd-run transient unit does
+# not set $HOME for the process it launches AT ALL -- confirmed directly on
+# hardware (`env` inside an otherwise-identical transient unit shows no HOME
+# entry whatsoever). update.sh runs as root, and with $HOME unset, every
+# plain `git` command it runs (not the `sudo -u eas-station git ...` ones,
+# which already get a correct $HOME from sudo) can't locate root's own
+# global gitconfig at all: git's own error for that case is not "no such
+# file", it's "fatal: $HOME not set", immediately followed by the exact
+# same "detected dubious ownership" fatal every git subcommand emits when
+# it can't establish the exception is configured -- indistinguishable from
+# the config genuinely missing the entry, which is what made this so slow
+# to track down: `git branch --show-current`, called bare (no `sudo -u`,
+# no `-c safe.directory=`) moments into the "Downloading Latest Version"
+# step, was failing on a check that every isolated repro of the *next*
+# command in the script kept passing.
+set -euo pipefail
+
+exec systemd-run \
+    --unit=eas-station-update \
+    --collect \
+    --no-block \
+    --property=Type=oneshot \
+    --property=Environment=HOME=/root \
+    -- /opt/eas-station/update.sh "$@"

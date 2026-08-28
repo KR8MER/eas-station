@@ -2,7 +2,7 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-2.197.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.198.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -195,7 +195,7 @@ The web tier is built for organizations that have to share operator credentials 
 
 Outbound notifications cover **email** (SMTP, with an optional bundled local Postfix relay), **SMS** (Twilio), and **SNMP v2c traps** for integration with existing NMS platforms.
 
-Day-to-day operations are made survivable by a **whiptail TUI configurator** (`sudo eas-config`), automatic **Alembic migrations** with a recovery script for half-applied schema changes, **pre-flight backup tooling** (`tools/create_backup.py`), **one-button in-place upgrades** (`tools/inplace_upgrade.py`), a comprehensive **web diagnostics page** plus CLI scripts, and an in-browser **journalctl log viewer** and **documentation reader** that renders the full 90+ document library.
+Day-to-day operations are made survivable by a **whiptail TUI configurator** (`sudo eas-config`), automatic **Alembic migrations** with a recovery script for half-applied schema changes, **pre-flight backup tooling** (`tools/create_backup.py`), **one-button in-place upgrades** (runs `update.sh` as its own systemd unit and streams progress to the page), a comprehensive **web diagnostics page** plus CLI scripts, and an in-browser **journalctl log viewer** and **documentation reader** that renders the full 90+ document library.
 
 ### Web Dashboard & REST API
 

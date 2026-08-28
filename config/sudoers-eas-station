@@ -110,6 +110,18 @@ eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart eas-station-ipaws-pol
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart eas-station-noaa-poller.service
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart eas-station.target
 
+# One-click System Upgrade (Admin -> Operations). The wrapper launches
+# update.sh as its own transient systemd unit (eas-station-update.service)
+# rather than as a child of eas-station-web.service, so update.sh's own
+# "Restarting Services" step doesn't kill the process reporting on it. The
+# web UI polls the unit's state/journal with the two read-only entries below
+# -- both work for any local user by systemd's default policy, but are
+# granted explicitly here for consistency with every other systemctl read
+# in this file, and in case a future hardening pass locks that down.
+eas-station ALL=(ALL) NOPASSWD: /opt/eas-station/bin/eas-station-run-update *
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl show eas-station-update.service *
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active eas-station-update.service
+
 # Audio service management (required to reload Icecast credentials after password change)
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart eas-station-audio
 

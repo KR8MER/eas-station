@@ -8,6 +8,82 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.198.0] - 2026-08-28 - Make the one-click upgrade button run the real update.sh, with live progress
+
+The one-click "System Upgrade" button (fixed in 2.196.3 to at least run
+*something* bare-metal-appropriate) still only replicated a thin slice of
+what `update.sh` actually does -- no pre-upgrade backup step, no service
+stop/start ordering, no system package updates, no systemd unit refresh, no
+nginx check, none of the migration-failure recovery path, and no
+step-by-step feedback beyond a final stdout/stderr dump once everything
+finished. Reimplementing all of that a second time in Python would have
+meant two upgrade scripts that inevitably drift apart, so the button now
+runs `update.sh` itself -- the exact script `sudo bash update.sh` runs at a
+terminal -- non-interactively.
+
+`update.sh` gained `--non-interactive`, `--skip-backup`, and `--checkout
+<ref>` flags: every whiptail confirmation (the welcome dialog, "create a
+backup?", the migration-failure pause, the final success/error dialog) is
+skipped in favor of a safe default (a backup **is** taken by default, since
+there is no operator here to notice a silently-skipped one) instead of
+hanging on a keypress that will never come, while every
+`echo_step`/`echo_info`/`echo_success`/`echo_warning`/`echo_error` line
+still goes to the log exactly as it does interactively.
+
+Getting there surfaced two real, previously-latent bugs in
+`scripts/lib/ui.sh`, neither ever exercised before because every prior
+invocation of `install.sh`/`update.sh` had a real controlling terminal
+attached:
+- `[ -w /dev/tty ]`, used throughout as the "is a real terminal available"
+  guard, only checks the special device node's own permission bits (always
+  broad, `crw-rw-rw-`) -- not whether *this* session actually has a
+  controlling terminal to open it against. A fully detached session (like
+  the one below) passes that check and then dies the moment something
+  really writes to `/dev/tty`, with "No such device or address". Replaced
+  every such guard with a real probe (attempt an actual open, once, cached
+  in `_UI_HAS_CONTROLLING_TTY`).
+- `_ui_ensure_gauge` returns 1 (an expected, ordinary result meaning "no
+  whiptail gauge available, fall back to plain output") from a bare,
+  unguarded call site in `echo_step`. Under `update.sh`'s `set -e`, that
+  ordinary "couldn't attach" result took the whole script down on its very
+  first progress step -- every previous run had a terminal, so the gauge
+  always attached and this had never fired.
+
+The button itself now launches `update.sh` via a new
+`bin/eas-station-run-update` wrapper, as its **own** transient systemd unit
+(`systemd-run --unit=eas-station-update --collect --no-block`) rather than
+as a direct child of `eas-station-web.service`. That statement is load-
+bearing, not cosmetic: `update.sh`'s own "Restarting Services" step
+restarts `eas-station-web.service`, and a direct child sits in that
+service's cgroup -- it would be killed by its own restart before ever
+reaching its final summary, the exact failure mode the *previous* one-click
+upgrade fix (2.196.3) still had. A sibling unit keeps running straight
+through that restart.
+
+New `GET /admin/operations/upgrade/progress` (`get_upgrade_progress` in
+`webapp/admin/maintenance/routes_operations.py`) reads that unit's state
+back out for the Admin -> Operations page to poll, and is deliberately
+**not** backed by the existing in-memory `_OPERATION_STATE` dict, which
+resets the moment this very worker restarts partway through the upgrade it
+would be reporting on. It is also deliberately journal-first rather than
+`systemctl show`-first: manual testing against a real `--collect` unit
+showed it gets garbage-collected within a couple of seconds of exiting,
+success or failure alike, so `systemctl show` reliably answers "is it
+running right now" but not "how did it end" -- by the time anything polls,
+the unit routinely already looks exactly like one that never ran. The
+journal does not get cleaned up, so result detection reads `update.sh`'s
+own `=== UPDATE RESULT: ... ===` marker (added to update.sh, printed
+unconditionally to the log right before the existing whiptail summary/error
+dialogs), falling back to systemd's own "Failed with result" / "Main
+process exited" / "Deactivated successfully" lines for the same unit if
+the script crashed before ever reaching its own summary.
+
+The Operations page now shows a step counter ("Step 7 of 12: ..."), a
+progress bar, and a live color-coded log feed reading that endpoint every 3
+seconds -- through the expected mid-upgrade disconnect and reconnect, not
+just a final dump after the fact. `tools/inplace_upgrade.py`, the
+Python reimplementation this replaces, is removed.
+
 ## [2.197.0] - 2026-08-28 - Auto-configure a USB sound card as an audio source and output
 
 Every Raspberry Pi board's onboard audio (the `vc4hdmi*` ALSA cards) is
