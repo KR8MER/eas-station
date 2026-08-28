@@ -429,33 +429,22 @@ def _render_map(geom: Dict, severity: str,
     # (static/js/core/map_theme.js). category != 'Met' or a fetch failure
     # both just skip this -- never a reason to break the share card.
     #
-    # Level II (raw per-site volume scan, radar_level2.py) is tried first
-    # for the fine-grained look near a radar site; the Level III WMS
-    # mosaic (_fetch_radar_overlay, ~1km, blocky at close zoom) is the
-    # fallback whenever Level II can't produce a frame -- no site within
-    # range, no volume near *sent*, a download/decode hiccup. Both draw
-    # from the same _REFLECTIVITY_LEGEND ramp, so a viewer can't tell
-    # which source produced a given frame from color alone.
+    # Always the Level III WMS mosaic (_fetch_radar_overlay) -- the same
+    # service and layer static/js/core/map_theme.js's radarLayer() uses for
+    # the in-app "Radar (at time of alert)" toggle, so a share card and the
+    # live map agree pixel-for-pixel on what "the radar" looked like. This
+    # used to prefer a sharper Level II render (radar_level2.py, raw
+    # per-site volume scans via Py-ART) when a site was in range, but that
+    # meant the exported/looped image could look nothing like the in-app
+    # toggle for the same alert -- different resolution and a different
+    # color ramp (cmweather's 'NWSRef' vs. IEM's own mosaic colors).
+    # radar_level2.py is kept for its REFLECTIVITY_LEGEND (still the
+    # legend's source of truth) but render_frame() is no longer called here.
     radar_drawn = False
     if category == 'Met':
-        center_lat = (min_lat + max_lat) / 2
-        center_lon = (min_lon + max_lon) / 2
-        half_width_m = max(
-            math.radians(max_lat - min_lat) * 6371000 / 2,
-            math.radians(max_lon - min_lon) * 6371000 * math.cos(math.radians(center_lat)) / 2,
+        radar_img = _fetch_radar_overlay(
+            tx_min, ty_min, tx_max, ty_max, z, canvas_w, canvas_h, sent,
         )
-        try:
-            radar_img = _radar_level2.render_frame(
-                center_lat, center_lon, sent, half_width_m, canvas_w, canvas_h,
-                opacity=_RADAR_OPACITY,
-            )
-        except Exception as exc:
-            logger.debug("Level II radar render raised, falling back to WMS: %s", exc)
-            radar_img = None
-        if radar_img is None:
-            radar_img = _fetch_radar_overlay(
-                tx_min, ty_min, tx_max, ty_max, z, canvas_w, canvas_h, sent,
-            )
         if radar_img is not None:
             canvas = canvas.convert('RGBA')
             canvas.alpha_composite(radar_img)

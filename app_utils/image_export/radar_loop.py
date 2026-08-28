@@ -22,24 +22,24 @@ from __future__ import annotations
 """Lazily-generated, disk-cached radar reflectivity loops for weather alerts.
 
 No background job proactively snapshots frames while an alert is active.
-Each frame tries Level II first (app_utils.image_export.radar_level2 --
-the fine-grained, near-site look) and falls back to IEM's WMS-T Level III
-mosaic (see app_utils.image_export.maps), which holds every 5-minute frame
-back to 2011-02-16 independent of when we ask -- so instead this renders
-an alert's loop the first time someone actually views it, and caches each
-frame to disk permanently (a frame for a given past timestamp never
-changes, since an alert's sent/expires/cancelled_at window is fixed once
-set). This also means it works retroactively for any weather alert
+Each frame renders from IEM's WMS-T Level III mosaic (see
+app_utils.image_export.maps._fetch_radar_overlay) -- the same service and
+layer the in-app "Radar (at time of alert)" toggle uses
+(static/js/core/map_theme.js's radarLayer()), so a loop frame and the live
+map always agree on what "the radar" looked like. It holds every 5-minute
+frame back to 2011-02-16 independent of when we ask -- so instead this
+renders an alert's loop the first time someone actually views it, and
+caches each frame to disk permanently (a frame for a given past timestamp
+never changes, since an alert's sent/expires/cancelled_at window is fixed
+once set). This also means it works retroactively for any weather alert
 already in the database, not just ones ingested after this feature
-shipped -- Level II may or may not still be available that far back for a
-given site, but the WMS-T fallback always is.
+shipped.
 
 build_radar_loop() renders a bounded number of not-yet-cached frames per
 call rather than the whole loop at once (a long severe-weather episode
-could need dozens of frames, each a real S3 download + decode when Level
-II is available, too slow for one request) and reports how many are still
-pending -- the API route this backs is designed to be polled by the
-frontend until `pending` reaches 0.
+could need dozens of frames) and reports how many are still pending -- the
+API route this backs is designed to be polled by the frontend until
+`pending` reaches 0.
 """
 
 import logging
@@ -64,13 +64,10 @@ RADAR_LOOP_CADENCE_MINUTES = 5
 RADAR_LOOP_MAX_FRAMES = 36
 
 #: How many not-yet-cached frames one build_radar_loop() call will render.
-#: A Level II frame (radar_level2.py -- tried first, falls back to a WMS
-#: fetch) costs ~15-20s: an S3 download plus a real decode/grid, not one
-#: HTTP GetMap call. Gunicorn's worker timeout is 300s and gevent workers
-#: block on that CPU-bound work for the duration, so this stays low enough
-#: that one slow call can't stall a worker for an uncomfortable stretch --
-#: the frontend already polls every 500ms regardless of how many rounds
-#: that takes to reach pending=0.
+#: Each frame is a WMS GetMap fetch plus a basemap tile mosaic -- not
+#: expensive, but kept modest so one request can't stall a gevent worker
+#: for too long; the frontend already polls every 500ms regardless of how
+#: many rounds that takes to reach pending=0.
 RADAR_LOOP_MAX_RENDER_PER_CALL = 2
 
 RADAR_LOOP_FRAME_W = 500

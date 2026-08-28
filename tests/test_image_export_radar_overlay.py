@@ -171,10 +171,6 @@ _TEST_GEOM = {
 def test_render_map_fetches_radar_for_met_category(monkeypatch):
     monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
     monkeypatch.setattr(maps_mod, "_fetch_county_outlines", lambda *a, **k: [])
-    # Level II is tried first (see test_render_map_tries_level2_before_wms
-    # below) -- forcing it to miss here isolates this test to what it's
-    # actually about: the WMS fallback gets called at all for Met category.
-    monkeypatch.setattr(radar_level2_mod, "render_frame", lambda *a, **k: None)
     calls = []
     monkeypatch.setattr(
         maps_mod, "_fetch_radar_overlay",
@@ -186,9 +182,15 @@ def test_render_map_fetches_radar_for_met_category(monkeypatch):
     assert len(calls) == 1
 
 
-def test_render_map_tries_level2_before_wms(monkeypatch):
-    """When Level II produces a frame, the WMS mosaic must not be fetched
-    at all -- it's a fallback, not a second source composited on top."""
+def test_render_map_never_calls_level2(monkeypatch):
+    """The share card, the Radar Loop, and the alert page's live "Radar (at
+    time of alert)" toggle (a Leaflet WMS tile layer -- see
+    static/js/core/map_theme.js's radarLayer()) must all show the same
+    radar product for the same alert. _render_map() therefore always goes
+    through the Level III WMS mosaic and never touches radar_level2's
+    Level II decode, which used a different resolution and color ramp and
+    made the share card/loop look like a different storm than the live
+    toggle for the same alert."""
     monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
     monkeypatch.setattr(maps_mod, "_fetch_county_outlines", lambda *a, **k: [])
 
@@ -209,8 +211,8 @@ def test_render_map_tries_level2_before_wms(monkeypatch):
 
     maps_mod._render_map(_TEST_GEOM, "severe", category="Met", map_w=300, map_h=250)
 
-    assert len(level2_calls) == 1
-    assert wms_calls == []
+    assert level2_calls == []
+    assert len(wms_calls) == 1
 
 
 @pytest.mark.parametrize("category", [None, "Transport", "Safety", "Geo", "Other"])
@@ -230,35 +232,11 @@ def test_render_map_skips_radar_for_non_met_categories(monkeypatch, category):
 
 def test_render_map_survives_radar_fetch_failure(monkeypatch):
     """A missing radar layer must never break the share card -- it already
-    renders fine without one, however many of the two sources came up
-    empty (site out of range, no volume near the timestamp, WMS error)."""
+    renders fine without one (WMS error, no coverage, etc.)."""
     monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
     monkeypatch.setattr(maps_mod, "_fetch_county_outlines", lambda *a, **k: [])
-    monkeypatch.setattr(radar_level2_mod, "render_frame", lambda *a, **k: None)
     monkeypatch.setattr(maps_mod, "_fetch_radar_overlay", lambda *a, **k: None)
 
     img = maps_mod._render_map(_TEST_GEOM, "severe", category="Met", map_w=300, map_h=250)
 
     assert img.size == (300, 250)
-
-
-def test_render_map_survives_level2_raising(monkeypatch):
-    """A Level II decode error (bad file, pyart internals) must fall back
-    to WMS, not blow up the whole share card."""
-    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
-    monkeypatch.setattr(maps_mod, "_fetch_county_outlines", lambda *a, **k: [])
-
-    def raising_level2(*args, **kwargs):
-        raise RuntimeError("simulated decode failure")
-
-    monkeypatch.setattr(radar_level2_mod, "render_frame", raising_level2)
-    wms_calls = []
-    monkeypatch.setattr(
-        maps_mod, "_fetch_radar_overlay",
-        lambda *a, **k: wms_calls.append(True) or None,
-    )
-
-    img = maps_mod._render_map(_TEST_GEOM, "severe", category="Met", map_w=300, map_h=250)
-
-    assert img.size == (300, 250)
-    assert len(wms_calls) == 1

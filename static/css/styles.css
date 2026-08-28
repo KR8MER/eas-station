@@ -8331,6 +8331,17 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 .stack-grid {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.6rem;
 }
+/* Cards crediting an unusually large bundle of libraries (e.g. several
+   packages behind one feature) get more room so their name/description
+   aren't squeezed into the same width as a single-library card. */
+.eas-stack-item-wide,
+.stack-item-wide {
+    grid-column: span 2;
+}
+@media (max-width: 480px) {
+    .eas-stack-item-wide,
+    .stack-item-wide { grid-column: span 1; }
+}
 .eas-stack-item,
 .stack-item {
     display: flex; align-items: center; gap: 0.75rem;

@@ -8,6 +8,38 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.196.2] - 2026-08-28 - Fix radar mismatch between the alert page and exported cards; widen the Py-ART attribution card
+
+The exported/shared alert card and the alert page's "Radar Loop" both
+rendered radar via `_render_map()`, which preferred a real per-site
+NEXRAD Level II decode (`radar_level2.py`, Py-ART) over the Level III
+WMS mosaic whenever a site was in range. The alert page's live "Radar
+(at time of alert)" toggle, however, is a `static/js/core/map_theme.js`
+Leaflet WMS tile layer that only ever shows the Level III mosaic. That
+meant the same alert could show two visually different radar products
+side by side on the same page (different resolution and color ramp --
+IEM's own mosaic colors vs. `cmweather`'s 15-band `NWSRef`), which read
+as a bug even though both were technically valid radar for the same
+storm.
+
+`_render_map()` (`app_utils/image_export/maps.py`) now always uses the
+Level III WMS mosaic (`_fetch_radar_overlay`) -- the same request the
+live toggle makes -- so the live map, the Radar Loop, and every exported
+share card agree pixel-for-pixel. `radar_level2.py`'s Level II decode/plot
+path (`render_frame`) is no longer called but is left in place (its
+`REFLECTIVITY_LEGEND` still backs the on-image legend) for a future pass
+that gives the live map a matching high-resolution option instead of
+silently diverging from it. Updated stale comments/docstrings in
+`radar_loop.py` that described the old Level-II-first behavior, and the
+Attribution page's Py-ART card to note the library is retained but not
+currently in the live overlay path.
+
+Also widened the Attribution page's Py-ART/boto3/Cartopy/cmweather/
+Matplotlib card (`.stack-item-wide` in `static/css/styles.css`) to span
+two grid columns -- it credits five libraries with the longest
+description and license list on the page, and was visibly cramped at
+the same width as single-library cards.
+
 ## [2.196.1] - 2026-08-27 - Fix Level II projection mismatch and coarse color banding
 
 2.196.0's Level II renderer (`pyart.map.grid_from_radars`) turned out to
