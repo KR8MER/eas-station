@@ -537,7 +537,19 @@ if [ -d ".git" ]; then
             export EAS_UPDATE_RESTARTED=true
             export EAS_SKIP_BACKUP=true
             export EAS_SKIP_PULL=true
-            exec "$INSTALL_DIR/update.sh"
+            # exec with no arguments silently dropped --non-interactive for
+            # the rest of the run on every single test of this PR (update.sh
+            # modifies itself in nearly every commit, so this branch fires
+            # on every run): the re-exec'd process's arg-parsing loop never
+            # runs at all with nothing to parse, so NON_INTERACTIVE reverts
+            # to its `false` default -- every whiptail call downstream of
+            # here, unguarded again, was blowing up under `set -e` for a
+            # session with no controlling terminal exactly the way the
+            # welcome dialog would have if EAS_UPDATE_RESTARTED didn't
+            # already special-case it.
+            RESTART_ARGS=()
+            [ "$NON_INTERACTIVE" = "true" ] && RESTART_ARGS+=(--non-interactive)
+            exec "$INSTALL_DIR/update.sh" "${RESTART_ARGS[@]}"
         fi
     fi
     
