@@ -155,10 +155,6 @@
                 <label for="upgrade-checkout" class="form-label">Git Branch/Tag (optional)</label>
                 <input type="text" class="form-control" id="upgrade-checkout" placeholder="e.g., main, v2.0.0">
             </div>
-            <div class="col-md-6">
-                <label for="upgrade-compose-file" class="form-label">Compose File (optional)</label>
-                <input type="text" class="form-control" id="upgrade-compose-file" placeholder="systemd services">
-            </div>
         </div>
 
         <div class="form-check mb-2">
@@ -456,7 +452,6 @@ async function startBackup() {
 // Start upgrade
 async function startUpgrade() {
     const checkout = document.getElementById('upgrade-checkout').value.trim();
-    const composeFile = document.getElementById('upgrade-compose-file').value.trim();
     const skipMigrations = document.getElementById('upgrade-skip-migrations').checked;
     const allowDirty = document.getElementById('upgrade-allow-dirty').checked;
     const btn = document.getElementById('upgrade-btn');
@@ -470,7 +465,6 @@ async function startUpgrade() {
 
     const payload = {};
     if (checkout) payload.checkout = checkout;
-    if (composeFile) payload.compose_file = composeFile;
     if (skipMigrations) payload.skip_migrations = true;
     if (allowDirty) payload.allow_dirty = true;
 

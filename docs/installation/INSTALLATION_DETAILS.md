@@ -382,7 +382,7 @@ No command-line configuration, no editing files with nano, no manual service man
 
 ## Alternative Installation Methods
 
-> **Status: design discussion, not shipped.** The sections below compare possible future installation methods. Today, the interactive `install.sh` bash script is the **only** supported installation method — the repository does not ship Ansible playbooks, Docker Compose files, or a `.deb` package, and `install.sh` does not yet support `--silent`/`--config` flags.
+> **Status: design discussion, not shipped.** The sections below compare possible future installation methods. Today, the interactive `install.sh` bash script is the **only** supported installation method — the repository does not ship Ansible playbooks or a `.deb` package, and `install.sh` does not yet support `--silent`/`--config` flags. Docker is intentionally not on this list: SDR and GPIO hardware access is central to EAS Station, and containerizing the app itself is not a direction this project is pursuing (the optional Postal mail server integration ships its own Docker-based install, which is unrelated to how EAS Station itself is deployed).
 
 ### Current Method: Bash Shell Script
 
@@ -423,33 +423,7 @@ The current `install.sh` provides an **interactive TUI-based installation** that
     eas_state_code: OH
 ```
 
-### 2. Docker / Docker Compose (Recommended for Development)
-
-**Pros:**
-- ✅ Isolated environment
-- ✅ Easy to reset/rebuild
-- ✅ No host system modifications
-- ✅ Portable across platforms
-- ✅ Built-in dependency management
-
-**Cons:**
-- ❌ SDR hardware access is complex
-- ❌ GPIO access requires privileged mode
-- ❌ Performance overhead
-- ❌ Not suitable for production EAS
-
-**Implementation:**
-```dockerfile
-# Dockerfile
-FROM python:3.12-slim
-RUN apt-get update && apt-get install -y postgresql postgis redis
-COPY . /app
-WORKDIR /app
-RUN pip install -r requirements.txt
-CMD ["gunicorn", "app:app"]
-```
-
-### 3. Debian Package (.deb)
+### 2. Debian Package (.deb)
 
 **Pros:**
 - ✅ Native package management
@@ -474,7 +448,7 @@ sudo dpkg -i eas-station_1.0.0_amd64.deb
 sudo apt-get install -f  # Fix dependencies
 ```
 
-### 4. Snap Package
+### 3. Snap Package
 
 **Pros:**
 - ✅ Auto-updates
@@ -487,7 +461,7 @@ sudo apt-get install -f  # Fix dependencies
 - ❌ Not suitable for SDR/GPIO
 - ❌ Snapd overhead
 
-### 5. Python Package (pip/PyPI)
+### 4. Python Package (pip/PyPI)
 
 **Pros:**
 - ✅ Easy Python-based installation
@@ -505,7 +479,7 @@ pip install eas-station
 eas-station-setup  # Interactive config wizard
 ```
 
-### 6. Makefile-based Installation
+### 5. Makefile-based Installation
 
 **Pros:**
 - ✅ Standard Unix tool
@@ -524,10 +498,10 @@ eas-station-setup  # Interactive config wizard
 |----------|-------------|-----|
 | **First-time user / single Pi** | Current bash script | Interactive, simple, works immediately |
 | **Multiple stations** | Ansible | Consistent deployment, centralized config |
-| **Development / testing** | Docker Compose | Easy reset, isolated |
+| **Development / testing** | Bash script against a disposable VM | SDR/GPIO access needs a real or passed-through device |
 | **Production (single)** | Ansible or .deb | Professional, maintainable |
 | **Air-gapped systems** | Bash script or .deb | No internet dependency |
-| **CI/CD pipeline** | Docker | Automated testing |
+| **CI/CD pipeline** | Bash script's `--silent` mode (proposed above) | Automated testing without hardware |
 
 ### Improving the Current Bash Script
 
@@ -553,9 +527,8 @@ sudo ./install.sh
 Keep the current bash script as the **primary method** but add:
 
 1. **Ansible roles** for multi-system deployment
-2. **Docker Compose** for development
-3. **Configuration templates** for automation
-4. **--silent mode** to the bash script for CI/CD
+2. **Configuration templates** for automation
+3. **--silent mode** to the bash script for CI/CD
 
 This gives users flexibility while maintaining simplicity for the common case.
 

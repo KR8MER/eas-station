@@ -468,6 +468,7 @@ def gpio_statistics_page():
     return render_template('admin/gpio_statistics.html')
 
 @dashboard_bp.route('/admin/operations')
+@require_permission('system.configure')
 def admin_operations():
     """Admin operations dashboard for backup, upgrade, and database maintenance"""
     return render_template('admin/operations.html')

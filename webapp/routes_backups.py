@@ -217,7 +217,6 @@ def register(app: Flask, logger) -> None:
         data = request.get_json() or {}
         label = data.get("label", "manual")
         include_media = data.get("include_media", True)
-        include_volumes = data.get("include_volumes", True)
 
         route_logger.info(f"Creating backup with label '{label}'")
 
@@ -237,8 +236,6 @@ def register(app: Flask, logger) -> None:
         args = ["--output-dir", str(backup_dir), "--label", label]
         if not include_media:
             args.append("--no-media")
-        if not include_volumes:
-            args.append("--no-volumes")
 
         success, stdout, stderr = run_script("create_backup.py", args)
 
@@ -301,8 +298,6 @@ def register(app: Flask, logger) -> None:
             args.append("--skip-database")
         if data.get("skip_media"):
             args.append("--skip-media")
-        if data.get("skip_volumes"):
-            args.append("--skip-volumes")
 
         success, stdout, stderr = run_script("restore_backup.py", args)
 

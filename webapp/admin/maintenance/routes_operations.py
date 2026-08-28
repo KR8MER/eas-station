@@ -105,16 +105,11 @@ def run_one_click_upgrade():
     python_executable = sys.executable or "python3"
     command = [python_executable, str(repo_root / "tools" / "inplace_upgrade.py")]
     checkout_value = payload.get("checkout")
-    compose_file = payload.get("compose_file")
     summary_bits = []
     if isinstance(checkout_value, str) and checkout_value.strip():
         checkout_clean = checkout_value.strip()
         command.extend(["--checkout", checkout_clean])
         summary_bits.append(f"checkout {checkout_clean}")
-    if isinstance(compose_file, str) and compose_file.strip():
-        compose_clean = compose_file.strip()
-        command.extend(["--compose-file", compose_clean])
-        summary_bits.append(f"compose {compose_clean}")
     if payload.get("skip_migrations"):
         command.append("--skip-migrations")
         summary_bits.append("skip migrations")

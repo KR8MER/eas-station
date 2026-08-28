@@ -20,21 +20,26 @@ Repository: https://github.com/KR8MER/eas-station
 
 from __future__ import annotations
 
-"""Utility to perform an in-place upgrade of the EAS Station stack.
+"""Perform a bare-metal in-place upgrade of the EAS Station stack.
 
-This script keeps the existing containers and volumes intact while pulling the
-latest code, rebuilding the Docker image, and running database migrations. It
-is intended to support the "upgrade in place" workflow described in the
-project documentation so operators do not need to tear down and recreate the
-stack on every release.
+This is the script the one-click "System Upgrade" button
+(``webapp/admin/maintenance/routes_operations.py``) runs as a background
+subprocess, using the same Python interpreter (and therefore the same venv)
+as the web app itself. It mirrors the manual bare-metal upgrade steps
+documented in ``docs/development/AGENTS.md`` and performed interactively by
+``update.sh``: pull the latest code, update this venv's Python dependencies,
+apply pending Alembic migrations, and restart services via systemd. There is
+no Docker/Compose deployment path to support -- EAS Station ships as a
+bare-metal systemd install (see ``install.sh``).
 """
 
-import argparse
-import shutil
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Iterable, List
+
+import argparse
 
 
 def run(cmd: Iterable[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -63,38 +68,14 @@ def ensure_clean_worktree(allow_dirty: bool) -> None:
         sys.exit(2)
 
 
-def detect_compose_command() -> List[str]:
-    """Return the preferred docker compose invocation as a list."""
-    docker_path = shutil.which("docker")
-    legacy_path = shutil.which("docker-compose")
-
-    if docker_path is not None:
-        probe = subprocess.run(
-            [docker_path, "compose", "version"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        if probe.returncode == 0:
-            return [docker_path, "compose"]
-
-    if legacy_path is not None:
-        return [legacy_path]
-
-    print("ERROR: Neither 'docker compose' nor 'docker-compose' is available in PATH.")
-    sys.exit(3)
-
-
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Perform an in-place upgrade of EAS Station")
+    parser = argparse.ArgumentParser(
+        description="Perform a bare-metal in-place upgrade of EAS Station"
+    )
     parser.add_argument(
         "--checkout",
         metavar="REF",
         help="Git ref (branch or tag) to check out before pulling updates.",
-    )
-    parser.add_argument(
-        "--compose-file",
-        default="docker-compose.yml",
-        help="Compose file to use (defaults to docker-compose.yml).",
     )
     parser.add_argument(
         "--allow-dirty",
@@ -118,19 +99,23 @@ def main() -> None:
     # Fast-forward the currently checked-out branch.
     run(["git", "pull", "--ff-only"])
 
-    compose_cmd = detect_compose_command()
-
-    # Pull/build updated container images while keeping volumes intact.
-    run([*compose_cmd, "-f", args.compose_file, "pull"])
-    run([*compose_cmd, "-f", args.compose_file, "up", "-d", "--build"])
+    # Update Python dependencies in this same venv (sys.executable is the venv
+    # interpreter the web app itself is running under -- see install.sh).
+    repo_root = Path(__file__).resolve().parent.parent
+    requirements = repo_root / "requirements.txt"
+    if requirements.exists():
+        run([sys.executable, "-m", "pip", "install", "--upgrade", "-r", str(requirements)])
 
     if not args.skip_migrations:
-        run([*compose_cmd, "-f", args.compose_file, "exec", "app", "python", "-m", "alembic", "upgrade", "head"])
+        run([sys.executable, "-m", "alembic", "upgrade", "head"])
 
-    # Restart poller containers to pick up new code without recreating the stack.
-    run([*compose_cmd, "-f", args.compose_file, "restart", "poller", "ipaws-poller"])
+    # Restart every EAS Station service. eas-station.target includes
+    # eas-station-web.service, so this call -- like the equivalent "Restart
+    # All" button in Settings -> Environment -- kills the very process
+    # running it; systemd has already accepted the restart job by then.
+    run(["sudo", "systemctl", "restart", "eas-station.target"], check=False)
 
-    print("\nUpgrade complete at", datetime.utcnow().isoformat() + "Z")
+    print("\nUpgrade complete at", datetime.now(timezone.utc).isoformat())
 
 
 if __name__ == "__main__":

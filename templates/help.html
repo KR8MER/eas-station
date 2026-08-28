@@ -450,6 +450,23 @@
                                             "Verify after each backup" on the auto-backup schedule.
                                         </li>
                                         <li>
+                                            <strong>Admin Operations</strong> (<strong>Settings &rarr; Admin
+                                            Operations</strong>, <code>/admin/operations</code>): a quick-action
+                                            maintenance page distinct from the full Backups page above. It covers
+                                            four things &mdash; database health and a "Optimize Database" (VACUUM
+                                            ANALYZE) button; a quick one-click backup shortcut (visit
+                                            <strong>Admin &rarr; Backups</strong> instead to browse, restore, or
+                                            schedule backups); alert-boundary intersection recalculation, for when
+                                            coverage percentages look wrong; and the <strong>one-click System
+                                            Upgrade</strong>, which runs <code>git pull</code>, updates this venv's
+                                            Python dependencies, applies pending database migrations, and restarts
+                                            every EAS Station service &mdash; equivalent to the manual bare-metal
+                                            upgrade steps, without needing shell access. Because that restart
+                                            includes the web service itself, expect the page to disconnect briefly
+                                            during an upgrade; check <strong>Admin &rarr; Backups</strong> or the
+                                            system logs afterward to confirm it landed. Take a backup first.
+                                        </li>
+                                        <li>
                                             <strong>Clock sync monitoring</strong> (<strong>System Health</strong>):
                                             SAME timing and Required Weekly Test scheduling both depend on correct
                                             system time. The Clock Sync card shows chrony/NTP synchronization status

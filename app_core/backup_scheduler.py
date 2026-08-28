@@ -44,7 +44,6 @@ _DEFAULT_CONFIG: dict = {
     "interval_hours": 24,
     "hour": 2,
     "include_media": True,
-    "include_volumes": False,
     "keep_count": 7,
     "verify_after_backup": False,
     "last_run": None,
@@ -173,8 +172,6 @@ class BackupScheduler:
                 "--label", label]
         if not self._config.get("include_media", True):
             args.append("--no-media")
-        if not self._config.get("include_volumes", False):
-            args.append("--no-volumes")
 
         try:
             result = subprocess.run(args, capture_output=True, text=True, timeout=3600)

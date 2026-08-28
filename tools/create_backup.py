@@ -20,11 +20,11 @@ Repository: https://github.com/KR8MER/eas-station
 
 from __future__ import annotations
 
-"""Create a comprehensive snapshot of configuration, database, media, and optional container volumes.
+"""Create a comprehensive snapshot of configuration, database, and media.
 
-This backup script supports both bare-metal and containerized deployments:
-- Bare-metal: Backs up .env, database dumps, and media files
-- Containers (optional): Additionally backs up Docker/Podman volumes if available
+Backs up .env, a PostgreSQL dump, and media directories for the bare-metal
+deployment (see install.sh) -- EAS Station does not ship a containerized
+deployment path.
 
 Usage:
     python tools/create_backup.py                                    # Full backup (default: ./backups)
@@ -40,7 +40,7 @@ import sys
 import tarfile
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, Optional
 
 try:
     from app_utils.versioning import get_current_version
@@ -91,36 +91,6 @@ def detect_git_command() -> Optional[str]:
             return path
 
     return None
-
-
-def detect_compose_command() -> List[str]:
-    docker_path = shutil.which("docker")
-    legacy_path = shutil.which("docker-compose")
-
-    if docker_path is not None:
-        probe = subprocess.run(
-            [docker_path, "compose", "version"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        if probe.returncode == 0:
-            return [docker_path, "compose"]
-
-    if legacy_path is not None:
-        return [legacy_path]
-
-    return []
-
-
-def compose_service_running(compose_cmd: List[str], service: str) -> bool:
-    if not compose_cmd:
-        return False
-    result = subprocess.run(
-        [*compose_cmd, "ps", "-q", service],
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip() != ""
 
 
 def run_pg_dump(env: Dict[str, str], output_path: Path) -> str:
@@ -221,59 +191,6 @@ def backup_directory(source: Path, destination: Path, name: str) -> Optional[int
     return tarball_path.stat().st_size
 
 
-def backup_docker_volume(compose_cmd: List[str], volume_name: str, destination: Path) -> Optional[int]:
-    """Backup a Docker volume to a tarball.
-
-    Args:
-        compose_cmd: Docker compose command (e.g., ['docker', 'compose'])
-        volume_name: Name of the volume to backup
-        destination: Destination directory for the tarball
-
-    Returns:
-        Size in bytes of the created tarball, or None if backup failed
-    """
-    if not compose_cmd:
-        return None
-
-    # Get the full volume name (includes project prefix)
-    result = subprocess.run(
-        [*compose_cmd, "volume", "ls", "--format", "{{.Name}}"],
-        capture_output=True,
-        text=True,
-    )
-
-    if result.returncode != 0:
-        return None
-
-    full_volume_name = None
-    for line in result.stdout.splitlines():
-        if volume_name in line:
-            full_volume_name = line.strip()
-            break
-
-    if not full_volume_name:
-        return None
-
-    tarball_path = destination / f"volume-{volume_name}.tar.gz"
-
-    # Use docker run to backup the volume
-    backup_cmd = [
-        "docker", "run", "--rm",
-        "-v", f"{full_volume_name}:/data:ro",
-        "-v", f"{destination.absolute()}:/backup",
-        "busybox",
-        "tar", "czf", f"/backup/{tarball_path.name}", "-C", "/data", "."
-    ]
-
-    result = subprocess.run(backup_cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        return None
-
-    if tarball_path.exists():
-        return tarball_path.stat().st_size
-    return None
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Create a comprehensive backup of EAS Station",
@@ -287,7 +204,7 @@ Examples:
   python create_backup.py --label pre-upgrade
 
   # Database and config only (fast)
-  python create_backup.py --no-media --no-volumes
+  python create_backup.py --no-media
 
   # Custom output directory
   python create_backup.py --output-dir /var/backups/eas-station
@@ -307,11 +224,6 @@ Examples:
         action="store_true",
         help="Skip backing up media files (EAS messages, uploads)",
     )
-    parser.add_argument(
-        "--no-volumes",
-        action="store_true",
-        help="Skip backing up Docker volumes",
-    )
     args = parser.parse_args()
 
     timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
@@ -326,7 +238,6 @@ Examples:
         "config": False,
         "database": False,
         "media": [],
-        "volumes": [],
         "total_size_mb": 0.0,
     }
 
@@ -429,7 +340,6 @@ Contents:
 - PostgreSQL database dump (alerts_database.sql)
 """
         + (f"- Media archives ({len(backup_summary['media'])} directories)\n" if backup_summary['media'] else "")
-        + (f"- Docker volumes ({len(backup_summary['volumes'])} volumes)\n" if backup_summary['volumes'] else "")
         + f"\nTotal Size: {backup_summary['total_size_mb']:.1f} MB\n\n"
         + """Restoration:
 -----------
@@ -446,7 +356,6 @@ For manual restoration, see docs/runbooks/backup_strategy.md
     print(f"Total size: {backup_summary['total_size_mb']:.1f} MB")
     print(f"Database: {'✓' if backup_summary['database'] else '✗'}")
     print(f"Media directories: {len(backup_summary['media'])}")
-    print(f"Docker volumes: {len(backup_summary['volumes'])}")
     print("=" * 60)
 
 

@@ -276,6 +276,13 @@ SETTINGS_SECTION = NavSection(
                     permissions=(SYSTEM_CONFIGURE,),
                 ),
                 NavItem(
+                    label="Admin Operations",
+                    icon="fas fa-cogs",
+                    href="/admin/operations",
+                    description="Database optimization, a quick backup shortcut, alert-boundary recalculation, and the one-click system upgrade.",
+                    permissions=(SYSTEM_CONFIGURE,),
+                ),
+                NavItem(
                     label="Alert Purge",
                     icon="fas fa-broom",
                     href="/admin/alert-purge/",

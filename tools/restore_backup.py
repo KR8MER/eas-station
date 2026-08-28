@@ -97,7 +97,6 @@ def validate_backup(backup_dir: Path) -> tuple[bool, List[str]]:
     # Report summary
     summary = metadata.get("summary", {})
     media_count = len(summary.get("media", []))
-    volume_count = len(summary.get("volumes", []))
 
     print(f"Backup validation for: {backup_dir.name}")
     print(f"  Created: {metadata.get('timestamp')}")
@@ -105,7 +104,6 @@ def validate_backup(backup_dir: Path) -> tuple[bool, List[str]]:
     print(f"  Database: {'✓' if db_dump.exists() else '✗'}")
     print(f"  Config: {'✓' if env_file.exists() else '✗'}")
     print(f"  Media archives: {media_count}")
-    print(f"  Docker volumes: {volume_count}")
 
     return len(issues) == 0, issues
 
@@ -127,26 +125,6 @@ def confirm_action(prompt: str, default: bool = False) -> bool:
         return default
 
     return response in {"y", "yes"}
-
-
-def detect_compose_command() -> List[str]:
-    """Detect available Docker Compose command."""
-    docker_path = shutil.which("docker")
-    legacy_path = shutil.which("docker-compose")
-
-    if docker_path:
-        probe = subprocess.run(
-            [docker_path, "compose", "version"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        if probe.returncode == 0:
-            return [docker_path, "compose"]
-
-    if legacy_path:
-        return [legacy_path]
-
-    return []
 
 
 def read_env(path: Path) -> Dict[str, str]:
@@ -210,37 +188,12 @@ def restore_database(backup_dir: Path, env_values: Dict[str, str], force: bool =
     # Create a connection URL without the database name for admin operations
     admin_url = psql_url.rsplit('/', 1)[0] + '/postgres'
 
-    compose_cmd = detect_compose_command()
-    # Check if using containerized database
-    use_compose = "alerts-db" in database_url or ("postgres" in database_url and "localhost" not in database_url)
-
-    # Drop and recreate database
-    print("  Recreating database...")
-    if use_compose:
-        # For containerized deployments
-        drop_cmd = [
-            *compose_cmd, "exec", "-T", "alerts-db",
-            "psql", admin_url, "-c", f"DROP DATABASE IF EXISTS {db_name}"
-        ]
-        create_cmd = [
-            *compose_cmd, "exec", "-T", "alerts-db",
-            "psql", admin_url, "-c", f"CREATE DATABASE {db_name}"
-        ]
-        restore_cmd = [
-            *compose_cmd, "exec", "-T", "alerts-db",
-            "psql", psql_url
-        ]
-    else:
-        # For bare-metal deployments, use connection URL
-        drop_cmd = [
-            "psql", admin_url, "-c", f"DROP DATABASE IF EXISTS {db_name}"
-        ]
-        create_cmd = [
-            "psql", admin_url, "-c", f"CREATE DATABASE {db_name}"
-        ]
-        restore_cmd = [
-            "psql", psql_url
-        ]
+    # EAS Station is a bare-metal deployment (see install.sh) -- the database
+    # may be local or a remote host, but it is never reached through a Docker
+    # Compose service, so restoration always talks to it directly via psql.
+    drop_cmd = ["psql", admin_url, "-c", f"DROP DATABASE IF EXISTS {db_name}"]
+    create_cmd = ["psql", admin_url, "-c", f"CREATE DATABASE {db_name}"]
+    restore_cmd = ["psql", psql_url]
 
     # Execute restoration
     try:
@@ -317,68 +270,6 @@ def restore_media(backup_dir: Path, force: bool = False) -> int:
     return restored
 
 
-def restore_docker_volume(compose_cmd: List[str], volume_name: str, backup_dir: Path, force: bool = False) -> bool:
-    """Restore a Docker volume from backup.
-
-    Args:
-        compose_cmd: Docker compose command
-        volume_name: Name of the volume to restore
-        backup_dir: Directory containing the backup
-        force: Skip confirmation prompts
-
-    Returns:
-        True if restoration succeeded, False otherwise
-    """
-    archive_path = backup_dir / f"volume-{volume_name}.tar.gz"
-    if not archive_path.exists():
-        return False
-
-    if not force:
-        print(f"\n  WARNING: This will OVERWRITE volume '{volume_name}'!")
-        if not confirm_action(f"  Continue with volume restoration?", default=False):
-            print(f"  - Skipped volume '{volume_name}'")
-            return False
-
-    # Get full volume name
-    result = subprocess.run(
-        [*compose_cmd, "volume", "ls", "--format", "{{.Name}}"],
-        capture_output=True,
-        text=True,
-    )
-
-    full_volume_name = None
-    for line in result.stdout.splitlines():
-        if volume_name in line:
-            full_volume_name = line.strip()
-            break
-
-    if not full_volume_name:
-        print(f"  ✗ Volume '{volume_name}' not found")
-        return False
-
-    # Restore volume
-    try:
-        restore_cmd = [
-            "docker", "run", "--rm",
-            "-v", f"{full_volume_name}:/data",
-            "-v", f"{backup_dir.absolute()}:/backup",
-            "busybox",
-            "sh", "-c",
-            f"cd /data && rm -rf * && tar xzf /backup/{archive_path.name}"
-        ]
-
-        result = subprocess.run(restore_cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            print(f"  ✗ Failed to restore volume '{volume_name}': {result.stderr}")
-            return False
-
-        size_mb = archive_path.stat().st_size / (1024 * 1024)
-        print(f"  ✓ Restored volume '{volume_name}' ({size_mb:.1f} MB)")
-        return True
-
-    except Exception as exc:
-        print(f"  ✗ Failed to restore volume '{volume_name}': {exc}")
-        return False
 
 
 def main() -> None:
@@ -438,11 +329,6 @@ CAUTION: This tool will OVERWRITE existing data. Always create a backup before r
         action="store_true",
         help="Skip media restoration",
     )
-    parser.add_argument(
-        "--skip-volumes",
-        action="store_true",
-        help="Skip Docker volume restoration",
-    )
     args = parser.parse_args()
 
     backup_dir = Path(args.backup_dir).resolve()
@@ -500,7 +386,6 @@ CAUTION: This tool will OVERWRITE existing data. Always create a backup before r
         "config": False,
         "database": False,
         "media": 0,
-        "volumes": 0,
     }
 
     # Restore configuration
@@ -545,20 +430,6 @@ CAUTION: This tool will OVERWRITE existing data. Always create a backup before r
         results["media"] = restore_media(backup_dir, args.force)
         print()
 
-    # Restore Docker volumes
-    if not args.skip_volumes and not args.database_only:
-        print("Restoring Docker volumes...")
-        compose_cmd = detect_compose_command()
-
-        if compose_cmd:
-            volumes = ["app-config", "certbot-conf"]
-            for volume in volumes:
-                if restore_docker_volume(compose_cmd, volume, backup_dir, args.force):
-                    results["volumes"] += 1
-        else:
-            print("  - Docker not available, skipping volume restoration")
-        print()
-
     # Summary
     print("=" * 60)
     print("Restoration Summary")
@@ -566,12 +437,11 @@ CAUTION: This tool will OVERWRITE existing data. Always create a backup before r
     print(f"Configuration: {'✓' if results['config'] else '-'}")
     print(f"Database: {'✓' if results['database'] else '-'}")
     print(f"Media directories: {results['media']}")
-    print(f"Docker volumes: {results['volumes']}")
     print("=" * 60)
 
     if results["database"] or results["config"]:
         print("\nNOTE: You may need to restart services for changes to take effect:")
-        print("    docker compose restart")
+        print("    sudo systemctl restart eas-station.target")
 
 
 if __name__ == "__main__":

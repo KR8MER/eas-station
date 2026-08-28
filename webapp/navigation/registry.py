@@ -407,13 +407,6 @@ _REPORTS = NavSection(
                     description="Alert volume, coverage and response-time analysis.",
                 ),
                 NavItem(
-                    label="Operations Report",
-                    icon="fas fa-cogs",
-                    href="/admin/operations",
-                    description="Rolled-up operational summary for the station.",
-                    permissions=(SYSTEM_CONFIGURE,),
-                ),
-                NavItem(
                     label="Repository Statistics",
                     icon="fas fa-code-branch",
                     href="/repo-stats",

@@ -59,9 +59,8 @@ tests/test_audio_ingest.py::test_api_start_icecast_stream_success
 tests/test_audio_ingest.py::test_api_stop_icecast_stream_requires_configuration
 tests/test_audio_ingest.py::test_api_stop_icecast_stream_success
 
-# tests/test_backup_restore.py (2) — Needs pg_dump/pg_restore against a real database.
+# tests/test_backup_restore.py (1) — Needs pg_dump/pg_restore against a real database.
 tests/test_backup_restore.py::TestBackupRestore::test_runbooks_exist
-tests/test_backup_restore.py::TestBackupRestore::test_standby_config_exists
 
 # tests/test_boundary_uploads.py (8) — Needs PostGIS geometry support; SQLite cannot satisfy it.
 tests/test_boundary_uploads.py::TestUploadBoundariesEndpoint::test_rejects_invalid_json

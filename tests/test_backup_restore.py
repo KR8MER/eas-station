@@ -101,7 +101,7 @@ class TestBackupRestore(unittest.TestCase):
         self.assertIn("backup", result.stdout.lower())
 
     def test_backup_dry_run(self):
-        """Test backup with minimal configuration (no-media, no-volumes)."""
+        """Test backup with minimal configuration (no-media)."""
         result = subprocess.run(
             [
                 sys.executable,
@@ -109,7 +109,6 @@ class TestBackupRestore(unittest.TestCase):
                 "--output-dir", self.temp_dir,
                 "--label", "test",
                 "--no-media",
-                "--no-volumes",
             ],
             capture_output=True,
             text=True,
@@ -139,7 +138,6 @@ class TestBackupRestore(unittest.TestCase):
                 "config": True,
                 "database": True,
                 "media": [],
-                "volumes": [],
                 "total_size_mb": 1.0,
             },
         }
@@ -197,7 +195,6 @@ class TestBackupRestore(unittest.TestCase):
     def test_standby_config_exists(self):
         """Test that standby configuration example exists."""
         examples_dir = self.repo_root / "examples"
-        self.assertTrue((examples_dir / "docker-compose.standby.yml").exists(), "Missing standby config")
         self.assertTrue((examples_dir / "STANDBY_DEPLOYMENT.md").exists(), "Missing standby docs")
 
 

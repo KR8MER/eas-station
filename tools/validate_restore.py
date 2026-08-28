@@ -28,10 +28,7 @@ accessibility, and service availability.
 
 Usage:
     python3 tools/validate_restore.py [--host HOST] [--port PORT]
-    
-    # With Docker Compose
-    docker compose exec app python3 /app/tools/validate_restore.py
-    
+
 Exit codes:
     0 - All validation checks passed
     1 - One or more validation checks failed
@@ -457,7 +454,7 @@ class RestoreValidator:
             print("Next Steps:")
             print("1. Access the web UI and verify functionality")
             print("2. Check recent logs for any warnings:")
-            print("   docker compose logs --since 10m | grep -i warning")
+            print("   journalctl -u eas-station-web --since '10 min ago' | grep -i warning")
             print("3. Review system health in the admin dashboard")
             print()
         else:
@@ -467,11 +464,11 @@ class RestoreValidator:
             print("Recommended Actions:")
             print("1. Review failed checks above")
             print("2. Check application logs:")
-            print("   docker compose logs --tail=100 app")
+            print("   journalctl -u eas-station-web -n 100")
             print("3. Verify database status:")
-            print("   docker compose exec app python -m alembic current")
+            print("   cd /opt/eas-station && venv/bin/alembic current")
             print("4. Restart services if needed:")
-            print("   docker compose restart")
+            print("   sudo systemctl restart eas-station.target")
             print()
         
         return all_passed

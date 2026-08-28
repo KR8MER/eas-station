@@ -8,6 +8,67 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.196.3] - 2026-08-28 - Fix the one-click upgrade button, remove unsupported Docker code paths, and fix Admin Operations navigation
+
+The one-click "System Upgrade" button (Admin -> Operations) ran
+`tools/inplace_upgrade.py`, which only knew how to upgrade a Docker
+Compose deployment (`docker compose pull/up/exec/restart`) -- but
+EAS Station ships exclusively as a bare-metal systemd install
+(`install.sh`), and no `docker-compose.yml` exists in the repository.
+Every click of the button failed outright with "Neither 'docker
+compose' nor 'docker-compose' is available in PATH." The script now
+performs the actual bare-metal upgrade: `git pull --ff-only`, `pip
+install --upgrade` against this venv's `requirements.txt`, `alembic
+upgrade head`, then `sudo systemctl restart eas-station.target` (the
+same sudoers-granted command the Settings -> Environment "Restart All"
+button already uses). The now-meaningless "Compose File" field was
+removed from the Operations page and its route.
+
+While auditing for other Docker assumptions: `tools/create_backup.py`
+carried a Docker/Podman volume backup path that was never actually
+invoked (`backup_summary["volumes"]` was always empty) -- removed.
+`tools/restore_backup.py` had a live bug in the same vein: any
+bare-metal deployment pointing at a non-`localhost` PostgreSQL host
+(a perfectly normal remote-database setup) was misrouted into running
+`docker compose exec alerts-db psql ...` against a container that was
+never going to exist, instead of connecting directly; and its "restore
+Docker volumes" step looked for `volume-app-config.tar.gz` /
+`volume-certbot-conf.tar.gz` archives that `create_backup.py` never
+produced. Both are removed, and `tools/validate_restore.py`'s
+post-restore guidance (which told bare-metal operators to run `docker
+compose logs` / `docker compose restart`) now prints the systemd/psql
+equivalents. `tests/test_backup_restore.py::test_standby_config_exists`
+no longer requires a `docker-compose.standby.yml` that was never
+shipped -- the standby doc it guards (`examples/STANDBY_DEPLOYMENT.md`)
+is already fully rsync/systemd based. Stale Docker mentions were also
+cleaned out of `install.sh` (dead rsync excludes for files that don't
+exist) and the installation/architecture docs; `scripts/setup_postal.sh`
+is untouched since the optional Postal mail server integration
+genuinely ships its own Docker-based install upstream.
+
+Removing those dead `--no-volumes`/`--skip-volumes` flags from
+`create_backup.py`/`restore_backup.py` broke three more call sites that
+still passed them: `webapp/routes_backups.py` (the full Backups page's
+create/restore actions), `app_core/backup_scheduler.py` (the in-process
+auto-backup scheduler, which defaulted `include_volumes` to `False` --
+meaning every scheduled backup would have started failing), and the
+standalone `tools/backup_scheduler.py` cron/systemd-timer script. All
+three, plus the now-dead "Docker volumes" checkboxes in
+`templates/admin/backups.html`, are cleaned up to match.
+
+Separately: the Admin Operations page (`/admin/operations` -- one-click
+backup, database optimization, alert-boundary recalculation, and the
+System Upgrade button fixed above) was filed in the navigation under
+**Reports -> Analytics** and labeled "Operations Report," which reads as
+a passive report rather than the maintenance/action page it actually is
+-- effectively making it undiscoverable. Moved it to **Settings -> Data
+& Storage**, next to Backups, and relabeled it "Admin Operations." Its
+route was also missing the `system.configure` permission check every
+sibling `/admin/*` route has (the page rendered for any logged-in user,
+though the backup/upgrade POST endpoints were already permission-gated)
+-- added. The page had no help.html documentation at all; added an
+entry.
+
 ## [2.196.2] - 2026-08-28 - Fix radar mismatch between the alert page and exported cards; widen the Py-ART attribution card
 
 The exported/shared alert card and the alert page's "Radar Loop" both

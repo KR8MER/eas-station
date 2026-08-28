@@ -143,7 +143,7 @@ When implementing ANY new feature:
    - ✅ Users can view logs for all services via web UI
    - ✅ Filter by service, level, date range, and free-text search
    - ✅ Export any category as CSV or PDF
-   - ❌ **NEVER** require users to run `journalctl`, `tail -f`, or `docker logs`
+   - ❌ **NEVER** require users to run `journalctl` or `tail -f`
 
 3. **Configuration Management**
    - ✅ **Already Implemented**: Admin → Environment page edits `.env` file
