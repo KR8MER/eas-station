@@ -18,6 +18,40 @@ START_TIME=$(date +%s)
 # Title used by the shared cleanup_on_exit trap when something fails.
 FAILURE_TITLE="Update Failed"
 
+# ── Command-line flags ──────────────────────────────────────────────────────
+# --non-interactive: for automated callers (the Admin -> Operations "System
+#   Upgrade" button runs this via systemd-run). Every whiptail confirmation
+#   or pause below is skipped in favor of a sane default, but every
+#   echo_step/echo_info/echo_success/echo_warning/echo_error line still goes
+#   to the log exactly as it does interactively -- that plain-text stream is
+#   what the web UI tails and renders as live progress.
+# --skip-backup: skip the pre-update tar.gz backup (default: create one).
+#   Independent of the one-click "Backup Operations" panel on the same page.
+# --checkout <ref>: git checkout this branch/tag before pulling.
+NON_INTERACTIVE=false
+SKIP_BACKUP=false
+CHECKOUT_REF=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --non-interactive)
+            NON_INTERACTIVE=true
+            shift
+            ;;
+        --skip-backup)
+            SKIP_BACKUP=true
+            shift
+            ;;
+        --checkout)
+            CHECKOUT_REF="${2:-}"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 2
+            ;;
+    esac
+done
+
 # Resolve script dir before sourcing the UI library.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -114,8 +148,11 @@ else
     echo_info "Installation is not a git repository"
 fi
 
-# Show welcome dialog — skip on self-restart so the user is not asked to confirm twice.
-if [ "${EAS_UPDATE_RESTARTED:-}" != "true" ]; then
+# Show welcome dialog — skip on self-restart so the user is not asked to confirm twice,
+# and skip entirely in --non-interactive mode (nobody is at a terminal to answer it).
+if [ "$NON_INTERACTIVE" = "true" ]; then
+    echo_info "Non-interactive mode — proceeding without confirmation"
+elif [ "${EAS_UPDATE_RESTARTED:-}" != "true" ]; then
     VERSION_LINE=""
     if [ -n "$CURRENT_VERSION" ]; then
         VERSION_LINE="  Version: $CURRENT_VERSION\n"
@@ -131,11 +168,17 @@ fi # End of EAS_UPDATE_RESTARTED check
 
 # Create backup (skip if restarting after self-update)
 BACKUP_FILE="none"
-if [ "${EAS_SKIP_BACKUP:-}" != "true" ]; then
+if [ "${EAS_SKIP_BACKUP:-}" != "true" ] && [ "$SKIP_BACKUP" != "true" ]; then
 echo_step "Creating Backup"
 
 DO_BACKUP=false
-if whiptail --title "Create Backup?" --backtitle "$(whiptail_footer)" --yesno "Would you like to create a backup before updating?\n\nThis will create a compressed archive of your current installation.\nBackups are saved to: $BACKUP_DIR\n\nRecommended if you have local customizations." 14 65 --defaultno; then
+if [ "$NON_INTERACTIVE" = "true" ]; then
+    # No one to ask -- default to safe (create it), unlike the interactive
+    # wizard's --defaultno, since there is no operator here to notice and
+    # override a silently-skipped backup.
+    DO_BACKUP=true
+    echo_info "Non-interactive mode — creating a backup before updating"
+elif whiptail --title "Create Backup?" --backtitle "$(whiptail_footer)" --yesno "Would you like to create a backup before updating?\n\nThis will create a compressed archive of your current installation.\nBackups are saved to: $BACKUP_DIR\n\nRecommended if you have local customizations." 14 65 --defaultno; then
     DO_BACKUP=true
 fi
 
@@ -207,6 +250,22 @@ if [ -d ".git" ]; then
         fi
     else
         echo_success "Git directory ownership is correct ($SERVICE_USER)"
+    fi
+
+    # Optional: check out a specific branch/tag before pulling.
+    if [ -n "$CHECKOUT_REF" ] && [ "${EAS_SKIP_PULL:-}" != "true" ]; then
+        echo_progress "Checking out $CHECKOUT_REF..."
+        set +e
+        CHECKOUT_OUTPUT=$(sudo -u "$SERVICE_USER" git fetch origin --tags --prune 2>&1 \
+            && sudo -u "$SERVICE_USER" git checkout "$CHECKOUT_REF" 2>&1)
+        CHECKOUT_STATUS=$?
+        set -e
+        if [ $CHECKOUT_STATUS -eq 0 ]; then
+            echo_success "Checked out $CHECKOUT_REF"
+        else
+            echo "$CHECKOUT_OUTPUT" | head -20 | _tty_block
+            echo_error "Failed to check out '$CHECKOUT_REF' - continuing on the current branch"
+        fi
     fi
 
     # Check if we should skip git pull (e.g., after update.sh self-restart)
@@ -1219,10 +1278,12 @@ with app.app_context():
         MIGRATION_ERR_MSG+="\n  sudo -u $SERVICE_USER \\\\"
         MIGRATION_ERR_MSG+="\n    $INSTALL_DIR/venv/bin/python \\\\"
         MIGRATION_ERR_MSG+="\n    $INSTALL_DIR/scripts/database/recover_split_location_settings.py"
-        whiptail --title "Migration Warning" \
-            --backtitle "$(whiptail_footer)" \
-            --msgbox "$MIGRATION_ERR_MSG" \
-            26 78
+        if [ "$NON_INTERACTIVE" != "true" ]; then
+            whiptail --title "Migration Warning" \
+                --backtitle "$(whiptail_footer)" \
+                --msgbox "$MIGRATION_ERR_MSG" \
+                26 78
+        fi
     fi
 
     # Independent recovery pass: even if alembic itself succeeded, a previous
@@ -1503,9 +1564,16 @@ SUMMARY+="• View logs: journalctl -u eas-station-web -f\n"
 SUMMARY+="• Check status: systemctl status eas-station.target\n"
 SUMMARY+="• Web interface: https://$(hostname -I | awk '{print $1}')\n"
 
-# Only show whiptail success dialog if update completed without errors
+# Every run prints the plain-text summary to the log unconditionally --
+# that's what the web UI's progress feed reads its final result from. The
+# whiptail dialog on top of it is only for someone actually watching a
+# terminal.
 if [ "$SERVICE_STATUS" = "running" ] && [ "$NGINX_STATUS" = "ok" ]; then
-    whiptail --title "Update Complete" --backtitle "$(whiptail_footer)" --msgbox "$SUMMARY" 24 75
+    echo "=== UPDATE RESULT: SUCCESS ==="
+    echo -e "$SUMMARY"
+    if [ "$NON_INTERACTIVE" != "true" ]; then
+        whiptail --title "Update Complete" --backtitle "$(whiptail_footer)" --msgbox "$SUMMARY" 24 75
+    fi
 else
     # Show error dialog instead
     ERROR_MSG="Update completed with errors:\n\n"
@@ -1519,10 +1587,15 @@ else
         ERROR_MSG+="  Check: sudo systemctl status eas-station.target\n"
         ERROR_MSG+="  Logs: sudo journalctl -u eas-station-web -n 100\n\n"
     fi
-    ERROR_MSG+="Review the console output above for details.\n"
-    ERROR_MSG+="Press OK to continue..."
+    ERROR_MSG+="Review the console output above for details."
 
-    whiptail --title "Update Issues Detected" --backtitle "$(whiptail_footer)" --msgbox "$ERROR_MSG" 20 75
+    echo "=== UPDATE RESULT: ISSUES DETECTED ==="
+    echo -e "$ERROR_MSG"
+    if [ "$NON_INTERACTIVE" != "true" ]; then
+        ERROR_MSG_DIALOG="$ERROR_MSG"
+        ERROR_MSG_DIALOG+="\nPress OK to continue..."
+        whiptail --title "Update Issues Detected" --backtitle "$(whiptail_footer)" --msgbox "$ERROR_MSG_DIALOG" 20 75
+    fi
 fi
 
 # Console summary

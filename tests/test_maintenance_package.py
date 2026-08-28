@@ -111,8 +111,8 @@ def test_repo_root_is_the_repository_root():
     """The failure mode here is silent and destructive.
 
     ``repo_root`` locates ``tools/create_backup.py`` and
-    ``tools/inplace_upgrade.py``, is passed as their ``cwd``, and resolves the
-    ``.env`` the environment editor reads and writes. The single-file module
+    ``bin/eas-station-run-update``, is passed as their ``cwd``, and resolves
+    the ``.env`` the environment editor reads and writes. The single-file module
     was ``webapp/admin/maintenance.py`` and needed three ``.parent`` hops;
     ``webapp/admin/maintenance/paths.py`` needs four. With three it becomes
     ``<repo>/webapp`` — the backup would point at a script that does not

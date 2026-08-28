@@ -101,9 +101,24 @@ _UI_GAUGE_PCT=0
 _UI_BANNER_TITLE=""       # set by ui_banner(), consumed when the gauge lazily starts
 _UI_BANNER_BACKTITLE=""
 
+# `[ -w /dev/tty ]` only checks the special device node's own permission
+# bits, which are broad (crw-rw-rw-) regardless of whether this process
+# actually has a controlling terminal to open it against -- it says nothing
+# about whether a real open() against it will succeed. A session with no
+# controlling tty at all (e.g. update.sh launched via `systemd-run`, as the
+# one-click web upgrade does) passes that check and then dies the moment
+# something really writes to /dev/tty, with "No such device or address"
+# under `set -e`. Probe for real, once, up front, and cache the answer;
+# every guard below checks this instead of re-testing permission bits.
+if { : >/dev/tty; } 2>/dev/null; then
+    _UI_HAS_CONTROLLING_TTY=1
+else
+    _UI_HAS_CONTROLLING_TTY=0
+fi
+
 # Honour NO_COLOR (https://no-color.org/) and non-TTY destinations.
 _ui_tty_supports_color() {
-    [ -z "${NO_COLOR:-}" ] && { [ -t 1 ] || [ -w /dev/tty ]; }
+    [ -z "${NO_COLOR:-}" ] && { [ -t 1 ] || [ "$_UI_HAS_CONTROLLING_TTY" = "1" ]; }
 }
 
 # Move the cursor to column 1 of the given row and clear that line, ready
@@ -132,7 +147,7 @@ _tty_raw() { printf '%s' "$1" >/dev/tty 2>/dev/null || printf '%s' "$1"; }
 #
 # Exit code is the wrapped command's.
 ui_stream() {
-    if ! [ -w /dev/tty ] 2>/dev/null; then
+    if [ "$_UI_HAS_CONTROLLING_TTY" != "1" ]; then
         "$@" 2>&1
         return $?
     fi
@@ -167,7 +182,7 @@ _tty_block() {
     local block
     block=$(cat)
     echo "$block"
-    if [ -w /dev/tty ] 2>/dev/null; then
+    if [ "$_UI_HAS_CONTROLLING_TTY" = "1" ]; then
         printf '%s\n' "$block" >>/dev/tty 2>/dev/null
     fi
 }
@@ -204,7 +219,7 @@ whiptail_footer() {
 ui_gauge_start() {
     _UI_GAUGE_ATTEMPTED=1
     command -v whiptail >/dev/null 2>&1 || return 1
-    [ -w /dev/tty ] 2>/dev/null || return 1
+    [ "$_UI_HAS_CONTROLLING_TTY" = "1" ] || return 1
     _ui_tty_supports_color || return 1
 
     _UI_GAUGE_FIFO=$(mktemp -u /tmp/eas-gauge.XXXXXX) || return 1
@@ -296,8 +311,17 @@ ui_gauge_stop() {
 # through to the fixed-row/scrolling fallback instead of retrying per step.
 _ui_ensure_gauge() {
     [ "$_UI_GAUGE_ACTIVE" = "1" ] && return 0
-    [ "$_UI_GAUGE_ATTEMPTED" = "1" ] && return 1
-    ui_gauge_start
+    [ "$_UI_GAUGE_ATTEMPTED" = "1" ] && return 0
+    # Every caller (echo_step, etc.) checks the _UI_GAUGE_ACTIVE side effect
+    # afterward, never this function's own exit status -- so it must never
+    # propagate ui_gauge_start's "couldn't attach" 1 (the ordinary, expected
+    # outcome whenever there is no controlling terminal, e.g. update.sh
+    # launched via systemd-run) up to a bare, unguarded call site under
+    # update.sh's `set -e`. Before this went through the same rediscovery
+    # that ui_gauge_start's own header comment already documents for the
+    # -w /dev/tty check: this had simply never been exercised by a fully
+    # detached invocation before.
+    ui_gauge_start || true
 }
 
 # ── Time formatting ────────────────────────────────────────────────────────
@@ -580,7 +604,7 @@ show_spinner() {
     start=$(date +%s)
 
     # If not a TTY, just wait.
-    if ! [ -w /dev/tty ]; then
+    if [ "$_UI_HAS_CONTROLLING_TTY" != "1" ]; then
         wait "$pid" 2>/dev/null
         return $?
     fi
@@ -691,7 +715,7 @@ ui_apt_install() {
     echo_progress "Installing $# package(s): $*"
 
     # If not a TTY, fall back to plain apt-get install.
-    if ! [ -w /dev/tty ]; then
+    if [ "$_UI_HAS_CONTROLLING_TTY" != "1" ]; then
         # shellcheck disable=SC2086
         DEBIAN_FRONTEND=noninteractive apt-get install -y ${APT_EXTRA_FLAGS:-} "$@"
         return $?
@@ -739,7 +763,7 @@ ui_apt_install() {
 ui_pip_install() {
     local pip_bin="${PIP:-pip}"
     echo_progress "pip install $*"
-    if ! [ -w /dev/tty ]; then
+    if [ "$_UI_HAS_CONTROLLING_TTY" != "1" ]; then
         "$pip_bin" install --progress-bar on "$@"
         return $?
     fi
