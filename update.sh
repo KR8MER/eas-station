@@ -187,7 +187,24 @@ if [ "$DO_BACKUP" = true ]; then
     BACKUP_FILE="$BACKUP_DIR/eas-station-$(date +%Y%m%d-%H%M%S).tar.gz"
 
     echo_progress "Creating backup archive..."
-    if tar -czf "$BACKUP_FILE" -C "$INSTALL_DIR" . 2>/dev/null; then
+    # Exclude the big, regenerable-or-already-preserved-elsewhere directories:
+    # venv/venv-sdr rebuild from requirements*.txt in minutes; .git duplicates
+    # what's already on the remote; archives/ is recorded audio (tens of GB
+    # on a station that's been running a while -- backing it up on every
+    # single upgrade turns a few-second step into a multi-minute one for no
+    # reason a code/config backup needs); backups/ is this very script's own
+    # output directory when it lives under INSTALL_DIR -- without excluding
+    # it, every new backup would also contain every backup before it,
+    # growing without bound across repeated upgrades.
+    if tar -czf "$BACKUP_FILE" \
+        --exclude=./venv \
+        --exclude=./venv-sdr \
+        --exclude=./.git \
+        --exclude=./archives \
+        --exclude=./backups \
+        --exclude='*/__pycache__' \
+        --exclude='*.pyc' \
+        -C "$INSTALL_DIR" . 2>/dev/null; then
         BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
         echo_success "Backup created: $BACKUP_FILE (${BACKUP_SIZE})"
     else
