@@ -34,9 +34,6 @@ python tools/create_backup.py --output-dir /var/backups/eas-station --label manu
 
 # Database and config only (faster, no media)
 python tools/create_backup.py --output-dir /var/backups/eas-station --label config-only --no-media
-
-# Skip volumes as well
-python tools/create_backup.py --output-dir /var/backups/eas-station --label db-only --no-media --no-volumes
 ```
 
 ---

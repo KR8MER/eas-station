@@ -73,7 +73,6 @@ def run_backup(
     output_dir: Path,
     label: Optional[str] = None,
     include_media: bool = True,
-    include_volumes: bool = True,
     logger: Optional[logging.Logger] = None,
 ) -> tuple[bool, Optional[Path]]:
     """Execute a backup using create_backup.py.
@@ -82,7 +81,6 @@ def run_backup(
         output_dir: Directory to store backups
         label: Optional label for the backup
         include_media: Include media files in backup
-        include_volumes: Include Docker volumes in backup
         logger: Logger instance
 
     Returns:
@@ -106,9 +104,6 @@ def run_backup(
 
     if not include_media:
         cmd.append("--no-media")
-
-    if not include_volumes:
-        cmd.append("--no-volumes")
 
     try:
         result = subprocess.run(
@@ -318,7 +313,7 @@ Examples:
   python backup_scheduler.py --keep-daily 14 --keep-weekly 8 --keep-monthly 12
 
   # Database and config only (fast)
-  python backup_scheduler.py --no-media --no-volumes
+  python backup_scheduler.py --no-media
 
   # With email notification
   python backup_scheduler.py --notify admin@example.com
@@ -341,11 +336,6 @@ Examples:
         "--no-media",
         action="store_true",
         help="Skip backing up media files",
-    )
-    parser.add_argument(
-        "--no-volumes",
-        action="store_true",
-        help="Skip backing up Docker volumes",
     )
     parser.add_argument(
         "--keep-daily",
@@ -406,7 +396,6 @@ Examples:
         output_dir=output_dir,
         label=args.label,
         include_media=not args.no_media,
-        include_volumes=not args.no_volumes,
         logger=logger,
     )
 

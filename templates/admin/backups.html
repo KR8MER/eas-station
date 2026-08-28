@@ -92,12 +92,6 @@
                                         Include media files
                                     </label>
                                 </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="include-volumes" checked>
-                                    <label class="form-check-label" for="include-volumes">
-                                        Include system directories
-                                    </label>
-                                </div>
                             </div>
                             <div class="col-md-4 d-flex align-items-end">
                                 <button type="submit" class="btn btn-primary btn-lg w-100">
@@ -173,10 +167,6 @@
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" id="auto-backup-media">
                                             <label class="form-check-label" for="auto-backup-media">Media files</label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="auto-backup-volumes">
-                                            <label class="form-check-label" for="auto-backup-volumes">System volumes</label>
                                         </div>
                                         <div class="form-check mt-2">
                                             <input class="form-check-input" type="checkbox" id="auto-backup-verify">
@@ -345,9 +335,6 @@
                                                 {% if backup.summary.media %}
                                                     <i class="fas fa-file-audio text-success" title="Media ({{ backup.summary.media|length }})"></i>
                                                 {% endif %}
-                                                {% if backup.summary.volumes %}
-                                                    <i class="fas fa-hdd text-success" title="Volumes ({{ backup.summary.volumes|length }})"></i>
-                                                {% endif %}
                                             </small>
                                         </td>
                                         <td>
@@ -471,12 +458,6 @@
                                 Skip media files restore
                             </label>
                         </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="skip-volumes">
-                            <label class="form-check-label" for="skip-volumes">
-                                Skip system directories restore
-                            </label>
-                        </div>
                     </div>
 
                     <div class="alert alert-info mt-3">
@@ -522,7 +503,6 @@ document.getElementById('create-backup-form').addEventListener('submit', async f
 
     const label = document.getElementById('backup-label').value || 'manual';
     const includeMedia = document.getElementById('include-media').checked;
-    const includeVolumes = document.getElementById('include-volumes').checked;
 
     const progressDiv = document.getElementById('backup-progress');
     const resultDiv = document.getElementById('backup-result');
@@ -537,7 +517,7 @@ document.getElementById('create-backup-form').addEventListener('submit', async f
         const response = await fetch('/api/backups/create', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({label, include_media: includeMedia, include_volumes: includeVolumes})
+            body: JSON.stringify({label, include_media: includeMedia})
         });
 
         const data = await response.json();
@@ -597,7 +577,6 @@ async function executeRestore() {
         database_only: mode === 'database',
         skip_database: mode === 'custom' && document.getElementById('skip-database').checked,
         skip_media: mode === 'custom' && document.getElementById('skip-media').checked,
-        skip_volumes: mode === 'custom' && document.getElementById('skip-volumes').checked,
     };
 
     progressDiv.style.display = 'block';
@@ -861,7 +840,6 @@ async function loadAutoBackupConfig() {
         document.getElementById('auto-backup-hour').value = cfg.hour ?? 2;
         document.getElementById('auto-backup-keep').value = cfg.keep_count ?? 7;
         document.getElementById('auto-backup-media').checked = cfg.include_media ?? true;
-        document.getElementById('auto-backup-volumes').checked = cfg.include_volumes ?? false;
         document.getElementById('auto-backup-verify').checked = cfg.verify_after_backup ?? false;
 
         const badge = document.getElementById('auto-backup-status-badge');
@@ -892,7 +870,6 @@ document.getElementById('auto-backup-form').addEventListener('submit', async fun
         hour: parseInt(document.getElementById('auto-backup-hour').value, 10),
         keep_count: parseInt(document.getElementById('auto-backup-keep').value, 10),
         include_media: document.getElementById('auto-backup-media').checked,
-        include_volumes: document.getElementById('auto-backup-volumes').checked,
         verify_after_backup: document.getElementById('auto-backup-verify').checked,
     };
     try {

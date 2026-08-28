@@ -1339,11 +1339,7 @@ REPO_ROOT="$SCRIPT_DIR"
 # Copy all files including .git directory for update capability
 # NOTE: We KEEP .git directory so update.sh can use git to pull updates
 # This enables fast git-based updates instead of slow tarball downloads
-rsync -a --exclude='Dockerfile*' \
-    --exclude='docker-compose*.yml' \
-    --exclude='.dockerignore' \
-    --exclude='docker-entrypoint*.sh' \
-    --exclude='.env' \
+rsync -a --exclude='.env' \
     --exclude='__pycache__' \
     --exclude='*.pyc' \
     --exclude='bugs/' \

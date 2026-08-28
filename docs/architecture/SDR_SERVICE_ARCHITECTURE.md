@@ -666,7 +666,7 @@ redis-cli GET "sdr:ring_buffer:{receiver_id}"
 
 - Each IcecastStreamer: ~100MB peak
 - Buffer memory: ~50MB per stream
-- Monitor with: `docker stats`
+- Monitor with: `systemctl status eas-station-sdr` (see `MemoryCurrent`) or `ps -o rss,cmd -C python3`
 
 ### Best Practices
 
