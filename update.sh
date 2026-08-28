@@ -1637,8 +1637,19 @@ fi
 # Console summary
 echo ""
 
-# Show celebration animation
-show_celebration "Update completed successfully!" "*** UPDATE COMPLETE ***"
+# Show celebration animation -- purely decorative for a human watching a
+# terminal, so skip it in --non-interactive mode. Its own whiptail call is
+# guarded (`2>/dev/null || true`) and an isolated repro of that exact call
+# doesn't abort the shell, yet on hardware, in a real end-to-end run inside
+# this script, it still took the whole script down right here with the
+# same "/dev/tty: No such device or address" -> exit 1 signature as every
+# other TTY-only call in this script -- after every real step (backup,
+# services, git pull, deps, migrations, restart) had already succeeded.
+# Not worth chasing the exact mechanism further for a screen nobody
+# watching a log file will ever see.
+if [ "$NON_INTERACTIVE" != "true" ]; then
+    show_celebration "Update completed successfully!" "*** UPDATE COMPLETE ***"
+fi
 
 # Show elapsed time
 show_elapsed_time
