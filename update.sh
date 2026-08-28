@@ -1565,8 +1565,16 @@ fi
 
 # Display success summary
 # Don't clear screen if migration failed - user needs to see the errors
+#
+# clear needs $TERM to look up how to clear the screen via terminfo; a
+# systemd-run transient unit sets neither $TERM nor $HOME for the process
+# it launches (see bin/eas-station-run-update's $HOME fix for the same
+# class of gap). Unguarded, this was the one command standing between a
+# fully successful non-interactive run and `set -e` aborting it right at
+# the finish line, exit 1, after every real step had already succeeded --
+# `clear`'s only job here is cosmetic.
 if [ "$MIGRATION_FAILED" != "true" ]; then
-    clear
+    clear 2>/dev/null || true
 fi
 echo_header "Update Complete!"
 
