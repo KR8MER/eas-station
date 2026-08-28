@@ -1717,3 +1717,4 @@ echo -e "   ${RED}If you still see old pages after hard refresh, fully clear bro
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
+# Trivial touch to exercise the self-restart path in the next end-to-end test.
