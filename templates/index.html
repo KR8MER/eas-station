@@ -811,6 +811,7 @@ function getColorVar(varName) {
 // Global map variables
 let map;
 let alertLayer;
+let historicalLayer;
 let boundaryLayers = {};
 let alertData = { active: [], historical: [] };
 
@@ -1008,8 +1009,14 @@ async function initMap() {
             tile: { minZoom: 8 }
         }).setView(MAP_CENTER, MAP_ZOOM);
 
-        // Initialize layer groups
+        // Initialize layer groups. Historical alerts get their own group,
+        // separate from active alerts' alertLayer -- they used to share
+        // one, so re-applying the date filter piled new polygons on top of
+        // old ones instead of replacing them (displayHistoricalAlerts()
+        // never cleared), and toggling "Active Alerts" off/on wiped out
+        // historical polygons as a side effect of alertLayer.clearLayers().
         alertLayer = L.layerGroup().addTo(map);
+        historicalLayer = L.layerGroup().addTo(map);
         boundaryLayers = {};
 
         console.log('✅ Map initialized successfully');
@@ -1200,6 +1207,10 @@ function displayAlerts(alerts) {
 
 // Display historical alerts
 function displayHistoricalAlerts(alerts) {
+    // Re-applying the date filter (or the initial auto-load) must replace
+    // what's already drawn, not pile on top of it.
+    historicalLayer.clearLayers();
+
     alerts.forEach(alert => {
         if (alert.geometry) {
             // Reference pane, not the hazard pane: an expired alert is
@@ -1223,7 +1234,7 @@ function displayHistoricalAlerts(alerts) {
                 }
             });
 
-            alertLayer.addLayer(alertFeature);
+            historicalLayer.addLayer(alertFeature);
         }
     });
 }
@@ -1594,12 +1605,15 @@ function setupEventListeners() {
 
             document.getElementById('end-date').value = endDate.toISOString().split('T')[0];
             document.getElementById('start-date').value = startDate.toISOString().split('T')[0];
+
+            // Checking the box is the signal to show historical alerts --
+            // it previously only revealed the date pickers and silently did
+            // nothing until "Apply Filter" was also clicked, which read as
+            // the toggle being broken.
+            loadHistoricalAlerts();
         } else {
             dateFilters.style.display = 'none';
-            // Remove historical alerts from map
-            if (alertData.active) {
-                displayAlerts(alertData.active);
-            }
+            historicalLayer.clearLayers();
         }
     });
 
