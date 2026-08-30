@@ -76,6 +76,9 @@ def _load_fonts() -> Dict[str, ImageFont.FreeTypeFont]:
         # Body copy — 13 px is the floor for comfortable reading once
         # social platforms re-encode + downscale the card in the feed.
         'small':  _load_font(_FONT_REG_PATHS,  13),
+        # Same size as 'small' -- for bolding specific numbers/units inline
+        # within a wrapped body line (see panels_text._draw_emphasized_line).
+        'small_bold': _load_font(_FONT_BOLD_PATHS, 13),
         'tiny':   _load_font(_FONT_REG_PATHS,  11),
         'label':  _load_font(_FONT_BOLD_PATHS, 11),
         'threat': _load_font(_FONT_BOLD_PATHS, 15),

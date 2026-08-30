@@ -28,7 +28,7 @@ alike.
 
 from typing import Dict, Optional, Tuple
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from .palette import (
     WHITE, _CARD, _SECTION_BG,
@@ -73,6 +73,34 @@ def _draw_pill(draw: ImageDraw.ImageDraw,
     draw.text((x + pad_x, y + pad_y - bbox_top), text, font=font, fill=text_color)
     return x + pill_w
 
+
+def _draw_pill_glow(img: Image.Image, font: ImageFont.FreeTypeFont, text: str,
+                    color: Tuple[int, int, int], x: int, y: int, *,
+                    pad_x: int = 9, pad_y: int = 3, blur: int = 8,
+                    alpha: int = 140) -> None:
+    """Composite a soft blurred glow behind where ``_draw_pill`` with the
+    *same* text/x/y/pad_x/pad_y is about to draw. Call this first, then
+    ``_draw_pill`` on top -- the tier/severity words (WARNING / SEVERE) are
+    the single most important thing on the card, so they get the same
+    glow-behind-a-crisp-shape treatment as the map's hazard polygon instead
+    of sitting as a flat-filled pill like every other badge.
+    """
+    text_w = _tw(font, text)
+    text_h = _th(font, text)
+    pill_w = text_w + pad_x * 2
+    pill_h = text_h + pad_y * 2
+    radius = max(2, pill_h // 2)
+    pad = blur * 2
+    layer = Image.new('RGBA', (pill_w + pad * 2, pill_h + pad * 2), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
+    ld.rounded_rectangle((pad, pad, pad + pill_w, pad + pill_h), radius=radius,
+                         fill=(*color, alpha))
+    layer = layer.filter(ImageFilter.GaussianBlur(radius=blur))
+    base = img.convert('RGBA')
+    base.alpha_composite(layer, dest=(x - pad, y - pad))
+    img.paste(base.convert('RGB'))
+
+
 def _composite(target: Image.Image, region: Tuple[int, int, int, int],
                layer: Image.Image) -> None:
     """Composite *layer* (RGBA) at *region*'s top-left over *target* (RGB/RGBA)."""
@@ -110,6 +138,35 @@ def _round_image_corners(img: Image.Image, radius: int,
     out = Image.new('RGB', (w, h), bg)
     out.paste(rgba, (0, 0), mask)
     return out
+
+
+def _apply_card_lift(img: Image.Image, radius: int, *,
+                     width: int = 6, max_alpha: int = 45) -> Image.Image:
+    """Soft inner shadow hugging the card's outer edge.
+
+    A *real* drop shadow needs canvas space outside the card shape, which
+    would change the finished PNG's pixel dimensions -- both the export
+    UI's advertised sizes (1200x630 etc.) and the test suite assume those
+    are exact. This is the closest equivalent that stays inside the
+    existing bounds: a thin, low-alpha ring blurred inward from the edge,
+    so the card reads as set into a frame instead of a flat rectangle
+    pasted onto whatever background it lands on. Kept deliberately subtle
+    (narrow + low alpha) since header/footer copy sits close to every edge.
+    """
+    w, h = img.size
+    ring = Image.new('L', (w, h), 0)
+    rd = ImageDraw.Draw(ring)
+    rd.rounded_rectangle((0, 0, w - 1, h - 1), radius=radius, fill=max_alpha)
+    inset = width
+    if w - 2 * inset > 0 and h - 2 * inset > 0:
+        rd.rounded_rectangle((inset, inset, w - 1 - inset, h - 1 - inset),
+                             radius=max(0, radius - inset), fill=0)
+    ring = ring.filter(ImageFilter.GaussianBlur(radius=max(1, width // 2)))
+    rgba = img.convert('RGBA')
+    shade = Image.new('RGBA', (w, h), (0, 0, 0, 255))
+    shade.putalpha(ring)
+    rgba.alpha_composite(shade)
+    return rgba.convert('RGB')
 
 # ─── Drawing helpers ─────────────────────────────────────────────────────────
 def _section_header(draw: ImageDraw.ImageDraw, fonts: Dict,

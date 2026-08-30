@@ -46,7 +46,7 @@ from .text import (
     _format_countdown, _short_local_dt,
 )
 from .drawing import (
-    _draw_pill, _round_image_corners,
+    _apply_card_lift, _draw_pill, _draw_pill_glow, _round_image_corners,
 )
 from .weather_fx import (
     _draw_themed_header,
@@ -213,6 +213,12 @@ def generate_alert_image(
     # lands on a same-coloured stretch of the event gradient.
     if tier is not None:
         tier_word, tier_style = tier
+        # Glow first (composites onto img directly, invalidating `draw`'s
+        # buffer reference like every other img.paste() in this function),
+        # then re-bind draw before the crisp pill on top.
+        _draw_pill_glow(img, pill_font, tier_word.upper(),
+                        tier_style['fill'], pill_x, sub_y)
+        draw = ImageDraw.Draw(img)
         pill_x = _draw_pill(draw, pill_font, tier_word.upper(),
                             tier_style['fill'], pill_x, sub_y,
                             text_color=tier_style['text'],
@@ -233,6 +239,8 @@ def generate_alert_image(
         )
         # Amber needs dark text for contrast; every other fill takes white.
         sev_text = (45, 36, 3) if severity_val.lower() == 'moderate' else WHITE
+        _draw_pill_glow(img, pill_font, severity_val.upper(), sev_color, pill_x, sub_y)
+        draw = ImageDraw.Draw(img)
         pill_x = _draw_pill(draw, pill_font, severity_val.upper(),
                             sev_color, pill_x, sub_y,
                             text_color=sev_text,
@@ -497,6 +505,14 @@ def generate_alert_image(
             Image.LANCZOS,
         )
         corner_r = int(round(corner_r * out_scale))
+
+    # A thin inner shadow along the card's own edge so it reads as set into
+    # a frame rather than a flat rectangle, without changing the finished
+    # PNG's pixel dimensions (see _apply_card_lift's docstring for why a
+    # real drop shadow, which needs space *outside* the card, isn't safe
+    # here). Scales with corner_r so it stays proportionate at 2x/3x output.
+    lift_width = max(4, int(round(6 * out_scale)))
+    img = _apply_card_lift(img, corner_r, width=lift_width)
 
     # ── Round outer corners and serialise ────────────────────────────────────
     # Soft rounded corners across the whole share card — matches modern

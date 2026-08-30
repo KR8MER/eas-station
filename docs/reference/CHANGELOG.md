@@ -8,6 +8,32 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.202.0] - 2026-08-30 - Radar timestamp, card lift, bolded hazard numbers, and pill glow on the share card
+
+Fifth polish pass on the social-share card, all four picked by the user
+from a shortlist:
+
+- **Radar "as of" timestamp** (`maps.py`) — `_fetch_radar_overlay()` now
+  returns `(image, scan_time)`; `_draw_radar_legend()` shows "Radar 2:08 PM"
+  under the dBZ legend so the card admits the reflectivity can be a few
+  minutes older than the alert's own timestamps (the WMS-T service snaps
+  to its own 5-minute cadence).
+- **Card lift** (`drawing.py`'s new `_apply_card_lift()`) — a thin, low-alpha
+  inner shadow along the card's own rounded edge. A *real* drop shadow needs
+  canvas space outside the card, which would change the finished PNG's
+  pixel dimensions -- both the export UI's advertised sizes and the test
+  suite assume those are exact -- so this stays inside the existing bounds
+  instead, deliberately subtle since header/footer copy sits close to
+  every edge.
+- **Bolded hazard numbers** (`panels_text.py`'s new `_draw_emphasized_line()`)
+  — HAZARD/IMPACTS body text now bolds numeric magnitudes with units ("60
+  mph", `1.00"`) inline via a new `small_bold` font, so the actionable
+  numbers are scannable without reading the full sentence.
+- **Pill glow** (`drawing.py`'s new `_draw_pill_glow()`) — the tier/severity
+  badges (WARNING / SEVERE) get a soft blurred glow behind them, the same
+  glow-behind-a-crisp-shape technique already used for the map's hazard
+  polygon, so the single most important words on the card pop first.
+
 ## [2.201.0] - 2026-08-30 - Section icons, a tornado confidence gauge, a storm ping, and a north arrow on the share card
 
 Fourth polish pass on the social-share card:
