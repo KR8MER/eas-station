@@ -217,6 +217,38 @@ def _draw_radar_legend(img: Image.Image, fonts: Dict) -> Tuple[int, int, int, in
     return (x0, y0, x0 + box_w, y0 + box_h)
 
 
+def _draw_north_arrow(img: Image.Image, fonts: Dict) -> Tuple[int, int, int, int]:
+    """Small compass mark, upper-left -- the map's only corner not already
+    spoken for (scale bar lower-left, OSM attribution lower-right, radar
+    legend upper-right when reflectivity is drawn). Returns the drawn box
+    so the caller can keep county labels off it, matching the other three
+    chrome elements.
+    """
+    pad = 10
+    w, h = 26, 42
+    x0, y0 = pad, pad
+    backing = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    bd = ImageDraw.Draw(backing)
+    bd.rounded_rectangle((0, 0, w - 1, h - 1), radius=6, fill=(10, 14, 22, 150))
+    base = img.convert('RGBA')
+    base.alpha_composite(backing, dest=(x0, y0))
+    img.paste(base.convert('RGB'))
+
+    d = ImageDraw.Draw(img)
+    cx = x0 + w // 2
+    needle_top, needle_mid, needle_bot = y0 + 6, y0 + 20, y0 + 30
+    # Two-tone needle -- bright half points north, dim half points south --
+    # the classic compass-rose convention, still legible at this size.
+    d.polygon([(cx, needle_top), (cx - 6, needle_mid), (cx + 6, needle_mid)],
+             fill=(240, 242, 248))
+    d.polygon([(cx, needle_bot), (cx - 6, needle_mid), (cx + 6, needle_mid)],
+             fill=(120, 128, 145))
+    label = 'N'
+    d.text((cx - _tw(fonts['tiny'], label) // 2, y0 + h - 12), label,
+          font=fonts['tiny'], fill=(230, 234, 242))
+    return (x0, y0, x0 + w, y0 + h)
+
+
 def _nice_scale_miles(max_miles: float) -> float:
     """Return the largest 'nice' distance ≤ *max_miles* for the scale bar."""
     pick = _SCALE_BAR_MILES[0]
@@ -656,6 +688,14 @@ def _render_map(geom: Dict, severity: str,
     cropped = apply_vignette(cropped)
     cd = ImageDraw.Draw(cropped)
 
+    # ── North arrow (upper-left) ────────────────────────────────────────────
+    # Drawn after the vignette (like the attribution) so it stays fully
+    # legible instead of getting darkened along with the rest of the corner.
+    try:
+        north_arrow_box = _draw_north_arrow(cropped, fonts)
+    except Exception:
+        north_arrow_box = None
+
     # ── County name labels ──────────────────────────────────────────────────
     # A map with no place names cannot answer "where is this?".  Labels were
     # dropped once for colliding with each other; they are back with collision
@@ -669,6 +709,8 @@ def _render_map(geom: Dict, severity: str,
         ]
         if radar_legend_box is not None:
             keep_out.append(radar_legend_box)          # radar legend (upper-right)
+        if north_arrow_box is not None:
+            keep_out.append(north_arrow_box)            # north arrow (upper-left)
         ordered = sorted(county_labels, key=lambda c: not c[1])
         anchors = [
             (name, (int(round((px - x1) * sx)), int(round((py - y1) * sy))))

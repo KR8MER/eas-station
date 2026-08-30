@@ -36,6 +36,7 @@ from .palette import (
 from .fonts import (
     _th, _tw,
 )
+from .icons import _SECTION_ICON_FN
 
 
 def _draw_pill(draw: ImageDraw.ImageDraw,
@@ -131,8 +132,15 @@ def _section_header(draw: ImageDraw.ImageDraw, fonts: Dict,
     accent = stripe if stripe is not None else alr_clr
     draw.rectangle((ix, iy, ix + iw, iy + h), fill=fill)
     draw.rectangle((ix, iy, ix + stripe_w, iy + h), fill=accent)
-    # Label offset clears the stripe.
-    draw.text((ix + stripe_w + 6,
+    # Label offset clears the stripe; a small glyph (keyed off the exact
+    # title string) sits between the stripe and the text when one exists
+    # for this section -- faster to scan than text alone at thumbnail size.
+    text_x = ix + stripe_w + 6
+    icon_fn = _SECTION_ICON_FN.get(title)
+    if icon_fn is not None:
+        icon_fn(draw, text_x + 6, iy + h // 2, WHITE)
+        text_x += 16
+    draw.text((text_x,
                iy + (h - _th(fonts['label'], title)) // 2),
               title, font=fonts['label'], fill=WHITE)
     return iy + h + 2
