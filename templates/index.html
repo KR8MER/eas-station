@@ -129,7 +129,13 @@
         margin-right: 0.5rem;
         width: 2.6rem;
         height: 1.3rem;
-        background-color: var(--light-color);
+        /* Fixed grey, not var(--light-color) -- this is the actual
+           highest-specificity rule controlling every switch in this panel
+           (Active/Historical Alerts, severity filters, event-type filters,
+           boundary layers), and it was overriding the app-wide
+           .form-switch fix in static/css/styles.css. Same failure mode:
+           near-white in 7 themes, worst in Lightning. */
+        background-color: #495057;
         border: 1px solid var(--border-color);
         transition: background-color var(--transition-fast), border-color var(--transition-fast);
     }
