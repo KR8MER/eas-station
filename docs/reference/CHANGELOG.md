@@ -8,6 +8,23 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.203.4] - 2026-08-30 - Drop the fill on historical alerts -- semi-transparent fills stack
+
+Severity colouring (2.203.3) fixed historical alerts all looking the same,
+but introduced a different problem visible immediately on a real 30-day
+window: a date range easily loads 100+ overlapping polygons (the same
+county gets re-alerted many times across a month), and semi-transparent
+fills stack. Even a faint 0.12 fillOpacity per shape compounded across
+dozens of overlapping ones into a solid, texture-free colour wash that hid
+the map underneath -- a worse failure than the flat-colour problem it was
+fixing.
+
+`displayHistoricalAlerts()` now draws outline-only (`fill: false`,
+`opacity: 0.75`). Outline-only doesn't have the compounding failure mode a
+fill does; the dashed, severity-coloured stroke alone still distinguishes
+both alert type (colour) and historical-vs-active (dashed + reference
+pane, which sits under the hazard pane).
+
 ## [2.203.3] - 2026-08-30 - Colour historical alerts by severity instead of one flat line
 
 The previous pass (2.203.2) fixed historical alerts being *invisible*
