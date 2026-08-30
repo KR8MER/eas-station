@@ -8,6 +8,18 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.199.1] - 2026-08-30 - Raise radar overlay opacity so reflectivity actually reads at a glance
+
+`_RADAR_OPACITY` (`app_utils/image_export/maps.py`) and the matching
+`radarLayer()` default (`static/js/core/map_theme.js`) were both 0.45 --
+legible over the basemap, but light/moderate reflectivity read as a faint
+haze on the social-share card and the in-app radar pane alike. Raised to
+0.6, verified pixel-by-pixel on a live storm cell alongside 0.45 and a
+rejected 0.75 (which reproduced the washed-out-basemap problem a prior pass
+already hit at 0.65 and pulled back from). The two files share one constant
+by design, so both surfaces -- and the animated radar loop export, which
+reuses the same `_render_map()` call -- move together.
+
 ## [2.199.0] - 2026-08-30 - Extend systemd watchdog coverage to every hardware subsystem and the web app
 
 Only `eas-station-audio`, `-demod`, and `-poller` had `Type=notify` +

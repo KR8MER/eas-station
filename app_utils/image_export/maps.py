@@ -78,9 +78,13 @@ _RADAR_WMS_URL = 'https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0q-t.cgi
 _RADAR_WMS_LAYER = 'nexrad-n0q-wmst'
 # 0.65 blended correctly (verified pixel-by-pixel) but still read as a solid
 # weather-radar image over a wide, intense cell -- the toned basemap's road
-# lines and terrain all but disappeared underneath it. Lower value keeps the
-# basemap legible under the overlay.
-_RADAR_OPACITY = 0.45
+# lines and terrain all but disappeared underneath it. 0.45 kept the basemap
+# legible but read as too faint to register as radar at a glance (feedback:
+# light reflectivity all but invisible on the share card). 0.6 is the
+# midpoint verified pixel-by-pixel against both concerns -- clearly visible
+# on light/moderate reflectivity while the basemap's road lines and county
+# outlines still show through even under a solid cell.
+_RADAR_OPACITY = 0.6
 
 # EPSG:3857 (Web Mercator) world extent in meters -- a fixed square,
 # independent of zoom.
