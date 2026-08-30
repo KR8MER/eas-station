@@ -8,6 +8,15 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.200.1] - 2026-08-30 - Fix crowded threat-level/category labels on the share card
+
+The threat-level line ("Radar") and the category label ("WIND") under each
+Storm Threats gauge sat only ~11px apart against ~13-15px-tall text, so
+they nearly touched. `card_h` bumped 108 → 118 and the category label's y
+is now derived from where the level line actually measures to (`_th()` +
+a real gap) instead of a second guessed constant -- closes the same gap
+for the icon-fallback path too (wind/hail with an unparsable gust/size).
+
 ## [2.200.0] - 2026-08-30 - Add film grain, an expiration countdown badge, and threat gauges to the share card
 
 Three additive polish passes on the social-share card, picked from user

@@ -104,7 +104,11 @@ def _draw_threats(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     n       = len(active)
     gap     = 5
     card_w  = (iw - gap * (n - 1)) // n
-    card_h  = 108
+    # 108 packed the threat-level line (cy+84) and the category label
+    # (cy+95) close enough that their glyphs nearly touched -- 11px of
+    # nominal gap against ~13-15px-tall text at these two sizes. +10 buys
+    # the room to space them properly below.
+    card_h  = 118
     # Reserve space for the section header (22px) + card height before
     # committing to drawing anything, so we never leave an orphan header.
     if iy + 22 + card_h > bot:
@@ -161,23 +165,34 @@ def _draw_threats(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
         draw.text((ce_x - vw // 2, val_y), val, font=vfont, fill=_TEXT)
 
         # ── Unit / descriptor ───────────────────────────────────────────────
+        # level_y starts from a fixed baseline that fits every path *except*
+        # the icon path with a unit line (wind/hail falling back to the icon
+        # because gust/size didn't parse) -- there it's pushed down from
+        # where the unit actually ends instead, closing the gap that let
+        # "Radar"/"WIND" nearly touch when both lines were present.
+        level_y = cy + 85
         if unit:
             uw = _tw(fonts['tiny'], unit)
             unit_y = cy + 58 if gauge_frac is not None else cy + 73
             draw.text((ce_x - uw // 2, unit_y), unit,
                       font=fonts['tiny'], fill=_TEXT_SEC)
+            if gauge_frac is None:
+                level_y = max(level_y, unit_y + _th(fonts['tiny'], unit) + 6)
 
         # ── Threat level (coloured) ─────────────────────────────────────────
         disp = t.get('display', '') if key != 'tornado' else ''
         if disp and key in ('wind', 'hail'):
             dw = _tw(fonts['tiny'], disp)
-            draw.text((ce_x - dw // 2, cy + 84), disp,
+            draw.text((ce_x - dw // 2, level_y), disp,
                       font=fonts['tiny'], fill=lvl_clr)
+            cat_y = level_y + _th(fonts['tiny'], disp) + 6
+        else:
+            cat_y = level_y
 
         # ── Category label at bottom ────────────────────────────────────────
         cat = key.upper()
         cw  = _tw(fonts['label'], cat)
-        draw.text((ce_x - cw // 2, cy + 95), cat,
+        draw.text((ce_x - cw // 2, cat_y), cat,
                   font=fonts['label'], fill=_TEXT_MUT)
 
     return iy + card_h + 6
