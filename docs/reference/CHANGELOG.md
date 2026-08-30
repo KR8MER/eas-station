@@ -8,6 +8,16 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.199.2] - 2026-08-30 - Fix jagged stroke joints on the share-card alert polygon and county outlines
+
+Every bend in the affected-area polygon (and the county reference outlines
+under it) showed a visible notch cut into the wide white+accent stroke --
+PIL's `ImageDraw.line()` defaults to a hard miter join with no rounding, so
+a winding shape (a road corridor, an irregular county line) looked jagged
+at each vertex, worst on the crisp casing/core outline drawn on top. Added
+`joint='curve'` to the county-outline, glow, and casing/core `line()` calls
+in `app_utils/image_export/maps.py` so every vertex rounds smoothly instead.
+
 ## [2.199.1] - 2026-08-30 - Raise radar overlay opacity so reflectivity actually reads at a glance
 
 `_RADAR_OPACITY` (`app_utils/image_export/maps.py`) and the matching
