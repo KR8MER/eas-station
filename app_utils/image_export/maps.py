@@ -540,8 +540,12 @@ def _render_map(geom: Dict, severity: str,
                     closed = cpts + [cpts[0]]
                     # Dark casing then a light hairline so the border reads
                     # on both bright and dark basemap tiles without shouting.
-                    cl.line(closed, fill=(18, 22, 31, 130), width=line_w + 1)
-                    cl.line(closed, fill=line_clr, width=line_w)
+                    # joint='curve' rounds each vertex -- PIL's default miter
+                    # join leaves a visible notch/gap at every bend on a wide
+                    # multi-segment stroke, which is very noticeable on a
+                    # winding county line at this width.
+                    cl.line(closed, fill=(18, 22, 31, 130), width=line_w + 1, joint='curve')
+                    cl.line(closed, fill=line_clr, width=line_w, joint='curve')
 
             point = county.get('point')
             name = (county.get('name') or '').strip()
@@ -564,7 +568,11 @@ def _render_map(geom: Dict, severity: str,
     for ring in rings:
         pts = _to_px(ring)
         if len(pts) >= 2:
-            gd.line(pts + [pts[0]], fill=(*alr_clr, 230), width=glow_w)
+            # joint='curve': without it, PIL miters each vertex, which on a
+            # polygon with sharp turns (a road corridor, a county outline)
+            # leaves a visible notch cut into the stroke at every bend --
+            # the blur below only smears that defect, it doesn't hide it.
+            gd.line(pts + [pts[0]], fill=(*alr_clr, 230), width=glow_w, joint='curve')
     glow = glow.filter(ImageFilter.GaussianBlur(radius=glow_r))
 
     # Semi-transparent fill
@@ -580,14 +588,17 @@ def _render_map(geom: Dict, severity: str,
     base_rgba.alpha_composite(overlay)
     canvas = base_rgba.convert('RGB')
 
-    # Solid outline on top (white casing for visibility, then accent core)
+    # Solid outline on top (white casing for visibility, then accent core).
+    # joint='curve' rounds each vertex instead of leaving PIL's default
+    # mitered notch -- most visible right here, the crispest stroke on the
+    # card.
     od = ImageDraw.Draw(canvas)
     for ring in rings:
         pts = _to_px(ring)
         if len(pts) >= 2:
             closed = pts + [pts[0]]
-            od.line(closed, fill=(255, 255, 255), width=casing_w)
-            od.line(closed, fill=alr_clr,         width=core_w)
+            od.line(closed, fill=(255, 255, 255), width=casing_w, joint='curve')
+            od.line(closed, fill=alr_clr,         width=core_w, joint='curve')
 
     # Storm motion overlay (new cone + tapered arrow + callout)
     if storm_motion:
