@@ -183,7 +183,15 @@
     }
 
     #date-filters {
-        background: var(--light-color);
+        /* Was var(--light-color) -- paired with the label's --text-muted
+           below, that measured under 4.5:1 in every one of the 20 themes
+           (as low as 1.24:1 in Lightning, the worst but nowhere close to
+           the only broken one: Cosmo 2.45, Aurora 1.39, Charcoal 1.65,
+           Slate 1.93 -- none passed). --surface-color/--text-secondary is
+           the same pairing already verified safe everywhere else on this
+           card (see the "Card .text-secondary" probe in
+           scripts/diagnostics/check_theme_contrast.py). */
+        background: var(--surface-color);
         border-radius: var(--radius-sm);
         padding: 1rem;
         border: 1px dashed var(--border-color);
@@ -194,7 +202,7 @@
         font-size: 0.78rem;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        color: var(--text-muted);
+        color: var(--text-secondary);
     }
 
     .alert-summary-panel {
@@ -1408,14 +1416,23 @@ function displayHistoricalAlerts(alerts) {
             // Reference pane, not the hazard pane: an expired alert is
             // context. Left in the default overlay pane it would render
             // *under* the boundary lines, which load asynchronously.
+            // --map-reference-line, not --text-muted: that variable is
+            // tuned for text on the page's own dark/light card surface, not
+            // for a line drawn over the toned basemap -- it's near-white in
+            // several themes, which at 0.6 opacity over an already-light
+            // toned map was effectively invisible (exactly what county
+            // reference lines elsewhere on this same map avoid by using
+            // --map-reference-line, a variable purpose-built and verified
+            // for this exact job: legible against the basemap in both the
+            // light and dark map-tone modes).
             const alertFeature = L.geoJSON(alert, {
                 pane: EASMap.PANE_REFERENCE,
                 style: {
-                    color: getColorVar('--text-muted'),
+                    color: getColorVar('--map-reference-line'),
                     weight: 2,
                     opacity: 0.6,
                     fillOpacity: 0.1,
-                    fillColor: getColorVar('--text-muted'),
+                    fillColor: getColorVar('--map-reference-line'),
                     dashArray: '5,5',
                     className: 'alert-expired'
                 },

@@ -8,6 +8,33 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.203.2] - 2026-08-30 - Fix the date-filter panel and historical-alert map lines being unreadable
+
+Found from a user screenshot of the Lightning theme: the date-filter
+sub-panel's FROM/TO labels were nearly invisible, and every historical
+alert on the map rendered as a barely-visible pale line indistinguishable
+from the basemap.
+
+Two more instances of the same root cause already fixed twice today
+elsewhere on this page (`var(--text-muted)` used somewhere it wasn't
+designed for):
+
+- `#date-filters` paired `background: var(--light-color)` with the
+  label's `color: var(--text-muted)`. That combination failed WCAG AA in
+  **all 20 themes**, not just Lightning (1.24:1) -- Cosmo measured 2.45:1,
+  Aurora 1.39:1, Charcoal 1.65:1, Slate 1.93:1, and the rest landed
+  "marginal" in the 3.7-4.5 range. Switched to `--surface-color` /
+  `--text-secondary`, the same pairing already verified safe everywhere
+  else on this card.
+- `displayHistoricalAlerts()` drew every historical alert polygon in
+  `getColorVar('--text-muted')` at 0.6 opacity over the toned basemap --
+  near-white in several themes, so the shape all but disappeared into the
+  map. Switched to `--map-reference-line`, the variable this same map
+  already uses for county boundary lines, purpose-built and tuned for
+  exactly this job (legible against the basemap in both light and dark
+  map-tone modes, unlike `--text-muted` which has 20 unrelated values
+  never designed to sit on top of map tiles).
+
 ## [2.203.1] - 2026-08-30 - Fix unreadable radar-legend chips on the dashboard
 
 The dashboard's Reflectivity (dBZ) legend (shown when the map's Radar
