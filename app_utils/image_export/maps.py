@@ -48,6 +48,7 @@ from .theme import (
 from .fonts import (
     _load_fonts, _th, _title_font_for, _tw,
 )
+from .text import _short_local_dt
 from .tiles import (
     _detail_zoom, _fetch_tile, _geojson_bbox, _lat_to_ty, _lon_to_tx,
 )
@@ -121,10 +122,14 @@ def _floor_to_5min(dt: datetime) -> datetime:
 def _fetch_radar_overlay(
     tx_min: int, ty_min: int, tx_max: int, ty_max: int, z: int,
     canvas_w: int, canvas_h: int, when: Optional[datetime],
-) -> Optional[Image.Image]:
+) -> Optional[Tuple[Image.Image, datetime]]:
     """Fetch a radar reflectivity image covering the exact bbox/size of the
     basemap tile mosaic, at *when* (or "now" if None), pre-scaled to
     ``_RADAR_OPACITY`` so it stays legible under the hazard polygon.
+
+    Returns ``(image, scan_time)`` -- the caller shows *scan_time* next to
+    the legend, since the WMS-T service snaps to its own 5-minute cadence
+    and the actual scan can be a few minutes older than "now".
 
     Best-effort: returns None on any failure. A missing radar layer must
     never break the share card, which already renders fine without it.
@@ -151,7 +156,7 @@ def _fetch_radar_overlay(
         radar_img = Image.open(io.BytesIO(r.content)).convert('RGBA')
         red, green, blue, alpha = radar_img.split()
         alpha = alpha.point(lambda v: int(v * _RADAR_OPACITY))
-        return Image.merge('RGBA', (red, green, blue, alpha))
+        return Image.merge('RGBA', (red, green, blue, alpha)), ts
     except Exception as exc:
         logger.debug("Radar overlay fetch failed: %s", exc)
         return None
@@ -167,7 +172,9 @@ def _fetch_radar_overlay(
 _REFLECTIVITY_LEGEND = _radar_level2.REFLECTIVITY_LEGEND
 
 
-def _draw_radar_legend(img: Image.Image, fonts: Dict) -> Tuple[int, int, int, int]:
+def _draw_radar_legend(img: Image.Image, fonts: Dict,
+                       scan_time: Optional[datetime] = None,
+                       ) -> Tuple[int, int, int, int]:
     """Draw a small reflectivity (dBZ) color-scale reference, upper-right.
 
     Without this, "green vs red" on the radar overlay means nothing to a
@@ -177,6 +184,11 @@ def _draw_radar_legend(img: Image.Image, fonts: Dict) -> Tuple[int, int, int, in
     the required OSM attribution lower-right -- see the bottom of this
     function's caller), so this sits upper-right instead of colliding with
     either.
+
+    *scan_time*, when given, adds a small "Radar 2:08 PM" caption -- the
+    WMS-T service snaps to its own 5-minute cadence, so the reflectivity
+    shown can be a few minutes older than the alert's own timestamps, and
+    without this the card never says so.
 
     Returns the drawn box (x0, y0, x1, y1) so the caller can add it to the
     county-label keep-out list -- this is drawn *before* labels are placed
@@ -193,8 +205,11 @@ def _draw_radar_legend(img: Image.Image, fonts: Dict) -> Tuple[int, int, int, in
     label_h = max(_th(fnt, label) for label, _ in _REFLECTIVITY_LEGEND)
     title_h = _th(fnt, title)
 
+    scan_text = f'Radar {_short_local_dt(scan_time, ref=None)}' if scan_time else None
+    scan_h = (_th(fnt, scan_text) + 3) if scan_text else 0
+
     box_w = bar_w + pad * 2
-    box_h = title_h + 4 + chip_h + 2 + label_h + pad * 2
+    box_h = title_h + 4 + chip_h + 2 + label_h + scan_h + pad * 2
     x0 = map_w - box_w - 10
     y0 = 10
 
@@ -213,6 +228,11 @@ def _draw_radar_legend(img: Image.Image, fonts: Dict) -> Tuple[int, int, int, in
         cx = x0 + pad + i * chip_w
         d.rectangle((cx, chips_y, cx + chip_w - 1, chips_y + chip_h - 1), fill=color)
         d.text((cx, chips_y + chip_h + 2), label, font=fnt, fill=(220, 225, 235))
+
+    if scan_text:
+        scan_y = y0 + box_h - pad - _th(fnt, scan_text)
+        d.text((x0 + box_w - pad - _tw(fnt, scan_text), scan_y), scan_text,
+              font=fnt, fill=(165, 174, 194))
 
     return (x0, y0, x0 + box_w, y0 + box_h)
 
@@ -477,11 +497,13 @@ def _render_map(geom: Dict, severity: str,
     # radar_level2.py is kept for its REFLECTIVITY_LEGEND (still the
     # legend's source of truth) but render_frame() is no longer called here.
     radar_drawn = False
+    radar_scan_time: Optional[datetime] = None
     if category == 'Met':
-        radar_img = _fetch_radar_overlay(
+        radar_result = _fetch_radar_overlay(
             tx_min, ty_min, tx_max, ty_max, z, canvas_w, canvas_h, sent,
         )
-        if radar_img is not None:
+        if radar_result is not None:
+            radar_img, radar_scan_time = radar_result
             canvas = canvas.convert('RGBA')
             canvas.alpha_composite(radar_img)
             canvas = canvas.convert('RGB')
@@ -677,7 +699,7 @@ def _render_map(geom: Dict, severity: str,
     radar_legend_box = None
     if radar_drawn:
         try:
-            radar_legend_box = _draw_radar_legend(cropped, fonts)
+            radar_legend_box = _draw_radar_legend(cropped, fonts, radar_scan_time)
         except Exception:
             pass
 

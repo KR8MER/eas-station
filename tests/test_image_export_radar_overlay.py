@@ -122,10 +122,12 @@ def test_fetch_radar_overlay_scales_down_alpha_for_legibility(monkeypatch):
     result = maps_mod._fetch_radar_overlay(10, 10, 11, 11, 8, 512, 512, None)
 
     assert result is not None
-    assert result.mode == "RGBA"
-    _, _, _, alpha = result.split()
+    img, scan_time = result
+    assert img.mode == "RGBA"
+    _, _, _, alpha = img.split()
     max_alpha = alpha.getextrema()[1]
     assert max_alpha == pytest.approx(int(255 * maps_mod._RADAR_OPACITY), abs=2)
+    assert scan_time is not None
 
 
 def test_fetch_radar_overlay_sends_time_param_rounded_to_5min(monkeypatch):

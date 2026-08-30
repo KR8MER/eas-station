@@ -39,6 +39,46 @@ from .drawing import _section_header
 from .nws_text import NWSSegment, select_share_segments, strip_urls
 
 
+_EMPHASIS_RE = re.compile(
+    # Two alternatives because \b can't follow a non-word literal like '"':
+    # a plain unit word gets the word-boundary check, a bare inch-mark
+    # doesn't need one -- the quote itself is already an unambiguous stop.
+    r'\d+(?:\.\d+)?\s*(?:mph|kt|knots?|in\.?|inch(?:es)?|ft|feet|mm|cm)\b'
+    r'|\d+(?:\.\d+)?"',
+    re.IGNORECASE,
+)
+
+
+def _draw_emphasized_line(draw: ImageDraw.ImageDraw, x: int, y: int, text: str,
+                          font: ImageFont.FreeTypeFont,
+                          bold_font: ImageFont.FreeTypeFont,
+                          color) -> None:
+    """Draw *text* left-to-right, bolding numeric hazard magnitudes
+    ("60 mph", '1.00"', "2 inch") so the specific, actionable numbers in a
+    HAZARD/IMPACTS line are scannable without reading the full sentence.
+    Falls back to a single plain draw when nothing matches.
+
+    Wrapping (_wrap_text) measures every line at the regular weight only --
+    a bold run is a few px wider than the same text at the same size, but
+    matched spans are short relative to the line, so the resulting overflow
+    is negligible and not worth a run-aware wrap pass for this cosmetic a
+    feature.
+    """
+    pos = 0
+    cx = x
+    for m in _EMPHASIS_RE.finditer(text):
+        if m.start() > pos:
+            plain = text[pos:m.start()]
+            draw.text((cx, y), plain, font=font, fill=color)
+            cx += _tw(font, plain)
+        bold = m.group(0)
+        draw.text((cx, y), bold, font=bold_font, fill=color)
+        cx += _tw(bold_font, bold)
+        pos = m.end()
+    if pos < len(text):
+        draw.text((cx, y), text[pos:], font=font, fill=color)
+
+
 def _wrap_text(font: ImageFont.FreeTypeFont, text: str,
                max_w: int, max_lines: int = 8) -> List[str]:
     """Word-wrap *text* into lines that fit within *max_w* pixels."""
@@ -203,9 +243,12 @@ def _draw_labeled_segments(draw: ImageDraw.ImageDraw, fonts: Dict,
                       _truncate(label_font, label, label_col - 6),
                       font=label_font, fill=label_clr)
         text_x = body_x if label else ix + 8
+        bold_font = fonts.get('small_bold', body_font)
         for ltext in lines:
-            draw.text((text_x, ty + (row_h - _th(body_font, ltext)) // 2),
-                      ltext, font=body_font, fill=_TEXT)
+            _draw_emphasized_line(
+                draw, text_x, ty + (row_h - _th(body_font, ltext)) // 2,
+                ltext, body_font, bold_font, _TEXT,
+            )
             ty += row_h
 
     return iy + used_h + 6
