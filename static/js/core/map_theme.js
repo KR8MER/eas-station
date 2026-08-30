@@ -390,7 +390,7 @@
      * @param {Object} [options]
      * @param {Date|string} [options.time] UTC time to show radar as-of
      *        (rounded down to the nearest 5 min). Omit for the current scan.
-     * @param {number} [options.opacity=0.65] Layer opacity -- overlays drawn
+     * @param {number} [options.opacity=0.6] Layer opacity -- overlays drawn
      *        in the hazard/reference panes stay legible on top of it.
      * @returns {L.TileLayer.WMS}
      */
@@ -406,9 +406,10 @@
             transparent: true,
             version: '1.1.1',
             // 0.65 blended correctly but read as a solid weather-radar image
-            // over a wide, intense cell -- lowered to keep the basemap
-            // legible underneath (matches _RADAR_OPACITY in maps.py).
-            opacity: opts.opacity === undefined ? 0.45 : opts.opacity,
+            // over a wide, intense cell. 0.45 kept the basemap legible but
+            // read as too faint to register as radar at a glance. 0.6 is the
+            // verified midpoint (matches _RADAR_OPACITY in maps.py).
+            opacity: opts.opacity === undefined ? 0.6 : opts.opacity,
             attribution: 'Radar: Iowa Environmental Mesonet / NWS WSR-88D',
             time: timeParam
         });
