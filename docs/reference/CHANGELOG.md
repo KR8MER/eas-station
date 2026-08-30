@@ -8,6 +8,23 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.203.3] - 2026-08-30 - Colour historical alerts by severity instead of one flat line
+
+The previous pass (2.203.2) fixed historical alerts being *invisible*
+against the basemap, but left every one of them the same flat neutral
+line -- fixing invisible-to-visible didn't fix indistinguishable-from-
+each-other: a flood watch and a tornado warning looked identical, which
+throws away the one piece of information a reader actually wants when
+scanning a season of alerts.
+
+`displayHistoricalAlerts()` now resolves each alert's own colour via
+`EASMap.severityColor()` -- the same resolver `hazardLayer()` uses for
+active alerts -- instead of one fixed `--map-reference-line` value.
+Dashed stroke, lower opacity (0.65/0.12 vs. an active alert's full
+strength) and the reference pane (which sits under the hazard pane, so
+an active alert on the same spot always wins) still mark it as
+historical rather than happening now; only the hue was the problem.
+
 ## [2.203.2] - 2026-08-30 - Fix the date-filter panel and historical-alert map lines being unreadable
 
 Found from a user screenshot of the Lightning theme: the date-filter

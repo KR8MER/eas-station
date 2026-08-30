@@ -1413,26 +1413,25 @@ function displayHistoricalAlerts(alerts) {
 
     (alerts || []).forEach(alert => {
         if (alert.geometry) {
-            // Reference pane, not the hazard pane: an expired alert is
-            // context. Left in the default overlay pane it would render
-            // *under* the boundary lines, which load asynchronously.
-            // --map-reference-line, not --text-muted: that variable is
-            // tuned for text on the page's own dark/light card surface, not
-            // for a line drawn over the toned basemap -- it's near-white in
-            // several themes, which at 0.6 opacity over an already-light
-            // toned map was effectively invisible (exactly what county
-            // reference lines elsewhere on this same map avoid by using
-            // --map-reference-line, a variable purpose-built and verified
-            // for this exact job: legible against the basemap in both the
-            // light and dark map-tone modes).
+            // Coloured by severity, same as an active alert (EASMap.severityColor
+            // is the same resolver hazardLayer() uses below) -- a flat neutral
+            // line for every historical alert made a flood watch and a tornado
+            // warning indistinguishable from each other, which is worse than
+            // just "muted", it throws away the one piece of information a
+            // reader actually wants when scanning a season of alerts. Dashed +
+            // lower opacity + the reference pane (under the hazard pane, so an
+            // active alert always wins where they overlap) is what still marks
+            // it as historical rather than happening now.
+            const severity = (alert.properties || {}).severity;
+            const color = EASMap.severityColor(severity);
             const alertFeature = L.geoJSON(alert, {
                 pane: EASMap.PANE_REFERENCE,
                 style: {
-                    color: getColorVar('--map-reference-line'),
+                    color: color,
                     weight: 2,
-                    opacity: 0.6,
-                    fillOpacity: 0.1,
-                    fillColor: getColorVar('--map-reference-line'),
+                    opacity: 0.65,
+                    fillOpacity: 0.12,
+                    fillColor: color,
                     dashArray: '5,5',
                     className: 'alert-expired'
                 },
