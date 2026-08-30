@@ -165,8 +165,13 @@
     }
 
     .coverage-badge.bg-secondary {
-        background-color: var(--text-muted) !important;
-        color: var(--surface-color) !important;
+        /* Fixed grey/ink, not var(--text-muted)/var(--surface-color) --
+           that pairing failed WCAG AA in 5 of the 20 themes (Cosmo
+           2.56:1). #adb5bd/#1a1a1a is the same fixed pairing already
+           verified safe everywhere else this anti-pattern showed up
+           tonight (8.4:1, every theme). */
+        background-color: #adb5bd !important;
+        color: #1a1a1a !important;
     }
 
     .coverage-breakdown .badge {
@@ -331,8 +336,13 @@
     }
 
     .scope-coverage-na {
-        background: var(--text-muted);
-        color: var(--bg-color);
+        /* Fixed grey/ink, not var(--text-muted)/var(--bg-color) -- that
+           pairing failed WCAG AA in 9 of the 20 themes (Cosmo 2.34:1).
+           #adb5bd/#1a1a1a is the same fixed pairing already verified safe
+           everywhere else this anti-pattern showed up tonight (8.4:1,
+           every theme). */
+        background: #adb5bd;
+        color: #1a1a1a;
     }
 
     .county-wide-badge {
@@ -647,13 +657,18 @@
                             {% if alert.category == 'Met' %}
                             <div class="mt-2" id="radar-legend" style="display: none;">
                                 <small class="text-muted d-block mb-1">Reflectivity (dBZ):</small>
+                                <!-- Same fix as the dashboard's copy of this legend (templates/index.html):
+                                     every chip needs an explicit color -- .badge defaults to white text,
+                                     which fails WCAG AA on the lighter chips (as low as 2.07:1 on "40")
+                                     regardless of theme, since these are hardcoded RGB literals. No single
+                                     ink clears 4.5:1 on all six; each is set to whichever does. -->
                                 <small>
                                     <span class="badge" style="background: rgb(100,200,100); color: #123;">5</span>
-                                    <span class="badge" style="background: rgb(40,160,40);">20</span>
+                                    <span class="badge" style="background: rgb(40,160,40); color: #123;">20</span>
                                     <span class="badge" style="background: rgb(240,230,60); color: #123;">30</span>
-                                    <span class="badge" style="background: rgb(250,160,40);">40</span>
-                                    <span class="badge" style="background: rgb(220,40,40);">50</span>
-                                    <span class="badge" style="background: rgb(200,60,200);">60+</span>
+                                    <span class="badge" style="background: rgb(250,160,40); color: #123;">40</span>
+                                    <span class="badge" style="background: rgb(220,40,40); color: white;">50</span>
+                                    <span class="badge" style="background: rgb(200,60,200); color: black;">60+</span>
                                 </small>
                             </div>
                             {% endif %}

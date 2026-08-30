@@ -202,9 +202,15 @@
     }
 
     .role-badge.viewer {
-        background: var(--text-muted);
-        border-color: var(--text-muted);
-        color: var(--bg-primary);
+        /* Fixed grey, not var(--text-muted) -- paired with var(--bg-primary)
+           text, that combination failed WCAG AA in 17 of the app's 20
+           themes (as low as 1.00:1 in Blue -- literally the same colour on
+           both sides). #adb5bd/#1a1a1a is the same fixed pairing already
+           verified safe everywhere else this exact anti-pattern showed up
+           tonight (8.4:1, every theme). */
+        background: #adb5bd;
+        border-color: #adb5bd;
+        color: #1a1a1a;
     }
 </style>
 {% endblock %}

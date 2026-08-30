@@ -3925,8 +3925,16 @@ textarea:focus {
 }
 
 .form-switch .form-check-input {
+    /* Fixed grey track, not var(--text-muted) -- the knob above is a fixed
+       white SVG circle, and paired with that fixed white, --text-muted's
+       track measured under 3:1 (UI-component contrast, not text) in 7 of
+       the 20 themes -- as low as 1.33:1 in Lightning, which made every
+       *unchecked* switch app-wide (not just this one page) look identical
+       to its own track, i.e. no visible knob at all. #495057 (8.2:1 with
+       white, the same fixed grey already used elsewhere tonight for this
+       exact failure mode) works in every theme. */
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23fff'/%3e%3c/svg%3e");
-    background-color: var(--text-muted);
+    background-color: #495057;
     border: 2px solid var(--border-color);
 }
 

@@ -8,6 +8,40 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.203.5] - 2026-08-30 - Sweep the rest of the app for the var(--text-muted)-as-fill bug
+
+Grepped every `background: var(--text-muted)` / `background-color:
+var(--text-muted)` in the codebase (not just the dashboard) for the same
+failure mode fixed five times already tonight, and computed exact WCAG
+contrast for every hit that pairs it with text. Six more instances, all
+fixed the same way (a fixed colour instead of the variable):
+
+- `security_settings.html`'s `.role-badge.viewer` (bg `--text-muted`,
+  text `--bg-primary`) failed in **17 of the 20 themes** -- Blue measured
+  1.00:1, literally the same colour on both sides.
+- `alert_detail.html`'s `.coverage-badge.bg-secondary` (text
+  `--surface-color`) and `.scope-coverage-na` (text `--bg-color`) failed
+  in 5 and 9 themes respectively.
+- `displays_preview.html`'s `.display-status.disabled` was marginal
+  (3.78:1) in 8 themes.
+- `static/css/styles.css`'s `.form-switch .form-check-input` unchecked
+  track, paired with the switch knob's fixed white SVG circle, failed
+  **app-wide** in 7 themes (1.33:1 in Lightning) -- every unchecked toggle
+  switch on every page, not just one component.
+- `alert_detail.html` also carried its own copy of the radar-legend chips
+  fixed on the dashboard in 2.203.1 (`rgb(...)` badges missing an explicit
+  `color`) -- same fix applied.
+
+Also found, but left alone: `static/css/styles.css` already carries a
+large, deliberate comment block (~line 1131) documenting this exact
+`var(--light-color)`-without-paired-text pattern in
+`.workflow-card > .card-header`, `.same-chip`, `.alert-summary-panel`,
+`.feature-group`, `.layout-preset-btn:hover` and `.rss-item-row`, with an
+existing per-theme text-colour override. Unlike `#date-filters` (also on
+that list, and the actual bug fixed in 2.203.2 -- its label had a *more
+specific* rule fighting the override back to `--text-muted`), these five
+weren't verified live and weren't touched.
+
 ## [2.203.4] - 2026-08-30 - Drop the fill on historical alerts -- semi-transparent fills stack
 
 Severity colouring (2.203.3) fixed historical alerts all looking the same,

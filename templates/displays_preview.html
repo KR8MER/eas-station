@@ -49,7 +49,12 @@
     }
 
     .display-status.disabled {
-        background: var(--text-muted);
+        /* Fixed grey, not var(--text-muted) -- that background measured
+           only 3.78:1 with this same #1a1a1a text in 8 of the 20 themes
+           (AA needs 4.5:1). #adb5bd is the same fixed colour already
+           verified safe everywhere else this anti-pattern showed up
+           tonight (8.4:1, every theme). */
+        background: #adb5bd;
         color: #1a1a1a;
     }
 
