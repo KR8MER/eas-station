@@ -30,6 +30,7 @@ import math
 import random
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 from .layout import (
@@ -365,6 +366,23 @@ def _draw_haze(target: Image.Image, region: Tuple[int, int, int, int],
     _composite(target, region, layer)
 
 
+def _header_grain(w: int, h: int, seed: int = 0, alpha: int = 14) -> Image.Image:
+    """A subtle monochrome noise layer so the header gradient reads as a
+    textured surface instead of a flat CSS-button gradient -- real
+    broadcast graphics use grain like this. *alpha* stays low deliberately:
+    the goal is texture the eye registers without seeing it as "noise".
+    """
+    rng = np.random.default_rng(seed)
+    # Per-pixel grey value centred at 128; alpha-compositing it over the
+    # gradient at a fixed low alpha lightens where it's brighter than 128
+    # and darkens where it's dimmer, which is what grain actually looks
+    # like (versus a flat tint, which a uniform-alpha fill would give).
+    noise = rng.normal(loc=128, scale=22, size=(h, w)).clip(0, 255).astype('uint8')
+    rgb = np.stack([noise, noise, noise], axis=-1)
+    a = np.full((h, w, 1), alpha, dtype='uint8')
+    return Image.fromarray(np.concatenate([rgb, a], axis=-1), mode='RGBA')
+
+
 _PARTICLE_FNS = {
     'bolts':  lambda t, r, **kw: _draw_lightning_bolts(t, r, count=3, **kw),
     'snow':   _draw_snow,
@@ -420,6 +438,12 @@ def _draw_themed_header(img: Image.Image, theme: _Theme,
         sd.line([(0, y), (canvas_w, y)], fill=(0, 0, 0, a))
     base = img.convert('RGBA')
     base.alpha_composite(shade)
+    img.paste(base.convert('RGB'))
+    # Film-grain texture -- applied to the gradient/shade base only, before
+    # particles and (back in render.py) the title text, so both stay crisp
+    # on top of it.
+    base = img.convert('RGBA')
+    base.alpha_composite(_header_grain(canvas_w, header_h, seed=seed))
     img.paste(base.convert('RGB'))
     # Particle layer
     particle = theme.get('particles', 'bolts')

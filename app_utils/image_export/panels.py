@@ -47,6 +47,39 @@ from .drawing import (
 )
 from .icons import _ICON_FN
 from .nws_text import compact_area_desc
+
+# ─── Threat gauge arcs (wind / hail only — tornado detection has no
+# continuous magnitude to plot, so it keeps the plain icon) ─────────────────
+# Headroom above the NWS "significant" threshold (75 mph gust / 2" hail) so
+# the arc rarely pins at full on a real report.
+_GAUGE_DOMAIN = {'wind': 100.0, 'hail': 3.0}
+
+
+def _gauge_fraction(key: str, t: Dict) -> Optional[float]:
+    """Return 0.0-1.0 fill fraction for *key*'s magnitude, or None if the
+    threat has no plottable numeric value (tornado; a missing/unparsable
+    gust or hail size)."""
+    domain = _GAUGE_DOMAIN.get(key)
+    if domain is None:
+        return None
+    raw = t.get('gust') if key == 'wind' else t.get('size') if key == 'hail' else None
+    try:
+        val = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, min(1.0, val / domain))
+
+
+def _draw_gauge_arc(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int,
+                    frac: float, track_clr: Tuple, fill_clr: Tuple,
+                    width: int = 7) -> None:
+    """Semicircular gauge (180°-360°: dome on top, open at the bottom,
+    matching a car speedometer) — a dim full-width track, then a coloured
+    arc filled to *frac*."""
+    bbox = (cx - r, cy - r, cx + r, cy + r)
+    draw.arc(bbox, start=180, end=360, fill=track_clr, width=width)
+    if frac > 0.01:
+        draw.arc(bbox, start=180, end=180 + 180 * frac, fill=fill_clr, width=width)
 from .panels_text import (  # noqa: F401  (re-exported for compatibility)
     _INSTR_ACCENT, _draw_description, _draw_instruction, _draw_labeled_segments,
     _draw_nws_headline, _wrap_text,
@@ -94,10 +127,19 @@ def _draw_threats(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
                                radius=7, fill=bg,
                                outline=lvl_clr, width=1)
 
-        # ── Icon (top section) ──────────────────────────────────────────────
-        icon_fn = _ICON_FN.get(key)
-        if icon_fn:
-            icon_fn(draw, ce_x, cy + 28, lvl_clr)
+        # ── Icon or gauge (top section) ───────────────────────────────────────
+        # Wind/hail plot their magnitude as a semicircular gauge -- more
+        # informative at a glance than a flat icon, and doubles as the
+        # value's backdrop. Tornado detection has no continuous magnitude
+        # (radar/observed/possible), so it keeps the plain icon.
+        gauge_frac = _gauge_fraction(key, t)
+        if gauge_frac is not None:
+            track_clr = tuple(int(lvl_clr[j] * 0.28 + _CARD[j] * 0.72) for j in range(3))
+            _draw_gauge_arc(draw, ce_x, cy + 34, 27, gauge_frac, track_clr, lvl_clr)
+        else:
+            icon_fn = _ICON_FN.get(key)
+            if icon_fn:
+                icon_fn(draw, ce_x, cy + 28, lvl_clr)
 
         # ── Primary value (large number or short label) ─────────────────────
         if key == 'wind':
@@ -113,12 +155,16 @@ def _draw_threats(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
 
         vfont = fonts['head']   # 18 pt bold
         vw    = _tw(vfont, val)
-        draw.text((ce_x - vw // 2, cy + 52), val, font=vfont, fill=_TEXT)
+        # The gauge's dome leaves room to sit the value inside it (opening
+        # at the bottom); the icon path keeps the original lower position.
+        val_y = cy + 34 if gauge_frac is not None else cy + 52
+        draw.text((ce_x - vw // 2, val_y), val, font=vfont, fill=_TEXT)
 
         # ── Unit / descriptor ───────────────────────────────────────────────
         if unit:
             uw = _tw(fonts['tiny'], unit)
-            draw.text((ce_x - uw // 2, cy + 73), unit,
+            unit_y = cy + 58 if gauge_frac is not None else cy + 73
+            draw.text((ce_x - uw // 2, unit_y), unit,
                       font=fonts['tiny'], fill=_TEXT_SEC)
 
         # ── Threat level (coloured) ─────────────────────────────────────────
