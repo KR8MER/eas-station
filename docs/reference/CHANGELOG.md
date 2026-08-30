@@ -8,6 +8,25 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.202.1] - 2026-08-30 - Fix the dashboard's Historical Alerts toggle
+
+Checking the "Historical Alerts" layer checkbox only revealed the date
+pickers -- it never actually loaded or displayed anything. `loadHistoricalAlerts()`
+was wired to the "Apply Filter" button alone, so a user checking the box
+(the same gesture that immediately shows/hides Active Alerts) saw nothing
+happen until they noticed they also had to click Apply Filter below it.
+
+Separately, active and historical alerts shared one Leaflet layer group
+(`alertLayer`). `displayHistoricalAlerts()` never cleared it before adding
+new polygons, so re-applying the date filter with a different range piled
+new alerts on top of old ones instead of replacing them; toggling "Active
+Alerts" off/on also wiped out historical polygons as a side effect of
+`alertLayer.clearLayers()`, since both lived in the same group.
+
+Historical alerts now get their own `historicalLayer`, cleared at the top
+of every `displayHistoricalAlerts()` call, and checking the checkbox calls
+`loadHistoricalAlerts()` immediately instead of waiting for a second click.
+
 ## [2.202.0] - 2026-08-30 - Radar timestamp, card lift, bolded hazard numbers, and pill glow on the share card
 
 Fifth polish pass on the social-share card, all four picked by the user
