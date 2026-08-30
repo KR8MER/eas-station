@@ -208,7 +208,15 @@ def _draw_storm_track(canvas: Image.Image, storm: Dict,
 
         cone_drawn = True
 
-    # ── "Now" marker — bright disc at the newest waypoint ─────────────────
+    # ── "Now" marker — ping rings + bright disc at the newest waypoint ────
+    # The outward-fading rings read as a live radar ping / location pulse
+    # (the same convention as a "you are here" map dot) even in a still
+    # image -- a static disc alone gave no sense that this point is a
+    # detection, not just a pin.
+    for ring_r, ring_a in ((14, 45), (10, 75)):
+        rr = _s(ring_r)
+        ld.ellipse((last_x - rr, last_y - rr, last_x + rr, last_y + rr),
+                   outline=arrow_fill + (ring_a,), width=_s(2))
     r = _s(6)
     ld.ellipse((last_x - r - _s(2), last_y - r - _s(2),
                 last_x + r + _s(2), last_y + r + _s(2)), fill=(0, 0, 0, 220))

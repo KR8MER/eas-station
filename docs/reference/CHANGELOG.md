@@ -8,6 +8,29 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.201.0] - 2026-08-30 - Section icons, a tornado confidence gauge, a storm ping, and a north arrow on the share card
+
+Fourth polish pass on the social-share card:
+
+- **Section-header icons** (`icons.py`'s new `_SECTION_ICON_FN`, wired into
+  `drawing.py`'s `_section_header()`) — a small glyph (flag / pin / lines /
+  triangle / ring / needle / bolt) next to HEADLINE, AFFECTED AREAS,
+  DESCRIPTION, STORM THREATS, COVERAGE, STORM MOTION and ACTION, keyed off
+  the exact title string so every call site picked it up with no signature
+  changes.
+- **Tornado detection as a stepped gauge** (`panels.py`) — tornado detection
+  (possible/radar/observed) has no continuous magnitude like wind/hail, so
+  it now gets the same gauge shape as a discrete 3-segment version
+  (`_draw_stepped_gauge`) instead of the flat funnel icon; a bare "none"
+  reading still falls back to the icon.
+- **Storm-position ping** (`storm_overlay.py`) — two fading outward rings
+  behind the "now" marker, reading as a live radar ping / location pulse
+  even in a still image, instead of a plain disc.
+- **North arrow** (`maps.py`'s new `_draw_north_arrow()`) — small two-tone
+  compass needle in the map's one previously-empty corner (upper-left),
+  added to the county-label keep-out list like the other three chrome
+  elements so nothing lands on top of it.
+
 ## [2.200.1] - 2026-08-30 - Fix crowded threat-level/category labels on the share card
 
 The threat-level line ("Radar") and the category label ("WIND") under each
