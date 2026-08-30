@@ -8,6 +8,26 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.200.0] - 2026-08-30 - Add film grain, an expiration countdown badge, and threat gauges to the share card
+
+Three additive polish passes on the social-share card, picked from user
+feedback after the polygon-joint and radar-opacity fixes:
+
+- **Header film grain** (`weather_fx.py`) — a subtle monochrome noise layer
+  composited over the gradient before particles/text, so the header reads
+  as a textured surface instead of a flat CSS-button gradient. Low alpha
+  (14/255) by design; the goal is texture, not visible speckle.
+- **Expiration countdown badge** (`text.py`'s new `_format_countdown()`,
+  wired into the footer in `render.py`) — "Expires in 42m" next to the
+  Issued/Expires timestamps, colour-coded red/orange/slate by urgency
+  (≤30 min / ≤2 h / normal), skipped entirely when it would crowd the
+  brand credit on a narrow canvas.
+- **Storm-threat gauge meters** (`panels.py`) — the Wind/Hail cards now plot
+  their magnitude as a semicircular gauge arc (0-100 mph / 0-3") instead of
+  a flat icon, with the value sitting inside the arc. Tornado detection has
+  no continuous magnitude (radar/observed/possible), so it keeps the plain
+  icon.
+
 ## [2.199.2] - 2026-08-30 - Fix jagged stroke joints on the share-card alert polygon and county outlines
 
 Every bend in the affected-area polygon (and the county reference outlines

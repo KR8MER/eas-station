@@ -88,7 +88,48 @@ def _short_local_dt(dt: Any, ref: Optional[Any] = None) -> str:
     if show_date:
         date_part = local.strftime('%b %d').replace(' 0', ' ')
         return f"{date_part} · {time_part}"
+
     return time_part
+
+
+def _format_countdown(expires: Any, now: Optional[Any] = None) -> Optional[Any]:
+    """Return ``(label, urgency)`` describing time left until *expires*.
+
+    *urgency* is one of ``'critical'`` (≤30 min), ``'soon'`` (≤2 h),
+    ``'normal'`` or ``'expired'`` -- the caller picks a badge colour off
+    this instead of re-deriving the thresholds.  Returns ``None`` when
+    *expires* is unset, so the footer badge is simply omitted for alerts
+    that carry no expiry (some CAP products legitimately don't).
+    """
+    if not expires:
+        return None
+    from datetime import datetime, timezone
+
+    dt = expires
+    if getattr(dt, 'tzinfo', None) is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    if getattr(now, 'tzinfo', None) is None:
+        now = now.replace(tzinfo=timezone.utc)
+
+    total_min = int((dt - now).total_seconds() // 60)
+    if total_min <= 0:
+        return 'EXPIRED', 'expired'
+
+    hours, minutes = divmod(total_min, 60)
+    if hours > 0:
+        label = f'Expires in {hours}h {minutes}m' if minutes else f'Expires in {hours}h'
+    else:
+        label = f'Expires in {minutes}m'
+
+    if total_min <= 30:
+        urgency = 'critical'
+    elif total_min <= 120:
+        urgency = 'soon'
+    else:
+        urgency = 'normal'
+    return label, urgency
+
 
 # ─── ALL-CAPS → sentence-case humanizer ─────────────────────────────────────
 # NWS CAP feeds arrive ALL-CAPS (a legacy of teletype-era systems).  Rendering

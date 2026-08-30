@@ -43,7 +43,7 @@ from .fonts import (
     _load_fonts, _th, _title_font_for, _tw,
 )
 from .text import (
-    _short_local_dt,
+    _format_countdown, _short_local_dt,
 )
 from .drawing import (
     _draw_pill, _round_image_corners,
@@ -439,10 +439,36 @@ def generate_alert_image(
     except Exception:
         pass
 
+    footer_x = 12
     if timing:
         t_str = '  ·  '.join(timing)
         ty_pos = fy + (layout.footer_h - _th(fonts['small'], t_str)) // 2
-        draw.text((12, ty_pos), t_str, font=fonts['small'], fill=_TEXT_SEC)
+        draw.text((footer_x, ty_pos), t_str, font=fonts['small'], fill=_TEXT_SEC)
+        footer_x += _tw(fonts['small'], t_str) + 10
+
+    # Countdown badge — the single most share-worthy fact for a social post
+    # ("is this still happening") restated as urgency instead of a bare
+    # timestamp the reader has to do math on.
+    countdown = _format_countdown(getattr(alert, 'expires', None))
+    if countdown:
+        label, urgency = countdown
+        badge_style = {
+            'critical': {'fill': _SEVERITY['extreme'], 'text': WHITE},
+            'soon':     {'fill': _SEVERITY['severe'],  'text': WHITE},
+            'normal':   {'fill': (68, 80, 102),         'text': (222, 228, 240)},
+            'expired':  {'fill': (52, 58, 74),          'text': _TEXT_MUT},
+        }[urgency]
+        pill_w_est = _tw(fonts['tiny'], label) + 14
+        credit_w = _tw(fonts['small'], 'EAS Station™  •  Emergency Alert System')
+        # Skip the badge rather than crowd the brand credit on a narrow
+        # canvas with a long "Issued/Expires" stamp already eating the
+        # left side -- the timestamp text itself already conveys this.
+        if footer_x + pill_w_est + 16 < layout.width - credit_w - 16:
+            pill_h_target = _th(fonts['tiny'], 'Mg') + 6
+            pill_y = fy + (layout.footer_h - pill_h_target) // 2
+            _draw_pill(draw, fonts['tiny'], label, badge_style['fill'],
+                      footer_x, pill_y, text_color=badge_style['text'],
+                      pad_x=7, pad_y=3)
 
     # Footer attribution carries the trademark mark on the brand name —
     # mirrors the wordmark in the header band so a viewer who clipped
