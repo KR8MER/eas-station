@@ -747,12 +747,19 @@
                                 <p class="text-uppercase small text-muted fw-semibold mb-2">
                                     <i class="fas fa-cloud-showers-heavy me-1"></i>Reflectivity (dBZ)
                                 </p>
+                                <!-- Every chip needs an explicit color: the base .badge rule defaults
+                                     to white text, which is fine on the darker reds/purples but fails
+                                     WCAG AA on the lighter greens/orange (as low as 2.07:1 on the
+                                     orange "40" chip) -- and these six are hardcoded RGB literals, so
+                                     that failure is the same in every theme, not theme-specific. Each
+                                     chip below uses whichever ink (black or white) actually clears
+                                     4.5:1 against its own background; no single colour works for all six. -->
                                 <span class="badge" style="background: rgb(100,200,100); color: #123;">5</span>
-                                <span class="badge" style="background: rgb(40,160,40);">20</span>
+                                <span class="badge" style="background: rgb(40,160,40); color: #123;">20</span>
                                 <span class="badge" style="background: rgb(240,230,60); color: #123;">30</span>
-                                <span class="badge" style="background: rgb(250,160,40);">40</span>
-                                <span class="badge" style="background: rgb(220,40,40);">50</span>
-                                <span class="badge" style="background: rgb(200,60,200);">60+</span>
+                                <span class="badge" style="background: rgb(250,160,40); color: #123;">40</span>
+                                <span class="badge" style="background: rgb(220,40,40); color: white;">50</span>
+                                <span class="badge" style="background: rgb(200,60,200); color: black;">60+</span>
                             </div>
                         </div>
                         <div class="row mt-3" id="alert-summary-row">

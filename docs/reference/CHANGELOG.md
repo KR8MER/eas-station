@@ -8,6 +8,21 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.203.1] - 2026-08-30 - Fix unreadable radar-legend chips on the dashboard
+
+The dashboard's Reflectivity (dBZ) legend (shown when the map's Radar
+toggle is on) has six colour chips; three of them (20/40/60+) never got an
+explicit `color`, so they fell back to `.badge`'s default white text. That
+failed WCAG AA on two of them regardless of theme, since the colours are
+hardcoded RGB literals, not theme variables: the orange "40" chip measured
+2.07:1, the green "20" chip 3.42:1 (AA needs 4.5:1).
+
+No single ink works for all six -- the range runs from light green through
+saturated red and magenta. Set each chip's `color` individually to
+whichever of black/white actually clears 4.5:1 against its own background
+(computed, not eyeballed): `#123` for 5/20/30/40, white for the red "50"
+chip, black for the magenta "60+" chip.
+
 ## [2.203.0] - 2026-08-30 - Filter dashboard alerts by severity and event type
 
 The dashboard map could only toggle Active vs. Historical alerts -- no way
