@@ -8,6 +8,23 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.203.6] - 2026-08-30 - Fix the actual highest-specificity rule controlling dashboard toggle switches
+
+The app-wide `.form-switch` fix (2.203.5) didn't actually take effect on
+the dashboard: live-checked via the browser's own `document.styleSheets`
+(matching every CSS rule against the element in cascade order, not just
+reading computed style), the real winner was
+`.layer-options .form-check.form-switch .form-check-input` -- a
+page-local rule in `templates/index.html` with higher specificity (four
+classes) than the app-wide fix (two classes), still setting
+`background-color: var(--light-color)`. That selector covers every
+switch in the Map Layers panel: Active/Historical Alerts, the severity
+filters, the event-type filters, and every boundary-layer toggle.
+
+Switched it to the same fixed `#495057` used everywhere else tonight.
+Grepped every other template for a similarly-scoped override and found
+none.
+
 ## [2.203.5] - 2026-08-30 - Sweep the rest of the app for the var(--text-muted)-as-fill bug
 
 Grepped every `background: var(--text-muted)` / `background-color:
