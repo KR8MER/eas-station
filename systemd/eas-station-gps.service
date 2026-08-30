@@ -12,7 +12,9 @@ After=network.target redis.service gpsd.service gpsd.socket
 Requires=redis.service
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
+WatchdogSec=60
 User=eas-station
 Group=eas-station
 # GPS subsystem talks to:

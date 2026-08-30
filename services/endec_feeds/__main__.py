@@ -53,6 +53,7 @@ from app_core.audio.endec_feed_publisher import (
     ENDEC_FEED_RELOAD_CHANNEL as RELOAD_CHANNEL,
 )
 from app_utils.endec_feeds import feed_event_from_payload
+from app_utils.system.sd_notify import notify as sd_notify, Watchdog
 
 PORT = 5111
 SUBSYSTEM = "endec-feeds"
@@ -140,7 +141,14 @@ def main() -> None:
         pubsub.subscribe(ENDEC_FEED_CHANNEL, RELOAD_CHANNEL)
         logger.info("Subscribed to '%s' and '%s'", ENDEC_FEED_CHANNEL, RELOAD_CHANNEL)
 
+        # Tell systemd we're up (Type=notify + WatchdogSec= on this unit) and
+        # start kicking the watchdog from inside the loop -- a hang stops the
+        # kicks and systemd restarts the unit.
+        sd_notify("READY=1")
+        systemd_watchdog = Watchdog()
+
         while _running:
+            systemd_watchdog.kick()
             message = pubsub.get_message(timeout=1.0)
             if not message or message.get("type") != "message":
                 continue

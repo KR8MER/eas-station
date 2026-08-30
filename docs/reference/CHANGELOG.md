@@ -8,6 +8,28 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.199.0] - 2026-08-30 - Extend systemd watchdog coverage to every hardware subsystem and the web app
+
+Only `eas-station-audio`, `-demod`, and `-poller` had `Type=notify` +
+`WatchdogSec=` -- `Restart=always` recovers a crashed process on every unit,
+but nothing caught a *hung-but-still-alive* one (a wedged I2C bus, a stuck
+GPIO ioctl, a deadlocked serial read) on `-displays`, `-endec-feeds`,
+`-gpio`, `-gps`, `-network`, `-sdr`, `-zigbee`, or `-web`. Each of the six
+`services/*/__main__.py` split-hardware entry points plus
+`sdr_hardware_service.py` now call `sd_notify("READY=1")` once startup
+finishes and kick a `Watchdog()` (`app_utils/system/sd_notify.py`, the same
+helper `eas_monitoring_service.py`/`cap_poller.py` already used) from their
+existing ~1 Hz main loop; the matching unit files gained
+`Type=notify`/`NotifyAccess=main`/`WatchdogSec=60`.
+
+The web app runs under a multi-process gunicorn arbiter rather than a single
+Python loop, so it needed its own mechanism: a new `gunicorn.conf.py`
+(loaded via `--config` in `eas-station-web.service`) starts a background
+thread in the arbiter's `when_ready` hook that kicks the watchdog every 5s
+for as long as the arbiter's event loop is alive. This only covers an
+arbiter deadlock, not a single hung gevent worker -- that path is already
+gunicorn's own `--timeout 300` (kills and respawns the worker).
+
 ## [2.198.0] - 2026-08-28 - Make the one-click upgrade button run the real update.sh, with live progress
 
 The one-click "System Upgrade" button (fixed in 2.196.3 to at least run

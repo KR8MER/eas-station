@@ -7,7 +7,9 @@ Requires=redis.service
 Wants=postgresql.service
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
+WatchdogSec=60
 User=eas-station
 Group=eas-station
 # Pure application service: subscribes to Redis for alert feed events and

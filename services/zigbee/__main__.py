@@ -50,6 +50,7 @@ from services.zigbee import (
     initialize_zigbee_coordinator,
 )
 from services.zigbee.controller import ZigpyController
+from app_utils.system.sd_notify import notify as sd_notify, Watchdog
 
 PORT = 5102
 SUBSYSTEM = "zigbee"
@@ -135,6 +136,13 @@ def main() -> None:
         api_thread.start()
         logger.info("✅ Zigbee API server started")
 
+        # Tell systemd we're up (Type=notify + WatchdogSec= on this unit) and
+        # start kicking the watchdog from inside the loop -- a hang (e.g. a
+        # stuck serial read / ZNP firmware deadlock) stops the kicks and
+        # systemd restarts the unit.
+        sd_notify("READY=1")
+        systemd_watchdog = Watchdog()
+
         last_heartbeat = 0.0
         while _running:
             now = time.time()
@@ -145,6 +153,7 @@ def main() -> None:
                     zigpy_controller=_zigpy_controller,
                 )
                 last_heartbeat = now
+            systemd_watchdog.kick()
             time.sleep(1)
 
     except KeyboardInterrupt:

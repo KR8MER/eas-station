@@ -115,6 +115,7 @@ else:
 # Import centralized Redis configuration
 from app_core.config.redis_config import get_redis_host, get_redis_port, get_redis_db, RedisChannels
 from app_core.radio import trends as _sdr_trends
+from app_utils.system.sd_notify import notify as sd_notify, Watchdog
 
 # Redis configuration
 REDIS_HOST = get_redis_host()
@@ -2392,7 +2393,13 @@ def main():
         logger.info(f"   - Receivers configured: {len(radio_manager._receivers) if radio_manager and hasattr(radio_manager, '_receivers') else 0}")
         logger.info("   - Sample publishing: ACTIVE")
         logger.info("=" * 80)
-        
+
+        # Tell systemd we're up (Type=notify + WatchdogSec= on this unit) and
+        # start kicking the watchdog from inside the loop -- a hang (e.g. a
+        # wedged USB read) stops the kicks and systemd restarts the unit.
+        sd_notify("READY=1")
+        systemd_watchdog = Watchdog()
+
         # Main loop: process commands and maintain health.
         # process_commands() blocks (BLPOP) for up to a few seconds waiting
         # for a command, so it paces this loop itself -- no extra sleep
@@ -2400,6 +2407,7 @@ def main():
         while _state.running:
             try:
                 process_commands(redis_client)
+                systemd_watchdog.kick()
 
             except KeyboardInterrupt:
                 logger.info("Received keyboard interrupt")
