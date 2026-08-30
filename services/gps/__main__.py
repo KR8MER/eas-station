@@ -60,6 +60,7 @@ from services.gps import (
 )
 from services.gps import trends as _gps_trends
 from services.gps.trends import collect_chrony_tracking
+from app_utils.system.sd_notify import notify as sd_notify, Watchdog
 
 PORT = 5103
 SUBSYSTEM = "gps"
@@ -184,10 +185,17 @@ def main() -> None:
         api_thread.start()
         logger.info("✅ GPS API server started")
 
+        # Tell systemd we're up (Type=notify + WatchdogSec= on this unit) and
+        # start kicking the watchdog from inside the loop -- a hang (e.g. a
+        # wedged GPS serial port) stops the kicks and systemd restarts the unit.
+        sd_notify("READY=1")
+        systemd_watchdog = Watchdog()
+
         last_sample = 0.0
         last_heartbeat = 0.0
         while _running:
             now = time.time()
+            systemd_watchdog.kick()
             # Trend sampler at GPS_TRENDS_INTERVAL_S (5 s) — produces
             # one row of NMEA / chrony / PPS-jitter data and rolls up
             # closed 1m/10m/1h buckets.  Was driven by

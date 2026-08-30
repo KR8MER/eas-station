@@ -55,6 +55,7 @@ from services.displays import (
     initialize_screen_manager,
     initialize_vfd_controller,
 )
+from app_utils.system.sd_notify import notify as sd_notify, Watchdog
 
 PORT = 5104
 SUBSYSTEM = "displays"
@@ -147,6 +148,12 @@ def main() -> None:
         api_thread.start()
         logger.info("✅ Displays API server started")
 
+        # Tell systemd we're up (Type=notify + WatchdogSec= on this unit) and
+        # start kicking the watchdog from inside the loop -- a hang (e.g. a
+        # wedged I2C bus) stops the kicks and systemd restarts the unit.
+        sd_notify("READY=1")
+        systemd_watchdog = Watchdog()
+
         last_heartbeat = 0.0
         while _running:
             now = time.time()
@@ -157,6 +164,7 @@ def main() -> None:
                     screen_manager=_screen_manager,
                 )
                 last_heartbeat = now
+            systemd_watchdog.kick()
             time.sleep(1)
 
     except KeyboardInterrupt:

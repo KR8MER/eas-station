@@ -7,7 +7,9 @@ Requires=redis.service
 Wants=NetworkManager.service
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
+WatchdogSec=60
 User=eas-station
 Group=eas-station
 # Network subsystem talks to NetworkManager via DBus; the eas-station

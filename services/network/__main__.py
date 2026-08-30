@@ -49,6 +49,7 @@ from services.common import (
     publish_network_metrics,
 )
 from services.network import create_blueprint
+from app_utils.system.sd_notify import notify as sd_notify, Watchdog
 
 PORT = 5101
 SUBSYSTEM = "network"
@@ -119,12 +120,20 @@ def main() -> None:
         api_thread.start()
         logger.info("✅ Network API server started")
 
+        # Tell systemd we're up (Type=notify + WatchdogSec= on this unit) and
+        # start kicking the watchdog from inside the loop -- a hang (e.g. a
+        # NetworkManager / DBus stall) stops the kicks and systemd restarts
+        # the unit.
+        sd_notify("READY=1")
+        systemd_watchdog = Watchdog()
+
         last_heartbeat = 0.0
         while _running:
             now = time.time()
             if now - last_heartbeat >= HEARTBEAT_INTERVAL_S:
                 publish_network_metrics(redis_client=redis_client)
                 last_heartbeat = now
+            systemd_watchdog.kick()
             time.sleep(1)
 
     except KeyboardInterrupt:

@@ -6,7 +6,9 @@ After=network.target redis.service
 Requires=redis.service
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
+WatchdogSec=60
 User=eas-station
 Group=eas-station
 # Zigbee subsystem needs to open the coordinator's USB serial device

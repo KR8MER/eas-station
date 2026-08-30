@@ -62,6 +62,7 @@ from services.gpio import (
     initialize_neopixel_controller,
     initialize_tower_light_controller,
 )
+from app_utils.system.sd_notify import notify as sd_notify, Watchdog
 
 PORT = 5105
 SUBSYSTEM = "gpio"
@@ -464,10 +465,17 @@ def main() -> None:
             command_thread.start()
             logger.info("✅ GPIO command listener started")
 
+        # Tell systemd we're up (Type=notify + WatchdogSec= on this unit) and
+        # start kicking the watchdog from inside the loop -- a hang (e.g. a
+        # stuck GPIO chip ioctl) stops the kicks and systemd restarts the unit.
+        sd_notify("READY=1")
+        systemd_watchdog = Watchdog()
+
         last_heartbeat = 0.0
 
         while _running:
             now = time.time()
+            systemd_watchdog.kick()
             try:
                 if redis_client and indicators_active:
                     # Safety-net poll; the listener handles the fast path.

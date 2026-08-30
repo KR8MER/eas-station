@@ -6,7 +6,9 @@ After=network.target postgresql.service redis.service
 Wants=postgresql.service redis.service
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
+WatchdogSec=60
 User=eas-station
 Group=eas-station
 # GPIO access required for OLED button on Pi 5
@@ -41,6 +43,7 @@ ExecStartPre=/opt/eas-station/venv/bin/python3 /opt/eas-station/scripts/check_ge
 # IMPORTANT: gevent is REQUIRED for WebSocket functionality
 # System packages (numpy, scipy, SoapySDR) may conflict with gevent C extensions
 ExecStart=/opt/eas-station/venv/bin/gunicorn \
+    --config gunicorn.conf.py \
     --bind 0.0.0.0:5000 \
     --workers 2 \
     --timeout 300 \
