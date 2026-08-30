@@ -8,6 +8,24 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.202.2] - 2026-08-30 - Fix unreadable map-popup badges in several themes (worst in Lightning)
+
+`.historical-badge` (the small "Historical" tag on a historical-alert map
+popup) used `background: linear-gradient(45deg, var(--text-muted), #495057)`
+with white text. `--text-muted` is tuned for *text on a surface*, not for
+carrying white text as a fill, and it's a near-white colour in several
+themes -- worst in Lightning (`#d8e0f0`), where the badge measured 1.33:1
+contrast against its own white text (WCAG AA needs 4.5:1): effectively
+invisible. Cosmo, Dark, Coffee, Aurora, Charcoal and Slate had the same
+failure to varying degrees.
+
+Switched to a fixed dark gradient (`#495057` → `#343a40`, 8.2:1 / 11.5:1
+with white) that doesn't depend on the theme. Fixed the same root cause in
+two related spots that shared it more marginally (dark text on
+`var(--text-muted)`, 3.78:1 in eight themes against the 4.5:1 target):
+`.severity-unknown` and the "EXPIRED" alert-popup badge, both now `#adb5bd`
+background (8.4:1 with `#1a1a1a` text) instead of the theme variable.
+
 ## [2.202.1] - 2026-08-30 - Fix the dashboard's Historical Alerts toggle
 
 Checking the "Historical Alerts" layer checkbox only revealed the date

@@ -322,7 +322,13 @@
     }
 
     .historical-badge {
-        background: linear-gradient(45deg, var(--text-muted), #495057);
+        /* Fixed dark gradient, not var(--text-muted) -- that variable is
+           tuned for *text* legibility on a theme's own surface, not for
+           carrying white text itself. It's near-white in several themes
+           (lightning: #d8e0f0), which measured 1.33:1 for white text here
+           -- effectively invisible. #495057/#343a40 stay dark (8.2:1 /
+           11.5:1 with white) regardless of theme. */
+        background: linear-gradient(45deg, #495057, #343a40);
         color: var(--text-on-color);
         font-size: 0.7em;
         padding: 2px 6px;
@@ -358,7 +364,11 @@
     .severity-severe { background: var(--warning-color); color: #1a1a1a; }
     .severity-moderate { background: var(--warning-color); color: #1a1a1a; }
     .severity-minor { background: var(--info-color); color: #1a1a1a; }
-    .severity-unknown { background: var(--text-muted); color: #1a1a1a; }
+    /* Fixed grey, not var(--text-muted) -- same reasoning as .historical-badge
+       above: that variable is tuned for text-on-surface, not as a fill.
+       #adb5bd holds 8.4:1 with #1a1a1a in every theme; --text-muted itself
+       fell to 3.78:1 in eight themes that share a #757575 muted value. */
+    .severity-unknown { background: #adb5bd; color: #1a1a1a; }
 
     @media (max-width: 991px) {
         .sticky-card {
@@ -1473,7 +1483,8 @@ function createAlertPopup(props) {
     const isActive = !isAlertExpired(props.expires);
     const statusBadge = isActive ?
         '<span class="popup-badge" style="background: var(--success-color); color: #1a1a1a;">ACTIVE</span>' :
-        '<span class="popup-badge" style="background: var(--text-muted); color: #1a1a1a;">EXPIRED</span>';
+        // Fixed grey, not var(--text-muted) -- see .severity-unknown above.
+        '<span class="popup-badge" style="background: #adb5bd; color: #1a1a1a;">EXPIRED</span>';
 
     return `
         <div class="popup-title">${props.event || 'Unknown Event'}</div>
