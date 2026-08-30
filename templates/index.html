@@ -551,6 +551,30 @@
                                             <i class="fas fa-search"></i> Apply Filter
                                         </button>
                                     </div>
+
+                                    <!-- Which alerts show, independent of Active/Historical -- applies to
+                                         both layers at once so switching between them doesn't lose the
+                                         filter. Severity is a fixed CAP set; event type is populated from
+                                         whatever's actually in the loaded data (see populateEventTypeFilters()),
+                                         since the real list runs 15+ deep and changing which products a feed
+                                         sends shouldn't require a template edit. -->
+                                    <div class="alert-filter-section mt-3 pt-3" style="border-top: 1px solid var(--border-color);">
+                                        <p class="form-label mb-2">Severity</p>
+                                        <div id="severity-filters" class="layer-options"></div>
+                                    </div>
+
+                                    <div class="alert-filter-section mt-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <p class="form-label mb-0">Event Type</p>
+                                            <span>
+                                                <button type="button" class="btn btn-link btn-sm p-0 me-2" onclick="setAllEventTypeFilters(true)">All</button>
+                                                <button type="button" class="btn btn-link btn-sm p-0" onclick="setAllEventTypeFilters(false)">None</button>
+                                            </span>
+                                        </div>
+                                        <div id="event-type-filters" class="layer-options" style="max-height: 240px; overflow-y: auto;">
+                                            <div class="empty-placeholder">Load alerts to filter by type</div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -824,6 +848,20 @@ let alertLayer;
 let historicalLayer;
 let boundaryLayers = {};
 let alertData = { active: [], historical: [] };
+
+// Which alerts are shown, independent of the Active/Historical toggle --
+// a Set of *excluded* keys (not included) so a severity/event type that
+// hasn't been explicitly hidden defaults to visible, including one that
+// shows up for the first time after a later data reload.
+let excludedSeverities = new Set();
+let excludedEventTypes = new Set();
+const SEVERITY_FILTER_LIST = [
+    { key: 'extreme',  label: 'Extreme',  color: 'var(--danger-color)' },
+    { key: 'severe',   label: 'Severe',   color: 'var(--warning-color)' },
+    { key: 'moderate', label: 'Moderate', color: 'var(--warning-color)' },
+    { key: 'minor',    label: 'Minor',    color: 'var(--info-color)' },
+    { key: 'unknown',  label: 'Unknown',  color: 'var(--text-muted)' },
+];
 
 const BOUNDARY_TYPE_CONFIG = window.BOUNDARY_TYPE_CONFIG || {};
 const BOUNDARY_GROUP_LABELS = window.BOUNDARY_GROUP_LABELS || {};
@@ -1107,6 +1145,7 @@ async function loadAlerts() {
 
         if (response.ok && data.features) {
             alertData.active = data.features;
+            populateEventTypeFilters();
             displayAlerts(data.features);
             updateAlertSummary(data.features);
             console.log(`✅ Loaded ${data.features.length} alerts`);
@@ -1140,6 +1179,7 @@ async function loadHistoricalAlerts() {
 
         if (response.ok && data.features) {
             alertData.historical = data.features;
+            populateEventTypeFilters();
             if (document.getElementById('show-expired').checked) {
                 displayHistoricalAlerts(data.features);
             }
@@ -1151,8 +1191,142 @@ async function loadHistoricalAlerts() {
     }
 }
 
+// ---------------------------------------------------------------------
+// Alert selection filters (severity + event type). Independent of the
+// Active/Historical toggle and applied to both layers, so switching
+// between them -- or reloading either one -- never loses the selection.
+// ---------------------------------------------------------------------
+
+function getFilteredAlerts(alerts) {
+    if (!alerts) return alerts;
+    return alerts.filter(alert => {
+        const props = alert.properties || {};
+        const severity = (props.severity || 'unknown').toLowerCase();
+        if (excludedSeverities.has(severity)) return false;
+        const eventType = props.event || 'Unknown';
+        if (excludedEventTypes.has(eventType)) return false;
+        return true;
+    });
+}
+
+// Redraw whichever alert layers are currently toggled on, from the cached
+// data, with the current filter selection applied -- no re-fetch needed.
+function reapplyAlertFilters() {
+    if (document.getElementById('show-active').checked) {
+        displayAlerts(alertData.active);
+    }
+    if (document.getElementById('show-expired').checked) {
+        displayHistoricalAlerts(alertData.historical);
+    }
+}
+
+function populateSeverityFilters() {
+    const container = document.getElementById('severity-filters');
+    if (!container) return;
+    container.innerHTML = '';
+
+    SEVERITY_FILTER_LIST.forEach(({ key, label, color }) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'form-check form-switch';
+
+        const checkbox = document.createElement('input');
+        checkbox.className = 'form-check-input';
+        checkbox.type = 'checkbox';
+        checkbox.id = `severity-filter-${key}`;
+        checkbox.checked = !excludedSeverities.has(key);
+
+        const labelEl = document.createElement('label');
+        labelEl.className = 'form-check-label';
+        labelEl.setAttribute('for', checkbox.id);
+
+        const swatch = document.createElement('span');
+        swatch.className = 'layer-swatch';
+        swatch.style.backgroundColor = color;
+
+        const labelText = document.createElement('span');
+        labelText.textContent = label;
+
+        labelEl.appendChild(swatch);
+        labelEl.appendChild(labelText);
+        wrapper.appendChild(checkbox);
+        wrapper.appendChild(labelEl);
+        container.appendChild(wrapper);
+
+        checkbox.addEventListener('change', function() {
+            if (this.checked) {
+                excludedSeverities.delete(key);
+            } else {
+                excludedSeverities.add(key);
+            }
+            reapplyAlertFilters();
+        });
+    });
+}
+
+function populateEventTypeFilters() {
+    const container = document.getElementById('event-type-filters');
+    if (!container) return;
+
+    const eventTypes = new Set();
+    (alertData.active || []).forEach(a => eventTypes.add((a.properties || {}).event || 'Unknown'));
+    (alertData.historical || []).forEach(a => eventTypes.add((a.properties || {}).event || 'Unknown'));
+
+    if (eventTypes.size === 0) {
+        container.innerHTML = '<div class="empty-placeholder">Load alerts to filter by type</div>';
+        return;
+    }
+
+    container.innerHTML = '';
+    Array.from(eventTypes).sort().forEach(eventType => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'form-check form-switch';
+
+        const checkbox = document.createElement('input');
+        checkbox.className = 'form-check-input';
+        checkbox.type = 'checkbox';
+        const safeId = eventType.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase();
+        checkbox.id = `event-type-filter-${safeId}`;
+        // Preserve the user's existing selection across a data reload --
+        // only a type not seen before defaults to shown.
+        checkbox.checked = !excludedEventTypes.has(eventType);
+
+        const labelEl = document.createElement('label');
+        labelEl.className = 'form-check-label';
+        labelEl.setAttribute('for', checkbox.id);
+        labelEl.textContent = eventType;
+
+        wrapper.appendChild(checkbox);
+        wrapper.appendChild(labelEl);
+        container.appendChild(wrapper);
+
+        checkbox.addEventListener('change', function() {
+            if (this.checked) {
+                excludedEventTypes.delete(eventType);
+            } else {
+                excludedEventTypes.add(eventType);
+            }
+            reapplyAlertFilters();
+        });
+    });
+}
+
+function setAllEventTypeFilters(show) {
+    const eventTypes = new Set();
+    (alertData.active || []).forEach(a => eventTypes.add((a.properties || {}).event || 'Unknown'));
+    (alertData.historical || []).forEach(a => eventTypes.add((a.properties || {}).event || 'Unknown'));
+
+    if (show) {
+        excludedEventTypes.clear();
+    } else {
+        eventTypes.forEach(t => excludedEventTypes.add(t));
+    }
+    populateEventTypeFilters();
+    reapplyAlertFilters();
+}
+
 // Display alerts on map
 function displayAlerts(alerts) {
+    alerts = getFilteredAlerts(alerts);
     alertLayer.clearLayers();
 
     if (!alerts || alerts.length === 0) {
@@ -1217,11 +1391,12 @@ function displayAlerts(alerts) {
 
 // Display historical alerts
 function displayHistoricalAlerts(alerts) {
+    alerts = getFilteredAlerts(alerts);
     // Re-applying the date filter (or the initial auto-load) must replace
     // what's already drawn, not pile on top of it.
     historicalLayer.clearLayers();
 
-    alerts.forEach(alert => {
+    (alerts || []).forEach(alert => {
         if (alert.geometry) {
             // Reference pane, not the hazard pane: an expired alert is
             // context. Left in the default overlay pane it would render
@@ -1596,6 +1771,10 @@ function updateAlertSummary(alerts) {
 
 // Event handlers
 function setupEventListeners() {
+    // Severity checkboxes are a fixed set, unlike event types (which
+    // depend on loaded data) -- build them once, up front.
+    populateSeverityFilters();
+
     // Layer toggles
     document.getElementById('show-active').addEventListener('change', function() {
         if (this.checked && alertData.active) {

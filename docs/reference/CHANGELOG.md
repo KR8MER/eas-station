@@ -8,6 +8,22 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.203.0] - 2026-08-30 - Filter dashboard alerts by severity and event type
+
+The dashboard map could only toggle Active vs. Historical alerts -- no way
+to narrow by severity or event type, even though the historical set alone
+spans 15+ event names (Flood Warning, Severe Thunderstorm Warning, routine
+Required Weekly Test, ...) and all 5 CAP severity levels.
+
+Added a Severity checklist (fixed 5-item CAP set) and an Event Type
+checklist (populated from whatever's actually in the loaded active +
+historical data, with All/None shortcuts) to the Alert Types panel. Both
+filters apply to whichever alert layers are currently shown -- switching
+between Active and Historical, or reloading either one, never loses the
+selection, since `displayAlerts()`/`displayHistoricalAlerts()` filter from
+the same `excludedSeverities`/`excludedEventTypes` state and redraw from
+the already-cached data rather than re-fetching.
+
 ## [2.202.2] - 2026-08-30 - Fix unreadable map-popup badges in several themes (worst in Lightning)
 
 `.historical-badge` (the small "Historical" tag on a historical-alert map
