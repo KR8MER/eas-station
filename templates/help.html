@@ -1262,6 +1262,7 @@
                                         <li><strong>Allowed Days:</strong> The days the test is permitted to land on (Monday through Sunday). The scheduler picks <strong>one</strong> of them each week &mdash; ticking Sunday and Tuesday means one test, on a Sunday <em>or</em> a Tuesday, not one on each. Allowing more days makes the test less predictable, which is what 47 CFR &sect;11.61 asks for; it does not send more tests.</li>
                                         <li><strong>Time Window:</strong> Set start and end times (e.g., 8:00 AM to 4:00 PM). The exact minute is drawn at random from inside this window each week.</li>
                                         <li><strong>Coverage:</strong> The scheduler always follows the shared <em>Default RWT Counties</em> list that sits next to the form—update it once and Quick RWT, manual defaults, and automation all stay aligned.</li>
+                                        <li><strong>Spoken Announcements:</strong> Optionally play a station courtesy announcement before the test ("This station is conducting a test of the Emergency Alert System...") and/or after it ("This concludes this test..."). Each is synthesized with your configured TTS provider and can be toggled and edited independently.</li>
                                     </ul>
 
                                     <div class="alert alert-light">
@@ -1272,8 +1273,9 @@
                                     <h6 class="mt-3"><i class="fas fa-broadcast-tower me-2"></i>RWT Broadcast Behavior</h6>
                                     <p>Automatic RWT broadcasts are designed to be lean and FCC-compliant:</p>
                                     <ul>
-                                        <li><strong>No TTS Narration:</strong> RWT contains only SAME headers and EOM tones</li>
+                                        <li><strong>No TTS Narration:</strong> RWT contains only SAME headers and EOM tones — any spoken announcements you enable play outside the encoded burst, before the lead-in silence and after the EOM's trailing silence, so they never affect the required RWT format under 47 CFR &sect;11.61(a)(1)(ii)</li>
                                         <li><strong>No Attention Tones:</strong> Silent except for required signaling</li>
+                                        <li><strong>Guaranteed Lead-In Silence:</strong> The composite always opens with at least a second of true silence before the SAME header begins, mirroring the second of silence that already follows the EOM before the air-chain returns to normal programming</li>
                                         <li><strong>Once Per Week:</strong> Exactly one RWT per week, however many days you allow. If the station is down during the chosen slot, the test is caught up on a later allowed day in the same week.</li>
                                         <li><strong>Time Window:</strong> Broadcasts only during configured hours</li>
                                         <li><strong>Logged:</strong> All broadcasts stored in database for compliance tracking</li>

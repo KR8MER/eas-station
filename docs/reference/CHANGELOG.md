@@ -8,6 +8,12 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.205.0] - 2026-08-31 - Bracket the weekly test with optional spoken announcements and a guaranteed lead-in silence
+
+- The automated Required Weekly Test can now play optional station courtesy announcements before the SAME header ("This station is conducting a test of the Emergency Alert System...") and after the EOM ("This concludes this test..."), synthesized via the configured TTS provider and enabled/edited from the Weekly Test Automation page (`/rwt-schedule`). They play outside the encoded SAME/EOM burst, so they never affect RWT format compliance under 47 CFR §11.61(a)(1)(ii).
+- The composite RWT audio now always opens with at least a second of true silence before the SAME header begins (previously the header started at t=0 whenever no pre-alert chime was configured), mirroring the second of silence that already follows the EOM before the air-chain returns to normal programming.
+- `EASAudioGenerator.build_manual_components()` gained `silence_before_header`, `lead_announcement_samples`, and `trail_announcement_samples` parameters; `RWTScheduleConfig` gained `pre_announcement_enabled`/`pre_announcement_text`/`post_announcement_enabled`/`post_announcement_text` (migration `20260828_rwt_test_announcements`).
+
 ## [2.204.0] - 2026-08-31 - Show whether an upgrade is actually available before running one
 
 The one-click "System Upgrade" button gave no way to tell whether there
