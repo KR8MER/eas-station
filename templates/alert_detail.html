@@ -374,6 +374,31 @@
     [data-theme="yellow"] .vtec-current-marker {
         color: #0d1b2a;
     }
+
+    /* Map layer toggles -- same swatch treatment as the dashboard map's
+       "Map Layers" panel (templates/index.html), reimplemented small since
+       this page has one map, a fixed list of 8 boundary types, and no room
+       for a sidebar accordion. */
+    #map-layer-toggles {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem 1rem;
+    }
+    #map-layer-toggles .form-check {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin: 0;
+        min-width: 150px;
+    }
+    #map-layer-toggles .layer-swatch {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+        border: 1px solid var(--border-color);
+        flex-shrink: 0;
+    }
 </style>
 {% endblock %}
 
@@ -654,6 +679,13 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <div class="mt-3" id="map-layer-toggles">
+                                <!-- Populated by populateLayerToggles() in the scripts block below --
+                                     kept in sync with the boundaryTypes array there rather than
+                                     hand-listing types twice. -->
+                            </div>
+
                             {% if alert.category == 'Met' %}
                             <div class="mt-2" id="radar-legend" style="display: none;">
                                 <small class="text-muted d-block mb-1">Reflectivity (dBZ):</small>
@@ -2228,6 +2260,20 @@ function getBoundaryColor(type) {
 let map;
 let alertLayer;
 let boundaryLayers = {};
+// Which boundary types should be shown once loaded. Only 'county' defaults
+// on -- matches this page's long-standing default (see loadBoundaries()) so
+// existing users see no change until they opt in to the others.
+const layerVisibility = { county: true };
+const BOUNDARY_TYPE_LABELS = {
+    county: 'Counties',
+    fire: 'Fire Districts',
+    ems: 'EMS Districts',
+    electric: 'Electric Utilities',
+    township: 'Townships',
+    villages: 'Villages',
+    telephone: 'Telephone Service',
+    school: 'School Districts',
+};
 const alertData = {
     id: {{ alert.id|int }},
     event: {{ alert.event|tojson }},
@@ -2264,6 +2310,7 @@ function initializeMap() {
 
         // Load alert data and boundaries
         loadAlertData();
+        populateLayerToggles();
         loadBoundaries();
         initRadarToggle();
 
@@ -2767,11 +2814,59 @@ function displayAlertOnMap(alertGeoData) {
     }
 }
 
+const BOUNDARY_TYPES = ['county', 'fire', 'ems', 'electric', 'township', 'villages', 'telephone', 'school'];
+
+function populateLayerToggles() {
+    const container = document.getElementById('map-layer-toggles');
+    if (!container) return;
+
+    BOUNDARY_TYPES.forEach(type => {
+        const checkboxId = `layer-toggle-${type}`;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'form-check form-switch';
+
+        const checkbox = document.createElement('input');
+        checkbox.className = 'form-check-input';
+        checkbox.type = 'checkbox';
+        checkbox.role = 'switch';
+        checkbox.id = checkboxId;
+        checkbox.checked = !!layerVisibility[type];
+
+        const label = document.createElement('label');
+        label.className = 'form-check-label d-flex align-items-center gap-2';
+        label.htmlFor = checkboxId;
+
+        const swatch = document.createElement('span');
+        swatch.className = 'layer-swatch';
+        swatch.style.backgroundColor = getBoundaryColor(type);
+
+        label.appendChild(swatch);
+        label.appendChild(document.createTextNode(BOUNDARY_TYPE_LABELS[type] || type));
+
+        wrapper.appendChild(checkbox);
+        wrapper.appendChild(label);
+        container.appendChild(wrapper);
+
+        checkbox.addEventListener('change', function() {
+            layerVisibility[type] = this.checked;
+            if (this.checked) {
+                if (boundaryLayers[type]) {
+                    boundaryLayers[type].addTo(map);
+                }
+                // If the layer hasn't finished loading yet, loadBoundaries()'s
+                // fetch callback below checks layerVisibility[type] itself
+                // once it resolves -- no race, just a later add.
+            } else if (boundaryLayers[type]) {
+                map.removeLayer(boundaryLayers[type]);
+            }
+        });
+    });
+}
+
 function loadBoundaries() {
     // Load boundaries using the same approach as index.html
-    const boundaryTypes = ['county', 'fire', 'ems', 'electric', 'township', 'villages', 'telephone', 'school'];
-
-    boundaryTypes.forEach(type => {
+    BOUNDARY_TYPES.forEach(type => {
         fetch(`/api/boundaries?type=${type}`)
             .then(response => response.json())
             .then(data => {
@@ -2793,8 +2888,9 @@ function loadBoundaries() {
                         }
                     });
 
-                    // Add only county boundaries by default
-                    if (type === 'county') {
+                    // Respect whatever the layer toggle is currently set to
+                    // (defaults to on for 'county' only -- see layerVisibility).
+                    if (layerVisibility[type]) {
                         boundaryLayers[type].addTo(map);
                     }
                 }
