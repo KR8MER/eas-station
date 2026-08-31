@@ -175,6 +175,16 @@ document.addEventListener('DOMContentLoaded', function() {
     var _activeAlerts    = 0;          // count of unexpired alerts in system
     var _pendingGate     = 0;          // count of alerts in the Pending Alerts review queue
 
+    // /admin/pending-alerts/api/list requires login (@require_auth), then
+    // eas.view (@require_permission) on top of that. The .then(r.ok ? ... :
+    // null) below already treats *any* non-2xx as "just don't light the
+    // blue state" -- correct for an authenticated viewer who lacks eas.view
+    // (403) -- but this navbar renders on public pages (the dashboard has
+    // no login wall), so every anonymous visitor's browser was hitting a
+    // guaranteed-401 endpoint on every page load and on every 5s polling
+    // fallback tick. Skip the call entirely when nobody is logged in.
+    var _canSeePendingGate = {{ 'true' if (current_user is defined and current_user and current_user.is_authenticated) else 'false' }};
+
     // Resolve the single active state → {color, flash, buzzer, label}.
     function _resolve() {
         var critical = _healthStatus === 'critical';
@@ -286,7 +296,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('DOMContentLoaded', function () {
         // Always fire one HTTP fetch at load — independent of WebSocket state.
         _fetchBroadcastStateOnce();
-        _fetchPendingGateOnce();
+        if (_canSeePendingGate) _fetchPendingGateOnce();
 
         if (window.EASWebSocket && window.EASWebSocket.subscribe) {
             // Pass a fallbackFn so the red light keeps tracking the airchain
@@ -310,17 +320,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Subscribe to the Pending Alerts queue (already pushed for the
             // /admin/pending-alerts live page) so the blue state tracks it
-            // without a dedicated broadcast-state field.
-            window.EASWebSocket.subscribe(
-                'pending_alerts_update',
-                _applyPendingGate,
-                {
-                    fallbackFn: window.EASWebSocket.createPollingFallback(
-                        '/admin/pending-alerts/api/list', _applyPendingGate
-                    ),
-                    fallbackInterval: 5000,
-                }
-            );
+            // without a dedicated broadcast-state field. Same auth gate as
+            // the initial fetch above -- the fallback poller would otherwise
+            // hit the guaranteed-401 endpoint every 5s for an anonymous visitor.
+            if (_canSeePendingGate) {
+                window.EASWebSocket.subscribe(
+                    'pending_alerts_update',
+                    _applyPendingGate,
+                    {
+                        fallbackFn: window.EASWebSocket.createPollingFallback(
+                            '/admin/pending-alerts/api/list', _applyPendingGate
+                        ),
+                        fallbackInterval: 5000,
+                    }
+                );
+            }
         }
     });
 
