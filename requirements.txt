@@ -86,7 +86,7 @@ pytest-asyncio==1.4.0  # For async test support
 pyttsx3==2.99  # Offline text-to-speech engine for the pyttsx3 provider
 
 # Audio processing for EAS decoding
-scipy==1.17.1  # Optional: Advanced signal processing (not used for EAS resampling)
+scipy==1.18.1  # Optional: Advanced signal processing (not used for EAS resampling)
 # Note: scipy is capped below 1.18 -- that series requires Python >=3.12, and
 # this project's CI matrix (and supported install target) includes 3.11.
 # 1.17.1 is the newest release that still supports 3.11.
