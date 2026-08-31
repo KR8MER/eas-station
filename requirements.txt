@@ -109,7 +109,7 @@ numpy==2.3.5  # Required for SoapySDR sample processing
 pyserial==3.5  # Serial communication for VFD display and GPS HAT
 
 # Zigbee coordinator support (CC2652P and other Z-Stack based coordinators)
-zigpy>=0.60.0       # Core Zigbee protocol stack
+zigpy>=2.1.0       # Core Zigbee protocol stack
 zigpy-znp>=0.11.0   # Z-Stack (CC2652P / CC1352P) radio driver
 
 # GPS HAT support (Adafruit Ultimate GPS HAT #2324)
