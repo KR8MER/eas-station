@@ -856,8 +856,6 @@
 <script src="{{ url_for('static', filename='js/pages/dashboard_status.js') }}"></script>
 
 <script>
-console.log('🗺️ Interactive map page initializing...');
-
 // Helper to read CSS custom properties at runtime (for use in JS contexts like Leaflet styling)
 function getColorVar(varName) {
     return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
@@ -1069,8 +1067,6 @@ function getBoundaryMetadata(rawType, displayType, colorHint) {
 // Map initialization
 async function initMap() {
     try {
-        console.log(`🗺️ Initializing Leaflet map for ${LOCATION_LABEL}...`);
-
         // Create map centered on configured location. EASMap adds the
         // toned basemap, the hazard/reference panes and the scale bar so
         // this map matches the exported share graphics.
@@ -1088,7 +1084,6 @@ async function initMap() {
         historicalLayer = L.layerGroup().addTo(map);
         boundaryLayers = {};
 
-        console.log('✅ Map initialized successfully');
         updateMapStatus('Ready', 'success');
         initDashboardRadarToggle();
 
@@ -1155,7 +1150,6 @@ function refreshDashboardRadarLayer() {
 // Load alerts from API
 async function loadAlerts() {
     try {
-        console.log('📡 Loading alerts from API...');
         const response = await fetch('/api/alerts');
 
         if (!response.ok) {
@@ -1169,12 +1163,6 @@ async function loadAlerts() {
             populateEventTypeFilters();
             displayAlerts(data.features);
             updateAlertSummary(data.features);
-            console.log(`✅ Loaded ${data.features.length} alerts`);
-
-            // Debug: Log the structure of the first alert if available
-            if (data.features.length > 0) {
-                console.log('📋 Sample alert structure:', data.features[0]);
-            }
         } else {
             console.warn('⚠️ No alert features in API response:', data);
         }
@@ -1351,7 +1339,6 @@ function displayAlerts(alerts) {
     alertLayer.clearLayers();
 
     if (!alerts || alerts.length === 0) {
-        console.log('ℹ️ No alerts to display');
         return;
     }
 
@@ -1406,8 +1393,6 @@ function displayAlerts(alerts) {
             alertLayer.addLayer(alertFeature);
         }
     });
-
-    console.log(`✅ Displayed ${alerts.length} alerts on map`);
 }
 
 // Display historical alerts
@@ -1463,7 +1448,6 @@ function displayHistoricalAlerts(alerts) {
 // Load boundaries
 async function loadBoundaries() {
     try {
-        console.log('📡 Loading boundaries from API...');
         const response = await fetch('/api/boundaries');
 
         if (!response.ok) {
@@ -1476,8 +1460,6 @@ async function loadBoundaries() {
         boundaryTypeMetadata.clear();
 
         if (data.features && Array.isArray(data.features) && data.features.length > 0) {
-            console.log(`✅ Received ${data.features.length} boundaries`);
-
             const featuresByType = new Map();
 
             data.features.forEach(feature => {
@@ -1533,8 +1515,6 @@ async function loadBoundaries() {
                     group: metadata.group || 'custom',
                     count: features.length
                 });
-
-                console.log(`✅ Loaded ${features.length} ${metadata.label} features`);
             });
         } else {
             console.warn('⚠️ No boundary features in API response');
@@ -2180,8 +2160,6 @@ function showMapError(message) {
 
 // Initialize everything when page loads
 document.addEventListener('DOMContentLoaded', async function() {
-    console.log('📄 Interactive map page loaded');
-
     try {
         await initMap();
         if (isMapReady) {
@@ -2203,8 +2181,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         showMapError('Failed to initialize map interface: ' + error.message);
     }
 });
-
-console.log('📜 Interactive map script loaded');
 
 // Make diagnostic functions available globally for debugging
 window.mapDebug = {
@@ -2277,12 +2253,6 @@ window.mapDebug = {
         }
     }
 };
-
-console.log('💡 Debug functions available:');
-console.log('  • window.mapDebug.testAPIs() - Test all API endpoints');
-console.log('  • window.mapDebug.refreshAll() - Refresh all map data');
-console.log('  • window.mapDebug.inspectMap() - Inspect map objects');
-console.log('  • window.mapDebug.analyzeBoundaries() - Analyze boundary types');
 
 </script>
 {% endblock %}

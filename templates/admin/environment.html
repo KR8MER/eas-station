@@ -339,31 +339,18 @@
 
 {% block scripts %}
 <script>
-    // Debug logging
-    console.log('Environment settings page loading...');
-    {% if current_user %}
-    console.log('Current user:', {{ current_user.username|tojson }});
-    console.log('User role:', {{ current_user.role.name|tojson if current_user.role else 'null' }});
-    {% else %}
-    console.log('No current user');
-    {% endif %}
-    console.log('Has configure permission:', {{ 'true' if can_configure else 'false' }});
-
     let categoriesData = {};
     let currentValues = {};
     let hasChanges = false;
     // Permission check passed from backend
     const canEdit = {{ 'true' if can_configure else 'false' }};
-    console.log('canEdit =', canEdit);
 
     // Load categories and variables on page load
     async function loadSettings() {
-        console.log('Loading environment settings...');
         try {
             showLoading();
 
             // Load validation status
-            console.log('Fetching validation status...');
             const validationResp = await fetch('/api/environment/validate');
             if (!validationResp.ok) {
                 if (validationResp.status === 403) {
@@ -373,11 +360,9 @@
                 throw new Error(`Validation API returned ${validationResp.status}: ${validationResp.statusText}`);
             }
             const validation = await validationResp.json();
-            console.log('Validation result:', validation);
             displayValidation(validation);
 
             // Load all variables
-            console.log('Fetching environment variables...');
             const resp = await fetch('/api/environment/variables');
             if (!resp.ok) {
                 if (resp.status === 403) {
@@ -387,11 +372,9 @@
                 throw new Error(`API returned ${resp.status}: ${resp.statusText}`);
             }
             categoriesData = await resp.json();
-            console.log('Loaded categories:', Object.keys(categoriesData));
 
             // Check for metadata
             if (categoriesData._meta) {
-                console.log('Environment metadata:', categoriesData._meta);
                 if (!categoriesData._meta.env_file_exists) {
                     console.warn('.env file does not exist, reading from environment variables');
 
@@ -418,7 +401,6 @@
                 }
             }
 
-            console.log('Rendering UI...');
             renderCategoryNav();
             renderCategories();
 
@@ -431,12 +413,10 @@
                 : firstCat;
 
             if (targetCategory) {
-                console.log('Activating category:', targetCategory);
                 activateCategory(targetCategory);
             }
 
             hideLoading();
-            console.log('Environment settings loaded successfully');
         } catch (error) {
             console.error('Error loading settings:', error);
 

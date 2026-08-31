@@ -8,6 +8,14 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.210.2] - 2026-08-31 - Remove ambient debug logging from the browser console
+
+- A repo-wide audit found 142 `console.log`/`console.debug`/`console.info` calls with no gating flag, firing unconditionally on normal page loads and user actions — page-init narration ("Interactive map page loaded", "Alert detail page scripts loading..."), per-request cache hit/miss chatter, and bare function-entry markers ("toggleRawData called") left over from active debugging. Removed 116 of them (16 in `static/js/*.js`, 100 across 10 templates) that were pure narration with no diagnostic value.
+- One instance was more than noise: `templates/admin/environment.html` logged the signed-in admin's username and role to the console on every load of the environment-variables settings page — a minor but real thing to not be doing on a page that manages secrets.
+- `static/js/core/cache.js`'s cache hit/miss logging had a "dev only" gate (`hostname === 'localhost'`) that was already broken for exactly this kind of self-hosted appliance, since the app is commonly accessed via `http://localhost:5000` in normal use, not just development — removed rather than tightened, since the logging itself wasn't valuable.
+- Kept every `console.log`/`debug`/`info` call that's a genuine diagnostic: anything inside a `catch` block logging a real caught error (still present in every file touched), and the two intentional opt-in developer tools this app ships (`window.mapDebug.*` on the dashboard map, and `inspectBoundaries()`'s report generator) — those only produce console output when a developer explicitly invokes them, not on ordinary page loads.
+- Verified with a live browser console sweep (network cache disabled) across all 12 touched pages against the deployed app — every page loads completely silent, zero console output, zero new errors.
+
 ## [2.210.1] - 2026-08-31 - Fix heading hierarchy accessibility warnings site-wide
 
 - `static/js/accessibility-utils.js`'s `setupHeadingHierarchy()` flags any heading whose level skips more than one step deeper than the previous heading in DOM order (e.g. h2 straight to h5) — a real, longstanding gap in nearly every page, since card/widget headers throughout the app were written as bare `h5`/`h6` regardless of the page's actual section depth. Fixed every skip across the template tree (82 templates, 1 shared JS component) rather than leaving it as a known issue.

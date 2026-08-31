@@ -2232,8 +2232,6 @@ document.addEventListener('click', function(e) {
     }
 });
 
-console.log('Alert detail page scripts loading...');
-
 // Helper function to get CSS variable colors
 const getCSSVar = EASMap.cssVar;
 
@@ -2289,8 +2287,6 @@ const alertData = {
 
 // Initialize everything when page loads
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Alert detail page loaded for alert:', alertData.id);
-
     // Initialize map after a short delay
     setTimeout(initializeMap, 1000);
     initRadarLoop(); // Standalone <img> player, doesn't need the Leaflet map.
@@ -2299,14 +2295,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function initializeMap() {
     try {
-        console.log('Initializing map...');
-
         // Themed basemap + hazard/reference panes + scale bar. The tone,
         // vignette and hazard glow mirror the share-image renderer so the
         // page and the exported graphic read as the same map.
         map = EASMap.create('map').setView([41.0167, -84.1330], 11);
-
-        console.log('Map created successfully');
 
         // Load alert data and boundaries
         loadAlertData();
@@ -2577,8 +2569,6 @@ function setHiresRadarPlaying(playing) {
 }
 
 function loadAlertData() {
-    console.log('Loading alert geometry...');
-
     // Use per-alert geometry endpoint which triggers SAME geocode geometry building
     fetch(`/api/alerts/${alertData.id}/geometry`)
         .then(response => {
@@ -2588,19 +2578,15 @@ function loadAlertData() {
             return response.json();
         })
         .then(data => {
-            console.log('Alert geometry data received:', data);
-
             if (data.alert && data.alert.geometry) {
                 // Best case: pre-built union polygon from us_county_boundaries
                 displayAlertOnMap(data.alert);
             } else if (data.alert && data.alert.properties.same_codes && data.alert.properties.same_codes.length > 0) {
                 // Geometry build failed or not yet committed, but we have SAME codes.
                 // Fetch individual county polygons directly from us_county_boundaries.
-                console.log('No pre-built geometry; rendering counties from SAME codes:', data.alert.properties.same_codes);
                 loadCountiesFromSameCodes(data.alert.properties.same_codes, data.alert);
             } else if (alertData.is_county_wide || (data.alert && data.alert.properties.is_county_wide)) {
                 // County-wide alert without inline geometry — use configured boundary as fallback
-                console.log('County-wide alert without geometry, using county boundary fallback');
                 loadCountyBoundaryAsAlert();
             } else {
                 showMapError('Alert has no geographic data');
@@ -2668,7 +2654,6 @@ function loadCountiesFromSameCodes(sameCodes, alertFeature) {
 
         if (matchedFeatures.length === 0) {
             // County table not loaded or no match — fall back to configured boundary
-            console.log('No county boundary matches found; trying county boundary fallback');
             loadCountyBoundaryAsAlert();
             return;
         }
@@ -2693,12 +2678,10 @@ function loadCountiesFromSameCodes(sameCodes, alertFeature) {
         ).addTo(map);
 
         map.fitBounds(alertLayer.getBounds(), { padding: [30, 30] });
-        console.log('Rendered', matchedFeatures.length, 'counties from SAME codes');
     });
 }
 
 function loadCountyBoundaryAsAlert() {
-    console.log('Fetching county boundary for fallback display...');
     fetch('/api/boundaries?type=county')
         .then(response => {
             if (!response.ok) {
@@ -2707,7 +2690,6 @@ function loadCountyBoundaryAsAlert() {
             return response.json();
         })
         .then(data => {
-            console.log('County boundary response:', data.features ? data.features.length + ' features' : 'no features');
             if (data.features && data.features.length > 0) {
                 // Use county boundary as the alert's display geometry
                 const countyFeature = data.features[0];
@@ -2726,7 +2708,6 @@ function loadCountyBoundaryAsAlert() {
 }
 
 function showApproximateCountyCoverage() {
-    console.log('No county boundary data — showing approximate coverage');
     try {
         const color = getSeverityColor(alertData.severity);
 
@@ -2765,8 +2746,6 @@ function showApproximateCountyCoverage() {
             return div;
         };
         info.addTo(map);
-
-        console.log('Approximate county coverage displayed');
     } catch (error) {
         console.error('Error showing approximate coverage:', error);
         showMapError('Unable to display alert coverage');
@@ -2775,8 +2754,6 @@ function showApproximateCountyCoverage() {
 
 function displayAlertOnMap(alertGeoData) {
     try {
-        console.log('Displaying alert on map...');
-
         // Create alert layer — glow + white casing + severity core, the
         // same treatment the share image uses.
         alertLayer = EASMap.hazardLayer(alertGeoData, {
@@ -2802,8 +2779,6 @@ function displayAlertOnMap(alertGeoData) {
             <div class="popup-detail"><strong>Severity:</strong> ${alertData.severity || 'Unknown'}</div>
             <div class="popup-detail"><strong>Status:</strong> ${alertData.status}</div>
         `);
-
-        console.log('Alert displayed successfully on map');
 
         // Overlay storm track if motion data is available
         addStormTrackToMap();
@@ -3011,8 +2986,6 @@ function addStormTrackToMap() {
 
 // Action button functions
 function toggleRawData() {
-    console.log('toggleRawData called');
-
     const card = document.getElementById('rawDataCard');
     const btnText = document.getElementById('raw-data-btn-text');
 
@@ -3035,8 +3008,6 @@ function toggleRawData() {
 }
 
 function copyRawData() {
-    console.log('copyRawData called');
-
     const content = document.getElementById('rawDataContent').textContent;
     const button = event.target.closest('button');
 
@@ -3064,8 +3035,6 @@ function copyRawData() {
 }
 
 function downloadRawData() {
-    console.log('downloadRawData called');
-
     const content = document.getElementById('rawDataContent').textContent;
     const blob = new Blob([content], { type: 'application/json' });
     const url = window.URL.createObjectURL(blob);
@@ -3085,7 +3054,6 @@ function downloadRawData() {
 
 
 function debugBoundaries() {
-    console.log('debugBoundaries called');
     const url = `/debug/boundaries/${alertData.id}`;
     window.open(url, '_blank');
 }
@@ -3194,8 +3162,6 @@ function renderDebugPanel(data) {
 
 // Enhanced function to trigger intersection calculation
 async function triggerIntersectionFix(clickedBtn) {
-    console.log('triggerIntersectionFix called');
-
     // Disable every coverage-calc button on the page so the user can't
     // double-submit and so every button gives visible feedback.
     const allBtns = Array.from(document.querySelectorAll('.coverage-calc-btn'));
@@ -3262,7 +3228,5 @@ async function triggerIntersectionFix(clickedBtn) {
         });
     }
 }
-
-console.log('Alert detail page scripts loaded successfully');
 </script>
 {% endblock %}
