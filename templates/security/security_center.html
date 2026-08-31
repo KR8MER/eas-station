@@ -146,7 +146,7 @@
         <div class="tab-pane fade" id="malicious-pane" role="tabpanel" aria-labelledby="malicious-tab">
             <div class="container">
                 <div class="alert-danger-custom">
-                    <h5><i class="fas fa-triangle-exclamation"></i> Security Alert</h5>
+                    <h2 class="h5"><i class="fas fa-triangle-exclamation"></i> Security Alert</h2>
                     <p class="mb-0">These login attempts were automatically flagged as malicious due to SQL injection or command injection patterns. Attacking IPs are auto-banned and logged for fail2ban integration.</p>
                 </div>
 
@@ -196,7 +196,7 @@
                 </div>
 
                 <div class="admin-accent-card accent-danger mb-3">
-                    <h4 class="mb-3"><i class="fas fa-globe"></i> Top Attacking IP Addresses</h4>
+                    <h2 class="mb-3 h4"><i class="fas fa-globe"></i> Top Attacking IP Addresses</h2>
                     <div id="ip-statistics">
                         <p class="text-center text-muted">Loading statistics...</p>
                     </div>
@@ -231,7 +231,7 @@
         <div class="tab-pane fade" id="bans-pane" role="tabpanel" aria-labelledby="bans-tab">
             <div class="container">
                 <div class="admin-warning-box mb-3">
-                    <h5 class="mb-1"><i class="fas fa-diagram-project"></i> One ban list. Multiple enforcement layers.</h5>
+                    <h3 class="mb-1 h5"><i class="fas fa-diagram-project"></i> One ban list. Multiple enforcement layers.</h3>
                     <p class="mb-0">The <strong>Global Ban List</strong> below is the single source of truth. Bans
                     arrive from several detectors (manual, login brute force, SSH brute force, malicious requests),
                     and are enforced by multiple layers — the <strong>application gate</strong>, the
@@ -242,7 +242,7 @@
                 <!-- Security Enforcement Status -->
                 <div class="admin-accent-card accent-danger mb-3">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                        <h4 class="mb-0"><i class="fas fa-shield-halved"></i> Enforcement Status</h4>
+                        <h2 class="mb-0 h4"><i class="fas fa-shield-halved"></i> Enforcement Status</h2>
                         <button class="btn btn-sm btn-secondary" onclick="SC.loadSecurityOverview()">
                             <i class="fas fa-sync-alt"></i> Refresh
                         </button>
@@ -255,7 +255,7 @@
 
                 <!-- Security Metrics -->
                 <div class="admin-accent-card accent-danger mb-3">
-                    <h4 class="mb-2"><i class="fas fa-chart-line"></i> Security Metrics</h4>
+                    <h2 class="mb-2 h4"><i class="fas fa-chart-line"></i> Security Metrics</h2>
                     <div id="sec-metrics" class="row g-2 text-center">
                         <span class="text-muted small">Loading metrics…</span>
                     </div>
@@ -264,7 +264,7 @@
                 <!-- Global Ban List management -->
                 <div class="admin-accent-card accent-danger mb-4">
                     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                        <h4 class="mb-0"><i class="fas fa-shield-halved"></i> Global Ban List</h4>
+                        <h2 class="mb-0 h4"><i class="fas fa-shield-halved"></i> Global Ban List</h2>
                         <div>
                             <button class="btn btn-success btn-sm" onclick="SC.showAddFilterModal('allowlist')">
                                 <i class="fas fa-circle-plus"></i> Add Allowlist
@@ -297,7 +297,7 @@
         <div class="tab-pane fade" id="fail2ban-pane" role="tabpanel" aria-labelledby="fail2ban-tab">
             <div class="container">
                 <div class="admin-warning-box mb-3">
-                    <h5><i class="fas fa-circle-info-fill"></i> Host-Firewall Enforcement (fail2ban)</h5>
+                    <h3 class="h5"><i class="fas fa-circle-info-fill"></i> Host-Firewall Enforcement (fail2ban)</h3>
                     <p class="mb-0">There is <strong>one</strong> ban list — the <strong>Global Ban List</strong> tab.
                     fail2ban is an optional <em>firewall enforcer</em> for it: when enabled, every application
                     ban (manual or automatic) is also dropped at the host firewall, before traffic reaches the
@@ -308,7 +308,7 @@
                 <!-- Status / service control -->
                 <div class="admin-accent-card accent-danger mb-3">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                        <h4 class="mb-0"><i class="fas fa-network-wired"></i> fail2ban Service</h4>
+                        <h2 class="mb-0 h4"><i class="fas fa-network-wired"></i> fail2ban Service</h2>
                         <div class="d-flex gap-2 flex-wrap">
                             <button class="btn btn-sm btn-outline-secondary" onclick="SC.resyncFail2ban()">
                                 <i class="fas fa-right-left"></i> Resync bans
@@ -328,7 +328,7 @@
 
                 <!-- Configuration form -->
                 <div class="admin-accent-card accent-danger mb-3">
-                    <h4 class="mb-3"><i class="fas fa-sliders"></i> Configuration</h4>
+                    <h2 class="mb-3 h4"><i class="fas fa-sliders"></i> Configuration</h2>
                     <form id="f2b-config-form" onsubmit="return false;">
                         <div class="form-check form-switch mb-1">
                             <input class="form-check-input" type="checkbox" role="switch" id="f2b-enabled">
@@ -372,8 +372,8 @@
 
                 <!-- SSH jail bans (host SSH protection, separate concern) -->
                 <div class="admin-accent-card accent-danger mb-3" id="f2b-ssh-card" style="display: none;">
-                    <h4 class="mb-2"><i class="fas fa-terminal"></i> SSH Jail Bans
-                        <small class="text-muted">(also added to the global ban list)</small></h4>
+                    <h2 class="mb-2 h4"><i class="fas fa-terminal"></i> SSH Jail Bans
+                        <small class="text-muted">(also added to the global ban list)</small></h2>
                     <p class="text-muted small mb-2">This lists what fail2ban's <code>sshd</code> jail is
                         currently holding. Each offender is also copied into the <strong>Global Ban List</strong>
                         with a matching expiration (the <strong>SSH ban time</strong> set above), so both expire
@@ -402,7 +402,7 @@
     <div class="modal-dialog modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-cog me-2"></i>Traffic Collection Settings</h5>
+                <h3 class="modal-title h5"><i class="fas fa-cog me-2"></i>Traffic Collection Settings</h3>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -444,7 +444,7 @@
                 </div>
 
                 <hr>
-                <h6 class="text-uppercase small fw-bold text-muted mb-2"><i class="fas fa-user-shield me-1"></i>Privacy</h6>
+                <h4 class="text-uppercase small fw-bold text-muted mb-2 h6"><i class="fas fa-user-shield me-1"></i>Privacy</h4>
                 <div class="form-check form-switch mb-1">
                     <input class="form-check-input" type="checkbox" role="switch" id="setAnonymizeIp">
                     <label class="form-check-label" for="setAnonymizeIp">Anonymize visitor IPs</label>
@@ -462,7 +462,7 @@
                 </div>
 
                 <hr>
-                <h6 class="text-uppercase small fw-bold text-muted mb-2"><i class="fas fa-triangle-exclamation me-1"></i>Anomaly Detection</h6>
+                <h4 class="text-uppercase small fw-bold text-muted mb-2 h6"><i class="fas fa-triangle-exclamation me-1"></i>Anomaly Detection</h4>
                 <div class="form-check form-switch mb-1">
                     <input class="form-check-input" type="checkbox" role="switch" id="setAnomalyEnabled">
                     <label class="form-check-label" for="setAnomalyEnabled">Detect traffic anomalies</label>
@@ -513,7 +513,7 @@
                 </div>
 
                 <hr>
-                <h6 class="text-uppercase small fw-bold text-danger mb-2"><i class="fas fa-trash-can me-1"></i>Danger Zone</h6>
+                <h4 class="text-uppercase small fw-bold text-danger mb-2 h6"><i class="fas fa-trash-can me-1"></i>Danger Zone</h4>
                 <div class="mb-1">
                     <button type="button" class="btn btn-outline-danger" id="purgeAllBtn" onclick="purgeAllTraffic()"><i class="fas fa-trash-can me-1"></i>Purge all traffic data</button>
                     <div class="form-text">Permanently deletes <strong>every</strong> recorded request from the database, resetting all reports to zero. Your settings and GeoIP databases are kept. Use this to reclaim space and speed up a slow dashboard. <strong>This cannot be undone.</strong></div>
@@ -533,7 +533,7 @@
     <div class="modal-dialog modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="addFilterModalTitle">Add IP Filter</h5>
+                <h3 class="modal-title h5" id="addFilterModalTitle">Add IP Filter</h3>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">

@@ -118,49 +118,49 @@
     <div class="row g-3">
         <div class="col-lg-3 col-md-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-traffic-light section-icon"></i>Status Codes</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-traffic-light section-icon"></i>Status Codes</h3></div>
                 <div class="card-body"><div class="chart-container small"><canvas id="statusChart"></canvas></div></div>
             </div>
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-window-maximize section-icon"></i>Browsers</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-window-maximize section-icon"></i>Browsers</h3></div>
                 <div class="card-body"><div class="chart-container small"><canvas id="browserChart"></canvas></div></div>
             </div>
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-desktop section-icon"></i>Operating Systems</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-desktop section-icon"></i>Operating Systems</h3></div>
                 <div class="card-body"><div class="chart-container small"><canvas id="osChart"></canvas></div></div>
             </div>
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-sign-in-alt section-icon"></i>Login Activity</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-sign-in-alt section-icon"></i>Login Activity</h3></div>
                 <div class="card-body"><div class="chart-container small"><canvas id="loginChart"></canvas></div></div>
             </div>
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-mobile-screen-button section-icon"></i>Device Types</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-mobile-screen-button section-icon"></i>Device Types</h3></div>
                 <div class="card-body"><div class="chart-container small"><canvas id="deviceChart"></canvas></div></div>
             </div>
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-code section-icon"></i>HTTP Methods</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-code section-icon"></i>HTTP Methods</h3></div>
                 <div class="card-body"><div class="chart-container small"><canvas id="methodChart"></canvas></div></div>
             </div>
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-user-shield section-icon"></i>Authenticated vs Anonymous</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-user-shield section-icon"></i>Authenticated vs Anonymous</h3></div>
                 <div class="card-body"><div class="chart-container small"><canvas id="authChart"></canvas></div></div>
             </div>
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-magnifying-glass-location section-icon"></i>Search Engines</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-magnifying-glass-location section-icon"></i>Search Engines</h3></div>
                 <div class="card-body"><div class="chart-container small"><canvas id="searchEngineChart"></canvas></div></div>
             </div>
         </div>
@@ -171,13 +171,13 @@
     <div class="row g-3">
         <div class="col-lg-7">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-clock section-icon"></i>Hits by Hour of Day</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-clock section-icon"></i>Hits by Hour of Day</h3></div>
                 <div class="card-body"><div class="chart-container small"><canvas id="hourlyChart"></canvas></div></div>
             </div>
         </div>
         <div class="col-lg-5">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-calendar-week section-icon"></i>Hits by Day of Week</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-calendar-week section-icon"></i>Hits by Day of Week</h3></div>
                 <div class="card-body"><div class="chart-container small"><canvas id="weekdayChart"></canvas></div></div>
             </div>
         </div>
@@ -188,7 +188,7 @@
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center gap-2"><h6 class="mb-0"><i class="fas fa-file-alt section-icon"></i>Top Pages</h6><input type="search" id="searchTopPages" class="form-control form-control-sm table-search" placeholder="Filter…" aria-label="Filter top pages"></div>
+                <div class="card-header d-flex justify-content-between align-items-center gap-2"><h3 class="mb-0 h6"><i class="fas fa-file-alt section-icon"></i>Top Pages</h3><input type="search" id="searchTopPages" class="form-control form-control-sm table-search" placeholder="Filter…" aria-label="Filter top pages"></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Path</th><th class="text-end">Hits</th><th class="text-end d-none d-sm-table-cell">Avg ms</th></tr></thead>
                     <tbody id="topPages"></tbody></table></div></div>
@@ -196,7 +196,7 @@
         </div>
         <div class="col-lg-6">
             <div class="card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center gap-2"><h6 class="mb-0"><i class="fas fa-users section-icon"></i>Top Visitors (Hosts)</h6><input type="search" id="searchTopVisitors" class="form-control form-control-sm table-search" placeholder="Filter…" aria-label="Filter top visitors"></div>
+                <div class="card-header d-flex justify-content-between align-items-center gap-2"><h3 class="mb-0 h6"><i class="fas fa-users section-icon"></i>Top Visitors (Hosts)</h3><input type="search" id="searchTopVisitors" class="form-control form-control-sm table-search" placeholder="Filter…" aria-label="Filter top visitors"></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Host / IP Address</th><th class="text-end">Hits</th><th class="d-none d-sm-table-cell">Last Seen</th></tr></thead>
                     <tbody id="topVisitors"></tbody></table></div></div>
@@ -206,7 +206,7 @@
     <div class="row g-3 mt-0">
         <div class="col-12">
             <div class="card">
-                <div class="card-header"><h6><i class="fas fa-gauge-high section-icon"></i>Slowest Endpoints <span class="text-muted" style="text-transform:none;font-weight:400;font-size:0.72rem;">(avg server response, min 3 hits)</span></h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-gauge-high section-icon"></i>Slowest Endpoints <span class="text-muted" style="text-transform:none;font-weight:400;font-size:0.72rem;">(avg server response, min 3 hits)</span></h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Path</th><th class="text-end">Avg ms</th><th class="text-end d-none d-sm-table-cell">Max ms</th><th class="text-end">Hits</th></tr></thead>
                     <tbody id="slowestPages"></tbody></table></div></div>
@@ -219,14 +219,14 @@
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-right-to-bracket section-icon"></i>Entry Pages</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-right-to-bracket section-icon"></i>Entry Pages</h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Path</th><th class="text-end">Visits</th></tr></thead><tbody id="entryPages"></tbody></table></div></div>
             </div>
         </div>
         <div class="col-lg-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-right-from-bracket section-icon"></i>Exit Pages</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-right-from-bracket section-icon"></i>Exit Pages</h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Path</th><th class="text-end">Visits</th></tr></thead><tbody id="exitPages"></tbody></table></div></div>
             </div>
@@ -238,21 +238,21 @@
     <div class="row g-3">
         <div class="col-lg-4">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-file-code section-icon"></i>File Types</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-file-code section-icon"></i>File Types</h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Type</th><th class="text-end">Hits</th></tr></thead><tbody id="filetypeBreakdown"></tbody></table></div></div>
             </div>
         </div>
         <div class="col-lg-4">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-magnifying-glass section-icon"></i>Search Keyphrases</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-magnifying-glass section-icon"></i>Search Keyphrases</h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Keyphrase</th><th class="text-end">Hits</th></tr></thead><tbody id="searchTerms"></tbody></table></div></div>
             </div>
         </div>
         <div class="col-lg-4">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-robot section-icon"></i>Robots / Spiders</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-robot section-icon"></i>Robots / Spiders</h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Bot</th><th class="text-end">Hits</th></tr></thead><tbody id="botBreakdown"></tbody></table></div></div>
             </div>
@@ -264,35 +264,35 @@
     <div class="row g-3">
         <div class="col-lg-3 col-md-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-window-maximize section-icon"></i>Browsers</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-window-maximize section-icon"></i>Browsers</h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Browser</th><th class="text-end">Hits</th></tr></thead><tbody id="browserBreakdown"></tbody></table></div></div>
             </div>
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-desktop section-icon"></i>Operating Systems</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-desktop section-icon"></i>Operating Systems</h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>OS</th><th class="text-end">Hits</th></tr></thead><tbody id="osBreakdown"></tbody></table></div></div>
             </div>
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-expand section-icon"></i>Screen Resolutions</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-expand section-icon"></i>Screen Resolutions</h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Resolution</th><th class="text-end">Hits</th></tr></thead><tbody id="resBreakdown"></tbody></table></div></div>
             </div>
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-map-marker-alt section-icon"></i>Countries / Networks</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-map-marker-alt section-icon"></i>Countries / Networks</h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Location</th><th class="text-end">Hits</th></tr></thead><tbody id="countryBreakdown"></tbody></table></div></div>
             </div>
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-language section-icon"></i>Languages</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-language section-icon"></i>Languages</h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Language</th><th class="text-end">Hits</th></tr></thead><tbody id="langBreakdown"></tbody></table></div></div>
             </div>
@@ -302,7 +302,7 @@
     <div class="row g-3 mt-0">
         <div class="col-12">
             <div class="card">
-                <div class="card-header"><h6><i class="fas fa-external-link-alt section-icon"></i>Top External Referrers <span class="text-muted" style="text-transform:none;font-weight:400;font-size:0.72rem;">(by domain, excludes this site)</span></h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-external-link-alt section-icon"></i>Top External Referrers <span class="text-muted" style="text-transform:none;font-weight:400;font-size:0.72rem;">(by domain, excludes this site)</span></h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Referring Domain</th><th class="text-end">Hits</th></tr></thead><tbody id="refBreakdown"></tbody></table></div></div>
             </div>
@@ -314,14 +314,14 @@
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-building section-icon"></i>Top Organizations / ISPs</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-building section-icon"></i>Top Organizations / ISPs</h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Network Operator (ASN)</th><th class="text-end">Hits</th></tr></thead><tbody id="asnBreakdown"></tbody></table></div></div>
             </div>
         </div>
         <div class="col-lg-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-city section-icon"></i>Top Cities</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-city section-icon"></i>Top Cities</h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>City</th><th class="text-end">Hits</th></tr></thead><tbody id="cityBreakdown"></tbody></table></div></div>
             </div>
@@ -333,7 +333,7 @@
     <div class="row g-3">
         <div class="col-12">
             <div class="card">
-                <div class="card-header"><h6><i class="fas fa-network-wired section-icon"></i>IPv4 vs IPv6</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-network-wired section-icon"></i>IPv4 vs IPv6</h3></div>
                 <div class="card-body">
                     <div class="table-responsive"><table class="table eas-table mb-0">
                         <thead><tr>
@@ -356,7 +356,7 @@
     <div class="row g-3">
         <div class="col-lg-7">
             <div class="card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center gap-2"><h6 class="mb-0"><i class="fas fa-bug section-icon"></i>Top Error URLs (4xx / 5xx)</h6><input type="search" id="searchErrorPages" class="form-control form-control-sm table-search" placeholder="Filter…" aria-label="Filter error URLs"></div>
+                <div class="card-header d-flex justify-content-between align-items-center gap-2"><h3 class="mb-0 h6"><i class="fas fa-bug section-icon"></i>Top Error URLs (4xx / 5xx)</h3><input type="search" id="searchErrorPages" class="form-control form-control-sm table-search" placeholder="Filter…" aria-label="Filter error URLs"></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Path</th><th class="text-center">Status</th><th class="text-end">Hits</th></tr></thead>
                     <tbody id="errorPages"></tbody></table></div></div>
@@ -364,7 +364,7 @@
         </div>
         <div class="col-lg-5">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-user-secret section-icon"></i>Top Error Sources</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-user-secret section-icon"></i>Top Error Sources</h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Host / IP</th><th class="text-end">Errors</th></tr></thead>
                     <tbody id="errorSources"></tbody></table></div></div>
@@ -377,7 +377,7 @@
     <div class="row g-3">
         <div class="col-12">
             <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center gap-2"><h6 class="mb-0"><i class="fas fa-stream section-icon"></i>Recent Requests</h6><input type="search" id="searchRecent" class="form-control form-control-sm table-search" placeholder="Filter…" aria-label="Filter recent requests"></div>
+                <div class="card-header d-flex justify-content-between align-items-center gap-2"><h3 class="mb-0 h6"><i class="fas fa-stream section-icon"></i>Recent Requests</h3><input type="search" id="searchRecent" class="form-control form-control-sm table-search" placeholder="Filter…" aria-label="Filter recent requests"></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>When</th><th>Method</th><th>Path</th><th class="text-center">Status</th><th class="d-none d-md-table-cell">Browser</th><th class="d-none d-lg-table-cell">User Agent</th></tr></thead>
                     <tbody id="recentRequests"></tbody></table></div></div>
@@ -390,7 +390,7 @@
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-network-wired section-icon"></i>Top Login Source IPs</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-network-wired section-icon"></i>Top Login Source IPs</h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>IP Address</th><th class="text-end">Success</th><th class="text-end">Failed</th></tr></thead>
                     <tbody id="topLoginIps"></tbody></table></div></div>
@@ -398,7 +398,7 @@
         </div>
         <div class="col-lg-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-history section-icon"></i>Recent Logins</h6></div>
+                <div class="card-header"><h3 class="h6"><i class="fas fa-history section-icon"></i>Recent Logins</h3></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>When</th><th>User</th><th>IP</th><th>Result</th></tr></thead>
                     <tbody id="recentLogins"></tbody></table></div></div>

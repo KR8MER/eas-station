@@ -20,7 +20,7 @@
     <div class="alert alert-info d-flex align-items-center mb-4" role="alert">
         <i class="fas fa-sitemap fa-2x me-3"></i>
         <div class="flex-grow-1">
-            <h5 class="alert-heading mb-1">RBAC Permission Reference</h5>
+            <h2 class="alert-heading mb-1 h5">RBAC Permission Reference</h2>
             <p class="mb-0">
                 View the complete permission tree showing what each role can access.
                 <a href="/docs/RBAC_PERMISSION_TREE" class="alert-link fw-bold">
@@ -54,7 +54,7 @@
         <!-- Roles Tab -->
         <div class="tab-pane fade show active" id="roles" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-4">
-                <h3>Roles</h3>
+                <h2 class="h3">Roles</h2>
                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createRoleModal">
                     <i class="fas fa-plus"></i> Create Role
                 </button>
@@ -73,7 +73,7 @@
         <!-- Permissions Tab -->
         <div class="tab-pane fade" id="permissions" role="tabpanel">
             <div class="mb-4">
-                <h3>Available Permissions</h3>
+                <h2 class="h3">Available Permissions</h2>
                 <p class="text-muted">System permissions grouped by resource type</p>
             </div>
 
@@ -91,7 +91,7 @@
         <div class="tab-pane fade" id="assignments" role="tabpanel">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <div>
-                    <h3>User Role Assignments</h3>
+                    <h2 class="h3">User Role Assignments</h2>
                     <p class="text-muted">Manage which users have which roles</p>
                 </div>
                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createUserModal">
@@ -129,7 +129,7 @@
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-plus"></i> Create New Role</h5>
+                <h3 class="modal-title h5"><i class="fas fa-plus"></i> Create New Role</h3>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -165,7 +165,7 @@
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-edit"></i> Edit Role</h5>
+                <h3 class="modal-title h5"><i class="fas fa-edit"></i> Edit Role</h3>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -203,7 +203,7 @@
     <div class="modal-dialog modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-user-tag"></i> Change User Role</h5>
+                <h3 class="modal-title h5"><i class="fas fa-user-tag"></i> Change User Role</h3>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -231,7 +231,7 @@
     <div class="modal-dialog modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-user-plus"></i> Create New User</h5>
+                <h3 class="modal-title h5"><i class="fas fa-user-plus"></i> Create New User</h3>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -338,9 +338,9 @@ function renderRoles() {
             <div class="card admin-accent-card ${accentClass}" data-role-id="${role.id}">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h5 class="card-title text-capitalize mb-0">
+                        <h3 class="card-title text-capitalize mb-0 h5">
                             <i class="fas fa-user-tag"></i> ${escapeHtml(role.name)}
-                        </h5>
+                        </h3>
                         <span class="admin-count-badge">
                             <i class="fas fa-users me-1"></i> ${role.user_count || 0}
                         </span>
@@ -412,7 +412,7 @@ function renderPermissions() {
     const container = document.getElementById('permissions-container');
     container.innerHTML = Object.entries(permissionsByCategory).map(([category, perms]) => `
         <div class="admin-permission-group">
-            <h6><i class="fas fa-folder"></i> ${escapeHtml(category.toUpperCase())}</h6>
+            <h4 class="h6"><i class="fas fa-folder"></i> ${escapeHtml(category.toUpperCase())}</h4>
             <div>
                 ${perms.map(p => `
                     <span class="admin-permission-badge" title="${escapeHtml(p.description || '')}">
@@ -428,7 +428,7 @@ function renderPermissionsForModal(containerId = 'createRolePermissions', select
     const container = document.getElementById(containerId);
     container.innerHTML = Object.entries(permissionsByCategory).map(([category, perms]) => `
         <div class="admin-permission-group">
-            <h6>${escapeHtml(category.toUpperCase())}</h6>
+            <h4 class="h6">${escapeHtml(category.toUpperCase())}</h4>
             ${perms.map(p => `
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" value="${p.id}"

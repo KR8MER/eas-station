@@ -83,9 +83,9 @@
 
     {% if settings_section and settings_section.groups %}
         {% for group in settings_section.groups %}
-    <h6 class="settings-category-title">
+    <h2 class="settings-category-title h6">
         <i class="{{ group.icon }} me-1"></i> {{ group.label }}
-    </h6>
+    </h2>
     <div class="row g-3 mb-2">
             {% for item in group.items %}
         <div class="col-sm-6 col-md-4 col-xl-3">

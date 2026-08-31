@@ -341,8 +341,6 @@
 
         // Always init icon effects
         initIconEffects();
-
-        console.log('✨ Visual effects initialized');
     }
 
     // ============================================
@@ -413,9 +411,7 @@
     window.addEventListener('resize', () => {
         clearTimeout(resizeTimeout);
         resizeTimeout = setTimeout(() => {
-            if (optimizeForMobile()) {
-                console.log('📱 Mobile mode detected, using optimized effects');
-            }
+            optimizeForMobile();
         }, 250);
     });
 

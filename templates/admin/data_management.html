@@ -82,14 +82,14 @@
             <!-- Shapefile Upload Section -->
             <hr class="my-5">
             <div class="mb-4">
-                <h4 class="mb-2"><i class="fas fa-map text-info"></i> Upload Shapefiles</h4>
+                <h2 class="mb-2 h4"><i class="fas fa-map text-info"></i> Upload Shapefiles</h2>
                 <p class="text-muted">Upload ESRI Shapefiles (.shp with companion files) or use existing shapefiles from the server.</p>
             </div>
 
             <!-- Load Cities & Villages from Census -->
             <div class="card shadow-sm mb-4">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-city"></i> Load Cities &amp; Villages (Census)</h5>
+                    <h3 class="mb-0 h5"><i class="fas fa-city"></i> Load Cities &amp; Villages (Census)</h3>
                 </div>
                 <div class="card-body">
                     <p class="text-muted small">
@@ -117,7 +117,7 @@
             <!-- Existing Shapefiles on Server -->
             <div class="card shadow-sm mb-4">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-server"></i> Available Shapefiles on Server</h5>
+                    <h3 class="mb-0 h5"><i class="fas fa-server"></i> Available Shapefiles on Server</h3>
                 </div>
                 <div class="card-body">
                     <button type="button" class="btn btn-outline-primary mb-3" onclick="loadServerShapefiles()">
@@ -134,7 +134,7 @@
             <!-- Upload New Shapefile (ZIP) -->
             <div class="card shadow-sm">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-file-archive"></i> Upload New Shapefile (ZIP)</h5>
+                    <h3 class="mb-0 h5"><i class="fas fa-file-archive"></i> Upload New Shapefile (ZIP)</h3>
                 </div>
                 <div class="card-body">
                     <p class="text-muted small">
@@ -184,7 +184,7 @@
         <!-- Zones Catalog sub-tab -->
         <div class="tab-pane fade" id="zone-catalog" role="tabpanel">
             <div class="mb-4">
-                <h4 class="mb-2"><i class="fas fa-map-marked-alt text-primary"></i> NOAA Zone Catalog Management</h4>
+                <h2 class="mb-2 h4"><i class="fas fa-map-marked-alt text-primary"></i> NOAA Zone Catalog Management</h2>
                 <p class="text-muted">Manage the NOAA National Weather Service zone catalog database</p>
                 <div class="alert alert-info">
                     <i class="fas fa-info-circle"></i>
@@ -202,10 +202,10 @@
                 <div class="col-md-3">
                     <div class="card">
                         <div class="card-body">
-                            <h6 class="card-subtitle mb-2 text-muted">Zone File Status</h6>
-                            <h3 class="card-title" id="zone-file-status">
+                            <h3 class="card-subtitle mb-2 text-muted h6">Zone File Status</h3>
+                            <h2 class="card-title h3" id="zone-file-status">
                                 <i class="fas fa-spinner fa-spin"></i>
-                            </h3>
+                            </h2>
                             <p class="card-text"><small id="zone-file-path">Loading...</small></p>
                         </div>
                     </div>
@@ -213,8 +213,8 @@
                 <div class="col-md-3">
                     <div class="card">
                         <div class="card-body">
-                            <h6 class="card-subtitle mb-2 text-muted">Database Zones</h6>
-                            <h3 class="card-title" id="zone-db-count">--</h3>
+                            <h3 class="card-subtitle mb-2 text-muted h6">Database Zones</h3>
+                            <h2 class="card-title h3" id="zone-db-count">--</h2>
                             <p class="card-text"><small>Zones in database</small></p>
                         </div>
                     </div>
@@ -222,8 +222,8 @@
                 <div class="col-md-3">
                     <div class="card">
                         <div class="card-body">
-                            <h6 class="card-subtitle mb-2 text-muted">Cached Zones</h6>
-                            <h3 class="card-title" id="zone-cache-count">--</h3>
+                            <h3 class="card-subtitle mb-2 text-muted h6">Cached Zones</h3>
+                            <h2 class="card-title h3" id="zone-cache-count">--</h2>
                             <p class="card-text"><small>Zones in memory cache</small></p>
                         </div>
                     </div>
@@ -231,8 +231,8 @@
                 <div class="col-md-3">
                     <div class="card">
                         <div class="card-body">
-                            <h6 class="card-subtitle mb-2 text-muted">File Size</h6>
-                            <h3 class="card-title" id="zone-file-size">--</h3>
+                            <h3 class="card-subtitle mb-2 text-muted h6">File Size</h3>
+                            <h2 class="card-title h3" id="zone-file-size">--</h2>
                             <p class="card-text"><small>DBF file size</small></p>
                         </div>
                     </div>
@@ -244,12 +244,12 @@
                 <div class="col-12">
                     <div class="card">
                         <div class="card-header">
-                            <h5 class="mb-0"><i class="fas fa-tools"></i> Zone Catalog Actions</h5>
+                            <h3 class="mb-0 h5"><i class="fas fa-tools"></i> Zone Catalog Actions</h3>
                         </div>
                         <div class="card-body">
                             <div class="row">
                                 <div class="col-md-6 mb-3">
-                                    <h6>Upload New Zone Catalog File</h6>
+                                    <h4 class="h6">Upload New Zone Catalog File</h4>
                                     <p class="text-muted">
                                         Upload a .dbf file containing NOAA zone data.
                                         <a href="https://www.weather.gov/gis/publiczones" target="_blank" rel="noopener noreferrer">
@@ -267,7 +267,7 @@
                                     </form>
                                 </div>
                                 <div class="col-md-6 mb-3">
-                                    <h6>Reload Zone Catalog</h6>
+                                    <h4 class="h6">Reload Zone Catalog</h4>
                                     <p class="text-muted">Reload zones from the current DBF file into the database</p>
                                     <button id="zone-reload-btn" class="btn btn-success">
                                         <i class="fas fa-sync"></i> Reload from File
@@ -287,7 +287,7 @@
                 <div class="col-12">
                     <div class="card">
                         <div class="card-header">
-                            <h5 class="mb-0"><i class="fas fa-search"></i> Search Zones</h5>
+                            <h3 class="mb-0 h5"><i class="fas fa-search"></i> Search Zones</h3>
                         </div>
                         <div class="card-body">
                             <div class="mb-3">
@@ -306,7 +306,7 @@
         <!-- Manage Data sub-tab -->
         <div class="tab-pane fade" id="manage" role="tabpanel">
             <div class="mb-4">
-                <h4 class="mb-2"><i class="fas fa-tasks text-success"></i> Manage Boundary Data</h4>
+                <h3 class="mb-2 h4"><i class="fas fa-tasks text-success"></i> Manage Boundary Data</h3>
                 <p class="text-muted">Stay organized with filters, refreshed counts, and safer bulk actions.</p>
             </div>
             <div class="row g-3 align-items-stretch">
@@ -315,7 +315,7 @@
                         <div class="card-header bg-transparent border-0 pb-0">
                             <div class="d-flex flex-column flex-lg-row justify-content-lg-between gap-3 align-items-lg-center">
                                 <div>
-                                    <h5 class="mb-1">Current Boundaries</h5>
+                                    <h4 class="mb-1 h5">Current Boundaries</h4>
                                     <p class="text-muted small mb-0">Filter by type or name, then take action.</p>
                                 </div>
                                 <div class="d-flex flex-wrap gap-2 align-items-center">
@@ -379,7 +379,7 @@
                 <div class="col-lg-4">
                     <div class="card shadow-sm h-100 manage-card">
                         <div class="card-header bg-transparent border-0 pb-0">
-                            <h5 class="mb-1">Bulk Operations</h5>
+                            <h4 class="mb-1 h5">Bulk Operations</h4>
                             <p class="text-muted small mb-0">Use filters first, then choose targeted cleanup.</p>
                         </div>
                         <div class="card-body">
@@ -391,7 +391,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <h6 class="fw-bold">Delete by Type</h6>
+                            <h5 class="fw-bold h6">Delete by Type</h5>
                             <select id="deleteType" class="form-select mb-3">
                                 <option value="">Select boundary type...</option>
                                 <option value="electric">⚡ Electric Providers</option>
@@ -431,7 +431,7 @@
                             <i class="fas fa-lightbulb"></i>
                         </div>
                         <div>
-                            <h6 class="mb-1">Pro tips</h6>
+                            <h5 class="mb-1 h6">Pro tips</h5>
                             <p class="mb-0 text-muted small">Preview uploads to validate metadata, then refresh this list to keep stats current.</p>
                         </div>
                     </div>
@@ -451,9 +451,9 @@
         <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">
+                    <h3 class="modal-title h5">
                         <i class="fas fa-exclamation-triangle"></i> Confirmation Required
-                    </h5>
+                    </h3>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body" id="confirmationBody">

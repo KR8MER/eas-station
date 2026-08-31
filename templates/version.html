@@ -295,7 +295,7 @@
     {% set hero_extra %}
         <!-- Git Info Card -->
         <div class="git-info-card">
-            <h5 class="mb-3"><i class="fab fa-git-alt me-2"></i>Build Information</h5>
+            <h2 class="mb-3 h5"><i class="fab fa-git-alt me-2"></i>Build Information</h2>
             <div class="git-info-item">
                 <span class="git-info-label">Commit:</span>
                 <span class="git-info-value">
@@ -357,15 +357,15 @@
         <div class="tab-content" id="versionTabContent">
             <!-- Overview Tab -->
             <div class="tab-pane fade show active" id="overview" role="tabpanel">
-                <h3 class="mb-4">
+                <h2 class="mb-4 h3">
                     <i class="fas fa-star text-warning me-2"></i>
                     What's New in {{ version_info.version }}
-                </h3>
+                </h2>
 
                 {% if changelogs.main and changelogs.main|length > 0 %}
                     {% set latest = changelogs.main[0] %}
                     <div class="alert alert-info">
-                        <h5 class="alert-heading">Latest Release{% if latest.date %} - {{ latest.date }}{% endif %}</h5>
+                        <h3 class="alert-heading h5">Latest Release{% if latest.date %} - {{ latest.date }}{% endif %}</h3>
 
                         {% if latest.added %}
                         <div class="change-category added">
@@ -433,10 +433,10 @@
 
             <!-- Changelog Tab -->
             <div class="tab-pane fade" id="changelog" role="tabpanel">
-                <h3 class="mb-4">
+                <h2 class="mb-4 h3">
                     <i class="fas fa-history me-2"></i>
                     Release History
-                </h3>
+                </h2>
 
                 {% if changelogs.main and changelogs.main|length > 0 %}
                 <div class="timeline">
@@ -529,10 +529,10 @@
 
             <!-- Features Tab -->
             <div class="tab-pane fade" id="features" role="tabpanel">
-                <h3 class="mb-4">
+                <h2 class="mb-4 h3">
                     <i class="fas fa-check-circle text-success me-2"></i>
                     Installed Features &amp; Software Stack
-                </h3>
+                </h2>
 
                 <p class="text-muted">
                     Live availability for hardware-dependent features comes from the runtime probe at startup.
@@ -541,7 +541,7 @@
                 </p>
 
                 {# ---------- Alerting core ---------- #}
-                <h4 class="mt-4 mb-2"><i class="fas fa-bullhorn me-2 text-primary"></i>Alerting Core</h4>
+                <h3 class="mt-4 mb-2 h4"><i class="fas fa-bullhorn me-2 text-primary"></i>Alerting Core</h3>
                 <div class="feature-grid">
                     <div class="feature-item">
                         <div class="feature-icon available"><i class="fas fa-satellite-dish"></i></div>
@@ -574,7 +574,7 @@
                 </div>
 
                 {# ---------- Hardware integrations ---------- #}
-                <h4 class="mt-4 mb-2"><i class="fas fa-microchip me-2 text-primary"></i>Hardware Integrations</h4>
+                <h3 class="mt-4 mb-2 h4"><i class="fas fa-microchip me-2 text-primary"></i>Hardware Integrations</h3>
                 <div class="feature-grid">
                     <div class="feature-item">
                         <div class="feature-icon {% if version_info.led_available %}available{% else %}unavailable{% endif %}">
@@ -637,7 +637,7 @@
                 </div>
 
                 {# ---------- Audio / DSP ---------- #}
-                <h4 class="mt-4 mb-2"><i class="fas fa-wave-square me-2 text-primary"></i>Audio &amp; DSP</h4>
+                <h3 class="mt-4 mb-2 h4"><i class="fas fa-wave-square me-2 text-primary"></i>Audio &amp; DSP</h3>
                 <div class="feature-grid">
                     <div class="feature-item">
                         <div class="feature-icon available"><i class="fas fa-tower-broadcast"></i></div>
@@ -707,7 +707,7 @@
                 </div>
 
                 {# ---------- Security & auth ---------- #}
-                <h4 class="mt-4 mb-2"><i class="fas fa-shield-halved me-2 text-primary"></i>Security &amp; Auth</h4>
+                <h3 class="mt-4 mb-2 h4"><i class="fas fa-shield-halved me-2 text-primary"></i>Security &amp; Auth</h3>
                 <div class="feature-grid">
                     <div class="feature-item">
                         <div class="feature-icon available"><i class="fas fa-user-shield"></i></div>
@@ -744,7 +744,7 @@
                 </div>
 
                 {# ---------- Notifications & UI ---------- #}
-                <h4 class="mt-4 mb-2"><i class="fas fa-bell me-2 text-primary"></i>Notifications &amp; Dashboards</h4>
+                <h3 class="mt-4 mb-2 h4"><i class="fas fa-bell me-2 text-primary"></i>Notifications &amp; Dashboards</h3>
                 <div class="feature-grid">
                     <div class="feature-item">
                         <div class="feature-icon available"><i class="fas fa-sms"></i></div>
@@ -777,7 +777,7 @@
                 </div>
 
                 {# ---------- Deployment ---------- #}
-                <h4 class="mt-4 mb-2"><i class="fas fa-server me-2 text-primary"></i>Deployment</h4>
+                <h3 class="mt-4 mb-2 h4"><i class="fas fa-server me-2 text-primary"></i>Deployment</h3>
                 <div class="feature-grid">
                     <div class="feature-item">
                         <div class="feature-icon available"><i class="fas fa-cogs"></i></div>
@@ -810,7 +810,7 @@
                 </div>
 
                 {# ---------- Pinned software stack ---------- #}
-                <h4 class="mt-4 mb-2"><i class="fas fa-layer-group me-2 text-primary"></i>Software Stack (pinned versions)</h4>
+                <h3 class="mt-4 mb-2 h4"><i class="fas fa-layer-group me-2 text-primary"></i>Software Stack (pinned versions)</h3>
                 <p class="text-muted mb-2">
                     Canonical dependency list, kept in sync with <code>requirements.txt</code> by
                     <code>tests/test_tech_stack_badges.py</code>. Hover any badge for a one-line
@@ -819,7 +819,7 @@
                 {% include 'partials/tech_stack_badges.html' %}
 
                 <div class="alert alert-info mt-4">
-                    <h5 class="alert-heading"><i class="fas fa-info-circle me-2"></i>Feature Status</h5>
+                    <h4 class="alert-heading h5"><i class="fas fa-info-circle me-2"></i>Feature Status</h4>
                     <p class="mb-0">
                         Hardware-dependent rows reflect the live startup probe — see
                         <strong>Admin &rarr; Hardware Settings</strong> to enable or reconfigure devices.
@@ -831,16 +831,16 @@
 
             <!-- System Info Tab -->
             <div class="tab-pane fade" id="system" role="tabpanel">
-                <h3 class="mb-4">
+                <h2 class="mb-4 h3">
                     <i class="fas fa-server me-2"></i>
                     System Information
-                </h3>
+                </h2>
 
                 <div class="row g-4">
                     <div class="col-md-6">
                         <div class="card h-100">
                             <div class="card-header bg-primary text-white">
-                                <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Version Details</h5>
+                                <h3 class="mb-0 h5"><i class="fas fa-info-circle me-2"></i>Version Details</h3>
                             </div>
                             <div class="card-body">
                                 {% set items = [
@@ -857,7 +857,7 @@
                     <div class="col-md-6">
                         <div class="card h-100">
                             <div class="card-header bg-success text-white">
-                                <h5 class="mb-0"><i class="fab fa-git-alt me-2"></i>Git Information</h5>
+                                <h3 class="mb-0 h5"><i class="fab fa-git-alt me-2"></i>Git Information</h3>
                             </div>
                             <div class="card-body">
                                 {% set items = [
@@ -874,7 +874,7 @@
                     <div class="col-md-6">
                         <div class="card h-100">
                             <div class="card-header bg-info text-white">
-                                <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Time Information</h5>
+                                <h3 class="mb-0 h5"><i class="fas fa-clock me-2"></i>Time Information</h3>
                             </div>
                             <div class="card-body">
                                 {% set items = [
@@ -890,7 +890,7 @@
                     <div class="col-md-6">
                         <div class="card h-100">
                             <div class="card-header bg-dark text-white">
-                                <h5 class="mb-0"><i class="fas fa-microchip me-2"></i>Runtime Environment</h5>
+                                <h3 class="mb-0 h5"><i class="fas fa-microchip me-2"></i>Runtime Environment</h3>
                             </div>
                             <div class="card-body">
                                 {% set items = [
@@ -906,7 +906,7 @@
                     <div class="col-md-6">
                         <div class="card h-100">
                             <div class="card-header bg-warning text-dark">
-                                <h5 class="mb-0"><i class="fas fa-puzzle-piece me-2"></i>Runtime Feature Probe</h5>
+                                <h3 class="mb-0 h5"><i class="fas fa-puzzle-piece me-2"></i>Runtime Feature Probe</h3>
                             </div>
                             <div class="card-body">
                                 {% set yes = '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Available</span>' %}
@@ -931,10 +931,10 @@
 
             <!-- JSON API Tab -->
             <div class="tab-pane fade" id="api" role="tabpanel">
-                <h3 class="mb-4">
+                <h2 class="mb-4 h3">
                     <i class="fas fa-code me-2"></i>
                     JSON API Response
-                </h3>
+                </h2>
 
                 <p class="text-muted">
                     This data is also available in JSON format at

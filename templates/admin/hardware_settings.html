@@ -569,7 +569,7 @@
                 <div id="panel-gpio" class="hw-panel">
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title"><i class="fas fa-power-off me-1"></i> GPIO Control</h5>
+                            <h2 class="card-title h5"><i class="fas fa-power-off me-1"></i> GPIO Control</h2>
                             <div class="form-check mb-2">
                                 <input class="form-check-input" type="checkbox" id="gpio_enabled" name="gpio_enabled" value="true" {% if settings.gpio_enabled %}checked{% endif %}>
                                 <label class="form-check-label" for="gpio_enabled">Enable GPIO Control</label>
@@ -589,7 +589,7 @@
 
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title"><i class="fas fa-map me-1"></i> Pin Configuration</h5>
+                            <h2 class="card-title h5"><i class="fas fa-map me-1"></i> Pin Configuration</h2>
                             <p class="text-muted small mb-3">
                                 Configure individual GPIO pins and assign alert behaviors using the dedicated pages.
                             </p>
@@ -819,7 +819,7 @@
                 <div id="panel-zigbee" class="hw-panel">
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title"><i class="fas fa-broadcast-tower me-1"></i> Zigbee Coordinator</h5>
+                            <h2 class="card-title h5"><i class="fas fa-broadcast-tower me-1"></i> Zigbee Coordinator</h2>
                             <div class="form-check mb-2">
                                 <input class="form-check-input" type="checkbox" id="zigbee_enabled" name="zigbee_enabled" value="true" {% if settings.zigbee_enabled %}checked{% endif %}>
                                 <label class="form-check-label" for="zigbee_enabled">Enable Zigbee Coordinator</label>
@@ -832,7 +832,7 @@
 
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title">Serial Port</h5>
+                            <h2 class="card-title h5">Serial Port</h2>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label for="zigbee_port" class="form-label">Port</label>
@@ -869,7 +869,7 @@
 
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title">Network Settings</h5>
+                            <h2 class="card-title h5">Network Settings</h2>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label for="zigbee_channel" class="form-label">Channel (11-26)</label>
@@ -887,7 +887,7 @@
 
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title">Devices</h5>
+                            <h2 class="card-title h5">Devices</h2>
                             <p class="text-muted small mb-0">
                                 After enabling the coordinator, visit the
                                 <a href="{{ url_for('zigbee.zigbee_settings') }}">Zigbee Devices</a> page
@@ -1236,12 +1236,12 @@
                 <div id="panel-gps" class="hw-panel">
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <h2 class="card-title d-flex align-items-center justify-content-between flex-wrap gap-2 h5">
                                 <span><i class="fas fa-satellite me-1"></i> GPS Receiver</span>
                                 <a href="{{ url_for('hardware.gps_dashboard_page') }}" class="btn btn-sm btn-outline-info">
                                     <i class="fas fa-satellite-dish"></i> Open GPS &amp; Time Dashboard
                                 </a>
-                            </h5>
+                            </h2>
                             <div class="form-check mb-2">
                                 <input class="form-check-input" type="checkbox" id="gps_enabled" name="gps_enabled" value="true" {% if settings.gps_enabled %}checked{% endif %}>
                                 <label class="form-check-label" for="gps_enabled">Enable GPS Receiver</label>
@@ -1264,11 +1264,11 @@
                     <div class="card mb-3" id="gps-hat-diag-card">
                         <div class="card-body">
                             <div class="d-flex align-items-center justify-content-between mb-2">
-                                <h5 class="card-title mb-0">
+                                <h2 class="card-title mb-0 h5">
                                     <i class="fas fa-stethoscope me-1"></i>
                                     GPS HAT Setup Status
                                     <span id="gps-hat-status-badge" class="badge bg-secondary ms-2">Checking…</span>
-                                </h5>
+                                </h2>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" id="gps-hat-refresh-btn">
                                     <i class="fas fa-rotate"></i> Recheck
                                 </button>
@@ -1303,7 +1303,7 @@
                          ────────────────────────────────────────────────── -->
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title">Source</h5>
+                            <h2 class="card-title h5">Source</h2>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label for="gps_source" class="form-label">NMEA Source</label>
@@ -1331,7 +1331,7 @@
 
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title">Serial Connection</h5>
+                            <h2 class="card-title h5">Serial Connection</h2>
                             <small class="form-text text-muted d-block mb-2">
                                 Used when <strong>NMEA Source</strong> above is set to <em>Serial port</em>, or as the fallback in <em>Auto</em> mode.
                                 In <em>gpsd</em> mode these are written to <code>/etc/default/gpsd</code> instead, via the GPS HAT setup helper.
@@ -1359,7 +1359,7 @@
 
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title">PPS &amp; Time Sync</h5>
+                            <h2 class="card-title h5">PPS &amp; Time Sync</h2>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label for="gps_pps_gpio_pin" class="form-label">PPS GPIO Pin (BCM)</label>
@@ -1391,12 +1391,12 @@
 
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <h2 class="card-title d-flex align-items-center justify-content-between flex-wrap gap-2 h5">
                                 <span>Live GPS Status <span id="gps-live-badge" class="gps-live-pill"><span id="gps-live-dot" class="gps-live-dot"></span>auto-refreshing</span></span>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshGpsStatus()">
                                     <i class="fas fa-sync-alt"></i> Refresh
                                 </button>
-                            </h5>
+                            </h2>
                             <div id="gps-status-card" class="mt-2">
                                 <span class="text-muted small">Open this tab to load GPS status.</span>
                             </div>
@@ -1446,10 +1446,10 @@
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">
+                <h2 class="modal-title h5">
                     <i class="fas fa-bolt me-1"></i>
                     <span id="gps-hat-modal-title">Run action</span>
-                </h5>
+                </h2>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">

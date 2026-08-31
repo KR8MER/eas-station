@@ -24,7 +24,7 @@
             <!-- ── Status Card ─────────────────────────────────────────── -->
             <div class="card mb-3">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="fas fa-circle-info"></i> Postfix Status</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-circle-info"></i> Postfix Status</h2>
                     <div class="d-flex gap-2 align-items-center">
                         <span id="installedBadge"
                               class="badge bg-{{ 'success' if status.installed else 'secondary' }}">
@@ -96,7 +96,7 @@
             <!-- ── Install Card (hidden when installed) ────────────────── -->
             <div class="card mb-3 {{ 'd-none' if status.installed else '' }}" id="installCard">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-download"></i> Install Postfix</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-download"></i> Install Postfix</h2>
                 </div>
                 <div class="card-body">
                     <p>Postfix is a standard Linux mail transfer agent. Installing it here adds it
@@ -113,7 +113,7 @@
             <!-- ── Configuration Card (shown when installed) ──────────── -->
             <div class="card mb-3 {{ '' if status.installed else 'd-none' }}" id="configCard">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-sliders"></i> Configuration</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-sliders"></i> Configuration</h2>
                 </div>
                 <div class="card-body">
 
@@ -179,7 +179,7 @@
             <!-- ── Apply to Notifications Card ─────────────────────────── -->
             <div class="card mb-3 {{ '' if status.port_open else 'd-none' }}" id="applyNotifCard">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-plug"></i> Connect to EAS Station™</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-plug"></i> Connect to EAS Station™</h2>
                 </div>
                 <div class="card-body">
                     <p>Postfix is running. Click below to set the EAS Station™ notification
@@ -197,7 +197,7 @@
             <!-- ── Test Email Card ─────────────────────────────────────── -->
             <div class="card mb-3 {{ '' if status.port_open else 'd-none' }}" id="testCard">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-paper-plane"></i> Send Test Email</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-paper-plane"></i> Send Test Email</h2>
                 </div>
                 <div class="card-body">
                     <p class="mb-3">Send a test message through the local Postfix relay to verify
@@ -222,7 +222,7 @@
 
             <div class="card mb-3">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-circle-info"></i> How It Works</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-circle-info"></i> How It Works</h2>
                 </div>
                 <div class="card-body small">
                     <ol class="ps-3 mb-0">
@@ -240,7 +240,7 @@
 
             <div class="card mb-3">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fab fa-vuejs" style="color:#41b883"></i> Vultr Setup</h5>
+                    <h2 class="mb-0 h5"><i class="fab fa-vuejs" style="color:#41b883"></i> Vultr Setup</h2>
                 </div>
                 <div class="card-body small">
                     <p class="mb-2">Vultr blocks port 25 by default. To send mail directly:</p>
@@ -261,7 +261,7 @@
 
             <div class="card mb-3">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-shield-halved"></i> Deliverability Tips</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-shield-halved"></i> Deliverability Tips</h2>
                 </div>
                 <div class="card-body small">
                     <ul class="ps-3 mb-0">
@@ -277,7 +277,7 @@
 
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-terminal"></i> Quick Reference</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-terminal"></i> Quick Reference</h2>
                 </div>
                 <div class="card-body small font-monospace">
                     <div class="text-muted mb-1"># View Postfix mail queue</div>

@@ -39,7 +39,7 @@
     <div class="card">
         <div class="card-body text-center py-5">
             <i class="fas fa-magnifying-glass fa-2x text-muted mb-3"></i>
-            <h5>No events recorded for this identifier</h5>
+            <h2 class="h5">No events recorded for this identifier</h2>
             <p class="text-muted mb-0">
                 Either no alert with identifier <code>{{ identifier }}</code> has been
                 ingested yet, or the correlation ID was never bound during processing.
@@ -100,9 +100,9 @@
     {% if payload.chain %}
     <div class="card mb-4">
         <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
-            <h5 class="card-title mb-0"><i class="fas fa-diagram-project text-primary"></i> Event Lifecycle
+            <h3 class="card-title mb-0 h5"><i class="fas fa-diagram-project text-primary"></i> Event Lifecycle
                 <span class="badge bg-secondary ms-2">{{ payload.chain|length }} update{{ 's' if payload.chain|length != 1 else '' }}</span>
-            </h5>
+            </h3>
             <small class="text-muted">Full VTEC chain · oldest → newest</small>
         </div>
         <div class="list-group list-group-flush">
@@ -144,9 +144,9 @@
     {% if payload.messages %}
     <div class="card mb-4">
         <div class="card-header bg-transparent">
-            <h5 class="card-title mb-0"><i class="fas fa-volume-high text-success"></i> Broadcast Audio
+            <h3 class="card-title mb-0 h5"><i class="fas fa-volume-high text-success"></i> Broadcast Audio
                 <span class="badge bg-secondary ms-2">{{ payload.messages|length }}</span>
-            </h5>
+            </h3>
         </div>
         <div class="card-body">
             {% for message in payload.messages %}
@@ -182,9 +182,9 @@
     <!-- Timeline ─────────────────────────────────────────────────── -->
     <div class="card">
         <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
-            <h5 class="card-title mb-0"><i class="fas fa-timeline text-primary"></i> Timeline
+            <h3 class="card-title mb-0 h5"><i class="fas fa-timeline text-primary"></i> Timeline
                 <span class="badge bg-secondary ms-2">{{ payload.events|length }}</span>
-            </h5>
+            </h3>
             <small class="text-muted">Oldest → newest</small>
         </div>
         <div class="card-body">

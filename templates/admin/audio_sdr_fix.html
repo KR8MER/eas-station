@@ -16,7 +16,7 @@
     <div class="row">
         <div class="col-12">
             <div class="alert alert-info">
-                <h5><i class="fas fa-info-circle"></i> About This Tool</h5>
+                <h2 class="h5"><i class="fas fa-info-circle"></i> About This Tool</h2>
                 <p>This page helps diagnose and fix three common audio/SDR issues:</p>
                 <ol>
                     <li><strong>MP3 streams not appearing as Icecast mount points</strong></li>
@@ -29,7 +29,7 @@
             <!-- Diagnostic Section -->
             <div class="card mb-4">
                 <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0"><i class="fas fa-stethoscope"></i> Step 1: Diagnose Configuration</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-stethoscope"></i> Step 1: Diagnose Configuration</h2>
                 </div>
                 <div class="card-body">
                     <p>Click the button below to scan your configuration for issues.</p>
@@ -46,7 +46,7 @@
             <!-- Fix Section -->
             <div id="fixSection" class="card mb-4" style="display: none;">
                 <div class="card-header bg-success text-white">
-                    <h5 class="mb-0"><i class="fas fa-wrench"></i> Step 2: Apply Fixes</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-wrench"></i> Step 2: Apply Fixes</h2>
                 </div>
                 <div class="card-body">
                     <div class="alert alert-warning">
@@ -54,7 +54,7 @@
                         This will update your database configuration. Make sure you understand the changes before proceeding.
                     </div>
 
-                    <h6>Fixes to be applied:</h6>
+                    <h3 class="h6">Fixes to be applied:</h3>
                     <ul id="fixesList" class="mb-3">
                         <!-- Will be populated dynamically -->
                     </ul>
@@ -72,7 +72,7 @@
             <!-- Restart Section -->
             <div id="restartSection" class="card mb-4" style="display: none;">
                 <div class="card-header bg-warning">
-                    <h5 class="mb-0"><i class="fas fa-sync-alt"></i> Step 3: Restart Services</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-sync-alt"></i> Step 3: Restart Services</h2>
                 </div>
                 <div class="card-body">
                     <p>Configuration has been updated! Now restart the SDR service to apply the changes.</p>
@@ -167,14 +167,14 @@ function displayDiagnosticResults(data) {
     const resultsDiv = document.getElementById('diagnosticResults');
     const summary = data.summary;
 
-    let html = '<h5>Diagnostic Results</h5>';
+    let html = '<h2 class="h5">Diagnostic Results</h2>';
 
     // Summary
     html += '<div class="row mb-3">';
     html += `<div class="col-md-3">
         <div class="card text-center">
             <div class="card-body">
-                <h3>${summary.total_receivers}</h3>
+                <h2 class="h3">${summary.total_receivers}</h2>
                 <small>SDR Receivers</small>
             </div>
         </div>
@@ -182,7 +182,7 @@ function displayDiagnosticResults(data) {
     html += `<div class="col-md-3">
         <div class="card text-center">
             <div class="card-body">
-                <h3>${summary.total_audio_sources}</h3>
+                <h2 class="h3">${summary.total_audio_sources}</h2>
                 <small>Audio Sources</small>
             </div>
         </div>
@@ -190,7 +190,7 @@ function displayDiagnosticResults(data) {
     html += `<div class="col-md-3">
         <div class="card text-center bg-danger text-white">
             <div class="card-body">
-                <h3>${summary.total_issues}</h3>
+                <h2 class="h3">${summary.total_issues}</h2>
                 <small>Issues Found</small>
             </div>
         </div>
@@ -198,7 +198,7 @@ function displayDiagnosticResults(data) {
     html += `<div class="col-md-3">
         <div class="card text-center bg-warning">
             <div class="card-body">
-                <h3>${summary.total_warnings}</h3>
+                <h2 class="h3">${summary.total_warnings}</h2>
                 <small>Warnings</small>
             </div>
         </div>
@@ -207,7 +207,7 @@ function displayDiagnosticResults(data) {
 
     // Detailed results
     if (data.all_configs.length > 0) {
-        html += '<h6>Configuration Details:</h6>';
+        html += '<h3 class="h6">Configuration Details:</h3>';
 
         data.all_configs.forEach(item => {
             const severity = item.severity || 'success';
@@ -315,7 +315,7 @@ async function applyFixes() {
             html += '</div>';
 
             if (data.fixes_applied.length > 0) {
-                html += '<h6>Changes applied:</h6><ul>';
+                html += '<h3 class="h6">Changes applied:</h3><ul>';
                 data.fixes_applied.forEach(fix => {
                     html += '<li>';
                     if (fix.identifier) {

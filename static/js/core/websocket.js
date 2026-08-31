@@ -117,8 +117,6 @@
 
             // Register all known event handlers
             registerEventHandlers();
-
-            console.info('[EASWebSocket] Initializing connection...');
         } catch (error) {
             console.error('[EASWebSocket] Failed to initialize:', error);
             startAllFallbackPolling();
@@ -129,7 +127,6 @@
      * Handle successful connection
      */
     function onConnect() {
-        console.info('[EASWebSocket] Connected - real-time updates active');
         isConnected = true;
         reconnectAttempts = 0;
 

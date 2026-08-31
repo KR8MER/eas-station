@@ -55,7 +55,7 @@
             {% if alert.raw_audio_data %}
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-headphones me-2"></i>Received OTA Audio</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-headphones me-2"></i>Received OTA Audio</h2>
                 </div>
                 <div class="card-body">
                     <p class="text-muted small mb-2">Raw audio captured from the monitoring stream at time of detection (16 kHz mono WAV).</p>
@@ -103,7 +103,7 @@
             {# SAME Header card #}
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-code me-2"></i>SAME Header</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-code me-2"></i>SAME Header</h2>
                 </div>
                 <div class="card-body">
                     {% if alert.raw_same_header %}
@@ -117,7 +117,7 @@
             {# Alert details card #}
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Alert Details</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-info-circle me-2"></i>Alert Details</h2>
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
@@ -170,7 +170,7 @@
             {# FIPS codes #}
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-map-marker-alt me-2"></i>FIPS / Location Codes</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-map-marker-alt me-2"></i>FIPS / Location Codes</h2>
                 </div>
                 <div class="card-body">
                     {% if alert.fips_codes %}
@@ -209,7 +209,7 @@
             {% if alert.full_alert_data %}
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="fas fa-database me-2"></i>Full Decoded Data</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-database me-2"></i>Full Decoded Data</h2>
                     <button class="btn btn-sm btn-outline-secondary" type="button"
                             data-bs-toggle="collapse" data-bs-target="#fullAlertData">
                         Show / Hide
@@ -231,7 +231,7 @@
             {# Reception metadata #}
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-satellite-dish me-2"></i>Reception</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-satellite-dish me-2"></i>Reception</h2>
                 </div>
                 <div class="card-body">
                     <dl class="row mb-0">
@@ -279,7 +279,7 @@
             {# Generated broadcast link #}
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-broadcast-tower me-2"></i>Generated Broadcast</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-broadcast-tower me-2"></i>Generated Broadcast</h2>
                 </div>
                 <div class="card-body">
                     {% if alert.generated_message %}

@@ -263,14 +263,12 @@ async function monitorDeviceChanges() {
 
             // Notify user of changes
             if (newDevices.length > 0) {
-                console.info('New audio devices detected:', newDevices);
                 newDevices.forEach(device => {
                     showSuccess(`New device detected: ${device.name}`);
                 });
             }
 
             if (removedDevices.length > 0) {
-                console.info('Audio devices removed:', removedDevices);
                 removedDevices.forEach(device => {
                     showError(`Device disconnected: ${device.name}`);
                 });
@@ -644,7 +642,6 @@ async function updateMetrics() {
         updateBackendStatusIndicator(snapshot?.broadcast_stats, snapshot?.active_source);
 
         if (!Array.isArray(liveMetrics)) {
-            console.debug('No live metrics found in snapshot', snapshot);
             showMetricsWarning('No live audio metrics received — check audio service/Redis');
             refreshMetricTimestampIndicators();
             return;
@@ -1331,8 +1328,6 @@ async function addAudioSource() {
         auto_start: document.getElementById('autoStart')?.checked || false,
     };
 
-    console.log('Creating audio source with config:', requestBody);
-
     try {
         const response = await fetch('/api/audio/sources', {
             method: 'POST',
@@ -1341,8 +1336,6 @@ async function addAudioSource() {
             },
             body: JSON.stringify(requestBody),
         });
-
-        console.log('Response status:', response.status, response.statusText);
 
         if (response.ok) {
             safeCloseModal('addSourceModal');

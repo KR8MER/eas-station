@@ -19,7 +19,7 @@
             <!-- Monitor Settings Card -->
             <div class="card mb-4">
                 <div class="card-header bg-primary text-white">
-                    <h4 class="h5 mb-0"><i class="fas fa-sliders-h"></i> Decoder Monitor Settings</h4>
+                    <h2 class="h5 mb-0 h4"><i class="fas fa-sliders-h"></i> Decoder Monitor Settings</h2>
                 </div>
                 <div class="card-body">
                     <div class="alert alert-info">
@@ -75,7 +75,7 @@
             <!-- Test Signal Injection Card -->
             <div class="card mb-4">
                 <div class="card-header bg-warning text-dark">
-                    <h4 class="h5 mb-0"><i class="fas fa-broadcast-tower"></i> Inject Test EAS Signal</h4>
+                    <h2 class="h5 mb-0 h4"><i class="fas fa-broadcast-tower"></i> Inject Test EAS Signal</h2>
                 </div>
                 <div class="card-body">
                     <div class="alert alert-warning">
@@ -113,7 +113,7 @@
             <!-- Live Per-Source Streams Card -->
             <div class="card mb-4">
                 <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                    <h4 class="h5 mb-0"><i class="fas fa-play-circle"></i> Live Decoder Streams</h4>
+                    <h2 class="h5 mb-0 h4"><i class="fas fa-play-circle"></i> Live Decoder Streams</h2>
                     <button type="button" class="btn btn-sm btn-light" onclick="loadStreamSources()">
                         <i class="fas fa-sync"></i>
                     </button>
@@ -145,10 +145,10 @@
 
             <div class="card mb-4">
                 <div class="card-header bg-info text-white">
-                    <h4 class="h5 mb-0">Mount Point Reference</h4>
+                    <h2 class="h5 mb-0 h4">Mount Point Reference</h2>
                 </div>
                 <div class="card-body">
-                    <h6>Per-Source Streams</h6>
+                    <h3 class="h6">Per-Source Streams</h3>
                     <p class="small">
                         Each running audio source is exposed at:<br>
                         <code>/api/eas/decoder-stream/{source-name}</code><br>
@@ -156,23 +156,23 @@
                         <code>/{prefix}-{source-name}.mp3</code> on port&nbsp;8000.
                     </p>
 
-                    <h6>Sample Rate</h6>
+                    <h3 class="h6">Sample Rate</h3>
                     <p class="small">All decoder monitor streams run at <strong>16,000 Hz</strong>
                     mono — exactly what the SAME decoder processes.</p>
 
-                    <h6>Resampling</h6>
+                    <h3 class="h6">Resampling</h3>
                     <p class="small">Sources typically run at 32–48 kHz.
                     The <code>ResamplingBroadcastAdapter</code> converts to 16 kHz before
                     publishing to the EAS queue.</p>
 
-                    <h6>Bandwidth</h6>
+                    <h3 class="h6">Bandwidth</h3>
                     <p class="small">Each stream uses ~32 kbps (MP3, 16 kHz mono).</p>
                 </div>
             </div>
 
             <div class="card">
                 <div class="card-header bg-secondary text-white">
-                    <h4 class="h5 mb-0">Test Signal Details</h4>
+                    <h2 class="h5 mb-0 h4">Test Signal Details</h2>
                 </div>
                 <div class="card-body">
                     <p class="small">The injected signal is a standards-compliant SAME message:</p>

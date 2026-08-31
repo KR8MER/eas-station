@@ -14,7 +14,7 @@
             <div class="card-header">
                 <div class="row align-items-center">
                     <div class="col-12 col-lg-6 mb-2 mb-lg-0">
-                        <h5 class="mb-0">Log Viewer - {{ log_type_name }}</h5>
+                        <h2 class="mb-0 h5">Log Viewer - {{ log_type_name }}</h2>
                     </div>
                     <div class="col-12 col-lg-6 text-lg-end">
                         <div class="btn-group flex-wrap" role="group">
@@ -376,9 +376,9 @@
                     <div class="col-12 col-md-4">
                         <div class="card h-100">
                             <div class="card-body">
-                                <h6 class="card-title text-muted mb-1">
+                                <h3 class="card-title text-muted mb-1 h6">
                                     <i class="fas fa-broadcast-tower text-primary"></i> Relay Performance
-                                </h6>
+                                </h3>
                                 <p class="display-6 fw-semibold mb-1">
                                     {% if relay.relay_rate is not none %}
                                         {{ '%.1f'|format(relay.relay_rate) }}%
@@ -397,9 +397,9 @@
                     <div class="col-12 col-md-4">
                         <div class="card h-100">
                             <div class="card-body">
-                                <h6 class="card-title text-muted mb-1">
+                                <h3 class="card-title text-muted mb-1 h6">
                                     <i class="fas fa-calendar-check text-success"></i> Weekly Test Coverage
-                                </h6>
+                                </h3>
                                 <p class="display-6 fw-semibold mb-1">
                                     {% if weekly.relay_rate is not none %}
                                         {{ '%.1f'|format(weekly.relay_rate) }}%
@@ -417,9 +417,9 @@
                     <div class="col-12 col-md-4">
                         <div class="card h-100">
                             <div class="card-body">
-                                <h6 class="card-title text-muted mb-1">
+                                <h3 class="card-title text-muted mb-1 h6">
                                     <i class="fas fa-chart-line text-info"></i> Window
-                                </h6>
+                                </h3>
                                 <p class="mb-1"><strong>{{ compliance_summary.window_days }}</strong> day{{ '' if compliance_summary.window_days == 1 else 's' }}</p>
                                 <small class="text-muted">
                                     {% if compliance_summary.window_start %}
@@ -437,7 +437,7 @@
                 {% if weekly.rows %}
                 <div class="card mb-3">
                     <div class="card-header bg-transparent py-2">
-                        <h6 class="mb-0"><i class="fas fa-history"></i> Weekly Test History</h6>
+                        <h3 class="mb-0 h6"><i class="fas fa-history"></i> Weekly Test History</h3>
                     </div>
                     <div class="table-responsive">
                         <table class="table eas-table table-sm mb-0">
@@ -475,9 +475,9 @@
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
                             <div>
-                                <h6 class="card-title mb-1">
+                                <h3 class="card-title mb-1 h6">
                                     <i class="fas fa-link"></i> Chain Integrity
-                                </h6>
+                                </h3>
                                 <p class="text-muted small mb-0">
                                     Every audit row is hash-chained to its predecessor and signed
                                     with the station's Ed25519 key. Verification recomputes every
@@ -749,7 +749,7 @@
                                                     <tr class="collapse" id="details-{{ category|replace(' ', '') }}-{{ loop.index }}">
                                                         <td colspan="6">
                                                             <div class="card card-body bg-light">
-                                                                <h6><i class="fas fa-info-circle"></i> Detailed Information:</h6>
+                                                                <h3 class="h6"><i class="fas fa-info-circle"></i> Detailed Information:</h3>
                                                                 <pre class="mb-0" style="font-size: 0.85rem; max-height: 400px; overflow-y: auto;">{{ log.details | tojson(indent=2) }}</pre>
                                                             </div>
                                                         </td>
@@ -848,7 +848,7 @@
                                 <tr class="collapse" id="details-{{ loop.index }}">
                                     <td colspan="6">
                                         <div class="card card-body bg-light">
-                                            <h6><i class="fas fa-info-circle"></i> Detailed Information:</h6>
+                                            <h3 class="h6"><i class="fas fa-info-circle"></i> Detailed Information:</h3>
                                             <pre class="mb-0" style="font-size: 0.85rem; max-height: 400px; overflow-y: auto;">{{ log.details | tojson(indent=2) }}</pre>
                                         </div>
                                     </td>

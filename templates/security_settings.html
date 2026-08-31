@@ -225,7 +225,7 @@
     <div class="row mb-4">
         <div class="col-md-12">
             <div class="security-section">
-                <h5><i class="fas fa-user"></i> Account Information</h5>
+                <h2 class="h5"><i class="fas fa-user"></i> Account Information</h2>
                 <div class="row">
                     <div class="col-md-6">
                         <p><strong>Username:</strong> {{ current_user.username }}</p>
@@ -249,7 +249,7 @@
     <div class="row">
         <div class="col-md-12">
             <div class="security-section">
-                <h3><i class="fas fa-mobile-alt"></i> Two-Factor Authentication (MFA)</h3>
+                <h2 class="h3"><i class="fas fa-mobile-alt"></i> Two-Factor Authentication (MFA)</h2>
 
                 <!-- MFA Status -->
                 <div class="mfa-status {{ 'enabled' if mfa_enabled else 'disabled' }}" id="mfa-status-display">
@@ -257,13 +257,13 @@
                         <i class="fas {{ 'fa-check-circle' if mfa_enabled else 'fa-exclamation-triangle' }}"></i>
                     </div>
                     <div>
-                        <h5 class="mb-1">
+                        <h3 class="mb-1 h5">
                             {% if mfa_enabled %}
                                 Two-Factor Authentication is <strong>Enabled</strong>
                             {% else %}
                                 Two-Factor Authentication is <strong>Disabled</strong>
                             {% endif %}
-                        </h5>
+                        </h3>
                         <p class="mb-0">
                             {% if mfa_enabled %}
                                 Your account is protected with TOTP-based authentication.
@@ -321,7 +321,7 @@
                         </div>
 
                         <div class="qr-code-container">
-                            <h5>Scan this QR code with your authenticator app</h5>
+                            <h3 class="h5">Scan this QR code with your authenticator app</h3>
                             <img id="qr-code-img" class="qr-code-img" alt="MFA QR Code">
                             <p class="text-muted mt-3">
                                 <small>Or manually enter this secret key:</small>
@@ -416,7 +416,7 @@
                         </div>
 
                         <div class="backup-codes-container">
-                            <h5><i class="fas fa-key"></i> Backup Recovery Codes</h5>
+                            <h3 class="h5"><i class="fas fa-key"></i> Backup Recovery Codes</h3>
                             <p><strong>IMPORTANT:</strong> Save these codes in a secure location. Each code can be used once if you lose access to your authenticator app.</p>
 
                             <div class="backup-codes-grid" id="backup-codes-display"></div>
@@ -457,7 +457,7 @@
     <div class="row">
         <div class="col-md-12">
             <div class="security-section">
-                <h3><i class="fas fa-key"></i> Change Password</h3>
+                <h2 class="h3"><i class="fas fa-key"></i> Change Password</h2>
                 <p class="text-muted">Update your account password. Choose a strong password with at least 12 characters.</p>
 
                 <form id="change-password-form" class="row g-3">
@@ -493,7 +493,7 @@
     <div class="modal-dialog modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title"><i class="fas fa-exclamation-triangle"></i> Disable Two-Factor Authentication</h5>
+                <h3 class="modal-title h5"><i class="fas fa-exclamation-triangle"></i> Disable Two-Factor Authentication</h3>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">

@@ -18,7 +18,7 @@
         <div class="col-md-3">
             <div class="card border-primary">
                 <div class="card-body text-center">
-                    <h3 class="text-primary" id="total-tests">--</h3>
+                    <h2 class="text-primary h3" id="total-tests">--</h2>
                     <p class="text-muted mb-0">Discovered Tests</p>
                 </div>
             </div>
@@ -26,7 +26,7 @@
         <div class="col-md-3">
             <div class="card border-success">
                 <div class="card-body text-center">
-                    <h3 class="text-success" id="passed-tests">--</h3>
+                    <h2 class="text-success h3" id="passed-tests">--</h2>
                     <p class="text-muted mb-0">Passed</p>
                 </div>
             </div>
@@ -34,7 +34,7 @@
         <div class="col-md-3">
             <div class="card border-danger">
                 <div class="card-body text-center">
-                    <h3 class="text-danger" id="failed-tests">--</h3>
+                    <h2 class="text-danger h3" id="failed-tests">--</h2>
                     <p class="text-muted mb-0">Failed / Errors</p>
                 </div>
             </div>
@@ -42,7 +42,7 @@
         <div class="col-md-3">
             <div class="card border-warning">
                 <div class="card-body text-center">
-                    <h3 class="text-warning" id="skipped-tests">--</h3>
+                    <h2 class="text-warning h3" id="skipped-tests">--</h2>
                     <p class="text-muted mb-0">Skipped</p>
                 </div>
             </div>
@@ -54,9 +54,9 @@
         <div class="col-md-12">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0">
+                    <h3 class="mb-0 h5">
                         <i class="fas fa-cubes"></i> Discovered Test Modules
-                    </h5>
+                    </h3>
                 </div>
                 <div class="card-body">
                     <div id="test-modules-list">
@@ -72,9 +72,9 @@
         <div class="col-md-12">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0">
+                    <h3 class="mb-0 h5">
                         <i class="fas fa-play-circle"></i> Run Tests
-                    </h5>
+                    </h3>
                 </div>
                 <div class="card-body">
                     <div class="form-group">
@@ -115,9 +115,9 @@
         <div class="col-md-12">
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">
+                    <h3 class="mb-0 h5">
                         <i class="fas fa-chart-bar"></i> Test Results
-                    </h5>
+                    </h3>
                     <span class="badge" id="test-status-badge">--</span>
                 </div>
                 <div class="card-body">
@@ -260,7 +260,7 @@ function renderTestModules(modules, totalTests) {
         card.innerHTML = `
             <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <h6 class="mb-1"><i class="fas fa-cube"></i> ${escapeHtml(module.name)}</h6>
+                    <h4 class="mb-1 h6"><i class="fas fa-cube"></i> ${escapeHtml(module.name)}</h4>
                     <p class="text-muted small mb-1">${escapeHtml(module.description || '')}</p>
                     <code class="small text-muted">${escapeHtml(module.path || '')}</code>
                 </div>

@@ -592,7 +592,7 @@
         <div class="tab-pane fade" id="docs-pane" role="tabpanel">
             <div class="doc-card">
                 <div class="card-body">
-                    <h3><i class="fas fa-book"></i> Custom Screens Documentation</h3>
+                    <h2 class="h3"><i class="fas fa-book"></i> Custom Screens Documentation</h2>
                     <p class="lead">Create dynamic display templates with API data integration.</p>
 
                     <div class="alert alert-info">
@@ -601,7 +601,7 @@
                         For complete documentation, see <a href="/static/docs/guides/CUSTOM_DISPLAY_SCREENS.md" target="_blank">Custom Display Screens Guide</a>.
                     </div>
 
-                    <h4><i class="fas fa-code"></i> Template Variables</h4>
+                    <h3 class="h4"><i class="fas fa-code"></i> Template Variables</h3>
                     <p>Use these variables in your screen templates:</p>
 
                     <div class="table-responsive">
@@ -648,7 +648,7 @@
                     </table>
                     </div>
 
-                    <h4><i class="fas fa-database"></i> Available Data Sources</h4>
+                    <h3 class="h4"><i class="fas fa-database"></i> Available Data Sources</h3>
                     <ul>
                         <li><code>/api/system_status</code> - System health and resources</li>
                         <li><code>/api/alerts</code> - Active emergency alerts</li>
@@ -657,7 +657,7 @@
                         <li><code>/version</code> - System version info</li>
                     </ul>
 
-                    <h4><i class="fas fa-tv"></i> LED Screen Example</h4>
+                    <h3 class="h4"><i class="fas fa-tv"></i> LED Screen Example</h3>
                     <pre class="bg-dark text-light p-3 rounded"><code>{
   "lines": [
     "SYSTEM STATUS",
@@ -670,7 +670,7 @@
   "speed": "SPEED_3"
 }</code></pre>
 
-                    <h4><i class="fas fa-desktop"></i> VFD Screen Example (VU Meters)</h4>
+                    <h3 class="h4"><i class="fas fa-desktop"></i> VFD Screen Example (VU Meters)</h3>
                     <pre class="bg-dark text-light p-3 rounded"><code>{
   "elements": [
     {
@@ -701,7 +701,7 @@
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="screenModalTitle">Create Screen</h5>
+                <h4 class="modal-title h5" id="screenModalTitle">Create Screen</h4>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -789,7 +789,7 @@
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="rotationModalTitle">Create Rotation</h5>
+                <h4 class="modal-title h5" id="rotationModalTitle">Create Rotation</h4>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -1051,7 +1051,7 @@ function renderRotations() {
                     <div>
                         <div class="screen-title">
                             <span class="display-chip ${type}"><i class="${iconClass}"></i>${getDisplayLabel(type)}</span>
-                            <h5 class="mb-0">${escapeHtml(rotation.name)}</h5>
+                            <h4 class="mb-0 h5">${escapeHtml(rotation.name)}</h4>
                             <span class="status-chip ${rotation.enabled ? 'enabled' : 'disabled'}">${rotation.enabled ? 'Active' : 'Paused'}</span>
                         </div>
                         ${rotation.description ? `<p class="text-muted mt-1 mb-0">${escapeHtml(rotation.description)}</p>` : ''}
@@ -1106,7 +1106,7 @@ function buildScreenCard(screen) {
                 <div>
                     <div class="screen-title">
                         <span class="display-chip ${type}"><i class="${iconClass}"></i>${getDisplayLabel(type)}</span>
-                        <h5 class="mb-0">${escapeHtml(screen.name)}</h5>
+                        <h4 class="mb-0 h5">${escapeHtml(screen.name)}</h4>
                         <span class="status-chip ${statusClass}">${statusLabel}</span>
                         <span class="priority-badge priority-${screen.priority}">P${screen.priority}</span>
                         ${conditions}

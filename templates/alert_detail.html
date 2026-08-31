@@ -439,19 +439,19 @@
                 {% if county_coverage >= 95 and not county_is_estimated %}
                 <div class="county-wide-banner">
                     <i class="fas fa-globe-americas county-wide-icon"></i>
-                    <h4 class="mb-2">COUNTY-WIDE ALERT</h4>
+                    <h2 class="mb-2 h4">COUNTY-WIDE ALERT</h2>
                     <p class="mb-0">This alert affects {{ county_coverage }}% of the county and virtually all emergency service boundaries within it.</p>
                 </div>
                 {% elif county_coverage >= 75 %}
                 <div class="major-coverage-banner">
                     <i class="fas fa-map county-wide-icon"></i>
-                    <h4 class="mb-2">MAJOR COUNTY COVERAGE ALERT</h4>
+                    <h2 class="mb-2 h4">MAJOR COUNTY COVERAGE ALERT</h2>
                     <p class="mb-0">This alert affects {{ county_coverage }}% of the county and most emergency service boundaries within it.</p>
                 </div>
                 {% elif county_coverage >= 25 %}
                 <div class="localized-banner">
                     <i class="fas fa-map-marker-alt county-wide-icon"></i>
-                    <h4 class="mb-2">LOCALIZED ALERT</h4>
+                    <h2 class="mb-2 h4">LOCALIZED ALERT</h2>
                     <p class="mb-0">This alert affects {{ county_coverage }}% of the county and some emergency service boundaries within it.</p>
                 </div>
                 {% endif %}
@@ -471,7 +471,7 @@
                 {% if is_county_wide_fallback %}
                 <div class="localized-banner">
                     <i class="fas fa-exclamation-circle county-wide-icon"></i>
-                    <h4 class="mb-2">ALERT - COVERAGE PENDING</h4>
+                    <h2 class="mb-2 h4">ALERT - COVERAGE PENDING</h2>
                     <p class="mb-0">Coverage analysis has not been run yet. Use the <strong>Calculate Coverage Percentage</strong> button in the Actions section below to analyze boundaries.</p>
                 </div>
                 {% endif %}
@@ -483,7 +483,7 @@
                     <!-- Alert Info Card -->
                     <div class="card mb-4">
                         <div class="card-header bg-primary text-white">
-                            <h5 class="mb-0">
+                            <h3 class="mb-0 h5">
                                 <i class="fas fa-info-circle"></i> Alert Information
                                 <span class="float-end">
                                     {% if coverage_data and coverage_data.get('county') %}
@@ -508,22 +508,22 @@
                                         </span>
                                     {% endif %}
                                 </span>
-                            </h5>
+                            </h3>
                         </div>
                         <div class="card-body">
                             {% if alert.headline %}
                             <div class="alert alert-{% if alert.severity == 'Extreme' %}danger{% elif alert.severity == 'Severe' %}warning{% elif alert.severity == 'Moderate' %}info{% else %}secondary{% endif %}" role="alert">
-                                <h5 class="alert-heading">{{ alert.headline }}</h5>
+                                <h3 class="alert-heading h5">{{ alert.headline }}</h3>
                             </div>
                             {% endif %}
 
                             <div class="row g-2">
                                 <div class="col-md-4 col-sm-6">
-                                    <h6 class="text-muted mb-1 small">Event Type</h6>
+                                    <h4 class="text-muted mb-1 small h6">Event Type</h4>
                                     <span class="fw-bold text-primary">{{ alert.event }}</span>
                                 </div>
                                 <div class="col-md-4 col-sm-6">
-                                    <h6 class="text-muted mb-1 small">Status</h6>
+                                    <h4 class="text-muted mb-1 small h6">Status</h4>
                                     {% if alert.status == 'Cancelled' or alert.cancelled_at %}
                                     <span class="badge bg-warning text-dark">
                                         <i class="fas fa-ban me-1"></i>CANCELLED
@@ -546,7 +546,7 @@
                                     {% endif %}
                                 </div>
                                 <div class="col-md-4 col-sm-6">
-                                    <h6 class="text-muted mb-1 small">Severity</h6>
+                                    <h4 class="text-muted mb-1 small h6">Severity</h4>
                                     {% if alert.severity %}
                                     <span class="badge bg-{% if alert.severity == 'Extreme' %}danger{% elif alert.severity == 'Severe' %}warning{% elif alert.severity == 'Moderate' %}info{% else %}secondary{% endif %}">{{ alert.severity }}</span>
                                     {% else %}
@@ -554,7 +554,7 @@
                                     {% endif %}
                                 </div>
                                 <div class="col-md-4 col-sm-6">
-                                    <h6 class="text-muted mb-1 small">Urgency</h6>
+                                    <h4 class="text-muted mb-1 small h6">Urgency</h4>
                                     {% if alert.urgency %}
                                     <span class="badge bg-warning">{{ alert.urgency }}</span>
                                     {% else %}
@@ -562,7 +562,7 @@
                                     {% endif %}
                                 </div>
                                 <div class="col-md-4 col-sm-6">
-                                    <h6 class="text-muted mb-1 small">Certainty</h6>
+                                    <h4 class="text-muted mb-1 small h6">Certainty</h4>
                                     {% if alert.certainty %}
                                     <span class="badge bg-success">{{ alert.certainty }}</span>
                                     {% else %}
@@ -570,14 +570,14 @@
                                     {% endif %}
                                 </div>
                                 <div class="col-md-4 col-sm-6">
-                                    <h6 class="text-muted mb-1 small">Message Type</h6>
+                                    <h4 class="text-muted mb-1 small h6">Message Type</h4>
                                     <span class="badge bg-dark">{{ alert.message_type }}</span>
                                 </div>
                             </div>
 
                             {% if alert.description %}
                             <hr class="my-4">
-                            <h6 class="text-muted mb-2">Description</h6>
+                            <h4 class="text-muted mb-2 h6">Description</h4>
                             <div class="alert-description alert-content">
                                 <p class="mb-0">{{ alert.description | replace('\n\n', '</p><p class="mt-2 mb-0">') | replace('\n- ', '<br>- ') | replace('\n', ' ') | safe }}</p>
                             </div>
@@ -586,7 +586,7 @@
                             {% if alert.instruction %}
                             <hr class="my-4">
                             <div class="alert-instruction">
-                                <h6 class="text-muted mb-2"><i class="fas fa-exclamation-triangle"></i> Instructions</h6>
+                                <h4 class="text-muted mb-2 h6"><i class="fas fa-exclamation-triangle"></i> Instructions</h4>
                                 <div class="alert-content">
                                     <p class="mb-0">{{ alert.instruction | replace('\n\n', '</p><p class="mt-2 mb-0">') | replace('\n- ', '<br>- ') | replace('\n', ' ') | safe }}</p>
                                 </div>
@@ -595,7 +595,7 @@
 
                             {% if alert.area_desc %}
                             <hr class="my-4">
-                            <h6 class="text-muted mb-2">Affected Areas</h6>
+                            <h4 class="text-muted mb-2 h6">Affected Areas</h4>
                             <div class="p-3 rounded" style="background: var(--surface-color); border: 1px solid var(--border-color);">
                                 {{ alert.area_desc }}
                                 {% if ipaws_data and ipaws_data.same_codes_decoded %}
@@ -655,9 +655,9 @@
                     <!-- Alert Coverage Map -->
                     <div class="card mb-4">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">
+                            <h3 class="mb-0 h5">
                                 <i class="fas fa-map"></i> Alert Coverage Map
-                            </h5>
+                            </h3>
                             {% if alert.category == 'Met' %}
                             <div class="form-check form-switch mb-0">
                                 <input class="form-check-input" type="checkbox" role="switch" id="radarToggle">
@@ -727,9 +727,9 @@
                     <!-- Radar Loop -->
                     <div class="card mb-4">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">
+                            <h3 class="mb-0 h5">
                                 <i class="fas fa-satellite-dish"></i> Radar Loop
-                            </h5>
+                            </h3>
                             <button type="button" class="btn btn-sm btn-outline-primary" id="radarLoopBuildBtn">
                                 <i class="fas fa-film me-1"></i>Generate Loop
                             </button>
@@ -759,9 +759,9 @@
                     <!-- High-Resolution (Level II) Radar Loop -->
                     <div class="card mb-4">
                         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                            <h5 class="mb-0">
+                            <h3 class="mb-0 h5">
                                 <i class="fas fa-satellite-dish"></i> High-Resolution Radar Loop
-                            </h5>
+                            </h3>
                             <div class="d-flex align-items-center gap-2">
                                 <select class="form-select form-select-sm" id="hiresRadarField" style="width: auto;">
                                     <option value="reflectivity">Reflectivity</option>
@@ -804,9 +804,9 @@
                         <div class="col-md-6">
                             <div class="card h-100">
                                 <div class="card-header">
-                                    <h5 class="mb-0">
+                                    <h3 class="mb-0 h5">
                                         <i class="fas fa-clock"></i> Timing
-                                    </h5>
+                                    </h3>
                                 </div>
                                 <div class="card-body timing-card">
                                     <div class="row g-2">
@@ -896,9 +896,9 @@
                         <div class="col-md-6">
                             <div class="card h-100">
                                 <div class="card-header">
-                                    <h5 class="mb-0">
+                                    <h3 class="mb-0 h5">
                                         <i class="fas fa-cog"></i> Technical Details
-                                    </h5>
+                                    </h3>
                                 </div>
                                 <div class="card-body technical-details">
                                     <div class="row g-2">
@@ -969,7 +969,7 @@
                     <div class="card mb-4">
                         <div class="card-header">
                             {% set show_county_summary = suppress_boundary_details if suppress_boundary_details is defined else False %}
-                            <h5 class="mb-0">
+                            <h3 class="mb-0 h5">
                                 <i class="fas fa-map-marked-alt"></i>
                                 {% if show_county_summary %}
                                     County-Wide Coverage
@@ -981,7 +981,7 @@
                                 {% if intersections and not show_county_summary %}
                                     <span class="badge bg-secondary">{{ intersections|length }}</span>
                                 {% endif %}
-                            </h5>
+                            </h3>
                         </div>
                         <div class="card-body">
                             {% set county_data = coverage_data.get('county') if coverage_data else None %}
@@ -990,10 +990,10 @@
                                 {% set county_is_estimated = county_data.get('is_estimated', False) %}
                                 <div class="affected-summary">
                                     {% if show_county_summary %}
-                                        <h6>
+                                        <h4 class="h6">
                                             <i class="fas fa-globe-americas text-success"></i>
                                             County-Wide Impact
-                                        </h6>
+                                        </h4>
                                         <p class="mb-2">
                                             This alert covers all configured emergency service boundaries across
                                             {{ location_settings.county_name }}.
@@ -1004,7 +1004,7 @@
                                         </p>
                                         {% endif %}
                                     {% else %}
-                                        <h6>
+                                        <h4 class="h6">
                                             <i class="fas fa-{% if county_coverage >= 95 and not county_is_estimated %}globe-americas text-success{% elif county_coverage >= 75 %}map text-warning{% else %}map-marker-alt text-info{% endif %}"></i>
                                             {% if county_coverage >= 95 and not county_is_estimated %}
                                                 County-Wide Impact
@@ -1015,7 +1015,7 @@
                                             {% else %}
                                                 Localized County Impact
                                             {% endif %}
-                                        </h6>
+                                        </h4>
                                         <p class="mb-2">
                                             This alert covers <strong>{{ county_coverage }}%</strong> of {{ location_settings.county_name }}
                                             {% if county_data.get('intersected_area_sqmi') %}
@@ -1069,7 +1069,7 @@
                                 ) %}
                                 {% if is_county_wide_fallback %}
                                 <div class="affected-summary">
-                                    <h6><i class="fas fa-exclamation-triangle text-warning"></i> Coverage Pending</h6>
+                                    <h4 class="h6"><i class="fas fa-exclamation-triangle text-warning"></i> Coverage Pending</h4>
                                     <p class="mb-0 text-muted">Coverage percentages have not been calculated yet. See below to trigger analysis.</p>
                                 </div>
                                 {% endif %}
@@ -1154,7 +1154,7 @@
                                 {% if is_county_wide_fallback or has_county_geometry %}
                                 <div class="text-center py-4">
                                     <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
-                                    <h5>Boundary Analysis Pending</h5>
+                                    <h3 class="h5">Boundary Analysis Pending</h3>
                                     <p class="text-muted">Alert geometry exists ({{ coverage_data['county']['coverage_percentage'] if has_county_geometry else '' }}% county coverage), but service boundary intersections have not been calculated yet.</p>
                                     <button type="button" class="btn btn-warning coverage-calc-btn" onclick="triggerIntersectionFix(this)">
                                         <i class="fas fa-wrench"></i> Calculate Affected Boundaries
@@ -1163,7 +1163,7 @@
                                 {% else %}
                                 <div class="text-center py-4">
                                     <i class="fas fa-map fa-3x text-muted mb-3"></i>
-                                    <h5 class="text-muted">No Boundary Intersections Found</h5>
+                                    <h3 class="text-muted h5">No Boundary Intersections Found</h3>
                                     <p class="text-muted">This alert may not intersect with any configured emergency service boundaries.</p>
                                     {% if not coverage_data or not coverage_data.get('county') %}
                                     <button type="button" class="btn btn-outline-secondary coverage-calc-btn mt-2" onclick="triggerIntersectionFix(this)">
@@ -1252,19 +1252,19 @@
                     <!-- {{ ipaws_data.source_label }} Alert Details -->
                     <div class="card mt-4">
                         <div class="card-header">
-                            <h5 class="mb-0">
+                            <h3 class="mb-0 h5">
                                 {% if ipaws_data.is_ipaws %}
                                 <i class="fas fa-satellite-dish"></i> IPAWS Alert Details
                                 {% else %}
                                 <i class="fas fa-cloud-sun"></i> NOAA Alert Details
                                 {% endif %}
-                            </h5>
+                            </h3>
                         </div>
                         <div class="card-body technical-details">
 
                             {# ── Sender / Origin ── #}
                             {% if ipaws_data.sender_name or ipaws_data.sender %}
-                            <h6 class="text-muted mb-2">Alert Origin</h6>
+                            <h4 class="text-muted mb-2 h6">Alert Origin</h4>
                             {% if ipaws_data.sender_name %}
                             <div class="detail-item">
                                 <span class="detail-label">Originator</span>
@@ -1329,7 +1329,7 @@
 
                             {# ── EAS Parameters (IPAWS and NOAA) ── #}
                             {% if (ipaws_data.eas_org or ipaws_data.eas_station_id or ipaws_data.block_channels) %}
-                            <h6 class="text-muted mb-2">EAS Parameters</h6>
+                            <h4 class="text-muted mb-2 h6">EAS Parameters</h4>
                             {% if ipaws_data.eas_org_decoded %}
                             <div class="detail-item">
                                 <span class="detail-label">EAS Originator (EAS-ORG)</span>
@@ -1366,7 +1366,7 @@
 
                             {# ── Geocodes (both IPAWS and NOAA) ── #}
                             {% if ipaws_data.same_codes_decoded or ipaws_data.same_codes or ipaws_data.extra_geocodes %}
-                            <h6 class="text-muted mb-2">Geocodes</h6>
+                            <h4 class="text-muted mb-2 h6">Geocodes</h4>
                             {% if ipaws_data.same_codes_decoded %}
                             <div class="detail-item">
                                 <span class="detail-label">SAME Geocodes</span>
@@ -1416,7 +1416,7 @@
 
                             {# ── Event Codes ── #}
                             {% if ipaws_data.event_code %}
-                            <h6 class="text-muted mb-2">Event Codes</h6>
+                            <h4 class="text-muted mb-2 h6">Event Codes</h4>
                             {% for system, codes in ipaws_data.event_code.items() %}
                             <div class="detail-item">
                                 <span class="detail-label">{{ system }}</span>
@@ -1432,7 +1432,7 @@
 
                             {# ── References ── #}
                             {% if ipaws_data.references %}
-                            <h6 class="text-muted mb-2"><i class="fas fa-link"></i> CAP References</h6>
+                            <h4 class="text-muted mb-2 h6"><i class="fas fa-link"></i> CAP References</h4>
                             <div class="mb-3">
                                 {% for ref in ipaws_data.references %}
                                 <div class="p-2 rounded mb-1" style="background: var(--surface-color); border: 1px solid var(--border-color); font-size: 0.85em;">
@@ -1447,7 +1447,7 @@
 
                             {# ── VTEC (Valid Time Event Code) ── #}
                             {% if ipaws_data.vtec_parsed %}
-                            <h6 class="text-muted mb-2">VTEC</h6>
+                            <h4 class="text-muted mb-2 h6">VTEC</h4>
                             {% for vtec in ipaws_data.vtec_parsed %}
                             <div class="mb-2 p-2 rounded" style="background: color-mix(in srgb, var(--primary-color) 6%, var(--surface-color)); border-left: 3px solid var(--primary-color);">
                                 {% set action_colors = {'NEW': 'success', 'CON': 'info', 'CAN': 'danger', 'EXP': 'secondary', 'UPG': 'warning', 'EXT': 'info', 'EXA': 'info', 'EXB': 'info', 'COR': 'warning'} %}
@@ -1488,7 +1488,7 @@
 
                             {# ── VTEC Event Chain (full lifecycle, chronological) ── #}
                             {% if vtec_chain and vtec_chain|length > 1 %}
-                            <h6 class="text-muted mb-2"><i class="fas fa-link"></i> Event Lifecycle ({{ vtec_chain|length }} alerts)</h6>
+                            <h4 class="text-muted mb-2 h6"><i class="fas fa-link"></i> Event Lifecycle ({{ vtec_chain|length }} alerts)</h4>
                             <div class="mb-3">
                                 {% set action_colors = {'NEW': 'success', 'CON': 'info', 'CAN': 'danger', 'EXP': 'secondary', 'UPG': 'warning', 'EXT': 'info', 'EXA': 'info', 'EXB': 'info', 'COR': 'warning', 'ROU': 'secondary'} %}
                                 {% set action_labels = {'NEW': 'Issuance', 'CON': 'Continuing', 'CAN': 'Cancelled', 'EXP': 'Expired', 'UPG': 'Upgraded', 'EXT': 'Extended (Time)', 'EXA': 'Extended (Area)', 'EXB': 'Extended (Area+Time)', 'COR': 'Correction', 'ROU': 'Routine'} %}
@@ -1539,7 +1539,7 @@
                             {# ── Storm Motion ── #}
                             {% if ipaws_data.storm_motion %}
                             {% set sm = ipaws_data.storm_motion %}
-                            <h6 class="text-muted mb-2"><i class="fas fa-wind"></i> Storm Motion</h6>
+                            <h4 class="text-muted mb-2 h6"><i class="fas fa-wind"></i> Storm Motion</h4>
                             <div class="mb-2 p-2 rounded d-flex flex-wrap gap-3 align-items-center" style="background: color-mix(in srgb, var(--info-color) 8%, var(--surface-color)); border-left: 3px solid var(--info-color);">
 
                                 {# SVG compass rose — arrow points toward storm heading #}
@@ -1620,7 +1620,7 @@
                             {# ── Severe Weather Threats ── #}
                             {% if ipaws_data.threat_data %}
                             {% set td = ipaws_data.threat_data %}
-                            <h6 class="text-muted mb-2"><i class="fas fa-exclamation-triangle"></i> Severe Threats</h6>
+                            <h4 class="text-muted mb-2 h6"><i class="fas fa-exclamation-triangle"></i> Severe Threats</h4>
                             <div class="threat-grid mb-3">
                                 {% if td.wind %}
                                 {% set w = td.wind %}
@@ -1663,7 +1663,7 @@
                                 'CMAMlongtext': 'fa-mobile-alt',
                                 'expiredReferences': 'fa-history',
                             } %}
-                            <h6 class="text-muted mb-2">{% if ipaws_data.is_noaa %}NWS Parameters{% else %}Additional Parameters{% endif %}</h6>
+                            <h4 class="text-muted mb-2 h6">{% if ipaws_data.is_noaa %}NWS Parameters{% else %}Additional Parameters{% endif %}</h4>
                             {% for param_name, param_values in ipaws_data.extra_parameters.items() %}
                             <div class="detail-item">
                                 <span class="detail-label">
@@ -1682,9 +1682,9 @@
 
                             {# ── Digital Signature Certificate ── #}
                             {% if ipaws_data.certificate %}
-                            <h6 class="text-muted mb-2">
+                            <h4 class="text-muted mb-2 h6">
                                 <i class="fas fa-shield-alt"></i> Digital Signature Certificate
-                            </h6>
+                            </h4>
                             {% set cert = ipaws_data.certificate %}
 
                             {# Certificate validity status banner #}
@@ -1765,9 +1765,9 @@
 
                             {# ── IPAWS Original Audio ── #}
                             {% if ipaws_data.ipaws_audio_filename %}
-                            <h6 class="text-muted mb-2">
+                            <h4 class="text-muted mb-2 h6">
                                 <i class="fas fa-volume-up"></i> Original IPAWS Audio
-                            </h6>
+                            </h4>
                             <div class="detail-item">
                                 <audio controls preload="metadata" style="width: 100%; max-width: 400px;" aria-label="Original IPAWS alert audio">
                                     <source src="{{ url_for('api.ipaws_original_audio', alert_id=alert.id) }}" type="audio/mpeg">
@@ -1795,9 +1795,9 @@
                             {% endif %}
                             <hr>
                             {% elif ipaws_data.audio_resources %}
-                            <h6 class="text-muted mb-2">
+                            <h4 class="text-muted mb-2 h6">
                                 <i class="fas fa-volume-up"></i> IPAWS Audio Resources
-                            </h6>
+                            </h4>
                             {% for ar in ipaws_data.audio_resources %}
                             <div class="detail-item">
                                 <span class="detail-label">{{ ar.description }}</span>
@@ -1820,7 +1820,7 @@
 
                             {# ── Linked Resources ── #}
                             {% if ipaws_data.web_resources %}
-                            <h6 class="text-muted mb-2">Linked Resources</h6>
+                            <h4 class="text-muted mb-2 h6">Linked Resources</h4>
                             {% for res in ipaws_data.web_resources %}
                             <div class="detail-item">
                                 <span class="detail-label">{{ res.description }}</span>
@@ -1847,9 +1847,9 @@
                     {% if alert.eas_forwarded or alert.eas_forwarding_reason or forwarding_no_decision %}
                     <div class="card mt-4">
                         <div class="card-header {% if alert.eas_forwarded %}bg-success text-white{% elif forwarding_missed or forwarding_no_decision %}bg-danger text-white{% else %}bg-secondary text-white{% endif %}">
-                            <h5 class="mb-0">
+                            <h3 class="mb-0 h5">
                                 <i class="fas fa-broadcast-tower"></i> EAS Forwarding Status
-                            </h5>
+                            </h3>
                         </div>
                         <div class="card-body">
                             <div class="d-flex align-items-center mb-3">
@@ -1905,9 +1905,9 @@
                     {% if audio_entries %}
                     <div class="card mt-4">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">
+                            <h3 class="mb-0 h5">
                                 <i class="fas fa-headphones"></i> Broadcast Audio Archive
-                            </h5>
+                            </h3>
                             <a href="{{ url_for('audio_history') }}" class="btn btn-sm btn-outline-secondary">
                                 <i class="fas fa-folder-open"></i> View All Audio
                             </a>
@@ -2013,9 +2013,9 @@
                     <!-- Actions -->
                     <div class="card mt-4 alert-actions">
                         <div class="card-header">
-                            <h5 class="mb-0">
+                            <h3 class="mb-0 h5">
                                 <i class="fas fa-tools"></i> Actions
-                            </h5>
+                            </h3>
                         </div>
                         <div class="card-body">
                             <div class="d-grid gap-2">
@@ -2039,7 +2039,7 @@
                                         style="border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
                                                border-radius: var(--radius-xl);
                                                background-color: color-mix(in srgb, var(--surface-color) 96%, transparent);">
-                                        <li><h6 class="dropdown-header">PNG · universal</h6></li>
+                                        <li><h4 class="dropdown-header h6">PNG · universal</h4></li>
                                         <li>
                                             <a class="dropdown-item"
                                                href="{{ url_for('api.alert_detail_image', alert_id=alert.id, ratio='landscape') }}">
@@ -2069,7 +2069,7 @@
                                             </a>
                                         </li>
                                         <li><hr class="dropdown-divider"></li>
-                                        <li><h6 class="dropdown-header">WebP · ~30% smaller</h6></li>
+                                        <li><h4 class="dropdown-header h6">WebP · ~30% smaller</h4></li>
                                         <li>
                                             <a class="dropdown-item"
                                                href="{{ url_for('api.alert_detail_image', alert_id=alert.id, ratio='landscape', format='webp') }}">
@@ -2120,9 +2120,9 @@
                     <!-- Debug Info Panel (hidden by default, shown via "Show Debug Info" button) -->
                     <div class="card mt-4" id="debugInfoCard" style="display: none;">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">
+                            <h3 class="mb-0 h5">
                                 <i class="fas fa-bug text-warning"></i> Debug Information
-                            </h5>
+                            </h3>
                             <a href="/debug/boundaries/{{ alert.id }}" target="_blank" class="btn btn-sm btn-outline-secondary">
                                 <i class="fas fa-external-link-alt"></i> Raw JSON
                             </a>
@@ -2137,9 +2137,9 @@
                     <!-- Raw CAP Data Display Card (hidden by default) -->
                     <div class="card mt-4" id="rawDataCard" style="display: none;">
                         <div class="card-header">
-                            <h5 class="mb-0">
+                            <h3 class="mb-0 h5">
                                 <i class="fas fa-code"></i> Raw CAP Alert Data
-                            </h5>
+                            </h3>
                         </div>
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center mb-3">
@@ -2908,7 +2908,7 @@ function showMapError(message) {
             <div class="d-flex align-items-center justify-content-center h-100">
                 <div class="text-center">
                     <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
-                    <h5>Map Error</h5>
+                    <h3 class="h5">Map Error</h3>
                     <p class="text-muted">${message}</p>
                     <button type="button" class="btn btn-outline-primary" onclick="location.reload()">
                         <i class="fas fa-refresh"></i> Retry
@@ -3161,7 +3161,7 @@ function renderDebugPanel(data) {
 
     const results = data.intersection_results || [];
     if (results.length > 0) {
-        html += `<h6 class="mb-2">Boundary Intersection Results</h6>
+        html += `<h4 class="mb-2 h6">Boundary Intersection Results</h4>
             <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
             <table class="table table-sm table-hover table-bordered mb-0">
                 <thead class="table-dark sticky-top">
