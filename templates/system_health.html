@@ -1069,7 +1069,7 @@
             <div class="col-12">
                 <div class="card">
                     <div class="card-header bg-transparent">
-                        <h5 class="mb-0"><i class="fas fa-server section-icon"></i> System Information</h5>
+                        <h3 class="mb-0 h5"><i class="fas fa-server section-icon"></i> System Information</h3>
                     </div>
                     <div class="card-body">
                         <div class="row">
@@ -1161,7 +1161,7 @@
             <div class="col-12">
                 <div class="card perf-trends-card">
                     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <h5 class="mb-0"><i class="fas fa-chart-line section-icon"></i> Performance Trends</h5>
+                        <h3 class="mb-0 h5"><i class="fas fa-chart-line section-icon"></i> Performance Trends</h3>
                         <small class="text-muted" id="perf-trends-sample-info">loading history…</small>
                     </div>
                     <div class="card-body">
@@ -1208,7 +1208,7 @@
             <div class="col-lg-6 mb-3" id="cpu-hardware-card">
                 <div class="card health-card h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-microchip section-icon"></i> CPU Details</h5>
+                        <h3 class="h5"><i class="fas fa-microchip section-icon"></i> CPU Details</h3>
 
                         <div class="metric-row">
                             <span class="metric-label">Model:</span>
@@ -1283,7 +1283,7 @@
 
                         {% if hardware_cpu.flags %}
                         <hr>
-                        <h6 class="text-muted">Feature Flags</h6>
+                        <h4 class="text-muted h6">Feature Flags</h4>
                         <div>
                             {% for flag in hardware_cpu.flags[:16] %}
                             <span class="hardware-badge">{{ flag }}</span>
@@ -1300,7 +1300,7 @@
             <div class="col-lg-6 mb-3" id="platform-card">
                 <div class="card health-card h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-desktop section-icon"></i> Platform &amp; Firmware</h5>
+                        <h3 class="h5"><i class="fas fa-desktop section-icon"></i> Platform &amp; Firmware</h3>
 
                         <div class="metric-row">
                             <span class="metric-label">Manufacturer:</span>
@@ -1388,7 +1388,7 @@
                 {% set boot = pi_data.bootloader or None %}
                 <div class="card health-card h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-bolt section-icon"></i> Power &amp; Firmware</h5>
+                        <h3 class="h5"><i class="fas fa-bolt section-icon"></i> Power &amp; Firmware</h3>
 
                         {% if throttle %}
                             {% if throttle.healthy and not throttle.currently_degraded %}
@@ -1450,7 +1450,7 @@
                 {% set rp1v = pi_data.rp1_voltages or [] %}
                 <div class="card health-card h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-fan section-icon"></i> Fan &amp; RP1 Sensors</h5>
+                        <h3 class="h5"><i class="fas fa-fan section-icon"></i> Fan &amp; RP1 Sensors</h3>
 
                         {% if fans %}
                             {% for fan in fans %}
@@ -1491,7 +1491,7 @@
                 {% set cpu_class = 'danger' if cpu.cpu_usage_percent > 80 else 'warning' if cpu.cpu_usage_percent > 50 else 'success' %}
                 <div class="card health-card {{ cpu_class }} h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-microchip section-icon"></i> CPU Usage</h5>
+                        <h3 class="h5"><i class="fas fa-microchip section-icon"></i> CPU Usage</h3>
 
                         <!-- CPU Usage Chart -->
                         <div class="text-center mb-3" style="position: relative; height: 200px;">
@@ -1538,7 +1538,7 @@
 
                         {% if cpu.cpu_usage_per_core and cpu.cpu_usage_per_core|length <= 8 %}
                         <hr>
-                        <h6 class="text-muted">Per-Core Usage</h6>
+                        <h4 class="text-muted h6">Per-Core Usage</h4>
                         <div class="row">
                             {% for usage in cpu.cpu_usage_per_core %}
                             <div class="col-6 col-lg-12 col-xl-6">
@@ -1561,7 +1561,7 @@
                 {% set mem_class = 'danger' if memory.percentage > 90 else 'warning' if memory.percentage > 75 else 'success' %}
                 <div class="card health-card {{ mem_class }} h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-memory section-icon"></i> Memory Usage</h5>
+                        <h3 class="h5"><i class="fas fa-memory section-icon"></i> Memory Usage</h3>
 
                         <!-- Memory Usage Chart -->
                         <div class="text-center mb-3" style="position: relative; height: 200px;">
@@ -1624,7 +1624,7 @@
                 {% set failed_services = summary.get('failed', 0) %}
                 <div class="card health-card h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-server section-icon"></i> System Services</h5>
+                        <h3 class="h5"><i class="fas fa-server section-icon"></i> System Services</h3>
 
 
                         <div class="d-flex justify-content-between align-items-center mb-2">
@@ -1680,7 +1680,7 @@
                             {% set dep_services = systemd_data.services | selectattr('is_eas_service', 'equalto', False) | list %}
                             
                             {% if eas_services %}
-                                <h6 class="text-muted small mb-2">EAS Station™ Services</h6>
+                                <h4 class="text-muted small mb-2 h6">EAS Station™ Services</h4>
                                 {% for service in eas_services[:5] %}
                                     {% set active_state = (service.active_state or '')|lower %}
                                     {% if active_state == 'active' %}
@@ -1712,7 +1712,7 @@
                             {% endif %}
                             
                             {% if dep_services %}
-                                <h6 class="text-muted small mb-2 mt-3">Dependencies</h6>
+                                <h4 class="text-muted small mb-2 mt-3 h6">Dependencies</h4>
                                 {% for service in dep_services[:3] %}
                                     {% set active_state = (service.active_state or '')|lower %}
                                     {% if active_state == 'active' %}
@@ -1757,7 +1757,7 @@
             <div class="col-12" id="systemd-details">
                 <div class="card health-card">
                     <div class="card-body">
-                        <h5><i class="fas fa-server section-icon"></i> Service Details</h5>
+                        <h3 class="h5"><i class="fas fa-server section-icon"></i> Service Details</h3>
                         {% set systemd_detail = systemd or {} %}
                         {% set detail_services = systemd_detail.services or [] %}
                         {% if systemd_detail.available and detail_services %}
@@ -1839,7 +1839,7 @@
                             {% set hw_badge_label = 'Unknown' %}
                         {% endif %}
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h5 class="mb-0"><i class="fas fa-microchip section-icon"></i> Hardware Subsystems</h5>
+                            <h3 class="mb-0 h5"><i class="fas fa-microchip section-icon"></i> Hardware Subsystems</h3>
                             <span class="badge bg-{{ hw_badge_class }}">
                                 {{ hw_badge_label }} ({{ hw_subsystems.alive_count or 0 }}/{{ hw_subsystems.total or 5 }})
                             </span>
@@ -1887,7 +1887,7 @@
             <div class="col-lg-8 mb-3" id="storage-card">
                 <div class="card health-card">
                     <div class="card-body">
-                        <h5><i class="fas fa-hdd section-icon"></i> Storage Usage</h5>
+                        <h3 class="h5"><i class="fas fa-hdd section-icon"></i> Storage Usage</h3>
                         
                         {% for disk_item in disk %}
                         <div class="mb-3">
@@ -1918,7 +1918,7 @@
             <div class="col-lg-4 mb-3" id="network-card">
                 <div class="card health-card">
                     <div class="card-body">
-                        <h5><i class="fas fa-network-wired section-icon"></i> Network</h5>
+                        <h3 class="h5"><i class="fas fa-network-wired section-icon"></i> Network</h3>
 
                         <div class="metric-row mb-3">
                             <span class="metric-label">Hostname:</span>
@@ -2036,7 +2036,7 @@
             <div class="col-12 mb-3" id="hardware-devices-card">
                 <div class="card health-card h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-database section-icon"></i> Storage Inventory</h5>
+                        <h3 class="h5"><i class="fas fa-database section-icon"></i> Storage Inventory</h3>
 
                         {% if block_info.available and (block_info.devices or []) %}
                         {% set disk_items = block_info.devices | selectattr('type', 'equalto', 'disk') | list %}
@@ -2117,7 +2117,7 @@
             <div class="col-12" id="smart-card">
                 <div class="card health-card">
                     <div class="card-body">
-                        <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+                        <h3 class="h5"><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h3>
 
                         {% if smart_info.available %}
                             {% set smart_devices = smart_info.devices or [] %}
@@ -2142,7 +2142,7 @@
                                         <div class="d-flex justify-content-between align-items-start mb-3">
                                             <div>
                                                 <div class="d-flex align-items-center gap-2 mb-1">
-                                                    <h6 class="mb-0 fw-bold">{{ device.path or device.name or 'Unknown device' }}</h6>
+                                                    <h4 class="mb-0 fw-bold h6">{{ device.path or device.name or 'Unknown device' }}</h4>
                                                     {% if is_nvme %}
                                                         <span class="badge bg-info">NVMe</span>
                                                     {% elif device.is_rotational %}
@@ -2167,7 +2167,7 @@
                                         <div class="row">
                                             {# Column 1: Identity & Capacity #}
                                             <div class="col-md-4 col-sm-6 mb-3">
-                                                <h6 class="smart-section-label">Device Information</h6>
+                                                <h4 class="smart-section-label h6">Device Information</h4>
                                                 <div class="table-responsive">
                                                 <table class="table table-sm table-borderless smart-attr-table mb-0">
                                                     <tbody>
@@ -2199,7 +2199,7 @@
 
                                             {# Column 2: Temperature & Power #}
                                             <div class="col-md-4 col-sm-6 mb-3">
-                                                <h6 class="smart-section-label">Temperature &amp; Power</h6>
+                                                <h4 class="smart-section-label h6">Temperature &amp; Power</h4>
                                                 <div class="table-responsive">
                                                 <table class="table table-sm table-borderless smart-attr-table mb-0">
                                                     <tbody>
@@ -2254,7 +2254,7 @@
 
                                             {# Column 3: Health & Wear #}
                                             <div class="col-md-4 col-sm-12 mb-3">
-                                                <h6 class="smart-section-label">Health &amp; Wear</h6>
+                                                <h4 class="smart-section-label h6">Health &amp; Wear</h4>
                                                 <div class="table-responsive">
                                                 <table class="table table-sm table-borderless smart-attr-table mb-0">
                                                     <tbody>
@@ -2352,7 +2352,7 @@
             <div class="col-12" id="dependencies-card">
                 <div class="card health-card">
                     <div class="card-body">
-                        <h5><i class="fas fa-cubes section-icon"></i> Software Stack</h5>
+                        <h3 class="h5"><i class="fas fa-cubes section-icon"></i> Software Stack</h3>
                         {% if dependencies %}
                             {% set cats = namespace(runtime=[], framework=[], database=[], server=[], processing=[], network=[], system=[], testing=[]) %}
                             {% for dep in dependencies %}
@@ -2380,7 +2380,7 @@
                                 {% for group_name, group_icon, group_deps in all_groups %}
                                     {% if group_deps %}
                                     <div class="col-md-3 col-sm-6 mb-3">
-                                        <h6 class="text-muted mb-2"><i class="{{ group_icon }} me-1" style="font-size: 0.8em;"></i> {{ group_name }}</h6>
+                                        <h4 class="text-muted mb-2 h6"><i class="{{ group_icon }} me-1" style="font-size: 0.8em;"></i> {{ group_name }}</h4>
                                         {% for dep in group_deps %}
                                         <div class="d-flex justify-content-between align-items-center mb-1">
                                             <span class="dep-name">{{ dep.name }}</span>
@@ -2409,7 +2409,7 @@
             <div class="col-12" id="usb-card">
                 <div class="card health-card">
                     <div class="card-body">
-                        <h5><i class="fas fa-usb section-icon"></i> USB Devices</h5>
+                        <h3 class="h5"><i class="fas fa-usb section-icon"></i> USB Devices</h3>
 
                         {% set usb_info = hardware_data.usb or {} %}
                         {% if usb_info.available and usb_info.devices %}
@@ -2509,7 +2509,7 @@
 
                         {% set audio_processes = audio_info.processes or [] %}
                         {% if audio_processes %}
-                        <h6 class="text-muted fw-semibold">Audio-related processes</h6>
+                        <h3 class="text-muted fw-semibold h6">Audio-related processes</h3>
                         <div class="table-responsive mb-3">
                             <table class="table table-sm table-hover process-table">
                                 <thead class="table-light">
@@ -2605,14 +2605,14 @@
             <div class="col-12">
                 <div class="card health-card" id="gps-card">
                     <div class="card-body" id="gps-card-body">
-                        <h5 class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <h3 class="d-flex justify-content-between align-items-center flex-wrap gap-2 h5">
                             <span><i class="fas fa-satellite section-icon"></i> GPS Receiver</span>
                             <a href="{{ url_for('hardware.gps_dashboard_page') }}"
                                class="btn btn-sm btn-outline-primary"
                                title="Open the full GNSS &amp; Time dashboard">
                                 <i class="fas fa-satellite-dish me-1"></i>Full GNSS Dashboard
                             </a>
-                        </h5>
+                        </h3>
                         {% set gps = gps if gps is defined else {} %}
                         {% if gps and gps.get('running') %}
                             {% set fix_quality = gps.get('fix_quality', 'no_fix') %}
@@ -2724,7 +2724,7 @@
             <div class="col-12">
                 <div class="card health-card" id="rtc-card">
                     <div class="card-body" id="rtc-card-body">
-                        <h5><i class="fas fa-clock section-icon"></i> Hardware Clock</h5>
+                        <h3 class="h5"><i class="fas fa-clock section-icon"></i> Hardware Clock</h3>
                         {% set rtc = rtc if rtc is defined else {} %}
                         {% if rtc and rtc.get('available') %}
                             {% set drift = rtc.get('drift_seconds') %}
@@ -2826,11 +2826,11 @@
             <div class="col-12">
                 <div class="card health-card">
                     <div class="card-body">
-                        <h5><i class="fas fa-thermometer-half section-icon"></i> Temperature Sensors</h5>
+                        <h3 class="h5"><i class="fas fa-thermometer-half section-icon"></i> Temperature Sensors</h3>
                         <div class="row">
                             {% for sensor_name, entries in temperature.items() %}
                             <div class="col-md-4 mb-3">
-                                <h6 class="text-muted">{{ sensor_name }}</h6>
+                                <h4 class="text-muted h6">{{ sensor_name }}</h4>
                                 {% for entry in entries %}
                                 <div class="metric-row">
                                     <span class="metric-label">{{ entry.label or 'Sensor' }}:</span>
@@ -3094,7 +3094,7 @@
                     .join('');
                 perCoreHtml = `
                     <hr>
-                    <h6 class="text-muted">Per-Core Usage</h6>
+                    <h4 class="text-muted h6">Per-Core Usage</h4>
                     <div class="row">
                         ${perCoreRows}
                     </div>
@@ -3104,7 +3104,7 @@
             return `
                 <div class="card health-card ${cpuClass} h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-microchip section-icon"></i> CPU Usage</h5>
+                        <h3 class="h5"><i class="fas fa-microchip section-icon"></i> CPU Usage</h3>
 
                         <!-- CPU Usage Chart -->
                         <div class="text-center mb-3" style="position: relative; height: 200px;">
@@ -3175,7 +3175,7 @@
             return `
                 <div class="card health-card ${memoryClass} h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-memory section-icon"></i> Memory Usage</h5>
+                        <h3 class="h5"><i class="fas fa-memory section-icon"></i> Memory Usage</h3>
 
                         <!-- Memory Usage Chart -->
                         <div class="text-center mb-3" style="position: relative; height: 200px;">
@@ -3246,7 +3246,7 @@
             const flagSection = flagList.length
                 ? `
                         <hr>
-                        <h6 class="text-muted">Feature Flags</h6>
+                        <h4 class="text-muted h6">Feature Flags</h4>
                         <div>
                             ${flagBadges}
                             ${extraFlags}
@@ -3285,7 +3285,7 @@
             return `
                 <div class="card health-card h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-microchip section-icon"></i> CPU Details</h5>
+                        <h3 class="h5"><i class="fas fa-microchip section-icon"></i> CPU Details</h3>
 
                         <div class="metric-row">
                             <span class="metric-label">Model:</span>
@@ -3359,7 +3359,7 @@
             return `
                 <div class="card health-card h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-desktop section-icon"></i> Platform &amp; Firmware</h5>
+                        <h3 class="h5"><i class="fas fa-desktop section-icon"></i> Platform &amp; Firmware</h3>
 
                         <div class="metric-row">
                             <span class="metric-label">Manufacturer:</span>
@@ -3440,7 +3440,7 @@
             return `
                 <div class="card health-card h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-bolt section-icon"></i> Power &amp; Firmware</h5>
+                        <h3 class="h5"><i class="fas fa-bolt section-icon"></i> Power &amp; Firmware</h3>
                         ${throttleHtml}
                         <hr>
                         ${bootHtml}
@@ -3466,7 +3466,7 @@
             return `
                 <div class="card health-card h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-fan section-icon"></i> Fan &amp; RP1 Sensors</h5>
+                        <h3 class="h5"><i class="fas fa-fan section-icon"></i> Fan &amp; RP1 Sensors</h3>
                         ${fanHtml}
                         ${rp1Html}
                     </div>
@@ -3484,7 +3484,7 @@
                 return `
                     <div class="card health-card h-100">
                         <div class="card-body">
-                            <h5><i class="fas fa-database section-icon"></i> Storage Inventory</h5>
+                            <h3 class="h5"><i class="fas fa-database section-icon"></i> Storage Inventory</h3>
                             <div class="alert alert-warning mb-0 py-2">Storage inventory unavailable${error}</div>
                         </div>
                     </div>
@@ -3596,7 +3596,7 @@
             return `
                 <div class="card health-card h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-database section-icon"></i> Storage Inventory</h5>
+                        <h3 class="h5"><i class="fas fa-database section-icon"></i> Storage Inventory</h3>
                         ${summaryHtml}
                         ${tableContent}
                     </div>
@@ -3621,7 +3621,7 @@
                 return `
                     <div class="card health-card">
                         <div class="card-body">
-                            <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+                            <h3 class="h5"><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h3>
                             <div class="alert alert-warning mb-0 py-2">S.M.A.R.T. data unavailable${error}</div>
                         </div>
                     </div>
@@ -3633,7 +3633,7 @@
                 return `
                     <div class="card health-card">
                         <div class="card-body">
-                            <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+                            <h3 class="h5"><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h3>
                             <p class="text-muted mb-0">No S.M.A.R.T. capable devices detected.</p>
                         </div>
                     </div>
@@ -3738,7 +3738,7 @@
                         <div class="d-flex justify-content-between align-items-start mb-3">
                             <div>
                                 <div class="d-flex align-items-center gap-2 mb-1">
-                                    <h6 class="mb-0 fw-bold">${escapeHtml(d.path || d.name || 'Unknown device')}</h6>
+                                    <h4 class="mb-0 fw-bold h6">${escapeHtml(d.path || d.name || 'Unknown device')}</h4>
                                     ${typeBadge}
                                 </div>
                                 ${d.model ? `<div class="text-muted" style="font-size:0.85rem">${escapeHtml(d.model)}</div>` : ''}
@@ -3749,15 +3749,15 @@
                         ${errorAlert}
                         <div class="row">
                             <div class="col-md-4 col-sm-6 mb-3">
-                                <h6 class="smart-section-label">Device Information</h6>
+                                <h4 class="smart-section-label h6">Device Information</h4>
                                 <div class="table-responsive"><table class="table table-sm table-borderless smart-attr-table mb-0"><tbody>${col1 || '<tr><td class="text-muted" colspan="2">No device info available</td></tr>'}</tbody></table></div>
                             </div>
                             <div class="col-md-4 col-sm-6 mb-3">
-                                <h6 class="smart-section-label">Temperature &amp; Power</h6>
+                                <h4 class="smart-section-label h6">Temperature &amp; Power</h4>
                                 <div class="table-responsive"><table class="table table-sm table-borderless smart-attr-table mb-0"><tbody>${col2}</tbody></table></div>
                             </div>
                             <div class="col-md-4 col-sm-12 mb-3">
-                                <h6 class="smart-section-label">Health &amp; Wear</h6>
+                                <h4 class="smart-section-label h6">Health &amp; Wear</h4>
                                 <div class="table-responsive"><table class="table table-sm table-borderless smart-attr-table mb-0"><tbody>${col3 || '<tr><td class="text-muted" colspan="2">No health data available</td></tr>'}</tbody></table></div>
                             </div>
                         </div>
@@ -3772,7 +3772,7 @@
             return `
                 <div class="card health-card">
                     <div class="card-body">
-                        <h5><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h5>
+                        <h3 class="h5"><i class="fas fa-heartbeat section-icon"></i> Storage Health (S.M.A.R.T.)</h3>
                         ${devicePanels}
                         ${overflow}
                     </div>
@@ -3786,7 +3786,7 @@
                 return `
                     <div class="card health-card">
                         <div class="card-body">
-                            <h5><i class="fas fa-cubes section-icon"></i> Software Stack</h5>
+                            <h3 class="h5"><i class="fas fa-cubes section-icon"></i> Software Stack</h3>
                             <p class="text-muted mb-0">Version information unavailable.</p>
                         </div>
                     </div>
@@ -3822,7 +3822,7 @@
                     `).join('');
                     return `
                         <div class="col-md-3 col-sm-6 mb-3">
-                            <h6 class="text-muted mb-2"><i class="${meta.icon} me-1" style="font-size: 0.8em;"></i> ${meta.label}</h6>
+                            <h4 class="text-muted mb-2 h6"><i class="${meta.icon} me-1" style="font-size: 0.8em;"></i> ${meta.label}</h4>
                             ${items}
                         </div>
                     `;
@@ -3831,7 +3831,7 @@
             return `
                 <div class="card health-card">
                     <div class="card-body">
-                        <h5><i class="fas fa-cubes section-icon"></i> Software Stack</h5>
+                        <h3 class="h5"><i class="fas fa-cubes section-icon"></i> Software Stack</h3>
                         <div class="row">
                             ${groupHtml}
                         </div>
@@ -3944,11 +3944,11 @@
             let servicesHtml = '';
             if (isAvailable) {
                 if (easServices.length > 0) {
-                    servicesHtml += '<h6 class="text-muted small mb-2">EAS Station™ Services</h6>';
+                    servicesHtml += '<h4 class="text-muted small mb-2 h6">EAS Station™ Services</h4>';
                     servicesHtml += easServices.slice(0, 5).map(renderService).join('');
                 }
                 if (depServices.length > 0) {
-                    servicesHtml += '<h6 class="text-muted small mb-2 mt-3">Dependencies</h6>';
+                    servicesHtml += '<h4 class="text-muted small mb-2 mt-3 h6">Dependencies</h4>';
                     servicesHtml += depServices.slice(0, 3).map(renderService).join('');
                 }
                 if (!easServices.length && !depServices.length) {
@@ -3967,7 +3967,7 @@
             return `
                 <div class="card health-card h-100">
                     <div class="card-body">
-                        <h5><i class="fas fa-server section-icon"></i> System Services</h5>
+                        <h3 class="h5"><i class="fas fa-server section-icon"></i> System Services</h3>
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <span class="metric-label">Database</span>
                             <span class="badge bg-${dbClass}">${escapeHtml(dbStatusRaw)}</span>
@@ -4015,7 +4015,7 @@
                 return `
                 <div class="card health-card">
                     <div class="card-body">
-                        <h5><i class="fas fa-server section-icon"></i> Service Details</h5>
+                        <h3 class="h5"><i class="fas fa-server section-icon"></i> Service Details</h3>
                         <p class="text-muted mb-0">${message}</p>
                     </div>
                 </div>`;
@@ -4059,7 +4059,7 @@
             return `
                 <div class="card health-card">
                     <div class="card-body">
-                        <h5><i class="fas fa-server section-icon"></i> Service Details</h5>
+                        <h3 class="h5"><i class="fas fa-server section-icon"></i> Service Details</h3>
                         <div class="table-responsive">
                             <table class="table table-sm table-hover container-table">
                                 <thead class="table-light">
@@ -4092,7 +4092,7 @@
                 return `
                     <div class="card health-card">
                         <div class="card-body">
-                            <h5><i class="fas fa-usb section-icon"></i> USB Devices</h5>
+                            <h3 class="h5"><i class="fas fa-usb section-icon"></i> USB Devices</h3>
                             <div class="alert alert-warning mb-0 py-2">${message}</div>
                         </div>
                     </div>
@@ -4168,7 +4168,7 @@
             return `
                 <div class="card health-card">
                     <div class="card-body">
-                        <h5><i class="fas fa-usb section-icon"></i> USB Devices</h5>
+                        <h3 class="h5"><i class="fas fa-usb section-icon"></i> USB Devices</h3>
                         ${summaryHtml}
                         <div class="table-responsive">
                             <table class="table table-sm table-hover usb-device-table">
@@ -4222,7 +4222,7 @@
             return `
                 <div class="card health-card">
                     <div class="card-body">
-                        <h5><i class="fas fa-hdd section-icon"></i> Storage Usage</h5>
+                        <h3 class="h5"><i class="fas fa-hdd section-icon"></i> Storage Usage</h3>
                         ${diskHtml || '<p class="text-muted">No disk information available</p>'}
                     </div>
                 </div>
@@ -4358,7 +4358,7 @@
             return `
                 <div class="card health-card">
                     <div class="card-body">
-                        <h5><i class="fas fa-network-wired section-icon"></i> Network</h5>
+                        <h3 class="h5"><i class="fas fa-network-wired section-icon"></i> Network</h3>
                         <div class="metric-row mb-3">
                             <span class="metric-label">Hostname:</span>
                             <span class="metric-value">${hostname}</span>
@@ -4420,7 +4420,7 @@
 
             const audioSection = audioProcesses.length
                 ? `
-                        <h6 class="text-muted fw-semibold">Audio-related processes</h6>
+                        <h3 class="text-muted fw-semibold h6">Audio-related processes</h3>
                         <div class="table-responsive mb-3">
                             <table class="table table-sm table-hover process-table">
                                 <thead class="table-light">
@@ -4475,7 +4475,7 @@
             return `
                 <div class="card health-card">
                     <div class="card-body">
-                        <h5><i class="fas fa-tasks section-icon"></i> Top Processes (CPU Usage)</h5>
+                        <h3 class="h5"><i class="fas fa-tasks section-icon"></i> Top Processes (CPU Usage)</h3>
                         ${content}
                     </div>
                 </div>
@@ -4519,7 +4519,7 @@
                         .join('');
                     return `
                         <div class="col-md-4 mb-3">
-                            <h6 class="text-muted">${escapeHtml(name)}</h6>
+                            <h4 class="text-muted h6">${escapeHtml(name)}</h4>
                             ${readingHtml}
                         </div>
                     `;
@@ -4530,7 +4530,7 @@
                 <div class="col-12">
                     <div class="card health-card">
                         <div class="card-body">
-                            <h5><i class="fas fa-thermometer-half section-icon"></i> Temperature Sensors</h5>
+                            <h3 class="h5"><i class="fas fa-thermometer-half section-icon"></i> Temperature Sensors</h3>
                             <div class="row">
                                 ${sensorsHtml}
                             </div>
@@ -4727,14 +4727,14 @@
         }
 
         function _buildGpsCardShell() {
-            return `<h5 class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            return `<h3 class="d-flex justify-content-between align-items-center flex-wrap gap-2 h5">
                     <span><i class="fas fa-satellite section-icon"></i> GPS Receiver</span>
                     <a href="{{ url_for('hardware.gps_dashboard_page') }}"
                        class="btn btn-sm btn-outline-primary"
                        title="Open the full GNSS &amp; Time dashboard">
                         <i class="fas fa-satellite-dish me-1"></i>Full GNSS Dashboard
                     </a>
-                </h5>
+                </h3>
                 <div class="row mb-2">
                     <div class="col-md-6">
                         <div class="metric-row"><span class="metric-label">Status:</span>
@@ -4878,7 +4878,7 @@
         }
 
         function _buildRtcCardShell() {
-            return `<h5><i class="fas fa-clock section-icon"></i> Hardware Clock</h5>
+            return `<h3 class="h5"><i class="fas fa-clock section-icon"></i> Hardware Clock</h3>
                 <div class="row">
                     <div class="col-md-6">
                         <div id="rtc-h-device-row"></div>
@@ -4986,7 +4986,7 @@
                 : '';
 
             body.innerHTML = `
-                <h5><i class="fas fa-satellite-dish section-icon"></i> Clock Sync (${escapeHtml(clockSync.method || 'unknown')})</h5>
+                <h3 class="h5"><i class="fas fa-satellite-dish section-icon"></i> Clock Sync (${escapeHtml(clockSync.method || 'unknown')})</h3>
                 <div class="metric-row">
                     <span class="metric-label">Status:</span>
                     <span class="metric-value">${syncBadge}${offset}</span>
@@ -5033,7 +5033,7 @@
                 : '';
 
             body.innerHTML = `
-                <h5><i class="fas fa-tower-broadcast section-icon"></i> Alert Feeds</h5>
+                <h3 class="h5"><i class="fas fa-tower-broadcast section-icon"></i> Alert Feeds</h3>
                 <div class="row">
                     ${feedRow('NOAA', feeds.noaa)}
                     ${feedRow('IPAWS', feeds.ipaws)}

@@ -37,7 +37,7 @@
     <!-- Database Health -->
     <div class="admin-accent-card accent-success">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4><i class="fas fa-database"></i> Database Health</h4>
+            <h2 class="h4"><i class="fas fa-database"></i> Database Health</h2>
             <button class="btn btn-sm btn-outline-primary" onclick="checkDatabaseHealth()">
                 <i class="fas fa-sync-alt"></i> Refresh
             </button>
@@ -51,7 +51,7 @@
         </div>
 
         <div class="mt-3">
-            <h6>Database Optimization</h6>
+            <h3 class="h6">Database Optimization</h3>
             <p class="text-muted mb-3">Run VACUUM ANALYZE to reclaim space and improve performance</p>
             <button class="btn btn-success action-btn" onclick="optimizeDatabase()" id="optimize-btn">
                 <i class="fas fa-magic"></i> Optimize Database
@@ -63,7 +63,7 @@
     <!-- Backup Operations -->
     <div class="admin-accent-card accent-info">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4><i class="fas fa-save"></i> Backup Operations</h4>
+            <h2 class="h4"><i class="fas fa-save"></i> Backup Operations</h2>
             <div>
                 <a href="/admin/backups" class="btn btn-sm btn-outline-info me-2">
                     <i class="fas fa-database"></i> Manage Backups
@@ -92,7 +92,7 @@
         </button>
 
         <div id="backup-details" class="mt-3" style="display: none;">
-            <h6>Operation Details</h6>
+            <h3 class="h6">Operation Details</h3>
             <div class="stat-item">
                 <strong>Started:</strong> <span id="backup-started">—</span>
             </div>
@@ -103,11 +103,11 @@
                 <strong>Message:</strong> <span id="backup-message">—</span>
             </div>
             <div id="backup-output-container" style="display: none;">
-                <h6 class="mt-3">Output</h6>
+                <h3 class="mt-3 h6">Output</h3>
                 <div class="admin-output-box" id="backup-output"></div>
             </div>
             <div id="backup-error-container" style="display: none;">
-                <h6 class="mt-3">Error Output</h6>
+                <h3 class="mt-3 h6">Error Output</h3>
                 <div class="admin-output-box text-danger" id="backup-error"></div>
             </div>
         </div>
@@ -116,7 +116,7 @@
     <!-- Alert Boundary Recalculation -->
     <div class="admin-accent-card accent-info">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4><i class="fas fa-map-marked-alt"></i> Alert Boundary Coverage</h4>
+            <h2 class="h4"><i class="fas fa-map-marked-alt"></i> Alert Boundary Coverage</h2>
         </div>
 
         <p class="text-muted mb-3">Recalculate intersection areas between alert polygons and configured boundaries. Use this if coverage percentages appear incorrect.</p>
@@ -142,7 +142,7 @@
     <!-- Upgrade Operations -->
     <div class="admin-accent-card accent-warning">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4><i class="fas fa-arrow-up"></i> System Upgrade</h4>
+            <h2 class="h4"><i class="fas fa-arrow-up"></i> System Upgrade</h2>
             <span class="admin-badge admin-badge-muted" id="upgrade-status">Idle</span>
         </div>
 
@@ -193,7 +193,7 @@
 
         <div id="upgrade-details" class="mt-3" style="display: none;">
             <div class="d-flex justify-content-between align-items-center mb-2">
-                <h6 class="mb-0" id="upgrade-step-label">Starting…</h6>
+                <h3 class="mb-0 h6" id="upgrade-step-label">Starting…</h3>
                 <span id="upgrade-connection-badge" class="admin-badge admin-badge-muted" style="display: none;">Reconnecting…</span>
             </div>
             <div class="progress mb-3" style="height: 1.25rem;" id="upgrade-progress-bar-wrap">

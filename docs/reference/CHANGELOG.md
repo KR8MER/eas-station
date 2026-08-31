@@ -8,6 +8,13 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.210.1] - 2026-08-31 - Fix heading hierarchy accessibility warnings site-wide
+
+- `static/js/accessibility-utils.js`'s `setupHeadingHierarchy()` flags any heading whose level skips more than one step deeper than the previous heading in DOM order (e.g. h2 straight to h5) — a real, longstanding gap in nearly every page, since card/widget headers throughout the app were written as bare `h5`/`h6` regardless of the page's actual section depth. Fixed every skip across the template tree (82 templates, 1 shared JS component) rather than leaving it as a known issue.
+- Two-pattern fix, chosen per heading: (1) **renumber** the tag to the correct sequential level relative to its context, adding a matching `.hN` class (`h1, .h1`/`h2, .h2`/etc. are already paired in `static/css/base.css`) so the visual size is unchanged even though the semantic level moved; (2) for headings that were really just small styled labels with no real document-outline meaning (a caption over a JSON blob, a stat tile's number label), demoted them the same way but the net effect is identical markup weight, just at a level that doesn't skip.
+- `templates/base.html`'s global footer (`Quick Access`/`Resources`/`Legal & Info`/`System Status`, previously `h6`) and its Display Units modal title were the single highest-leverage fix — both render on every page, so fixing them once cleared the same warning everywhere without touching per-page templates.
+- Verified with a static heading-sequence scanner (expanding `{% include %}`s to check true rendered order, not just each file in isolation) and a live browser console sweep across 90 real routes against the deployed app — zero `Heading hierarchy jump` warnings remain anywhere, and no new console errors were introduced.
+
 ## [2.210.0] - 2026-08-31 - Add boundary layer toggles to the alert detail map
 
 - The alert detail page's Alert Coverage Map fetched all 8 boundary types (counties, fire, ems, electric, townships, villages, telephone, school) on every load but only ever showed counties — the rest were invisible dead weight with no way to see them. Added a row of toggle switches (mirroring the dashboard's existing "Map Layers" panel in `templates/index.html`) below the map so any of the 8 can be shown on demand.

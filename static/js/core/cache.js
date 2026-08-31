@@ -181,12 +181,7 @@
             cacheHits++;
             const totalRequests = cacheHits + cacheMisses;
             apiCache._hitRate = totalRequests > 0 ? cacheHits / totalRequests : 0;
-            
-            // Only log in development
-            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                console.debug(`[Cache HIT] ${url}`, apiCache.getStats());
-            }
-            
+
             // Return cached data as a Response-like object
             const urlObj = new URL(url, window.location.origin);
             const mockResponse = {
@@ -219,12 +214,7 @@
         cacheMisses++;
         const totalRequests = cacheHits + cacheMisses;
         apiCache._hitRate = totalRequests > 0 ? cacheHits / totalRequests : 0;
-        
-        // Only log in development
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            console.debug(`[Cache MISS] ${url}`, apiCache.getStats());
-        }
-        
+
         try {
             const response = await fetch(url, options);
             
@@ -248,7 +238,6 @@
      */
     function clearCache(pattern) {
         apiCache.clear(pattern);
-        console.info(`[Cache] Cleared cache${pattern ? ' for: ' + pattern : ''}`);
     }
 
     /**
@@ -263,7 +252,6 @@
      */
     function configureCacheTTL(pattern, ttlMs) {
         apiCache.config[pattern] = ttlMs;
-        console.info(`[Cache] Configured TTL for ${pattern}: ${ttlMs}ms`);
     }
 
     // Export to global scope
@@ -272,8 +260,5 @@
     window.getCacheStats = getCacheStats;
     window.configureCacheTTL = configureCacheTTL;
     window.apiCache = apiCache;
-
-    // Log cache initialization
-    console.info('[Cache] API caching initialized with default TTLs:', apiCache.config);
 
 })(window);

@@ -18,7 +18,7 @@
             <!-- Poller Configuration Card -->
             <div class="card mb-3">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-cog"></i> Poller Configuration</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-cog"></i> Poller Configuration</h2>
                 </div>
                 <div class="card-body">
                     <form id="pollerSettingsForm">
@@ -75,7 +75,7 @@
                         </div>
 
                         <hr>
-                        <h6 class="mb-3"><i class="fas fa-satellite"></i> CAP Feed Sources</h6>
+                        <h3 class="mb-3 h6"><i class="fas fa-satellite"></i> CAP Feed Sources</h3>
 
                         <!-- Custom CAP Endpoints -->
                         <div class="mb-3">
@@ -158,7 +158,7 @@
             <!-- Service Control Card -->
             <div class="card mb-3">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-server"></i> Service Status</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-server"></i> Service Status</h2>
                 </div>
                 <div class="card-body">
                     <div class="alert alert-info">
@@ -176,7 +176,7 @@
             <!-- Manual Alert Import Card -->
             <div class="card mb-3">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-cloud-download-alt"></i> Manual Alert Import</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-cloud-download-alt"></i> Manual Alert Import</h2>
                 </div>
                 <div class="card-body">
                     <p class="text-muted small">Query NOAA for specific alerts (including expired) and store them locally -- useful for backfilling an alert that arrived before this station was polling, or that expired before it was captured.</p>
@@ -222,7 +222,7 @@
             <!-- Current Settings Summary -->
             <div class="card mb-3">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-info-circle"></i> Current Settings</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-info-circle"></i> Current Settings</h2>
                 </div>
                 <div class="card-body">
                     <ul class="list-unstyled mb-0">
@@ -275,7 +275,7 @@
             <!-- View Logs Card -->
             <div class="card mb-3">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-file-alt"></i> Polling Logs</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-file-alt"></i> Polling Logs</h2>
                 </div>
                 <div class="card-body">
                     <div class="d-grid gap-2">
@@ -295,16 +295,16 @@
             <!-- Help Card -->
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-question-circle"></i> Help</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-question-circle"></i> Help</h2>
                 </div>
                 <div class="card-body">
-                    <h6>Poll Interval Guidelines</h6>
+                    <h3 class="h6">Poll Interval Guidelines</h3>
                     <ul class="small mb-3">
                         <li><strong>IPAWS/FEMA:</strong> 120 s (2 min)</li>
                         <li><strong>NOAA Weather:</strong> 300 s (5 min)</li>
                         <li><strong>Minimum:</strong> 30 s</li>
                     </ul>
-                    <h6>Troubleshooting</h6>
+                    <h3 class="h6">Troubleshooting</h3>
                     <ol class="small mb-0">
                         <li>Confirm poller is enabled</li>
                         <li>Check polling logs for HTTP errors</li>

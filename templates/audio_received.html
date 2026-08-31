@@ -26,7 +26,7 @@
                     <a href="/audio/received" class="text-decoration-none d-block" title="Show all received alerts">
                         <div class="card bg-info-gradient text-white">
                             <div class="card-body text-center">
-                                <h3 class="mb-0">{{ stats.total }}</h3>
+                                <h2 class="mb-0 h3">{{ stats.total }}</h2>
                                 <small>Total Received</small>
                             </div>
                         </div>
@@ -36,7 +36,7 @@
                     <a href="/audio/received?decision=forwarded" class="text-decoration-none d-block" title="Show only forwarded alerts">
                         <div class="card bg-success-gradient text-white">
                             <div class="card-body text-center">
-                                <h3 class="mb-0">{{ stats.forwarded }}</h3>
+                                <h2 class="mb-0 h3">{{ stats.forwarded }}</h2>
                                 <small>Forwarded</small>
                             </div>
                         </div>
@@ -46,7 +46,7 @@
                     <a href="/audio/received?decision=ignored" class="text-decoration-none d-block" title="Show only ignored alerts">
                         <div class="card stat-card text-white">
                             <div class="card-body text-center">
-                                <h3 class="mb-0">{{ stats.ignored }}</h3>
+                                <h2 class="mb-0 h3">{{ stats.ignored }}</h2>
                                 <small>Ignored</small>
                             </div>
                         </div>
@@ -56,7 +56,7 @@
                     <a href="/audio/received?decision=error" class="text-decoration-none d-block" title="Show only alerts with forwarding errors">
                         <div class="card bg-danger-gradient text-white">
                             <div class="card-body text-center">
-                                <h3 class="mb-0">{{ stats.error }}</h3>
+                                <h2 class="mb-0 h3">{{ stats.error }}</h2>
                                 <small>Errors</small>
                             </div>
                         </div>
@@ -73,9 +73,9 @@
             <!-- Filters -->
             <div class="card mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <h5 class="mb-0">
+                    <h3 class="mb-0 h5">
                         <i class="fas fa-filter"></i> Filters
-                    </h5>
+                    </h3>
                     {% if has_filters %}
                     <a href="/audio/received" class="btn btn-sm btn-outline-secondary">
                         <i class="fas fa-times"></i> Clear All
@@ -205,10 +205,10 @@
             <!-- Alerts Table -->
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">
+                    <h3 class="mb-0 h5">
                         <i class="fas fa-list"></i> Received Alerts
                         <span class="badge bg-secondary">{{ pagination.total }} total</span>
-                    </h5>
+                    </h3>
                 </div>
 
                 {# Active filter chips — quick view of applied filters with

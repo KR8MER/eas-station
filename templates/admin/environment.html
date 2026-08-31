@@ -445,7 +445,7 @@
             if (content) {
                 content.innerHTML = `
                     <div class="alert alert-danger">
-                        <h4><i class="fas fa-exclamation-triangle"></i> Error Loading Settings</h4>
+                        <h2 class="h4"><i class="fas fa-exclamation-triangle"></i> Error Loading Settings</h2>
                         <p><strong>Error:</strong> ${error.message}</p>
                         <p>Please check the browser console for more details.</p>
                         <button class="btn btn-primary" onclick="loadSettings()">
@@ -539,7 +539,7 @@
             if (catId === 'https') {
                 html += `
                     <div class="alert alert-warning mt-3">
-                        <h5><i class="fas fa-shield-alt"></i> SSL Certificate Export</h5>
+                        <h3 class="h5"><i class="fas fa-shield-alt"></i> SSL Certificate Export</h3>
                         <p class="mb-3">
                             <strong>Security Notice:</strong> You can download your SSL/TLS certificate and private key files 
                             to use them in external deployments like Portainer. 

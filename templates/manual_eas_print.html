@@ -140,7 +140,7 @@
                         <dd class="col-sm-8">{{ chime_badge(post_chime_meta) }}</dd>
 
                         {% if mdc_meta %}
-                        <dt class="col-sm-12 mt-3"><h6 class="mb-2">MDC1200 Selective Calling</h6></dt>
+                        <dt class="col-sm-12 mt-3"><h2 class="mb-2 h6">MDC1200 Selective Calling</h2></dt>
                         <dt class="col-sm-4">Source Unit ID</dt>
                         <dd class="col-sm-8"><code>{{ mdc_meta.get('unit_id', 'N/A') }}</code></dd>
                         <dt class="col-sm-4">Target Unit ID</dt>
@@ -177,7 +177,7 @@
                         {% endif %}
 
                         {% if qc2_meta %}
-                        <dt class="col-sm-12 mt-3"><h6 class="mb-2">QC-II Tones</h6></dt>
+                        <dt class="col-sm-12 mt-3"><h2 class="mb-2 h6">QC-II Tones</h2></dt>
                         <dt class="col-sm-4">Tone A</dt>
                         <dd class="col-sm-8">{{ qc2_meta.get('tone_a_freq', 'N/A') }} Hz</dd>
                         <dt class="col-sm-4">Tone B</dt>
@@ -217,11 +217,11 @@
                         <div class="mb-3">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
-                                    <h6 class="mb-1">{{ component_labels.get(key, key.replace('_', ' ').upper()) }}
+                                    <h2 class="mb-1 h6">{{ component_labels.get(key, key.replace('_', ' ').upper()) }}
                                         {%- if comp.profile and comp.profile != 'none' %}
                                         <span class="badge bg-secondary fw-normal ms-1 text-uppercase">{{ comp.profile }}</span>
                                         {%- endif %}
-                                    </h6>
+                                    </h2>
                                     <small class="text-muted">{{ comp.duration_seconds|default(0)|round(2) }} s · {{ comp.size_bytes|default(0) }} bytes</small>
                                 </div>
                                 {% if comp.download_url %}

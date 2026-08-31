@@ -187,8 +187,6 @@
 
     // Listen for theme changes and re-render all charts
     window.addEventListener('theme-changed', () => {
-        console.log('🎨 Alert delivery charts: Theme changed, re-rendering...');
-
         // Get the last rendered config from a stored reference
         if (window.__lastAlertVerificationConfig) {
             render(window.__lastAlertVerificationConfig);

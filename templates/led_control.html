@@ -583,10 +583,10 @@ details.debug-details > .debug-details-body {
         <div class="row g-4 align-items-center">
             <div class="col-lg-6">
                 <div id="led-status-display">
-                    <h5 class="mb-1">
+                    <h2 class="mb-1 h5">
                         <i class="fas fa-tv text-primary"></i> LED Sign
                         <small class="text-muted fw-normal">Alpha 9120C &middot; M-Protocol</small>
-                    </h5>
+                    </h2>
                     <div class="led-status-chips my-3">
                         <span class="led-chip led-chip-ok">
                             <span class="status-indicator status-connected"></span> Connected
@@ -691,7 +691,7 @@ details.debug-details > .debug-details-body {
     <div class="tab-content" id="ledTabContent">
         <!-- Custom Message Tab -->
         <div class="tab-pane fade show active" id="custom" role="tabpanel">
-            <h4><i class="fas fa-edit text-primary"></i> Custom Message</h4>
+            <h2 class="h4"><i class="fas fa-edit text-primary"></i> Custom Message</h2>
             <p class="text-muted mb-3">Create messages for the LED sign — 4 lines, 20 characters each.</p>
 
             <!-- ══ WYSIWYG Live Sign Preview (full-width, top of editor) ══ -->
@@ -724,7 +724,7 @@ details.debug-details > .debug-details-body {
                         <!-- Message Text -->
                         {% set positions = [' ', '!', '"', '#'] %}
                         <div class="feature-group">
-                            <h6><i class="fas fa-keyboard"></i> Message Designer</h6>
+                            <h3 class="h6"><i class="fas fa-keyboard"></i> Message Designer</h3>
                             <p class="text-muted small mb-3">Type directly into each line. Use the <i class="fas fa-sliders-h"></i> button on a card for per-line colour, effect and speed overrides.</p>
                             <div class="row g-3">
                                 {% for idx in range(4) %}
@@ -842,7 +842,7 @@ details.debug-details > .debug-details-body {
 
                         <!-- Message defaults: colour, font, effects, priority, typography -->
                         <div class="feature-group">
-                            <h6><i class="fas fa-sliders-h"></i> Message Defaults</h6>
+                            <h3 class="h6"><i class="fas fa-sliders-h"></i> Message Defaults</h3>
                             <p class="text-muted small">Used wherever a line card is set to "Use default" — line-specific settings always win.</p>
                             <div class="row g-3">
                                 <div class="col-md-4 col-sm-6">
@@ -1052,7 +1052,7 @@ details.debug-details > .debug-details-body {
 
         <!-- RGB Message Tab -->
         <div class="tab-pane fade" id="rgb" role="tabpanel">
-            <h4><i class="fas fa-palette text-danger"></i> RGB Custom Color Message</h4>
+            <h2 class="h4"><i class="fas fa-palette text-danger"></i> RGB Custom Color Message</h2>
             <p class="text-muted mb-4">Use custom RGB colors (RRGGBB format) for enhanced visual effects.</p>
 
             <form id="rgb-message-form">
@@ -1060,7 +1060,7 @@ details.debug-details > .debug-details-body {
                     <div class="col-lg-8">
                         <!-- RGB Message Text -->
                         <div class="feature-group">
-                            <h6><i class="fas fa-keyboard"></i> RGB Message Text</h6>
+                            <h3 class="h6"><i class="fas fa-keyboard"></i> RGB Message Text</h3>
                             <div class="row">
                                 <div class="col-md-6">
                                     <label for="rgb-line1" class="form-label">Line 1</label>
@@ -1083,7 +1083,7 @@ details.debug-details > .debug-details-body {
 
                         <!-- RGB Color Controls -->
                         <div class="feature-group">
-                            <h6><i class="fas fa-palette"></i> RGB Color Selection</h6>
+                            <h3 class="h6"><i class="fas fa-palette"></i> RGB Color Selection</h3>
                             <div class="row">
                                 <div class="col-md-6">
                                     <label for="rgb-color" class="form-label">RGB Color (RRGGBB)</label>
@@ -1111,7 +1111,7 @@ details.debug-details > .debug-details-body {
 
                         <!-- RGB Display Settings -->
                         <div class="feature-group">
-                            <h6><i class="fas fa-cog"></i> Display Settings</h6>
+                            <h3 class="h6"><i class="fas fa-cog"></i> Display Settings</h3>
                             <div class="row">
                                 <div class="col-md-4">
                                     <label for="rgb-font" class="form-label">Font</label>
@@ -1172,7 +1172,7 @@ details.debug-details > .debug-details-body {
 
         <!-- Canned Messages Tab -->
         <div class="tab-pane fade" id="canned" role="tabpanel">
-            <h4><i class="fas fa-list text-success"></i> Predefined Messages</h4>
+            <h2 class="h4"><i class="fas fa-list text-success"></i> Predefined Messages</h2>
             <p class="text-muted mb-4">Quick access to common emergency and informational messages.</p>
 
             <div class="row" id="canned-messages-container">
@@ -1261,14 +1261,14 @@ details.debug-details > .debug-details-body {
 
         <!-- Emergency Tab -->
         <div class="tab-pane fade" id="emergency" role="tabpanel">
-            <h4><i class="fas fa-exclamation-triangle text-danger"></i> Emergency Override</h4>
+            <h2 class="h4"><i class="fas fa-exclamation-triangle text-danger"></i> Emergency Override</h2>
             <p class="text-muted mb-4">High-priority emergency messages with immediate display and flashing effects.</p>
 
             <form id="emergency-message-form">
                 <div class="row">
                     <div class="col-lg-8">
                         <div class="feature-group">
-                            <h6><i class="fas fa-keyboard"></i> Emergency Message</h6>
+                            <h3 class="h6"><i class="fas fa-keyboard"></i> Emergency Message</h3>
                             <div class="alert alert-warning">
                                 <i class="fas fa-exclamation-triangle"></i>
                                 <strong>Warning:</strong> Emergency messages override all other displays and flash continuously.
@@ -1338,14 +1338,14 @@ details.debug-details > .debug-details-body {
 
         <!-- Advanced Features Tab -->
         <div class="tab-pane fade" id="advanced" role="tabpanel">
-            <h4><i class="fas fa-cogs text-info"></i> Advanced Features</h4>
+            <h2 class="h4"><i class="fas fa-cogs text-info"></i> Advanced Features</h2>
             <p class="text-muted mb-4">Advanced M-Protocol features and sign configuration.</p>
 
             <div class="row">
                 <div class="col-md-6">
                     <div class="card mb-3">
                         <div class="card-header">
-                            <h6><i class="fas fa-sun"></i> Brightness Control</h6>
+                            <h3 class="h6"><i class="fas fa-sun"></i> Brightness Control</h3>
                         </div>
                         <div class="card-body">
                             <div class="mb-3">
@@ -1365,7 +1365,7 @@ details.debug-details > .debug-details-body {
 
                     <div class="card mb-3">
                         <div class="card-header">
-                            <h6><i class="fas fa-vial"></i> Test Functions</h6>
+                            <h3 class="h6"><i class="fas fa-vial"></i> Test Functions</h3>
                         </div>
                         <div class="card-body">
                             <div class="d-grid gap-2">
@@ -1389,7 +1389,7 @@ details.debug-details > .debug-details-body {
                 <div class="col-md-6">
                     <div class="card mb-3">
                         <div class="card-header">
-                            <h6><i class="fas fa-network-wired"></i> Sign Information</h6>
+                            <h3 class="h6"><i class="fas fa-network-wired"></i> Sign Information</h3>
                         </div>
                         <div class="card-body">
                             <div class="table-responsive">
@@ -1409,7 +1409,7 @@ details.debug-details > .debug-details-body {
 
                     <div class="card">
                         <div class="card-header">
-                            <h6><i class="fas fa-tools"></i> System Controls</h6>
+                            <h3 class="h6"><i class="fas fa-tools"></i> System Controls</h3>
                         </div>
                         <div class="card-body">
                             <div class="d-grid gap-2">
@@ -1431,13 +1431,13 @@ details.debug-details > .debug-details-body {
 
         <!-- Time Display Tab -->
         <div class="tab-pane fade" id="time" role="tabpanel">
-            <h4><i class="fas fa-clock text-primary"></i> Time & Date Display</h4>
+            <h2 class="h4"><i class="fas fa-clock text-primary"></i> Time & Date Display</h2>
             <p class="text-muted mb-4">Configure time and date display formats and automatic time updates.</p>
 
             <div class="row">
                 <div class="col-md-8">
                     <div class="feature-group">
-                        <h6><i class="fas fa-calendar"></i> Date Format</h6>
+                        <h3 class="h6"><i class="fas fa-calendar"></i> Date Format</h3>
                         <div class="row">
                             <div class="col-md-6">
                                 <label for="date-format" class="form-label">Date Format</label>
@@ -1461,7 +1461,7 @@ details.debug-details > .debug-details-body {
                     </div>
 
                     <div class="feature-group">
-                        <h6><i class="fas fa-cog"></i> Time Display Settings</h6>
+                        <h3 class="h6"><i class="fas fa-cog"></i> Time Display Settings</h3>
                         <div class="row">
                             <div class="col-md-6">
                                 <label for="time-color" class="form-label">Time Color</label>
@@ -1536,13 +1536,13 @@ details.debug-details > .debug-details-body {
 
         <!-- Dots / Pixel Art Tab -->
         <div class="tab-pane fade" id="dots" role="tabpanel">
-            <h4><i class="fas fa-th text-success"></i> Dots / Pixel Art</h4>
+            <h2 class="h4"><i class="fas fa-th text-success"></i> Dots / Pixel Art</h2>
             <p class="text-muted mb-3">Draw custom pixel-art graphics and send them to the LED sign using the M-Protocol Picture File command.</p>
 
             <div class="row">
                 <div class="col-lg-8">
                     <div class="feature-group">
-                        <h6><i class="fas fa-palette"></i> Canvas Settings</h6>
+                        <h3 class="h6"><i class="fas fa-palette"></i> Canvas Settings</h3>
                         <div class="row g-2 mb-3">
                             <div class="col-sm-3">
                                 <label class="form-label">Columns</label>
@@ -1590,7 +1590,7 @@ details.debug-details > .debug-details-body {
                     </div>
 
                     <div class="feature-group">
-                        <h6><i class="fas fa-text-width"></i> Text-to-Dots</h6>
+                        <h3 class="h6"><i class="fas fa-text-width"></i> Text-to-Dots</h3>
                         <p class="text-muted small">Convert a short text string to a pixel-art representation.</p>
                         <div class="input-group">
                             <input type="text" class="form-control" id="dots-text-input" maxlength="20" placeholder="EAS ALERT">
@@ -1599,7 +1599,7 @@ details.debug-details > .debug-details-body {
                     </div>
 
                     <div class="feature-group">
-                        <h6><i class="fas fa-memory"></i> Sign Memory</h6>
+                        <h3 class="h6"><i class="fas fa-memory"></i> Sign Memory</h3>
                         <div class="alert alert-warning">
                             <i class="fas fa-exclamation-triangle"></i>
                             <strong>Destructive:</strong> the sign has no dedicated graphics file allocated out of the box (dots/pixel-art screens share nothing with the scrolling-text file). Run this once before using rotating LED graphics screens — it <strong>erases every message currently stored on the sign</strong> and reallocates its Memory Configuration table with a text file and a graphics file.
@@ -1638,7 +1638,7 @@ details.debug-details > .debug-details-body {
                         </div>
 
                         <div class="mt-3">
-                            <h6 class="text-muted">Quick Patterns</h6>
+                            <h3 class="text-muted h6">Quick Patterns</h3>
                             <div class="d-flex gap-2 flex-wrap">
                                 <button class="btn btn-sm btn-outline-secondary" onclick="dotsLoadPattern('checkerboard')">Checkerboard</button>
                                 <button class="btn btn-sm btn-outline-secondary" onclick="dotsLoadPattern('border')">Border</button>
@@ -1654,14 +1654,14 @@ details.debug-details > .debug-details-body {
 
         <!-- RSS Feeds Tab -->
         <div class="tab-pane fade" id="rss" role="tabpanel">
-            <h4><i class="fas fa-rss text-warning"></i> RSS Feed Ticker</h4>
+            <h2 class="h4"><i class="fas fa-rss text-warning"></i> RSS Feed Ticker</h2>
             <p class="text-muted mb-3">Configure RSS feeds to display headlines on the LED sign as a scrolling ticker.</p>
 
             <div class="row">
                 <div class="col-lg-8">
                     <!-- Add Feed Form -->
                     <div class="feature-group mb-3">
-                        <h6><i class="fas fa-plus-circle"></i> Add RSS Feed</h6>
+                        <h3 class="h6"><i class="fas fa-plus-circle"></i> Add RSS Feed</h3>
                         <div class="row g-2">
                             <div class="col-md-6">
                                 <label class="form-label">Feed Name</label>
@@ -1751,12 +1751,12 @@ details.debug-details > .debug-details-body {
 <!-- Message History -->
 <div class="card mt-4">
     <div class="card-header">
-        <h5 class="mb-0">
+        <h3 class="mb-0 h5">
             <i class="fas fa-history"></i> Message History
             <button class="btn btn-sm btn-outline-primary float-end" onclick="loadMessageHistory()">
                 <i class="fas fa-sync-alt"></i> Refresh
             </button>
-        </h5>
+        </h3>
     </div>
     <div class="card-body">
         <div class="row mb-3">

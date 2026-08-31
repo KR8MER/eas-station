@@ -60,7 +60,7 @@
         <div class="col-md-12">
             <div class="admin-form-section">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="mb-0">Time Period</h5>
+                    <h2 class="mb-0 h5">Time Period</h2>
                     <div class="btn-group" role="group" aria-label="Time period selection">
                         <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadStatistics(1, this)">24h</button>
                         <button type="button" class="btn btn-sm btn-outline-primary active" onclick="loadStatistics(7, this)">7d</button>
@@ -76,7 +76,7 @@
     <div class="row mb-4">
         <div class="col-md-12">
             <div class="admin-form-section">
-                <h5 class="mb-3">Activations by Type</h5>
+                <h2 class="mb-3 h5">Activations by Type</h2>
                 <div class="row" id="activation-types-container">
                     <div class="col-md-3 text-center">
                         <div class="spinner-border text-primary" role="status" aria-label="Loading activation types"></div>
@@ -90,7 +90,7 @@
     <div class="row mb-4">
         <div class="col-md-12">
             <div class="admin-form-section">
-                <h5 class="mb-3">Usage by Pin</h5>
+                <h2 class="mb-3 h5">Usage by Pin</h2>
                 <div id="pin-usage-container">
                     <div class="text-center">
                         <div class="spinner-border text-primary" role="status" aria-label="Loading pin statistics"></div>
@@ -105,7 +105,7 @@
     <div class="row">
         <div class="col-md-12">
             <div class="admin-form-section">
-                <h5 class="mb-3"><i class="fas fa-exclamation-triangle"></i> Recent Errors</h5>
+                <h2 class="mb-3 h5"><i class="fas fa-exclamation-triangle"></i> Recent Errors</h2>
                 <div class="table-responsive">
                     <table class="table eas-table" id="errors-table">
                         <thead>
@@ -303,7 +303,7 @@ function updatePinUsage(byPin) {
         return `
             <div class="admin-accent-card pin-usage">
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="mb-0"><i class="fas fa-microchip"></i> GPIO Pin ${pin.pin}</h6>
+                    <h3 class="mb-0 h6"><i class="fas fa-microchip"></i> GPIO Pin ${pin.pin}</h3>
                     <div>
                         <span class="badge bg-primary">${activationCount} activations</span>
                         <span class="badge bg-success">${successRate}% success</span>

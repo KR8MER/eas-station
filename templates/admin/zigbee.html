@@ -218,12 +218,12 @@
 <div class="admin-container">
     <!-- Coordinator Status -->
     <div class="admin-form-section" id="status-section">
-        <h3>
+        <h2 class="h3">
             <i class="fas fa-tower-broadcast"></i> Coordinator Status
             <button class="btn btn-sm btn-primary ms-auto" id="refresh-btn">
                 <i class="fas fa-sync-alt"></i> Refresh
             </button>
-        </h3>
+        </h2>
         <div id="status-loading">
             <div class="spinner"></div> Loading Zigbee status...
         </div>
@@ -235,7 +235,7 @@
 
     <!-- Pairing / Permit Join -->
     <div class="admin-form-section" id="pairing-section" style="display: none;">
-        <h3><i class="fas fa-plus-circle"></i> Add Devices (Pairing Mode)</h3>
+        <h2 class="h3"><i class="fas fa-plus-circle"></i> Add Devices (Pairing Mode)</h2>
         <div class="pairing-panel" id="pairing-panel">
             <!-- idle state -->
             <div id="pairing-idle">
@@ -265,13 +265,13 @@
 
     <!-- Diagnostics -->
     <div class="admin-form-section" id="diagnostics-section" style="display: none;">
-        <h3><i class="fas fa-stethoscope"></i> Diagnostics</h3>
+        <h2 class="h3"><i class="fas fa-stethoscope"></i> Diagnostics</h2>
         <div id="diagnostics-content"></div>
     </div>
 
     <!-- Connected Devices -->
     <div class="admin-form-section" id="devices-section">
-        <h3><i class="fas fa-network-wired"></i> Connected Devices</h3>
+        <h2 class="h3"><i class="fas fa-network-wired"></i> Connected Devices</h2>
         <div id="devices-loading">
             <div class="spinner"></div> Loading devices...
         </div>
@@ -425,7 +425,7 @@ const ZigbeeMonitor = {
             // Configuration table
             if (data.config) {
                 infoDiv.innerHTML = `
-                    <h4 style="margin-top: 1.5rem; margin-bottom: 1rem;">Configuration</h4>
+                    <h3 class="h4" style="margin-top: 1.5rem; margin-bottom: 1rem;">Configuration</h3>
                     <div class="table-responsive">
                     <table class="config-table">
                         <tr>
@@ -451,7 +451,7 @@ const ZigbeeMonitor = {
                 // Available ports
                 if (data.available_ports && data.available_ports.length > 0) {
                     infoDiv.innerHTML += `
-                        <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Available Serial Ports</h4>
+                        <h3 class="h4" style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Available Serial Ports</h3>
                         <ul class="serial-ports-list">
                             ${data.available_ports.map(port => `
                                 <li class="serial-port-item">

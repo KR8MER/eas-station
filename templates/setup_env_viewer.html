@@ -8,7 +8,7 @@
         <div class="col-lg-10">
             <div class="card shadow border-0">
                 <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-                    <h3 class="mb-0"><i class="fas fa-file-code me-2"></i>.env File Viewer</h3>
+                    <h2 class="mb-0 h3"><i class="fas fa-file-code me-2"></i>.env File Viewer</h2>
                     <a href="{{ url_for('setup_wizard') }}" class="btn btn-sm btn-light">
                         <i class="fas fa-arrow-left me-1"></i> Back to Setup
                     </a>
@@ -22,7 +22,7 @@
                     <!-- File Information -->
                     <div class="card mb-4">
                         <div class="card-header bg-light">
-                            <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>File Information</h5>
+                            <h3 class="mb-0 h5"><i class="fas fa-info-circle me-2"></i>File Information</h3>
                         </div>
                         <div class="card-body">
                             <div class="table-responsive">
@@ -87,7 +87,7 @@
                     <!-- File Content -->
                     <div class="card">
                         <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>File Contents</h5>
+                            <h3 class="mb-0 h5"><i class="fas fa-file-alt me-2"></i>File Contents</h3>
                             {% if env_info.exists and env_info.is_file %}
                             <button class="btn btn-sm btn-outline-light" onclick="copyContent()">
                                 <i class="fas fa-copy me-1"></i> Copy
@@ -111,10 +111,10 @@
                     <!-- Help Section -->
                     <div class="card mt-4 border-info">
                         <div class="card-header bg-info text-white">
-                            <h5 class="mb-0"><i class="fas fa-question-circle me-2"></i>Troubleshooting</h5>
+                            <h3 class="mb-0 h5"><i class="fas fa-question-circle me-2"></i>Troubleshooting</h3>
                         </div>
                         <div class="card-body">
-                            <h6>If the file doesn't exist or changes aren't saved:</h6>
+                            <h4 class="h6">If the file doesn't exist or changes aren't saved:</h4>
                             <ul>
                                 <li><strong>Check the Container ID</strong> above - make sure you're viewing the same container that's serving the web app</li>
                                 <li><strong>Check logs</strong> - Look for "Successfully wrote .env file" messages in the container logs</li>
@@ -122,7 +122,7 @@
                                 <li><strong>Check if it's a directory</strong> - If "Is File" shows "No", the path is a directory, not a file (this is an error)</li>
                             </ul>
 
-                            <h6 class="mt-3">If configuration doesn't persist across restarts:</h6>
+                            <h4 class="mt-3 h6">If configuration doesn't persist across restarts:</h4>
                             <ul>
                                 <li><strong>Container Restart</strong> - Changes should persist</li>
                                 <li><strong>Container Recreate/Redeploy</strong> - Changes will be lost (use Portainer environment variables for permanent config)</li>

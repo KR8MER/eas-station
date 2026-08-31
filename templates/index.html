@@ -520,22 +520,22 @@
         <div class="col-lg-4 col-xxl-3 order-2 order-lg-1">
             <div class="card control-card sticky-card">
                 <div class="card-header">
-                    <h5 class="card-title mb-1 d-flex align-items-center gap-2">
+                    <h2 class="card-title mb-1 d-flex align-items-center gap-2 h5">
                         <i class="fas fa-layer-group text-primary"></i>
                         <span>Map Layers</span>
-                    </h5>
+                    </h2>
                     <p class="card-subtitle mb-0">Toggle overlays to compare coverage.</p>
                 </div>
                 <div class="card-body p-0">
                     <div class="accordion accordion-flush layers-accordion" id="layers-accordion">
 
                         <div class="accordion-item">
-                            <h6 class="accordion-header">
+                            <h3 class="accordion-header h6">
                                 <button class="accordion-button layer-accordion-btn" type="button"
                                         data-bs-toggle="collapse" data-bs-target="#collapse-alerts" aria-expanded="true">
                                     <i class="fas fa-exclamation-triangle text-danger"></i><span>Alert Types</span>
                                 </button>
-                            </h6>
+                            </h3>
                             <div id="collapse-alerts" class="accordion-collapse collapse show">
                                 <div class="accordion-body">
                                     <div class="layer-options">
@@ -594,12 +594,12 @@
                         </div>
 
                         <div class="accordion-item">
-                            <h6 class="accordion-header">
+                            <h3 class="accordion-header h6">
                                 <button class="accordion-button layer-accordion-btn collapsed" type="button"
                                         data-bs-toggle="collapse" data-bs-target="#collapse-geographic">
                                     <i class="fas fa-map-marked-alt text-primary"></i><span>Geographic Boundaries</span>
                                 </button>
-                            </h6>
+                            </h3>
                             <div id="collapse-geographic" class="accordion-collapse collapse">
                                 <div class="accordion-body">
                                     <div id="layer-group-geographic" class="layer-options"></div>
@@ -608,12 +608,12 @@
                         </div>
 
                         <div class="accordion-item">
-                            <h6 class="accordion-header">
+                            <h3 class="accordion-header h6">
                                 <button class="accordion-button layer-accordion-btn collapsed" type="button"
                                         data-bs-toggle="collapse" data-bs-target="#collapse-service">
                                     <i class="fas fa-shield-alt text-success"></i><span>Service Boundaries</span>
                                 </button>
-                            </h6>
+                            </h3>
                             <div id="collapse-service" class="accordion-collapse collapse">
                                 <div class="accordion-body">
                                     <div id="layer-group-service" class="layer-options"></div>
@@ -622,12 +622,12 @@
                         </div>
 
                         <div class="accordion-item">
-                            <h6 class="accordion-header">
+                            <h3 class="accordion-header h6">
                                 <button class="accordion-button layer-accordion-btn collapsed" type="button"
                                         data-bs-toggle="collapse" data-bs-target="#collapse-infrastructure">
                                     <i class="fas fa-tools text-secondary"></i><span>Infrastructure</span>
                                 </button>
-                            </h6>
+                            </h3>
                             <div id="collapse-infrastructure" class="accordion-collapse collapse">
                                 <div class="accordion-body">
                                     <div id="layer-group-infrastructure" class="layer-options"></div>
@@ -636,12 +636,12 @@
                         </div>
 
                         <div class="accordion-item">
-                            <h6 class="accordion-header">
+                            <h3 class="accordion-header h6">
                                 <button class="accordion-button layer-accordion-btn collapsed" type="button"
                                         data-bs-toggle="collapse" data-bs-target="#collapse-hydro">
                                     <i class="fas fa-water text-info"></i><span>Water Features</span>
                                 </button>
-                            </h6>
+                            </h3>
                             <div id="collapse-hydro" class="accordion-collapse collapse">
                                 <div class="accordion-body">
                                     <div id="layer-group-hydrography" class="layer-options"></div>
@@ -650,12 +650,12 @@
                         </div>
 
                         <div class="accordion-item">
-                            <h6 class="accordion-header">
+                            <h3 class="accordion-header h6">
                                 <button class="accordion-button layer-accordion-btn collapsed" type="button"
                                         data-bs-toggle="collapse" data-bs-target="#collapse-custom">
                                     <i class="fas fa-layer-group text-warning"></i><span>Custom Layers</span>
                                 </button>
-                            </h6>
+                            </h3>
                             <div id="collapse-custom" class="accordion-collapse collapse">
                                 <div class="accordion-body">
                                     <div id="layer-group-custom" class="layer-options"></div>
@@ -672,10 +672,10 @@
             <div class="card map-card shadow-sm">
                 <div class="card-header">
                     <div class="d-flex align-items-center gap-2">
-                        <h5 class="mb-0 d-flex align-items-center gap-2">
+                        <h2 class="mb-0 d-flex align-items-center gap-2 h5">
                             <i class="fas fa-map text-primary"></i>
                             <span>Interactive Emergency Alert Map</span>
-                        </h5>
+                        </h2>
                         <span class="badge bg-success" id="map-status-badge">Loading...</span>
                         <div class="form-check form-switch mb-0 ms-2">
                             <input class="form-check-input" type="checkbox" role="switch" id="dashboardRadarToggle">
@@ -712,10 +712,10 @@
 
             <div class="card legend-card">
                 <div class="card-header">
-                    <h6 class="card-title mb-0 d-flex align-items-center gap-2">
+                    <h3 class="card-title mb-0 d-flex align-items-center gap-2 h6">
                         <i class="fas fa-list text-primary"></i>
                         <span>Map Legend</span>
-                    </h6>
+                    </h3>
                 </div>
                 <div class="card-body">
                     <div class="legend">
@@ -792,7 +792,7 @@
             <div class="card platform-highlights-card">
                 <div class="card-header d-flex align-items-center gap-2">
                     <i class="fas fa-star text-warning"></i>
-                    <h6 class="card-title mb-0">Platform Capabilities</h6>
+                    <h3 class="card-title mb-0 h6">Platform Capabilities</h3>
                 </div>
                 <div class="card-body">
                     <div class="row g-2">
@@ -1797,7 +1797,7 @@ function updateAlertSummary(alerts) {
         .map(([event, count]) => `<div><strong>${event}:</strong> ${count}</div>`)
         .join('');
 
-    summaryElement.innerHTML = `<h6 class="mb-2">Active Alerts by Type</h6>${summaryHtml}`;
+    summaryElement.innerHTML = `<h3 class="mb-2 h6">Active Alerts by Type</h3>${summaryHtml}`;
     summaryElement.style.display = 'block';
 
     if (placeholder) {
@@ -2168,7 +2168,7 @@ function showMapError(message) {
         mapContainer.innerHTML = `
             <div class="map-error">
                 <i class="fas fa-exclamation-triangle" style="font-size: 3em; margin-bottom: 15px;"></i>
-                <h4>Map Loading Error</h4>
+                <h3 class="h4">Map Loading Error</h3>
                 <p>${message}</p>
                 <button class="btn btn-primary" onclick="window.location.reload()">
                     <i class="fas fa-redo"></i> Reload Page

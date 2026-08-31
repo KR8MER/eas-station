@@ -88,10 +88,10 @@
         {% if section.groups %}
     <div class="card mb-4">
         <div class="card-header bg-{{ section.accent }} {{ 'text-dark' if section.accent == 'warning' else 'text-white' }}">
-            <h5 class="mb-0 d-flex align-items-center justify-content-between">
+            <h2 class="mb-0 d-flex align-items-center justify-content-between h5">
                 <span><i class="{{ section.icon }} me-2"></i>{{ section.label }}</span>
                 <span class="sitemap-count">{{ section.item_count }} page{{ '' if section.item_count == 1 else 's' }}</span>
-            </h5>
+            </h2>
             {% if section.description %}
             <small class="d-block mt-1 opacity-75">{{ section.description }}</small>
             {% endif %}

@@ -641,10 +641,10 @@ function renderLocationReference(data, container) {
         const missingCount = data.fips.missing?.length || 0;
         html += `
             <div class="col-md-6">
-                <h6 class="fw-bold small mb-2">
+                <h3 class="fw-bold small mb-2 h6">
                     <i class="fas fa-hashtag text-primary me-1"></i>
                     SAME / FIPS Codes (${knownCount} configured)
-                </h6>
+                </h3>
         `;
         if (knownCount > 0) {
             html += '<div class="d-flex flex-wrap gap-1">';
@@ -666,10 +666,10 @@ function renderLocationReference(data, container) {
         const missingCount = data.zones.missing?.length || 0;
         html += `
             <div class="col-md-6">
-                <h6 class="fw-bold small mb-2">
+                <h3 class="fw-bold small mb-2 h6">
                     <i class="fas fa-map me-1 text-success"></i>
                     NOAA Zone Codes (${knownCount} configured)
-                </h6>
+                </h3>
         `;
         if (knownCount > 0) {
             html += '<div class="d-flex flex-wrap gap-1">';
@@ -1285,7 +1285,7 @@ function buildEasEventFilterUI() {
         if (!group.items.length) return;
         html += `
             <div class="col-12 col-lg-6">
-                <h6 class="mb-2"><i class="fas ${group.icon} me-1"></i> ${group.label}</h6>
+                <h3 class="mb-2 h6"><i class="fas ${group.icon} me-1"></i> ${group.label}</h3>
                 <div class="row g-1">`;
         group.items.forEach(entry => {
             const id = `easEvent_${entry.code}`;

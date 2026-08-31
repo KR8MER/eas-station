@@ -288,7 +288,7 @@
         <!-- Status Tab -->
         <div class="tab-pane fade show active" id="status" role="tabpanel">
             <div class="admin-form-section">
-                <h3><i class="fas fa-info-circle"></i> Network Overview</h3>
+                <h2 class="h3"><i class="fas fa-info-circle"></i> Network Overview</h2>
                 <div id="status-loading">
                     <div class="spinner"></div> Loading network status...
                 </div>
@@ -299,7 +299,7 @@
             </div>
 
             <div class="admin-form-section">
-                <h3><i class="fas fa-desktop"></i> Hostname</h3>
+                <h2 class="h3"><i class="fas fa-desktop"></i> Hostname</h2>
                 <div id="hostname-loading">
                     <div class="spinner"></div> Loading hostname...
                 </div>
@@ -330,7 +330,7 @@
             </div>
 
             <div class="admin-form-section">
-                <h3><i class="fas fa-route"></i> Default Gateway</h3>
+                <h2 class="h3"><i class="fas fa-route"></i> Default Gateway</h2>
                 <div id="gateway-info"></div>
             </div>
         </div>
@@ -338,12 +338,12 @@
         <!-- WiFi Tab -->
         <div class="tab-pane fade" id="wifi" role="tabpanel">
             <div class="admin-form-section">
-                <h3>
+                <h2 class="h3">
                     <i class="fas fa-broadcast-tower"></i> Available WiFi Networks
                     <button class="btn btn-sm btn-primary ms-auto" id="scan-btn">
                         <i class="fas fa-sync-alt"></i> Scan
                     </button>
-                </h3>
+                </h2>
                 <div id="scan-loading" style="display: none;">
                     <div class="spinner"></div> Scanning for networks...
                 </div>
@@ -359,12 +359,12 @@
         <!-- Wired Tab -->
         <div class="tab-pane fade" id="wired" role="tabpanel">
             <div class="admin-form-section">
-                <h3>
+                <h2 class="h3">
                     <i class="fas fa-ethernet"></i> Ethernet Interfaces
                     <button class="btn btn-sm btn-primary ms-auto" id="refresh-interfaces-btn">
                         <i class="fas fa-sync-alt"></i> Refresh
                     </button>
-                </h3>
+                </h2>
                 <div id="interfaces-loading">
                     <div class="spinner"></div> Loading interfaces...
                 </div>
@@ -375,7 +375,7 @@
         <!-- DNS Tab -->
         <div class="tab-pane fade" id="dns" role="tabpanel">
             <div class="admin-form-section">
-                <h3><i class="fas fa-server"></i> DNS Configuration</h3>
+                <h2 class="h3"><i class="fas fa-server"></i> DNS Configuration</h2>
                 <div id="dns-loading">
                     <div class="spinner"></div> Loading DNS configuration...
                 </div>
@@ -413,7 +413,7 @@
         <div class="tab-pane fade" id="ntp" role="tabpanel">
             <div class="admin-form-section">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h3 class="mb-0"><i class="fas fa-clock"></i> NTP / Time Synchronisation</h3>
+                    <h2 class="mb-0 h3"><i class="fas fa-clock"></i> NTP / Time Synchronisation</h2>
                     <button class="btn btn-sm btn-outline-primary" id="ntp-refresh-btn" onclick="loadNtpStatus()">
                         <i class="fas fa-sync-alt"></i> Refresh
                     </button>
@@ -459,7 +459,7 @@
                     </div>
 
                     <div class="mb-3">
-                        <h6>Enable / Disable NTP</h6>
+                        <h3 class="h6">Enable / Disable NTP</h3>
                         <div class="d-flex gap-2">
                             <button class="btn btn-success btn-sm" onclick="setNtp(true)">
                                 <i class="fas fa-check"></i> Enable NTP
@@ -484,13 +484,13 @@
         <!-- Diagnostics Tab -->
         <div class="tab-pane fade" id="diagnostics" role="tabpanel">
             <div class="admin-form-section">
-                <h3><i class="fas fa-stethoscope"></i> Network Diagnostics</h3>
+                <h2 class="h3"><i class="fas fa-stethoscope"></i> Network Diagnostics</h2>
                 
                 <div class="row mb-4">
                     <div class="col-md-4">
                         <div class="card">
                             <div class="card-body">
-                                <h6 class="card-title"><i class="fas fa-broadcast-tower"></i> Ping Test</h6>
+                                <h3 class="card-title h6"><i class="fas fa-broadcast-tower"></i> Ping Test</h3>
                                 <div class="input-group mb-2">
                                     <input type="text" class="form-control" id="ping-host" placeholder="google.com">
                                     <button class="btn btn-primary" id="ping-btn">
@@ -503,7 +503,7 @@
                     <div class="col-md-4">
                         <div class="card">
                             <div class="card-body">
-                                <h6 class="card-title"><i class="fas fa-route"></i> Traceroute</h6>
+                                <h3 class="card-title h6"><i class="fas fa-route"></i> Traceroute</h3>
                                 <div class="input-group mb-2">
                                     <input type="text" class="form-control" id="traceroute-host" placeholder="google.com">
                                     <button class="btn btn-primary" id="traceroute-btn">
@@ -516,7 +516,7 @@
                     <div class="col-md-4">
                         <div class="card">
                             <div class="card-body">
-                                <h6 class="card-title"><i class="fas fa-search"></i> DNS Lookup</h6>
+                                <h3 class="card-title h6"><i class="fas fa-search"></i> DNS Lookup</h3>
                                 <div class="input-group mb-2">
                                     <input type="text" class="form-control" id="nslookup-host" placeholder="google.com">
                                     <button class="btn btn-primary" id="nslookup-btn">
@@ -535,7 +535,7 @@
                 </div>
 
                 <div id="diagnostics-output-container" style="display: none;">
-                    <h6><i class="fas fa-terminal"></i> Output:</h6>
+                    <h3 class="h6"><i class="fas fa-terminal"></i> Output:</h3>
                     <div class="diagnostics-output" id="diagnostics-output"></div>
                 </div>
             </div>
@@ -544,12 +544,12 @@
         <!-- Connections Tab -->
         <div class="tab-pane fade" id="connections" role="tabpanel">
             <div class="admin-form-section">
-                <h3>
+                <h2 class="h3">
                     <i class="fas fa-list"></i> Saved Connection Profiles
                     <button class="btn btn-sm btn-primary ms-auto" id="refresh-connections-btn">
                         <i class="fas fa-sync-alt"></i> Refresh
                     </button>
-                </h3>
+                </h2>
                 <div id="connections-loading">
                     <div class="spinner"></div> Loading connections...
                 </div>
@@ -564,7 +564,7 @@
     <div class="modal-dialog modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Connect to WiFi</h5>
+                <h3 class="modal-title h5">Connect to WiFi</h3>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -601,7 +601,7 @@
     <div class="modal-dialog modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Configure Network Interface</h5>
+                <h3 class="modal-title h5">Configure Network Interface</h3>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">

@@ -48,7 +48,7 @@
                     <i class="fas fa-heart fa-3x d-none" id="healthIcon"></i>
                 </div>
                 <div class="col-12 col-sm">
-                    <h5 class="mb-1" id="healthTitle">Checking system status...</h5>
+                    <h2 class="mb-1 h5" id="healthTitle">Checking system status...</h2>
                     <p class="mb-0 text-muted" id="healthMessage">Please wait while we check the audio pipeline.</p>
                 </div>
                 <div class="col-12 col-sm-auto">
@@ -397,9 +397,9 @@ sudo systemctl restart eas-station</code></pre>
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="rbdsHistoryModalLabel">
+                <h3 class="modal-title h5" id="rbdsHistoryModalLabel">
                     <i class="fas fa-clock-rotate-left me-2" aria-hidden="true"></i>RBDS History
-                </h5>
+                </h3>
                 <select id="rbdsHistoryRange" class="form-select form-select-sm w-auto ms-3" aria-label="History time range">
                     <option value="60" selected>Last hour</option>
                     <option value="360">Last 6 hours</option>
@@ -412,13 +412,13 @@ sudo systemctl restart eas-station</code></pre>
                     <i class="fas fa-spinner fa-spin me-2" aria-hidden="true"></i>Loading history…
                 </div>
                 <div id="rbdsHistoryContent" style="display:none;">
-                    <h6 class="text-muted">Block Error Rate</h6>
+                    <h4 class="text-muted h6">Block Error Rate</h4>
                     <div style="position:relative;height:220px;">
                         <canvas id="rbdsHistoryChart" aria-label="Raw and net block error rate over time" role="img"></canvas>
                     </div>
-                    <h6 class="text-muted mt-4">Field Changes
+                    <h4 class="text-muted mt-4 h6">Field Changes
                         <span class="small fw-normal">(PS, RadioText, TA, PI, PTY, lock transitions)</span>
-                    </h6>
+                    </h4>
                     <div class="table-responsive" style="max-height:280px;overflow-y:auto;">
                         <table class="table table-sm table-hover align-middle mb-0">
                             <thead>
@@ -634,11 +634,11 @@ sudo systemctl restart eas-station</code></pre>
                     <div class="card-body">
                         <div class="row">
                             <div class="col-md-6">
-                                <h5 class="card-title mb-3">
+                                <h3 class="card-title mb-3 h5">
                                     ${identifier}
                                     ${statusBadge}
                                     ${samplesBadge}
-                                </h5>
+                                </h3>
                                 <div class="table-responsive">
                                 <table class="table table-sm">
                                     <tbody>
@@ -663,7 +663,7 @@ sudo systemctl restart eas-station</code></pre>
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <h6 class="text-muted mb-2">Status Details</h6>
+                                <h4 class="text-muted mb-2 h6">Status Details</h4>
                                 <div class="table-responsive">
                                 <table class="table table-sm">
                                     <tbody>
@@ -946,7 +946,7 @@ sudo systemctl restart eas-station</code></pre>
                 return `
                     <article class="mb-4" aria-label="${escape(`RBDS decoder for ${displayName}`)}">
                         <header class="d-flex align-items-center gap-2 mb-2">
-                            <h5 class="mb-0">${escape(displayName)}</h5>
+                            <h3 class="mb-0 h5">${escape(displayName)}</h3>
                             ${ident ? `<code class="text-muted small">${escape(ident)}</code>` : ''}
                             <button type="button" class="btn btn-sm btn-outline-info ms-auto"
                                     data-rbds-history-source="${escape(s.name)}"
@@ -2833,7 +2833,7 @@ sudo systemctl restart eas-station</code></pre>
 
         let feHtml = `
             <div class="card-body pt-0">
-                <h6 class="text-muted text-uppercase small mb-2">Front-end health</h6>
+                <h4 class="text-muted text-uppercase small mb-2 h6">Front-end health</h4>
                 <div class="row g-2 mb-3">`;
         for (const tile of tiles) {
             feHtml += `
@@ -2874,10 +2874,10 @@ sudo systemctl restart eas-station</code></pre>
         // --- Subcarrier inventory ---
         let scHtml = `
             <div class="card-body pt-0">
-                <h6 class="text-muted text-uppercase small mb-2">
+                <h4 class="text-muted text-uppercase small mb-2 h6">
                     Subcarrier inventory
                     <small class="text-muted ms-1" style="text-transform: none;">— what's on the air vs. what the station decodes</small>
-                </h6>
+                </h4>
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0 small">
                         <thead class="table-light">

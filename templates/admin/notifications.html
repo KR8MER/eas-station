@@ -22,7 +22,7 @@
                      ============================================================ -->
                 <div class="card mb-3">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0"><i class="fas fa-envelope"></i> Email Notifications</h5>
+                        <h2 class="mb-0 h5"><i class="fas fa-envelope"></i> Email Notifications</h2>
                         <span class="badge bg-{{ 'success' if settings.email_enabled else 'secondary' }}" id="emailBadge">
                             {{ 'Enabled' if settings.email_enabled else 'Disabled' }}
                         </span>
@@ -239,7 +239,7 @@
                      ============================================================ -->
                 <div class="card mb-3">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0"><i class="fas fa-sms"></i> SMS Notifications (Twilio)</h5>
+                        <h2 class="mb-0 h5"><i class="fas fa-sms"></i> SMS Notifications (Twilio)</h2>
                         <span class="badge bg-{{ 'success' if settings.sms_enabled else 'secondary' }}" id="smsBadge">
                             {{ 'Enabled' if settings.sms_enabled else 'Disabled' }}
                         </span>
@@ -355,7 +355,7 @@
                      ============================================================ -->
                 <div class="card mb-3">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0"><i class="fas fa-network-wired"></i> SNMP Trap Notifications</h5>
+                        <h2 class="mb-0 h5"><i class="fas fa-network-wired"></i> SNMP Trap Notifications</h2>
                         <span class="badge bg-{{ 'success' if settings.snmp_enabled else 'secondary' }}" id="snmpBadge">
                             {{ 'Enabled' if settings.snmp_enabled else 'Disabled' }}
                         </span>
@@ -429,7 +429,7 @@
         <div class="col-lg-4">
             <div class="card mb-3">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-info-circle"></i> Current Status</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-info-circle"></i> Current Status</h2>
                 </div>
                 <div class="card-body">
                     <ul class="list-unstyled mb-0">
@@ -501,9 +501,9 @@
             <!-- Local Postfix mail server card -->
             <div class="card mb-3" id="postfixCard">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">
+                    <h2 class="mb-0 h5">
                         <i class="fas fa-server"></i> Local Mail Server
-                    </h5>
+                    </h2>
                     <span id="postfixStatusBadge" class="badge bg-secondary">Checking…</span>
                 </div>
                 <div class="card-body small">
@@ -531,10 +531,10 @@
 
             <div class="card mb-3">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-question-circle"></i> Email Help</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-question-circle"></i> Email Help</h2>
                 </div>
                 <div class="card-body small">
-                    <h6>Common Providers</h6>
+                    <h3 class="h6">Common Providers</h3>
                     <div class="table-responsive">
                     <table class="table table-sm table-borderless mb-0">
                         <thead><tr><th>Provider</th><th>Server</th><th>Port</th><th>Security</th></tr></thead>
@@ -583,17 +583,17 @@
 
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-question-circle"></i> SMS Help</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-question-circle"></i> SMS Help</h2>
                 </div>
                 <div class="card-body small">
-                    <h6>Getting Started with Twilio</h6>
+                    <h3 class="h6">Getting Started with Twilio</h3>
                     <ol class="mb-2 ps-3">
                         <li>Create a free account at <a href="https://www.twilio.com/" target="_blank" rel="noopener"><strong>twilio.com</strong></a></li>
                         <li>Buy a toll-free or long-code phone number</li>
                         <li>Copy your <strong>Account SID</strong> and <strong>Auth Token</strong></li>
                         <li>Enter the phone number in E.164 format: <code>+15555550100</code></li>
                     </ol>
-                    <h6>Phone Number Format</h6>
+                    <h3 class="h6">Phone Number Format</h3>
                     <p class="mb-2">All numbers must use E.164 format:<br>
                     <code>+[country code][number]</code><br>
                     US example: <code>+15555551234</code></p>
@@ -602,7 +602,7 @@
 
             <div class="card mt-3 border-warning">
                 <div class="card-header bg-warning text-dark">
-                    <h5 class="mb-0"><i class="fas fa-certificate"></i> Toll-Free Verification</h5>
+                    <h2 class="mb-0 h5"><i class="fas fa-certificate"></i> Toll-Free Verification</h2>
                 </div>
                 <div class="card-body small">
                     <p class="mb-2">Toll-free numbers <strong>must be verified</strong> in the Twilio Console

@@ -176,8 +176,6 @@ window.sanitizeBoundaryTypeInput = function(value) {
  * Initialize on DOMContentLoaded
  */
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Admin Core initialized');
-
     const confirmModalEl = document.getElementById('confirmationModal');
     if (confirmModalEl) {
         // Move to <body> so Bootstrap modal z-index renders above the sticky navbar

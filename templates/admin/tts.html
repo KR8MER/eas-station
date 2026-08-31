@@ -16,7 +16,7 @@
     <form id="ttsSettingsForm">
         <!-- General Settings -->
         <div class="admin-form-section">
-            <h4>General Settings</h4>
+            <h2 class="h4">General Settings</h2>
             
             <div class="mb-3">
                 <label for="enabled" class="form-label">TTS Enabled</label>
@@ -41,7 +41,7 @@
 
         <!-- Azure OpenAI Settings -->
         <div class="admin-form-section" id="azure-openai-section" style="display: none;">
-            <h4>Azure OpenAI Settings</h4>
+            <h2 class="h4">Azure OpenAI Settings</h2>
             <div class="alert alert-info mb-3">
                 <i class="fas fa-circle-info"></i> <strong>Azure OpenAI TTS</strong><br>
                 Uses Azure OpenAI's text-to-speech API for high-quality voice synthesis.
@@ -113,7 +113,7 @@
 <!-- Pronunciation Preview Panel -->
 <div class="admin-container mt-4" style="max-width: 1000px">
     <div class="admin-form-section mb-0">
-        <h4><i class="fas fa-eye me-1"></i> Pronunciation Preview</h4>
+        <h2 class="h4"><i class="fas fa-eye me-1"></i> Pronunciation Preview</h2>
         <p class="text-muted small mb-2">
             Paste any alert text to see how the normalization pipeline will transform it before
             it reaches the TTS engine.
@@ -159,7 +159,7 @@
 
 <!-- Test Result Modal/Alert -->
 <div id="testResultAlert" class="alert mt-3" style="display: none;" role="alert">
-    <h5 id="testResultTitle"></h5>
+    <h3 class="h5" id="testResultTitle"></h3>
     <p id="testResultMessage"></p>
     <div id="testResultDetails"></div>
     <div id="testAudioPlayer" style="display: none; margin-top: 1rem;">
