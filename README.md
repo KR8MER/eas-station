@@ -481,7 +481,7 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 | Flask‑SocketIO | 5.6.1 | MIT | Server side of the WebSocket layer that pushes live alert / radio / GPS updates to the dashboard. | https://flask-socketio.readthedocs.io/ |
 | Flask‑WTF | 1.3.0 | BSD‑3‑Clause | CSRF protection on every POST form and JSON endpoint. | https://flask-wtf.readthedocs.io/ |
 | Flask‑Limiter | 4.1.1 | MIT | Rate limiting on login, API key, and webhook endpoints (Redis or in‑memory backend). | https://flask-limiter.readthedocs.io/ |
-| Flask‑Caching | 2.4.1 | BSD‑3‑Clause | Response and view caching for expensive admin pages and read‑heavy JSON endpoints. | https://flask-caching.readthedocs.io/ |
+| Flask‑Caching | 2.5.0 | BSD‑3‑Clause | Response and view caching for expensive admin pages and read‑heavy JSON endpoints. | https://flask-caching.readthedocs.io/ |
 | python‑socketio | 5.16.4 | MIT | Core Socket.IO protocol implementation that Flask‑SocketIO builds on. | https://python-socketio.readthedocs.io/ |
 
 ### Database & ORM
