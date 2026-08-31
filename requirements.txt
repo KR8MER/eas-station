@@ -180,7 +180,7 @@ audioop-lts==0.2.2; python_version >= "3.13"  # Drop-in replacement for audioop 
 # (see app_core/auth/audit.py AuditLogger.verify_chain).  Pinned >=46.0.5 to
 # avoid GHSA on SECT-curve subgroup validation (we use Ed25519, which is
 # unaffected, but the same library exposes the affected curves).
-cryptography>=46.0.5
+cryptography>=50.0.1
 
 # ── System packages (NOT installed by pip) ─────────────────────────────────────
 # fail2ban is a host service, not a Python package, so it cannot be installed
