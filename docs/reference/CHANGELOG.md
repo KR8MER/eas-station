@@ -8,6 +8,26 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.203.7] - 2026-08-31 - Stop anonymous visitors' browsers from hitting a guaranteed-401 endpoint
+
+Checked the browser console on every public page (the dashboard, `/health`,
+`/style-guide`, `/about`, `/help`) via a headless-Chromium CDP session.
+Every one of them showed two 401s for `/admin/pending-alerts/api/list` on
+every load, plus a repeat every 5s from its WebSocket-fallback poller.
+
+`navbar_scripts.html` (included on every page via the navbar) fires this
+fetch to light the stack-light widget's blue "pending alerts" state. The
+endpoint requires login (`@require_auth`) then `eas.view`
+(`@require_permission`) on top of that; the existing `.then(r.ok ? ... :
+null)` handling already covers an authenticated-but-under-permissioned
+viewer gracefully (403 -> null, blue state just never lights), but nobody
+anticipated a completely anonymous visitor -- this dashboard has no login
+wall -- who gets a guaranteed 401 instead, every page load, every 5s poll.
+
+Gated both the initial fetch and the WebSocket fallback subscription behind
+`current_user.is_authenticated` (already available in the navbar's Jinja
+context). Anonymous visitors now skip the call entirely.
+
 ## [2.203.6] - 2026-08-30 - Fix the actual highest-specificity rule controlling dashboard toggle switches
 
 The app-wide `.form-switch` fix (2.203.5) didn't actually take effect on
