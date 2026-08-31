@@ -8,6 +8,12 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.207.2] - 2026-08-31 - Bump numba to 0.67, lifting the previous llvmlite-size cap
+
+- `numba` now floats `>=0.67.0,<0.68.0` (was `>=0.61.0,<0.64.0`). The old cap existed specifically to avoid numba 0.64+'s heavier llvmlite dependency; verified that cost is real (llvmlite 0.49.0's aarch64 wheel is ~58MB) but accepted it deliberately as a one-time download rather than staying capped indefinitely.
+- Verified end-to-end on the real target platform (aarch64) before merging: installed numba 0.67.0 into an isolated copy of the deployment venv (pulls llvmlite 0.49.0, keeps numpy at the already-pinned 2.3.5 — numba 0.67's own requirement, `numpy<2.6`, is looser than before), confirmed `app_core/radio/demod/kernels.py` JIT-compiles, and ran the full demod/RBDS test suite (93 tests) against it.
+- Updated the Numba badges (README top badge, attribution table, footer partial) to the new range.
+
 ## [2.207.0] - 2026-08-31 - Require Python 3.13 / Debian 13 (Trixie); drop 3.11/3.12 support
 
 - **Breaking for Debian 12 / Python 3.11 or 3.12 installs.** The project now requires Python 3.13 and targets Debian 13 (Trixie) / Raspberry Pi OS (Trixie-based) only. Maintaining both floors was an ongoing tax: scipy was capped below 1.18 solely because that series drops 3.11, numba's compatible-numpy range and the `audioop-lts` marker both existed to branch on the interpreter version, and CI ran the whole suite twice per PR to catch drift between them.
