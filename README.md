@@ -1,5 +1,6 @@
 # <img src="static/img/eas-system-wordmark.svg" alt="EAS Station™" width="192" height="48" style="vertical-align: middle;"> EAS Station™
 
+[![Tests](https://github.com/KR8MER/eas-station/actions/workflows/tests.yml/badge.svg)](https://github.com/KR8MER/eas-station/actions/workflows/tests.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
 [![Version](https://img.shields.io/badge/Version-2.206.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
@@ -466,7 +467,7 @@ Branding governed by the [Trademark Policy](docs/policies/TRADEMARK_POLICY.md). 
 
 EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. The badges at the top of this README are a curated highlight; this section is the exhaustive list of every third‑party library, system package, and CDN asset the project relies on. Each entry explains what role that library plays inside EAS Station™, not just what the upstream project is. Versions track [`requirements.txt`](requirements.txt) and the system‑package install scripts in [`scripts/`](scripts/).
 
-> The drift guard `tests/test_tech_stack_badges.py` and the workflow `.github/workflows/release-metadata.yml` enforce that the curated badge subset in this README, in `templates/partials/tech_stack_badges.html` (the live page footer), and in `requirements.txt` stay aligned. Bumping a dependency means updating all three.
+> The drift guard `tests/test_tech_stack_badges.py`, run on every PR and push by `.github/workflows/tests.yml`, enforces that the curated badge subset in this README, in `templates/partials/tech_stack_badges.html` (the live page footer), and in `requirements.txt` stay aligned. Bumping a dependency means updating all three.
 
 ### Python runtime, framework & extensions
 

@@ -14,7 +14,8 @@ signing step — but publishing the release is a deliberate, on-demand action.
    move the corresponding notes in
    [`CHANGELOG.md`](../reference/CHANGELOG.md) from `[Unreleased]` into a new
    `## [X.Y.Z]` heading. The `tests/test_release_metadata.py` guardrail (run
-   on every PR by `release-metadata.yml`) enforces that these stay aligned.
+   on every PR by `tests.yml`, and re-validated by `release.yml` itself
+   before it builds anything) enforces that these stay aligned.
 2. **Merge to `main`.** Land the version bump on `main` as usual. Merging
    does **not** publish a release on its own.
 3. **Run the release workflow manually.** When you are ready to publish, go to

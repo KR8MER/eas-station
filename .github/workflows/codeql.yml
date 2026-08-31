@@ -1,0 +1,49 @@
+name: CodeQL
+
+# Static analysis for real bug/vulnerability classes (SQL injection, path
+# traversal, SSRF, etc.) -- deeper than ruff's narrow, deliberately-small
+# rule set in pyproject.toml (which only catches a handful of correctness
+# rules the codebase is already clean against). Free for public repos.
+#
+# Runs on every PR/push to main so findings surface at review time, plus a
+# weekly scheduled scan so a newly-published CodeQL query can flag existing
+# code without needing a fresh commit to trigger it.
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '17 3 * * 1'  # Mondays, 03:17 UTC -- off the hour to avoid GitHub's traffic spike
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          queries: security-extended
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"

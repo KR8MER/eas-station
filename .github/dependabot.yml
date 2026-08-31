@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # requirements.txt / requirements-sdr.txt -- pinned Python dependencies.
+  # requirements-system.txt is apt package names, not pip specifiers, so
+  # Dependabot has nothing to act on there.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+
+  # Keep the actions pinned in .github/workflows/*.yml (actions/checkout,
+  # actions/setup-python, github/codeql-action, etc.) current.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "github-actions"
