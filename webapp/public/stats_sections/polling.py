@@ -138,16 +138,37 @@ def _poll_rate(polls: Sequence) -> float:
 
 
 def collect_polling_trend(stats_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Success rates over a 7- and 30-day window, plus a p95 run time."""
-    now = utc_now()
-    polls_short = PollHistory.query.filter(
-        PollHistory.timestamp >= now - timedelta(days=TREND_SHORT_DAYS)
-    ).all()
-    polls_long = PollHistory.query.filter(
-        PollHistory.timestamp >= now - timedelta(days=TREND_LONG_DAYS)
-    ).all()
+    """Success rates over a 7- and 30-day window, plus a p95 run time.
 
-    times = sorted(p.execution_time_ms for p in polls_long if p.execution_time_ms is not None)
+    One query over the 30-day window (the 7-day set is always a subset of
+    it) fetching only the four columns _is_success()/the p95 calc actually
+    read -- not the full row. poll_history rows carry a `details` JSON blob
+    and an `error_message` Text column; on a table where nearly every row
+    is inside 30 days (a poller running every few minutes fills that
+    window fast), SELECT * plus full ORM hydration of tens of thousands of
+    such rows measured at 7+ seconds despite the raw filtered scan itself
+    taking under 100ms -- the cost was fetching and instantiating columns
+    nothing here uses, not the query plan.
+    """
+    now = utc_now()
+    cutoff_short = now - timedelta(days=TREND_SHORT_DAYS)
+    cutoff_long = now - timedelta(days=TREND_LONG_DAYS)
+
+    rows = (
+        PollHistory.query
+        .with_entities(
+            PollHistory.timestamp,
+            PollHistory.status,
+            PollHistory.error_message,
+            PollHistory.execution_time_ms,
+        )
+        .filter(PollHistory.timestamp >= cutoff_long)
+        .all()
+    )
+    polls_long = rows
+    polls_short = [r for r in rows if r.timestamp >= cutoff_short]
+
+    times = sorted(r.execution_time_ms for r in polls_long if r.execution_time_ms is not None)
     p95 = times[int(len(times) * P95)] if times else 0
 
     return {

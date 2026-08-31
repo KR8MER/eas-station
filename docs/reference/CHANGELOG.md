@@ -8,6 +8,14 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.211.1] - 2026-08-31 - Fix an 8x-slower-than-needed query on the /stats dashboard
+
+- Continuation of the same load-time investigation as 2.210.3/2.210.4: profiling every section of `/stats`'s data pipeline individually found `collect_polling_trend()` alone taking 7.7 of the page's ~8.5 total seconds — every other section combined ran in well under a second.
+- Root cause was ORM overhead, not a missing index or a slow query plan: `poll_history` rows carry a `details` JSON blob and an `error_message` Text column, and the function was fetching *all* columns for every row in the last 30 days (`SELECT *`, then `.all()`) via two separate, largely-overlapping queries (7-day and 30-day windows) when only `timestamp`/`status`/`error_message`/`execution_time_ms` are ever read. `EXPLAIN ANALYZE` showed the raw filtered scan itself takes under 100ms on this table's ~41K rows — the cost was fetching and fully hydrating tens of thousands of wide ORM objects nothing needed.
+- `webapp/public/stats_sections/polling.py`'s `collect_polling_trend()` now does one query with `.with_entities(...)` selecting only the four needed columns, and derives the 7-day subset from the 30-day result set in Python instead of querying twice.
+- Verified live: `collect_polling_trend()` dropped from 7.7s to 0.91s (8.4x), and the full `/stats` page's data-build time dropped to 1.76s. Output values (rates, counts, p95) verified unchanged.
+- Verified correctness with the real test suite (`tests/test_public_stats_sections.py`) run against a genuinely isolated scratch PostgreSQL database (created and dropped for this run only, matching CI's setup) rather than the live database, since that test file's fixtures wipe several tables between tests — all `test_polling*` tests pass; confirmed the only 3 failures elsewhere in the file (unrelated timezone-formatting assertions) are pre-existing and reproduce identically against the unmodified code.
+
 ## [2.211.0] - 2026-08-31 - Add retention for system_log, shrink the audio metrics retention window
 
 - Found while auditing database size during the load-time investigation (2.210.3/2.210.4): `system_log` had **no retention policy at all** — confirmed by checking both `app_core/retention.py`'s field list and `alert_purge.py` (which only ever writes audit entries to it, never prunes it). It had grown to 1M+ rows / 850+ MB with nothing capping it. Added `system_log_max_age_days` (default 90 days, matching the existing `audio_alert_max_age_days` precedent for operational logs) and wired `SystemLog` into `RetentionScheduler`'s sweep.
