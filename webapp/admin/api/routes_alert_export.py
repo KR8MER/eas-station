@@ -42,6 +42,30 @@ from .blueprint import api_bp
 from .display_data import _extract_alert_display_data
 
 
+def _run_off_worker(render_fn, *args, **kwargs):
+    """Run a CPU-bound render function on a real OS thread instead of the
+    calling gevent greenlet.
+
+    gevent workers only yield control during I/O -- pure CPU work (Pillow
+    composition, image encoding) blocks the *entire worker process* for its
+    full duration, stalling every other concurrent request routed to that
+    same worker (this is how a single ~20s image export could make an
+    unrelated, normally-instant request like /api/broadcast/state -- polled
+    from every page's status widget -- take over two minutes in production).
+    gevent's own threadpool runs the call on a native thread while this
+    greenlet yields, so the worker's event loop stays free to serve everyone
+    else in the meantime.
+
+    Falls back to calling directly (still correct, just blocking) if gevent
+    isn't the active worker model -- e.g. a plain `flask run` dev server.
+    """
+    try:
+        import gevent
+    except ImportError:
+        return render_fn(*args, **kwargs)
+    return gevent.get_hub().threadpool.spawn(render_fn, *args, **kwargs).get()
+
+
 @api_bp.route('/alerts/<int:alert_id>/export.pdf')
 def alert_detail_pdf(alert_id):
     """Generate archival PDF for a specific alert - server-side from database."""
@@ -209,10 +233,36 @@ def alert_detail_image(alert_id):
         except Exception:
             location_settings = {}
 
-        image_bytes = generate_alert_image(
-            alert, coverage_data, ipaws_data, location_settings,
-            aspect_ratio=ratio, image_format=fmt, scale=scale,
-        )
+        # Rendering (Pillow composition, basemap/radar tile fetches) can take
+        # 20+ seconds for a busy alert. Run it off the request greenlet -- see
+        # _run_off_worker's docstring for why that matters on a 2-4 worker
+        # gevent deployment. The renderer only ever touches already-loaded
+        # plain columns on `alert` (id/severity/event/category/sent -- no
+        # lazy relationships) and does its own DB work through the explicit
+        # db_session it's handed, so a fresh session scoped to this render
+        # (not the request's own db.session, which isn't safe to share
+        # across threads) is all it needs.
+        from sqlalchemy.orm import sessionmaker
+
+        # db.engine needs an app context to resolve (it reads current_app
+        # internally) -- must be looked up here, on the request greenlet,
+        # not inside _render(), which runs on a plain thread with no app
+        # context pushed at all.
+        engine = db.engine
+        Session = sessionmaker(bind=engine)
+
+        def _render():
+            render_session = Session()
+            try:
+                return generate_alert_image(
+                    alert, coverage_data, ipaws_data, location_settings,
+                    aspect_ratio=ratio, image_format=fmt, scale=scale,
+                    db_session=render_session,
+                )
+            finally:
+                render_session.close()
+
+        image_bytes = _run_off_worker(_render)
 
         mimetype = 'image/webp' if fmt == 'webp' else 'image/png'
         response = Response(image_bytes, mimetype=mimetype)

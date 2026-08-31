@@ -240,7 +240,7 @@ sudo -u eas-station bash -c '
 cd /opt/eas-station
 source venv/bin/activate
 export $(cat .env | grep -v "^#" | xargs)
-gunicorn --bind 0.0.0.0:5000 --workers 2 --timeout 300 --worker-class gevent --log-level debug app:app
+gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 300 --worker-class gevent --log-level debug app:app
 '
 ```
 
