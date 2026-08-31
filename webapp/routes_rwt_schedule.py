@@ -89,6 +89,10 @@ def register_routes(app, logger):
                         'skip_until': None,
                         'next_fire_at': None,
                         'last_heartbeat_at': None,
+                        'pre_announcement_enabled': False,
+                        'pre_announcement_text': '',
+                        'post_announcement_enabled': False,
+                        'post_announcement_text': '',
                         'same_codes_source': 'not_configured',
                         'same_codes_note': 'RWT SAME codes must be explicitly configured. Use only your local broadcast area codes, NOT your alert filtering FIPS codes.',
                     }
@@ -168,6 +172,16 @@ def register_routes(app, logger):
             if enabled and not same_codes:
                 return jsonify({'success': False, 'error': 'Configure at least one SAME/FIPS code before enabling automatic RWT broadcasts.'}), 400
 
+            pre_announcement_enabled = bool(data.get('pre_announcement_enabled', False))
+            pre_announcement_text = str(data.get('pre_announcement_text', '') or '').strip()[:1000]
+            post_announcement_enabled = bool(data.get('post_announcement_enabled', False))
+            post_announcement_text = str(data.get('post_announcement_text', '') or '').strip()[:1000]
+
+            if pre_announcement_enabled and not pre_announcement_text:
+                return jsonify({'success': False, 'error': 'Enter the pre-test announcement text, or disable the pre-test announcement.'}), 400
+            if post_announcement_enabled and not post_announcement_text:
+                return jsonify({'success': False, 'error': 'Enter the post-test announcement text, or disable the post-test announcement.'}), 400
+
             # Get or create configuration
             config = RWTScheduleConfig.query.first()
             if config is None:
@@ -181,6 +195,10 @@ def register_routes(app, logger):
             config.end_hour = end_hour
             config.end_minute = end_minute
             config.same_codes = same_codes
+            config.pre_announcement_enabled = pre_announcement_enabled
+            config.pre_announcement_text = pre_announcement_text or None
+            config.post_announcement_enabled = post_announcement_enabled
+            config.post_announcement_text = post_announcement_text or None
 
             db.session.add(config)
 
@@ -194,6 +212,8 @@ def register_routes(app, logger):
                     'days_of_week': days_of_week,
                     'time_window': f"{start_hour:02d}:{start_minute:02d}-{end_hour:02d}:{end_minute:02d}",
                     'same_codes_count': len(same_codes),
+                    'pre_announcement_enabled': pre_announcement_enabled,
+                    'post_announcement_enabled': post_announcement_enabled,
                 }
             ))
 

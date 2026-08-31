@@ -3420,9 +3420,12 @@ class EASAudioGenerator:
         include_tts: bool = True,
         silence_between_headers: float = 1.0,
         silence_after_header: float = 1.0,
+        silence_before_header: float = 1.0,
         narration_upload_samples: Optional[List[int]] = None,
         pre_alert_samples: Optional[List[int]] = None,
         post_alert_samples: Optional[List[int]] = None,
+        lead_announcement_samples: Optional[List[int]] = None,
+        trail_announcement_samples: Optional[List[int]] = None,
     ) -> Dict[str, object]:
         # Extract event code from SAME header to detect RWT (Required Weekly Test)
         # Header format: ZCZC-ORG-EEE-PSSCCC-... where EEE is the event code
@@ -3566,6 +3569,23 @@ class EASAudioGenerator:
             if post_alert_samples else []
         )
 
+        # Station announcements that bracket the *entire* test transmission
+        # (e.g. "This station is conducting a test of the Emergency Alert
+        # System" / "This concludes this test"). Unlike pre_alert_samples /
+        # post_alert_samples above -- which sit between the SAME header and
+        # the EOM, bracketing the narration segment -- these play outside the
+        # encoded SAME burst entirely: before the lead-in silence and after
+        # the EOM's trailing silence. That keeps them clear of the actual
+        # FSK-encoded portion of the test per FCC 47 CFR §11.61(a)(1)(ii).
+        norm_lead_announcement = (
+            _normalize_audio_amplitude(lead_announcement_samples, amplitude * 0.7)
+            if lead_announcement_samples else []
+        )
+        norm_trail_announcement = (
+            _normalize_audio_amplitude(trail_announcement_samples, amplitude * 0.7)
+            if trail_announcement_samples else []
+        )
+
         trailing_silence = _generate_silence(silence_after_header, self.sample_rate)
 
         # System-level chimes (configured per-station via EASSettings).
@@ -3612,9 +3632,18 @@ class EASAudioGenerator:
         chime_separator = _generate_silence(1.0, self.sample_rate)
 
         composite_samples: List[int] = []
+        if norm_lead_announcement:
+            composite_samples.extend(norm_lead_announcement)
         if pre_chime_samples_list:
             composite_samples.extend(pre_chime_samples_list)
             composite_samples.extend(chime_separator)
+        else:
+            # Guarantee a lead-in gap before the SAME header even when no
+            # pre-chime is configured, mirroring the trailing silence that
+            # already follows the EOM below -- so a downstream encoder /
+            # attentive listener always gets a clean beat of dead air before
+            # the FSK burst starts, whether or not an announcement preceded it.
+            composite_samples.extend(_generate_silence(silence_before_header, self.sample_rate))
         composite_samples.extend(same_samples)
         composite_samples.extend(trailing_silence)
         composite_samples.extend(attention_samples)
@@ -3633,8 +3662,12 @@ class EASAudioGenerator:
             composite_samples.extend(_generate_silence(POST_ALERT_SIGNAL_GAP_SECONDS, self.sample_rate))
             composite_samples.extend(post_chime_samples_list)
         else:
-            # End-of-message tail when no post-alert signal follows.
+            # End-of-message tail when no post-alert signal follows. This is
+            # the gap that holds the air-chain open for a beat after the test
+            # concludes before control returns to normal programming.
             composite_samples.extend(_generate_silence(1.0, self.sample_rate))
+        if norm_trail_announcement:
+            composite_samples.extend(norm_trail_announcement)
 
         pre_chime_profile_norm = str(pre_chime_profile or 'none').lower()
         post_chime_profile_norm = str(post_chime_profile or 'none').lower()
@@ -3697,6 +3730,8 @@ class EASAudioGenerator:
             'eom_samples': eom_samples,
             'pre_alert_samples': norm_pre_alert,
             'post_alert_samples': norm_post_alert,
+            'lead_announcement_samples': norm_lead_announcement,
+            'trail_announcement_samples': norm_trail_announcement,
             'pre_chime_samples': pre_chime_samples_list,
             'post_chime_samples': post_chime_samples_list,
             'pre_chime_profile': pre_chime_profile_norm,

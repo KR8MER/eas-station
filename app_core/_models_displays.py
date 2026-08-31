@@ -243,6 +243,20 @@ class RWTScheduleConfig(db.Model):
     # workers without coordinating shared memory.
     last_heartbeat_at = db.Column(db.DateTime(timezone=True))
 
+    # Optional spoken station announcements that bracket the automated
+    # weekly test -- e.g. "This station is conducting a test of the
+    # Emergency Alert System" before the SAME header, and "This concludes
+    # this test of the Emergency Alert System" after the EOM. These are
+    # synthesized via the configured TTS provider at broadcast time and
+    # play outside the encoded SAME/EOM burst itself (see
+    # EASAudioGenerator.build_manual_components's lead/trail announcement
+    # handling) -- they are station courtesy IDs, not the CAP-message
+    # narration §11.61(a)(1)(ii) prohibits during an RWT.
+    pre_announcement_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    pre_announcement_text = db.Column(db.Text, nullable=True)
+    post_announcement_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    post_announcement_text = db.Column(db.Text, nullable=True)
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary for API responses.
 
@@ -267,6 +281,10 @@ class RWTScheduleConfig(db.Model):
             'last_heartbeat_at': (
                 self.last_heartbeat_at.isoformat() if self.last_heartbeat_at else None
             ),
+            'pre_announcement_enabled': bool(self.pre_announcement_enabled),
+            'pre_announcement_text': self.pre_announcement_text or '',
+            'post_announcement_enabled': bool(self.post_announcement_enabled),
+            'post_announcement_text': self.post_announcement_text or '',
         }
 
 

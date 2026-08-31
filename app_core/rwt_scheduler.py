@@ -502,11 +502,44 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
         )
 
         # Generate audio components. RWT enforcement (no Attention Signal,
-        # no TTS) is hardcoded inside build_manual_components() per
-        # FCC 47 CFR §11.61(a)(1)(ii); we don't pass tone_profile/include_tts
-        # here so there is no way for this path to request otherwise.
+        # no TTS narration of the alert message) is hardcoded inside
+        # build_manual_components() per FCC 47 CFR §11.61(a)(1)(ii); we
+        # don't pass tone_profile/include_tts here so there is no way for
+        # this path to request otherwise.
         generator = EASAudioGenerator(eas_config, logger=log)
-        components = generator.build_manual_components(alert_object, header)
+
+        # Optional spoken station announcements bracketing the test (e.g.
+        # "This station is conducting a test of the Emergency Alert
+        # System" / "This concludes this test..."). These are station
+        # courtesy IDs synthesized via the configured TTS provider, not
+        # the CAP-message narration the FCC rule above prohibits -- they
+        # play outside the encoded SAME/EOM burst (see
+        # build_manual_components' lead/trail announcement handling).
+        # Synthesis failures must not block the compliance-mandated
+        # weekly test, so any error here just skips the announcement.
+        lead_announcement_samples: Optional[List[int]] = None
+        trail_announcement_samples: Optional[List[int]] = None
+        if config.pre_announcement_enabled and (config.pre_announcement_text or '').strip():
+            try:
+                lead_announcement_samples = generator.tts_engine.generate(
+                    config.pre_announcement_text.strip()
+                )
+            except Exception as exc:
+                log.warning("RWT pre-announcement TTS synthesis failed, skipping: %s", exc)
+        if config.post_announcement_enabled and (config.post_announcement_text or '').strip():
+            try:
+                trail_announcement_samples = generator.tts_engine.generate(
+                    config.post_announcement_text.strip()
+                )
+            except Exception as exc:
+                log.warning("RWT post-announcement TTS synthesis failed, skipping: %s", exc)
+
+        components = generator.build_manual_components(
+            alert_object,
+            header,
+            lead_announcement_samples=lead_announcement_samples,
+            trail_announcement_samples=trail_announcement_samples,
+        )
 
         if not components:
             raise ValueError("Failed to generate RWT audio components")
@@ -540,19 +573,26 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
         composite_wav = _wav('composite_samples')
         pre_chime_wav = _wav('pre_chime_samples')
         post_chime_wav = _wav('post_chime_samples')
+        lead_announcement_wav = _wav('lead_announcement_samples')
+        trail_announcement_wav = _wav('trail_announcement_samples')
 
         # Phase breakpoints for the countdown overlay -- see
         # set_broadcast_active()'s docstring. Chime audio (when configured)
         # plays immediately before the header / after the EOM, so its
         # duration folds into those same two phases rather than needing a
-        # phase of its own.
+        # phase of its own. Spoken pre/post announcements (when configured)
+        # play even further out -- before the lead-in silence and after the
+        # EOM's trailing silence -- so they fold in the same way.
         header_seconds = (
-            _wav_duration_seconds(pre_chime_wav or b'')
+            _wav_duration_seconds(lead_announcement_wav or b'')
+            + (0.0 if pre_chime_wav else 1.0)
+            + _wav_duration_seconds(pre_chime_wav or b'')
             + _wav_duration_seconds(same_wav or b'')
         )
         eom_seconds = (
             _wav_duration_seconds(eom_wav or b'')
             + _wav_duration_seconds(post_chime_wav or b'')
+            + _wav_duration_seconds(trail_announcement_wav or b'')
         )
 
         components_payload: Dict[str, Any] = {}

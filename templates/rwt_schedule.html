@@ -150,6 +150,40 @@
                             </div>
                         </div>
 
+                        <!-- Pre/Post Test Announcements -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Spoken Test Announcements</label>
+                            <div class="alert alert-info py-2 small mb-3" role="alert">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Optional station courtesy announcements, synthesized with your
+                                configured TTS provider. They play <strong>outside</strong> the
+                                encoded SAME header / EOM tones — a full second of silence always
+                                separates them from the actual test signal — so they never
+                                interfere with the FCC-required RWT format
+                                (<a href="https://www.ecfr.gov/current/title-47/section-11.61" target="_blank" rel="noopener">47 CFR §11.61(a)(1)(ii)</a>).
+                            </div>
+
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" id="preAnnouncementEnabled">
+                                <label class="form-check-label" for="preAnnouncementEnabled">
+                                    Play an announcement before the test
+                                </label>
+                            </div>
+                            <textarea class="form-control mb-3" id="preAnnouncementText" rows="2"
+                                placeholder="This station is conducting a test of the Emergency Alert System. This is only a test."
+                                maxlength="1000"></textarea>
+
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" id="postAnnouncementEnabled">
+                                <label class="form-check-label" for="postAnnouncementEnabled">
+                                    Play an announcement after the test
+                                </label>
+                            </div>
+                            <textarea class="form-control" id="postAnnouncementText" rows="2"
+                                placeholder="This concludes this test of the Emergency Alert System."
+                                maxlength="1000"></textarea>
+                        </div>
+
                         <!-- Buttons -->
                         <div class="d-grid gap-2 d-md-flex justify-content-md-between">
                             <button type="submit" class="btn btn-primary">
@@ -358,6 +392,12 @@
                     document.getElementById('endHour').value = config.end_hour || 16;
                     document.getElementById('endMinute').value = config.end_minute || 0;
 
+                    // Spoken test announcements
+                    document.getElementById('preAnnouncementEnabled').checked = config.pre_announcement_enabled || false;
+                    document.getElementById('preAnnouncementText').value = config.pre_announcement_text || '';
+                    document.getElementById('postAnnouncementEnabled').checked = config.post_announcement_enabled || false;
+                    document.getElementById('postAnnouncementText').value = config.post_announcement_text || '';
+
                     renderSchedulerStatus(config);
                 }
             })
@@ -531,6 +571,20 @@
                 return;
             }
 
+            const preAnnouncementEnabled = document.getElementById('preAnnouncementEnabled').checked;
+            const preAnnouncementText = document.getElementById('preAnnouncementText').value.trim();
+            const postAnnouncementEnabled = document.getElementById('postAnnouncementEnabled').checked;
+            const postAnnouncementText = document.getElementById('postAnnouncementText').value.trim();
+
+            if (preAnnouncementEnabled && !preAnnouncementText) {
+                showToast('Enter the pre-test announcement text, or disable the pre-test announcement.', 'warning');
+                return;
+            }
+            if (postAnnouncementEnabled && !postAnnouncementText) {
+                showToast('Enter the post-test announcement text, or disable the post-test announcement.', 'warning');
+                return;
+            }
+
             const data = {
                 enabled,
                 days_of_week: daysOfWeek,
@@ -538,7 +592,11 @@
                 start_minute: startMinute,
                 end_hour: endHour,
                 end_minute: endMinute,
-                same_codes: rwtBroadcastCodes
+                same_codes: rwtBroadcastCodes,
+                pre_announcement_enabled: preAnnouncementEnabled,
+                pre_announcement_text: preAnnouncementText,
+                post_announcement_enabled: postAnnouncementEnabled,
+                post_announcement_text: postAnnouncementText
             };
 
             fetch('/api/rwt-schedule/config', {
