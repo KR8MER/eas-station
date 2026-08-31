@@ -76,6 +76,7 @@ RETENTION_AGE_FIELDS = (
     "audio_alert_max_age_days",
     "audio_metrics_max_age_days",
     "received_alert_audio_max_age_days",
+    "system_log_max_age_days",
 )
 
 _MAX_AGE_DAYS = 3650
@@ -231,6 +232,7 @@ def run_sweep(settings: Dict[str, Any]) -> Dict[str, Any]:
         AudioSourceMetrics,
         StreamMetadataLog,
     )
+    from app_core._models_admin import SystemLog
 
     summary: Dict[str, Any] = {
         "iq_files_removed": 0,
@@ -240,6 +242,7 @@ def run_sweep(settings: Dict[str, Any]) -> Dict[str, Any]:
         "audio_alert_rows_deleted": 0,
         "audio_metrics_rows_deleted": 0,
         "received_alert_audio_stripped": 0,
+        "system_log_rows_deleted": 0,
         "errors": [],
     }
 
@@ -321,16 +324,30 @@ def run_sweep(settings: Dict[str, Any]) -> Dict[str, Any]:
     if stripped:
         summary["received_alert_audio_stripped"] = stripped
 
+    # e. Operational system_log rows -- had no retention policy at all
+    # before this: unbounded growth, 1M+ rows / 850+ MB with no cap.
+    deleted = _guard(
+        "system_log",
+        lambda: _prune_table(
+            SystemLog,
+            SystemLog.timestamp,
+            settings.get("system_log_max_age_days"),
+        ),
+    )
+    if deleted:
+        summary["system_log_rows_deleted"] = deleted
+
     logger.info(
         "Retention sweep complete: %d IQ file(s) + %d temp file(s) removed "
         "(%d bytes), rows deleted: stream_metadata=%d audio_alerts=%d "
-        "audio_metrics=%d, audio blobs stripped=%d, errors=%d",
+        "audio_metrics=%d system_log=%d, audio blobs stripped=%d, errors=%d",
         summary["iq_files_removed"],
         summary["temp_files_removed"],
         summary["bytes_removed"],
         summary["stream_metadata_rows_deleted"],
         summary["audio_alert_rows_deleted"],
         summary["audio_metrics_rows_deleted"],
+        summary["system_log_rows_deleted"],
         summary["received_alert_audio_stripped"],
         len(summary["errors"]),
     )

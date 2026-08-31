@@ -1161,13 +1161,27 @@ class RetentionSettings(db.Model):
     # Days to keep audio source health events (audio_alerts)
     audio_alert_max_age_days = db.Column(db.Integer, nullable=False, default=90)
 
-    # Days to keep per-batch audio level metrics (audio_source_metrics)
-    audio_metrics_max_age_days = db.Column(db.Integer, nullable=False, default=30)
+    # Days to keep per-batch audio level metrics (audio_source_metrics).
+    # This table is append-only at several rows/sec across all sources
+    # (1.5M+ rows / 2.8GB after less than a week in one real deployment).
+    # Was 30 -- lowered to 3 (2026-08-31) after confirming nothing actually
+    # reads raw samples older than a short troubleshooting window: the
+    # "latest value" and "recent trend" endpoints only ever need the most
+    # recent data, and app_core/analytics/aggregator.py already rolls raw
+    # samples into the much smaller, permanent MetricSnapshot table for
+    # long-term history. 30 days of raw per-sample data was pure bloat.
+    audio_metrics_max_age_days = db.Column(db.Integer, nullable=False, default=3)
 
     # Days to keep raw_audio_data BYTEA blobs on received_eas_alerts.
     # Only the blob is stripped — the alert rows themselves are NEVER
     # deleted because they are compliance history.
     received_alert_audio_max_age_days = db.Column(db.Integer, nullable=False, default=30)
+
+    # Days to keep operational system_log rows (INFO/WARNING/ERROR entries,
+    # not compliance-relevant like eas_messages/received_eas_alerts). Added
+    # 2026-08-31 after finding this table had no retention policy at all --
+    # 1M+ rows / 850+ MB and growing forever.
+    system_log_max_age_days = db.Column(db.Integer, nullable=False, default=90)
 
     # Metadata
     updated_at = db.Column(
@@ -1187,6 +1201,7 @@ class RetentionSettings(db.Model):
             "audio_alert_max_age_days": self.audio_alert_max_age_days,
             "audio_metrics_max_age_days": self.audio_metrics_max_age_days,
             "received_alert_audio_max_age_days": self.received_alert_audio_max_age_days,
+            "system_log_max_age_days": self.system_log_max_age_days,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
