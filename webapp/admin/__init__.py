@@ -41,6 +41,7 @@ from .network import register_network_routes
 from .zigbee import register_zigbee_routes
 from .zones import zones_bp
 from .county_boundaries import county_boundaries_bp
+from .municipality_boundaries import municipality_boundaries_bp
 from .hardware import hardware_bp
 from .icecast import register_icecast_routes
 from .certbot import register_certbot_routes
@@ -82,6 +83,8 @@ def register(app, logger):
     logger.info("Zone management routes registered")
     app.register_blueprint(county_boundaries_bp, url_prefix='/admin')  # US county boundary management
     logger.info("County boundary management routes registered")
+    app.register_blueprint(municipality_boundaries_bp, url_prefix='/admin')  # US city/village boundary loading
+    logger.info("Municipality boundary loading routes registered")
     app.register_blueprint(hardware_bp, url_prefix='/admin')  # Hardware settings management
     logger.info("Hardware settings routes registered")
     register_icecast_routes(app, logger)  # Icecast streaming configuration
