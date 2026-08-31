@@ -33,12 +33,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.11 is the floor install.sh supports (it suggests downgrading to
-        # 3.12 when SoapySDR bindings mismatch); 3.13 is what README documents
-        # as fully supported on Debian 13. Both are covered so a dependency
-        # that only resolves on one of them cannot slip through again — the
-        # audioop-lts pin was exactly that failure.
-        python-version: ['3.11', '3.13']
+        # Python 3.13 only -- the sole supported runtime. See README.md's
+        # System Requirements table.
+        python-version: ['3.13']
 
     services:
       redis:
@@ -155,7 +152,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13'
 
       - name: Install ruff
         run: python -m pip install ruff

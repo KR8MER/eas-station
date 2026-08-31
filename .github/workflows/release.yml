@@ -56,7 +56,7 @@ jobs:
         if: steps.guard.outputs.exists == 'false'
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
       - name: Validate release metadata
         if: steps.guard.outputs.exists == 'false'

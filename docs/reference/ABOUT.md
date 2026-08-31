@@ -12,7 +12,7 @@ Raspberry Pi 4 systems remain compatible for labs but no longer represent the do
 
 ### Python Release Strategy
 
-- **Supported versions:** Python 3.11 is the minimum supported runtime; 3.12 and 3.13 are recommended and validated. Debian 13 (Trixie) ships Python 3.13, which the installer detects and supports out of the box.
+- **Supported versions:** Python 3.13 is the only supported runtime, matching Debian 13 (Trixie)'s default system Python, which the installer detects and supports out of the box. Earlier OS/Python combinations are no longer supported.
 - **SoapySDR compatibility:** The installer links the distribution's pre-compiled SoapySDR bindings (`python3-soapysdr`) into the application virtual environment, so SDR support tracks the OS Python version without from-source builds that would exhaust Raspberry Pi 5 hosts.
 - **Mitigation:** The system is updated regularly with CPython patch releases, and pinned dependencies are updated alongside security advisories to ensure CVE fixes without destabilizing the hardware-specific build pipeline or SDR functionality.
 

@@ -32,8 +32,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - depends on interpreter 
     raise ModuleNotFoundError(
         "The 'audioop' module is unavailable. It was removed from the standard "
         "library in Python 3.13; install the backfill with "
-        "`pip install audioop-lts` (already pinned in requirements.txt for "
-        "Python >= 3.13)."
+        "`pip install audioop-lts` (already pinned in requirements.txt)."
     ) from exc
 
 import ctypes.util

@@ -22,9 +22,10 @@ echo "Detecting Python paths..."
 DETECTED_PATHS=$(python3 -c "import site; print(':'.join(site.getsitepackages()))" 2>/dev/null || echo "")
 echo "  Detected paths: $DETECTED_PATHS"
 
-# IMPORTANT: Also include ALL Python version-specific paths as fallbacks
-# SoapySDR from apt is compiled for a specific Python version and may not match the running Python
-FALLBACK_PATHS="/usr/lib/python3.13/dist-packages:/usr/lib/python3.12/dist-packages:/usr/lib/python3.11/dist-packages:/usr/lib/python3.10/dist-packages:/usr/lib/python3/dist-packages:/usr/local/lib/python3.13/dist-packages:/usr/local/lib/python3.12/dist-packages:/usr/local/lib/python3.11/dist-packages:/usr/local/lib/python3.10/dist-packages:/usr/local/lib/python3/dist-packages"
+# IMPORTANT: Also include the Python 3.13 site-packages paths as fallbacks --
+# SoapySDR from apt is compiled for a specific Python version and may not
+# match the running Python. 3.13 is this project's only supported version.
+FALLBACK_PATHS="/usr/lib/python3.13/dist-packages:/usr/lib/python3/dist-packages:/usr/local/lib/python3.13/dist-packages:/usr/local/lib/python3/dist-packages"
 
 if [ -n "$DETECTED_PATHS" ]; then
     PYTHON_SITE_PACKAGES="${DETECTED_PATHS}:${FALLBACK_PATHS}"
