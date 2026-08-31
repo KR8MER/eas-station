@@ -103,21 +103,37 @@ def _read_redis_controller_state() -> RedisControllerState:
 
 
 def _latest_metrics_by_source(source_names: List[str]) -> Dict[str, AudioSourceMetrics]:
-    """Most recent persisted metric row per source, in one query."""
-    if not source_names:
-        return {}
+    """Most recent persisted metric row per source.
 
-    recent_metrics = (
-        AudioSourceMetrics.query
-        .filter(AudioSourceMetrics.source_name.in_(source_names))
-        .order_by(AudioSourceMetrics.source_name, desc(AudioSourceMetrics.timestamp))
-        .all()
-    )
+    audio_source_metrics is an append-only time-series table (several rows/
+    sec per source) that reaches millions of rows in normal operation. The
+    original version of this function fetched *every* row matching
+    source_names, sorted them all in Postgres, and kept only the first row
+    seen per source in Python -- on a 1.5M-row table that meant a 20+ second
+    sequential scan with a multi-hundred-MB disk sort, occasionally slow
+    enough to hit the statement timeout outright.
 
+    A single DISTINCT ON query (Postgres's native "top-1 per group"
+    operator) was tried first and measured *no better* even with a
+    (source_name, timestamp DESC) index: Postgres has no loose/skip-scan
+    index strategy, so DISTINCT ON with an IN-list still walked every
+    matching row before deduplicating (confirmed via EXPLAIN ANALYZE --
+    still 17-18s). The source list here is small (one row per configured
+    hardware input, realistically under a dozen), so N separate "ORDER BY
+    timestamp DESC LIMIT 1" queries -- one per source, each landing on the
+    index and stopping at the first match -- measured at ~0.15ms each,
+    i.e. under a millisecond total instead of 20+ seconds.
+    """
     latest: Dict[str, AudioSourceMetrics] = {}
-    for metric in recent_metrics:
-        if metric.source_name not in latest:
-            latest[metric.source_name] = metric
+    for name in source_names:
+        metric = (
+            AudioSourceMetrics.query
+            .filter(AudioSourceMetrics.source_name == name)
+            .order_by(desc(AudioSourceMetrics.timestamp))
+            .first()
+        )
+        if metric is not None:
+            latest[name] = metric
     return latest
 
 
