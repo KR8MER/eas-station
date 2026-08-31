@@ -19,6 +19,7 @@ Repository: https://github.com/KR8MER/eas-station
 
 """Notification settings admin routes."""
 
+import asyncio
 import logging
 import socket
 from types import SimpleNamespace
@@ -333,7 +334,11 @@ def test_snmp():
             return jsonify({'success': False, 'error': 'No SNMP targets configured'}), 400
 
         try:
-            from pysnmp.hlapi import (  # type: ignore[import]
+            # pysnmp 7 restructured hlapi into arch-specific, asyncio-native
+            # submodules -- see the matching comment in app_core/system_health.py
+            # for the full explanation of what changed from the old flat
+            # pysnmp.hlapi API.
+            from pysnmp.hlapi.v3arch.asyncio import (  # type: ignore[import]
                 CommunityData,
                 ContextData,
                 NotificationType,
@@ -341,8 +346,9 @@ def test_snmp():
                 ObjectType,
                 SnmpEngine,
                 UdpTransportTarget,
-                sendNotification,
+                send_notification,
             )
+            from pysnmp.proto.rfc1902 import OctetString  # type: ignore[import]
         except Exception:
             return jsonify({'success': False, 'error': 'pysnmp is not installed; install it to use SNMP traps'}), 400
 
@@ -350,6 +356,25 @@ def test_snmp():
         targets = [t.strip() for t in (settings.snmp_targets or []) if t and t.strip()]
         payload = "EAS Station SNMP trap test"
         errors = []
+
+        async def _send_one(host: str, port: int) -> None:
+            snmp_engine = SnmpEngine()
+            try:
+                transport = await UdpTransportTarget.create((host, port), timeout=3, retries=1)
+                error_indication, _error_status, _error_index, _var_binds = await send_notification(
+                    snmp_engine,
+                    CommunityData(community, mpModel=1),
+                    transport,
+                    ContextData(),
+                    'trap',
+                    NotificationType(ObjectIdentity('1.3.6.1.4.1.32473.1.0.1')).add_varbinds(
+                        ObjectType(ObjectIdentity('1.3.6.1.4.1.32473.1.1.1.0'), OctetString(payload))
+                    ),
+                )
+                if error_indication:
+                    errors.append(f"{host}:{port}: {error_indication}")
+            finally:
+                snmp_engine.close_dispatcher()
 
         for target in targets:
             host, _, port_str = target.partition(':')
@@ -359,18 +384,7 @@ def test_snmp():
                 port = 162
 
             try:
-                for error_indication, _error_status, _error_index, _var_binds in sendNotification(
-                    SnmpEngine(),
-                    CommunityData(community, mpModel=1),
-                    UdpTransportTarget((host, port), timeout=3, retries=1),
-                    ContextData(),
-                    'trap',
-                    NotificationType(ObjectIdentity('1.3.6.1.4.1.32473.1.0.1')).addVarBinds(
-                        ObjectType(ObjectIdentity('1.3.6.1.4.1.32473.1.1.1.0'), payload)
-                    ),
-                ):
-                    if error_indication:
-                        errors.append(f"{target}: {error_indication}")
+                asyncio.run(_send_one(host, port))
             except Exception as exc:
                 errors.append(f"{target}: {exc}")
 

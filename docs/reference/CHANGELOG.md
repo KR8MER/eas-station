@@ -8,6 +8,13 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.207.3] - 2026-08-31 - Fix silently-broken SNMP compliance traps under pysnmp 7
+
+- **A dependency bump already on `main` (pysnmp `>=7.1.29`, from a Dependabot PR merged earlier the same day) silently broke SNMP compliance trap sending.** pysnmp 7 restructured `hlapi` into arch-specific, asyncio-native submodules and dropped the old flat `pysnmp.hlapi` module (`CommunityData`, `SnmpEngine`, `sendNotification` as a sync-flavored generator) this code imported from. Both `HealthAlertWorker._send_snmp_traps()` (`app_core/system_health.py`) and the admin "Test SNMP" button (`webapp/admin/notifications.py`) catch that import failure broadly and just log/return a warning — so this broke with no crash and, since there was no prior test coverage for SNMP trap sending at all, no test failure either. Traps would have silently stopped sending entirely.
+- Both call sites now import from `pysnmp.hlapi.v3arch.asyncio`, call the now-async `send_notification()` via `asyncio.run()`, use `add_varbinds` (the renamed, non-deprecated method), and wrap the trap payload in an explicit `OctetString` (pysnmp 7 no longer auto-coerces a raw Python `str` varbind value). Each call's `SnmpEngine` is now explicitly closed via `close_dispatcher()` in a `finally` block — without it, every trap sent (including from the recurring background health-check interval) leaked a UDP dispatcher socket for the life of the process.
+- Verified end-to-end, not just via import checks: sent a real trap over a real UDP socket to a local listener and confirmed the payload arrives, using an isolated venv with `pysnmp==7.1.29` actually installed.
+- Added `tests/test_snmp_trap_pysnmp7.py` — the first test coverage this code path has ever had.
+
 ## [2.207.2] - 2026-08-31 - Bump numba to 0.67, lifting the previous llvmlite-size cap
 
 - `numba` now floats `>=0.67.0,<0.68.0` (was `>=0.61.0,<0.64.0`). The old cap existed specifically to avoid numba 0.64+'s heavier llvmlite dependency; verified that cost is real (llvmlite 0.49.0's aarch64 wheel is ~58MB) but accepted it deliberately as a one-time download rather than staying capped indefinitely.

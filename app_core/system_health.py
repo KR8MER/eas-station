@@ -21,6 +21,7 @@ from __future__ import annotations
 
 """System health snapshot helpers shared across route modules."""
 
+import asyncio
 import os
 import re
 import requests
@@ -48,7 +49,13 @@ from app_utils.system.clocksync import _collect_clock_sync
 from app_utils.time import UTC_TZ
 
 try:  # pragma: no cover - optional dependency
-    from pysnmp.hlapi import (  # type: ignore[import]
+    # pysnmp 7 restructured hlapi into arch-specific, asyncio-native
+    # submodules -- the old flat `pysnmp.hlapi` (CommunityData, SnmpEngine,
+    # etc. as sync-flavored generators) no longer exists. v3arch.asyncio is
+    # the SNMPv3-capable API that still accepts a plain CommunityData for
+    # v1/v2c use (mpModel=1 below), and send_notification is now a coroutine
+    # returning a single result tuple instead of a generator to iterate.
+    from pysnmp.hlapi.v3arch.asyncio import (  # type: ignore[import]
         CommunityData,
         ContextData,
         NotificationType,
@@ -56,11 +63,12 @@ try:  # pragma: no cover - optional dependency
         ObjectType,
         SnmpEngine,
         UdpTransportTarget,
-        sendNotification,
+        send_notification,
     )
+    from pysnmp.proto.rfc1902 import OctetString  # type: ignore[import]
 except Exception:  # pragma: no cover - pysnmp is optional
     CommunityData = ContextData = NotificationType = ObjectIdentity = ObjectType = None
-    SnmpEngine = UdpTransportTarget = sendNotification = None
+    SnmpEngine = UdpTransportTarget = send_notification = OctetString = None
 
 _HEALTH_WORKER = None
 _HEALTH_WORKER_LOCK = threading.Lock()
@@ -903,13 +911,36 @@ class HealthAlertWorker:
         if not targets:
             return
 
-        if sendNotification is None:
+        if send_notification is None:
             self._logger.warning(
                 "pysnmp not available; unable to emit SNMP compliance traps"
             )
             return
 
         payload = "; ".join(issues)
+
+        async def _send_one(host: str, port: int) -> None:
+            snmp_engine = SnmpEngine()
+            try:
+                transport = await UdpTransportTarget.create((host, port), timeout=3, retries=1)
+                error_indication, _error_status, _error_index, _var_binds = await send_notification(
+                    snmp_engine,
+                    CommunityData(community, mpModel=1),
+                    transport,
+                    ContextData(),
+                    "trap",
+                    NotificationType(ObjectIdentity("1.3.6.1.4.1.32473.1.0.1")).add_varbinds(
+                        ObjectType(ObjectIdentity("1.3.6.1.4.1.32473.1.1.1.0"), OctetString(payload))
+                    ),
+                )
+                if error_indication:  # pragma: no cover - depends on network stack
+                    self._logger.error("SNMP trap to %s:%s failed: %s", host, port, error_indication)
+            finally:
+                # A fresh SnmpEngine is created per target; without an
+                # explicit close its UDP dispatcher socket leaks for the
+                # life of the process -- this runs on every compliance
+                # health-check interval, not just once.
+                snmp_engine.close_dispatcher()
 
         for target in targets:
             host, _, port_str = target.partition(":")
@@ -919,18 +950,7 @@ class HealthAlertWorker:
                 port = 162
 
             try:
-                for error_indication, _error_status, _error_index, _var_binds in sendNotification(  # type: ignore[misc]
-                    SnmpEngine(),
-                    CommunityData(community, mpModel=1),
-                    UdpTransportTarget((host, port), timeout=3, retries=1),
-                    ContextData(),
-                    "trap",
-                    NotificationType(ObjectIdentity("1.3.6.1.4.1.32473.1.0.1")).addVarBinds(
-                        ObjectType(ObjectIdentity("1.3.6.1.4.1.32473.1.1.1.0"), payload)
-                    ),
-                ):
-                    if error_indication:  # pragma: no cover - depends on network stack
-                        self._logger.error("SNMP trap to %s:%s failed: %s", host, port, error_indication)
+                asyncio.run(_send_one(host, port))
             except Exception as exc:  # pragma: no cover - network dependent
                 self._logger.error(
                     "Failed to send SNMP trap to %s:%s: %s", host, port, exc
