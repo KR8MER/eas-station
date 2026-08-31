@@ -111,7 +111,7 @@ jobs:
 
       - name: Sign artifacts (Sigstore build provenance attestation)
         if: steps.guard.outputs.exists == 'false'
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/eas-station-*.tar.gz
