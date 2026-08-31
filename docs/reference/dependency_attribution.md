@@ -66,7 +66,7 @@ licenses at the time of writing; consult each project for authoritative terms.
 | **Py-ART** (`arm_pyart`) | NEXRAD Level II radar decode + geographic PPI rendering for the weather-alert radar overlay (`app_utils/image_export/radar_level2.py`) | BSD-3-Clause |
 | **boto3** | Anonymous read access to NOAA's public Level II archive on AWS Open Data | Apache-2.0 |
 | **Cartopy** | Web Mercator projection for the radar overlay, matching the OSM basemap tiles it composites onto | BSD-3-Clause |
-| **cmweather** | Registers the `NWSRef` reflectivity colormap (the standard NWS scale) used to color the radar overlay | MIT |
+| **cmweather** | Registers the `NWSRef`/`NWSVel` reflectivity/velocity colormaps (the standard NWS scales) used to color the radar overlay | MIT |
 | **Matplotlib** | Rendering backend (headless Agg) for the radar overlay's geographic PPI plot | Matplotlib License (BSD-style) |
 
 ### Networking, Parsing & I/O

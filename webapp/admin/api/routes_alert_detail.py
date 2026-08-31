@@ -316,6 +316,7 @@ def alert_detail(alert_id):
                 )
 
         from app_utils.image_export.radar_loop import RADAR_LOOP_MAX_FRAMES
+        from app_utils.image_export.radar_loop_hires import RADAR_LOOP_HIRES_MAX_FRAMES
 
         return render_template(
             'alert_detail.html',
@@ -332,6 +333,7 @@ def alert_detail(alert_id):
             related_alerts=related_alerts,
             vtec_chain=vtec_chain,
             radar_loop_max_frames=RADAR_LOOP_MAX_FRAMES,
+            radar_loop_hires_max_frames=RADAR_LOOP_HIRES_MAX_FRAMES,
         )
 
     except Exception as exc:

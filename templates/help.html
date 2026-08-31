@@ -372,31 +372,46 @@
                                         past alert, or the live scan for one still active. The alert
                                         detail page also has a <strong>Radar Loop</strong> card below
                                         the map: click <strong>Generate Loop</strong> to render a
-                                        disk-cached sequence of frames spanning the alert's full
-                                        duration (5-minute cadence, capped around 3 hours), so you can
-                                        step or play through how the weather actually moved rather
-                                        than seeing only one frozen moment. Loop frames prefer raw
-                                        NEXRAD <strong>Level II</strong> data (from NOAA's public
-                                        archive, decoded on the appliance) when the alert falls within
-                                        range of a radar site &mdash; a noticeably finer-grained image
-                                        than the Level III mosaic, closest to that site and gradually
-                                        blending toward it at longer range, since beam width genuinely
-                                        grows with distance. Falls back to the Level III mosaic
-                                        automatically wherever Level II isn't available. First
-                                        generation takes up to 30 seconds per frame; instant on every
-                                        view after that.
+                                        disk-cached sequence of frames from that same Level III mosaic,
+                                        spanning the alert's full duration (5-minute cadence, capped
+                                        around 3 hours), so you can step or play through how the
+                                        weather actually moved rather than seeing only one frozen
+                                        moment. First generation takes a few seconds per frame; instant
+                                        on every view after that.
+                                    </p>
+                                    <p class="text-muted small mb-0 mt-3">
+                                        <i class="fas fa-satellite-dish me-1"></i>
+                                        A separate <strong>High-Resolution Radar Loop</strong> card sits
+                                        right below the standard one, offering raw NEXRAD
+                                        <strong>Level II</strong> data (from NOAA's public archive,
+                                        decoded on the appliance) instead of the Level III mosaic &mdash;
+                                        a noticeably finer-grained image from the single nearest radar
+                                        site, plus a <strong>Reflectivity / Velocity</strong> selector:
+                                        velocity (motion toward or away from the radar) is a Level
+                                        II&ndash;only product with no Level III equivalent, useful for
+                                        spotting rotation. This is a deliberately separate, distinctly
+                                        labeled view, not a replacement for the standard loop above it
+                                        &mdash; the two use different data sources and can look
+                                        different for the same alert, which is exactly why they're not
+                                        merged into one toggle. Only available within roughly 230
+                                        miles of a radar site; outside that range (or if the site's
+                                        data has a temporary gap) it reports no coverage rather than
+                                        silently showing an empty frame. First generation is noticeably
+                                        slower than the standard loop &mdash; each frame is a real
+                                        multi-megabyte volume-scan download, not a small map tile.
                                     </p>
                                     <figure class="mt-3 mb-0">
                                         <img src="{{ url_for('static', filename='img/radar-loop-distance-example.jpg') }}"
-                                             class="img-fluid rounded border" alt="Radar Loop card for a Tornado Warning roughly 90 miles from its radar site, showing real reflectivity structure with some beam-to-beam banding softened by the renderer's smoothing pass">
+                                             class="img-fluid rounded border" alt="High-Resolution Radar Loop card for a Tornado Warning roughly 90 miles from its radar site, showing real reflectivity structure with some beam-to-beam banding softened by the renderer's smoothing pass">
                                         <figcaption class="text-muted small mt-1">
-                                            A real example, ~90 miles from its radar site &mdash; distance
-                                            from the transmitter is the dominant factor in how sharp a
-                                            frame looks. Near a site, expect crisp, RadarScope-like
-                                            detail; at range like this, expect a somewhat softer image
-                                            (a light smoothing pass keeps real beam-to-beam gaps from
-                                            reading as a harsh grid) &mdash; both are genuine Level II
-                                            data, not a rendering shortcut.
+                                            A real High-Resolution (Level II) Radar Loop example, ~90
+                                            miles from its radar site &mdash; distance from the
+                                            transmitter is the dominant factor in how sharp a frame
+                                            looks. Near a site, expect crisp, RadarScope-like detail; at
+                                            range like this, expect a somewhat softer image (a light
+                                            smoothing pass keeps real beam-to-beam gaps from reading as
+                                            a harsh grid) &mdash; both are genuine Level II data, not a
+                                            rendering shortcut.
                                         </figcaption>
                                     </figure>
                                 </div>

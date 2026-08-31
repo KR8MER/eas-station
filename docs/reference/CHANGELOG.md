@@ -8,6 +8,16 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.208.0] - 2026-08-31 - Add a High-Resolution (Level II) radar loop with a velocity overlay
+
+- New **High-Resolution Radar Loop** card on the alert detail page, below the existing (Level III) Radar Loop card — an explicitly separate, distinctly-labeled feature, not a silent upgrade to it. `maps.py`'s `_render_map()` used to always prefer a sharper Level II render when a site was in range, but that was reverted because the exported/looped image could then disagree pixel-for-pixel with the live "Radar (at time of alert)" toggle (different resolution, different color ramp). This reintroduces Level II behind its own opt-in `radar_source='level2'` parameter, used by exactly one caller, so the toggle, share-card, and standard loop are all unaffected.
+- Adds a **Reflectivity / Velocity** selector — velocity is a Level II–only product (no Level III equivalent), useful for spotting rotation. `radar_level2.py`'s `render_frame()`/`_plot_ppi()` now take a `field` parameter; velocity uses cmweather's `NWSVel` colormap over a ±32 m/s range (the practical base-velocity Nyquist limit) with its own `VELOCITY_LEGEND`. No de-aliasing is applied — a known limitation of the raw base product.
+- Level II only reaches ~230km from a WSR-88D site, so `radar_loop_hires.py` checks coverage once per alert up front and reports a genuine coverage gap distinctly from "not a weather alert", rather than silently caching a radar-less frame that would look identical to a legitimate no-echo scan.
+- `render_frame()` now returns `(image, scan_time)` — the matched volume's actual timestamp, not just the requested one — so the on-image "Radar H:MM" caption is accurate for Level II the same way it already was for Level III.
+- Verified end-to-end against live NOAA data (not just mocks): both fields render correctly through `radar_level2.render_frame()` directly and through the full `_render_map()` composite (basemap + polygon + radar + legend).
+- Added `tests/test_image_export_radar_loop_hires.py` (11 tests: eligibility, the coverage-gap short-circuit, caching, field-scoped cache isolation, render-failure handling).
+- Corrected `templates/help.html`'s Radar Loop documentation, which had drifted to describe the old (reverted) "loop prefers Level II automatically" behavior as current.
+
 ## [2.207.4] - 2026-08-31 - Bump zigpy to 2.1, fixing a permit_joining rename it silently would have broken
 
 - `zigpy` now floats `>=2.1.0` (was `>=0.60.0`) at the maintainer's request, after closing Dependabot's version of this bump (#2524) pending verification — zigpy manages real Zigbee hardware pairing, which can't be exercised in CI.

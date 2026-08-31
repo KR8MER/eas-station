@@ -723,6 +723,48 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- High-Resolution (Level II) Radar Loop -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <h5 class="mb-0">
+                                <i class="fas fa-satellite-dish"></i> High-Resolution Radar Loop
+                            </h5>
+                            <div class="d-flex align-items-center gap-2">
+                                <select class="form-select form-select-sm" id="hiresRadarField" style="width: auto;">
+                                    <option value="reflectivity">Reflectivity</option>
+                                    <option value="velocity">Velocity</option>
+                                </select>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="hiresRadarBuildBtn">
+                                    <i class="fas fa-film me-1"></i>Generate Loop
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="hiresRadarEmpty" class="text-muted small">
+                                A separate, sharper view from the single nearest NEXRAD site's raw volume
+                                scans (not the national mosaic above) — real gate-level detail instead of a
+                                blocky ~1km mosaic, plus a velocity option (rotation) the mosaic doesn't have
+                                at all. Only available within ~230km of a radar site, and won't always agree
+                                pixel-for-pixel with the standard loop above, since it's a different data
+                                source. Up to {{ radar_loop_hires_max_frames }} frames at 5-minute intervals.
+                                First generation takes longer than the standard loop (each frame is a real
+                                volume download); cached after that.
+                            </div>
+                            <div id="hiresRadarProgress" class="small text-muted mb-2" style="display: none;"></div>
+                            <div id="hiresRadarPlayer" style="display: none;">
+                                <img id="hiresRadarFrame" src="" alt="High-resolution radar loop frame"
+                                     style="max-width: 100%; border-radius: var(--radius-md, 6px);">
+                                <div class="d-flex align-items-center gap-2 mt-2">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="hiresRadarPlayPause">
+                                        <i class="fas fa-pause"></i>
+                                    </button>
+                                    <input type="range" class="form-range flex-grow-1" id="hiresRadarScrub" min="0" value="0" step="1">
+                                    <small class="text-muted text-nowrap" id="hiresRadarTime">--</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     {% endif %}
 
                     <!-- Timing & Technical Details (side by side) -->
@@ -2206,6 +2248,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize map after a short delay
     setTimeout(initializeMap, 1000);
     initRadarLoop(); // Standalone <img> player, doesn't need the Leaflet map.
+    initHiresRadarLoop();
 });
 
 function initializeMap() {
@@ -2355,6 +2398,133 @@ function setRadarLoopPlaying(playing) {
     if (playing && radarLoopFrames.length > 1) {
         radarLoopTimer = setInterval(function() {
             showRadarLoopFrame((radarLoopIndex + 1) % radarLoopFrames.length);
+        }, 400);
+    }
+}
+
+// ---------------------------------------------------------------------
+// High-Resolution (Level II) radar loop -- same pattern as the standard
+// loop above, but a separate endpoint/cache/player so the two can never
+// be confused for each other (see radar_loop_hires.py's docstring for
+// why they're deliberately not unified). Also carries a reflectivity/
+// velocity field selector the standard loop has no equivalent of.
+// ---------------------------------------------------------------------
+let hiresRadarFrames = [];
+let hiresRadarIndex = 0;
+let hiresRadarTimer = null;
+let hiresRadarPlaying = false;
+let hiresRadarPlayerShown = false;
+
+function initHiresRadarLoop() {
+    const buildBtn = document.getElementById('hiresRadarBuildBtn');
+    if (!buildBtn) {
+        return; // Not a Met-category alert -- see the card's Jinja condition in the template.
+    }
+
+    buildBtn.addEventListener('click', function() {
+        buildBtn.disabled = true;
+        document.getElementById('hiresRadarEmpty').style.display = 'none';
+        // A field change after frames already exist starts a fresh loop
+        // (different cache, different content) rather than mixing frames
+        // from two fields together.
+        hiresRadarFrames = [];
+        hiresRadarPlayerShown = false;
+        document.getElementById('hiresRadarPlayer').style.display = 'none';
+        pollHiresRadarLoop();
+    });
+
+    document.getElementById('hiresRadarField').addEventListener('change', function() {
+        // Only resets the button back to buildable -- doesn't auto-fetch,
+        // so switching fields is a deliberate "Generate" click, not a
+        // surprise re-render.
+        setHiresRadarPlaying(false);
+        hiresRadarFrames = [];
+        hiresRadarPlayerShown = false;
+        document.getElementById('hiresRadarPlayer').style.display = 'none';
+        document.getElementById('hiresRadarProgress').style.display = 'none';
+        document.getElementById('hiresRadarEmpty').style.display = '';
+        buildBtn.style.display = '';
+        buildBtn.disabled = false;
+    });
+
+    document.getElementById('hiresRadarPlayPause').addEventListener('click', function() {
+        setHiresRadarPlaying(!hiresRadarPlaying);
+    });
+
+    document.getElementById('hiresRadarScrub').addEventListener('input', function() {
+        setHiresRadarPlaying(false);
+        showHiresRadarFrame(parseInt(this.value, 10));
+    });
+}
+
+async function pollHiresRadarLoop() {
+    const progress = document.getElementById('hiresRadarProgress');
+    const field = document.getElementById('hiresRadarField').value;
+    progress.style.display = '';
+    let data;
+    try {
+        const resp = await fetch(`/api/alerts/${alertData.id}/radar-loop-hires?field=${encodeURIComponent(field)}`);
+        data = await resp.json();
+    } catch (err) {
+        progress.textContent = 'Error building high-resolution radar loop: ' + err;
+        return;
+    }
+
+    hiresRadarFrames = data.frames;
+
+    if (hiresRadarFrames.length > 0) {
+        const scrub = document.getElementById('hiresRadarScrub');
+        scrub.max = Math.max(0, hiresRadarFrames.length - 1);
+        if (!hiresRadarPlayerShown) {
+            hiresRadarPlayerShown = true;
+            document.getElementById('hiresRadarPlayer').style.display = '';
+        }
+        showHiresRadarFrame(hiresRadarFrames.length - 1);
+    }
+
+    if (data.total > 0) {
+        const done = data.total - data.pending;
+        progress.textContent = `Rendering high-resolution radar frames… (${done}/${data.total})`;
+    }
+
+    if (data.pending > 0) {
+        setTimeout(pollHiresRadarLoop, 1500); // slower cadence -- each frame is a real volume download
+        return;
+    }
+
+    progress.style.display = 'none';
+    document.getElementById('hiresRadarBuildBtn').style.display = 'none';
+    if (hiresRadarFrames.length === 0) {
+        progress.style.display = '';
+        progress.textContent = data.error || 'No high-resolution radar frames available for this alert.';
+        return;
+    }
+    setHiresRadarPlaying(true);
+}
+
+function showHiresRadarFrame(i) {
+    const frame = hiresRadarFrames[i];
+    if (!frame) {
+        return;
+    }
+    hiresRadarIndex = i;
+    document.getElementById('hiresRadarFrame').src = frame.url;
+    document.getElementById('hiresRadarScrub').value = i;
+    document.getElementById('hiresRadarTime').textContent =
+        new Date(frame.time).toLocaleTimeString();
+}
+
+function setHiresRadarPlaying(playing) {
+    hiresRadarPlaying = playing;
+    document.getElementById('hiresRadarPlayPause').innerHTML =
+        playing ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
+    if (hiresRadarTimer) {
+        clearInterval(hiresRadarTimer);
+        hiresRadarTimer = null;
+    }
+    if (playing && hiresRadarFrames.length > 1) {
+        hiresRadarTimer = setInterval(function() {
+            showHiresRadarFrame((hiresRadarIndex + 1) % hiresRadarFrames.length);
         }, 400);
     }
 }

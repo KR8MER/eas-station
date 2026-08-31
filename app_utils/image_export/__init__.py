@@ -160,6 +160,11 @@ from .radar_loop import (  # noqa: F401
     build_radar_loop, RADAR_LOOP_CADENCE_MINUTES, RADAR_LOOP_MAX_FRAMES,
 )
 
+from .radar_loop_hires import (  # noqa: F401
+    build_hires_radar_loop, VALID_FIELDS as RADAR_HIRES_VALID_FIELDS,
+    RADAR_LOOP_HIRES_CADENCE_MINUTES, RADAR_LOOP_HIRES_MAX_FRAMES,
+)
+
 from .icons import (  # noqa: F401
     _ICON_FN, _icon_hail, _icon_tornado, _icon_wind,
 )
