@@ -8,6 +8,14 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.207.4] - 2026-08-31 - Bump zigpy to 2.1, fixing a permit_joining rename it silently would have broken
+
+- `zigpy` now floats `>=2.1.0` (was `>=0.60.0`) at the maintainer's request, after closing Dependabot's version of this bump (#2524) pending verification — zigpy manages real Zigbee hardware pairing, which can't be exercised in CI.
+- Found one real, confirmed break by inspecting the installed `zigpy==2.1.0` + `zigpy-znp==1.1.0` API directly (the version pair pip's resolver actually picks for these pins): `ControllerApplication.permit_joining(duration)` was renamed to `.permit(time_s, node=None)` — the old name doesn't exist at all on 2.1.0. `services/zigbee/controller.py`'s `permit_join()`/`close_join()` (the pairing-mode open/close methods) called the old name; `close_join()`'s call is wrapped in a broad `except Exception`, so this would have failed the same silent way the pysnmp break below did.
+- Verified the rest of this codebase's zigpy-facing API surface is unaffected: `ControllerApplication.__init__`, `.add_listener`, `.startup`, `.shutdown`, the `device_joined`/`device_initialized` listener callbacks, and the `Device.ieee`/`.nwk`/`.model`/`.manufacturer` attributes this code reads are all unchanged between 0.60.0 and 2.1.0.
+- Added `tests/test_zigbee_controller_permit.py` — the first test coverage this file has ever had. It stubs the zigpy application object (no real coordinator hardware is available in CI) and asserts `permit_join()`/`close_join()` call `.permit()`, not the nonexistent `.permit_joining()`.
+- **Real device pairing over a live coordinator has not been hardware-tested** — this fix corrects a confirmed API break, but only physical testing can confirm end-to-end pairing behavior.
+
 ## [2.207.3] - 2026-08-31 - Fix silently-broken SNMP compliance traps under pysnmp 7
 
 - **A dependency bump already on `main` (pysnmp `>=7.1.29`, from a Dependabot PR merged earlier the same day) silently broke SNMP compliance trap sending.** pysnmp 7 restructured `hlapi` into arch-specific, asyncio-native submodules and dropped the old flat `pysnmp.hlapi` module (`CommunityData`, `SnmpEngine`, `sendNotification` as a sync-flavored generator) this code imported from. Both `HealthAlertWorker._send_snmp_traps()` (`app_core/system_health.py`) and the admin "Test SNMP" button (`webapp/admin/notifications.py`) catch that import failure broadly and just log/return a warning — so this broke with no crash and, since there was no prior test coverage for SNMP trap sending at all, no test failure either. Traps would have silently stopped sending entirely.
