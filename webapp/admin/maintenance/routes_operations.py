@@ -224,6 +224,57 @@ def check_for_upgrade():
         return jsonify({"error": "Could not check for updates"}), 500
 
 
+@maintenance_bp.route("/admin/operations/upgrade/tags", methods=["GET"])
+@require_permission('system.configure')
+def list_upgrade_tags():
+    """List released version tags an operator can pin the upgrade to.
+
+    Purely a remote query -- `git ls-remote` talks to the origin over the
+    network without touching any local ref, so it's as safe to call from a
+    page-load handler as check_for_upgrade()'s `git fetch`. Tags come from
+    the release workflow (.github/workflows/release.yml), which creates one
+    `vX.Y.Z` tag per published release.
+
+    Returns:
+        200 with {branch, tags}. `branch` is this checkout's current branch
+        (the "track main" default the picker falls back to). `tags` is up
+        to the 15 most recent release tags, newest first.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", "--tags", "--sort=-v:refname", "origin", "v*"],
+            cwd=repo_root, capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode != 0:
+            return jsonify({"error": (result.stderr or "git ls-remote failed").strip()[:300]}), 502
+
+        tags: List[str] = []
+        seen = set()
+        for line in result.stdout.splitlines():
+            parts = line.split("\t", 1)
+            if len(parts) != 2 or not parts[1].startswith("refs/tags/"):
+                continue
+            tag = parts[1][len("refs/tags/"):]
+            tag = tag[:-3] if tag.endswith("^{}") else tag
+            if tag in seen:
+                continue
+            seen.add(tag)
+            tags.append(tag)
+            if len(tags) >= 15:
+                break
+
+        branch = get_git_metadata().get("branch") or "main"
+        if branch == "unknown":
+            branch = "main"
+
+        return jsonify({"branch": branch, "tags": tags})
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Timed out reaching the remote repository"}), 504
+    except Exception as exc:  # pragma: no cover - defensive
+        current_app.logger.warning("list_upgrade_tags failed: %s", exc)
+        return jsonify({"error": "Could not list release tags"}), 500
+
+
 @maintenance_bp.route("/admin/operations/upgrade", methods=["POST"])
 @require_permission('system.configure')
 def run_one_click_upgrade():

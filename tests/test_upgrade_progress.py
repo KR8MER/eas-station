@@ -47,6 +47,7 @@ from webapp.admin.maintenance.routes_operations import (
     _classify_upgrade_log_line,
     check_for_upgrade,
     get_upgrade_progress,
+    list_upgrade_tags,
 )
 
 
@@ -362,6 +363,69 @@ class TestCheckForUpgrade:
             response, status = self._get(app, query_string="ref=no-such-branch")
 
         assert status == 404
+
+    def test_requires_authentication(self, app):
+        _body, status = self._get(app)
+        assert status == 401
+
+
+class TestListUpgradeTags:
+    """The version-picker dropdown on the upgrade page is populated from
+    this endpoint. `git ls-remote --tags` is a pure remote query -- it
+    never touches a local ref, unlike `git fetch` -- so, like
+    check_for_upgrade(), this is safe to call from a page-load handler.
+    """
+
+    URL = "/admin/operations/upgrade/tags"
+
+    def _get(self, app):
+        with app.test_request_context(self.URL, headers={"Accept": "application/json"}):
+            return list_upgrade_tags()
+
+    def test_lists_tags_newest_first_and_dedupes_annotated_refs(self, app, authenticated_user):
+        ls_remote_output = (
+            "abc123\trefs/tags/v2.205.0\n"
+            "abc124\trefs/tags/v2.205.0^{}\n"
+            "abc125\trefs/tags/v2.204.0\n"
+            "abc126\trefs/tags/v2.203.0\n"
+        )
+        with patch(
+            "webapp.admin.maintenance.routes_operations.get_git_metadata",
+            return_value={"branch": "main"},
+        ), patch(
+            "subprocess.run",
+            return_value=_proc(stdout=ls_remote_output),
+        ):
+            response = self._get(app)
+
+        data = response.get_json()
+        assert data["branch"] == "main"
+        assert data["tags"] == ["v2.205.0", "v2.204.0", "v2.203.0"]
+
+    def test_caps_at_fifteen_tags(self, app, authenticated_user):
+        ls_remote_output = "".join(
+            f"sha{i}\trefs/tags/v0.0.{i}\n" for i in range(20)
+        )
+        with patch(
+            "webapp.admin.maintenance.routes_operations.get_git_metadata",
+            return_value={"branch": "main"},
+        ), patch(
+            "subprocess.run",
+            return_value=_proc(stdout=ls_remote_output),
+        ):
+            response = self._get(app)
+
+        assert len(response.get_json()["tags"]) == 15
+
+    def test_ls_remote_failure_returns_502(self, app, authenticated_user):
+        with patch(
+            "subprocess.run",
+            return_value=_proc(returncode=1, stderr="unable to access remote"),
+        ):
+            response, status = self._get(app)
+
+        assert status == 502
+        assert "unable to access remote" in response.get_json()["error"]
 
     def test_requires_authentication(self, app):
         _body, status = self._get(app)
