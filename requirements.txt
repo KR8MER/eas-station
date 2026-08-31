@@ -155,7 +155,7 @@ pyproj==3.7.2  # CRS reprojection from shapefile .prj to WGS84 (optional, gracef
 # Python ecosystem. `arm_pyart` has no prebuilt ARM wheel (piwheels
 # covers its dependencies but not the package itself) -- expect a ~5-6
 # minute from-source build the first time, one-time cost.
-arm_pyart==2.2.4  # NEXRAD Archive II decode; RadarMapDisplay.plot_ppi_map renders each gate's true polar footprint, no interpolation (PyPI name; imports as `pyart`)
+arm_pyart==2.2.5  # NEXRAD Archive II decode; RadarMapDisplay.plot_ppi_map renders each gate's true polar footprint, no interpolation (PyPI name; imports as `pyart`)
 boto3==1.43.56  # Unencrypted, anonymous read access to NOAA's public Level II archive on AWS Open Data (no credentials needed)
 cartopy==0.25.0  # Geographic (Web Mercator) projection for plot_ppi_map, matching the OSM basemap tiles it composites onto
 cmweather==0.3.2  # Registers the 'NWSRef' reflectivity colormap (the standard ~15-band NWS scale most radar apps use, not a hand-rolled ramp)
