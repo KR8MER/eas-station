@@ -8,6 +8,14 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.207.4] - 2026-08-31 - Bump zigpy to 2.1, fixing a permit_joining rename it silently would have broken
+
+- `zigpy` now floats `>=2.1.0` (was `>=0.60.0`) at the maintainer's request, after closing Dependabot's version of this bump (#2524) pending verification — zigpy manages real Zigbee hardware pairing, which can't be exercised in CI.
+- Found one real, confirmed break by inspecting the installed `zigpy==2.1.0` + `zigpy-znp==1.1.0` API directly (the version pair pip's resolver actually picks for these pins): `ControllerApplication.permit_joining(duration)` was renamed to `.permit(time_s, node=None)` — the old name doesn't exist at all on 2.1.0. `services/zigbee/controller.py`'s `permit_join()`/`close_join()` (the pairing-mode open/close methods) called the old name; `close_join()`'s call is wrapped in a broad `except Exception`, so this would have failed the same silent way the pysnmp break above did.
+- Verified the rest of this codebase's zigpy-facing API surface is unaffected: `ControllerApplication.__init__`, `.add_listener`, `.startup`, `.shutdown`, the `device_joined`/`device_initialized` listener callbacks, and the `Device.ieee`/`.nwk`/`.model`/`.manufacturer` attributes this code reads are all unchanged between 0.60.0 and 2.1.0.
+- Added `tests/test_zigbee_controller_permit.py` — the first test coverage this file has ever had. It stubs the zigpy application object (no real coordinator hardware is available in CI) and asserts `permit_join()`/`close_join()` call `.permit()`, not the nonexistent `.permit_joining()`.
+- **Real device pairing over a live coordinator has not been hardware-tested** — this fix corrects a confirmed API break, but only physical testing can confirm end-to-end pairing behavior.
+
 ## [2.207.1] - 2026-08-31 - Fix a startup crash from Flask-Caching 2.5.0's dropped CACHE_TYPE aliases
 
 - Bumped `Flask-Caching` to 2.5.0 (a Dependabot PR for this had failed CI: `flask_caching.backends.redis` no longer exists in that release). `Cache._set_cache()` builds an import path from `CACHE_TYPE` and imports it; 2.5.0 dropped the lowercase short aliases (`redis`, `simple`, `filesystem`, `null`) that `flask_caching.backends` used to expose, keeping only the actual class names (`RedisCache`, `SimpleCache`, `FileSystemCache`, `NullCache`). Passing the old alias straight through raised an `ImportError` from `init_cache()`, which runs unconditionally during app creation — this would have crashed the whole web service on boot, not just broken caching.

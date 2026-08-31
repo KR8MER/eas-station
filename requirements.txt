@@ -106,7 +106,15 @@ numpy==2.3.5  # Required for SoapySDR sample processing
 pyserial==3.5  # Serial communication for VFD display and GPS HAT
 
 # Zigbee coordinator support (CC2652P and other Z-Stack based coordinators)
-zigpy>=0.60.0       # Core Zigbee protocol stack
+zigpy>=2.1.0        # Core Zigbee protocol stack
+# Note: bumping past zigpy 0.x renamed ControllerApplication.permit_joining()
+# to .permit() -- fixed in services/zigbee/controller.py, the only file in
+# this codebase that touches the zigpy application API directly. Verified
+# against zigpy==2.1.0 + zigpy-znp==1.1.0 (the version pip's resolver picks
+# for this pin pair): constructor, add_listener, startup, shutdown, the
+# device_joined/device_initialized listener callbacks, and the Device
+# ieee/nwk/model/manufacturer attributes this code reads are all unchanged.
+# Real device pairing over a live coordinator has not been hardware-tested.
 zigpy-znp>=0.11.0   # Z-Stack (CC2652P / CC1352P) radio driver
 
 # GPS HAT support (Adafruit Ultimate GPS HAT #2324)

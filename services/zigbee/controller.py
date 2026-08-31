@@ -149,7 +149,7 @@ class ZigpyController:
             raise RuntimeError("Zigpy coordinator is not running")
 
         asyncio.run_coroutine_threadsafe(
-            self._app.permit_joining(duration), self._loop
+            self._app.permit(duration), self._loop
         ).result(timeout=10)
 
         self._permit_join_active = True
@@ -175,7 +175,7 @@ class ZigpyController:
         if self._app and self._running:
             try:
                 asyncio.run_coroutine_threadsafe(
-                    self._app.permit_joining(0), self._loop
+                    self._app.permit(0), self._loop
                 ).result(timeout=10)
             except Exception as e:
                 logger.warning(f"Error closing join window: {e}")
