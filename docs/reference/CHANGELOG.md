@@ -8,6 +8,13 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.207.3] - 2026-08-31 - Fix silently-broken SNMP compliance traps under pysnmp 7
+
+- **A dependency bump already on `main` (pysnmp `>=7.1.29`, from a Dependabot PR merged earlier the same day) silently broke SNMP compliance trap sending.** pysnmp 7 restructured `hlapi` into arch-specific, asyncio-native submodules and dropped the old flat `pysnmp.hlapi` module (`CommunityData`, `SnmpEngine`, `sendNotification` as a sync-flavored generator) this code imported from. Both `HealthAlertWorker._send_snmp_traps()` (`app_core/system_health.py`) and the admin "Test SNMP" button (`webapp/admin/notifications.py`) catch that import failure broadly and just log/return a warning — so this broke with no crash and, since there was no prior test coverage for SNMP trap sending at all, no test failure either. Traps would have silently stopped sending entirely.
+- Both call sites now import from `pysnmp.hlapi.v3arch.asyncio`, call the now-async `send_notification()` via `asyncio.run()`, use `add_varbinds` (the renamed, non-deprecated method), and wrap the trap payload in an explicit `OctetString` (pysnmp 7 no longer auto-coerces a raw Python `str` varbind value). Each call's `SnmpEngine` is now explicitly closed via `close_dispatcher()` in a `finally` block — without it, every trap sent (including from the recurring background health-check interval) leaked a UDP dispatcher socket for the life of the process.
+- Verified end-to-end, not just via import checks: sent a real trap over a real UDP socket to a local listener and confirmed the payload arrives, using an isolated venv with `pysnmp==7.1.29` actually installed.
+- Added `tests/test_snmp_trap_pysnmp7.py` — the first test coverage this code path has ever had.
+
 ## [2.207.0] - 2026-08-31 - Require Python 3.13 / Debian 13 (Trixie); drop 3.11/3.12 support
 
 - **Breaking for Debian 12 / Python 3.11 or 3.12 installs.** The project now requires Python 3.13 and targets Debian 13 (Trixie) / Raspberry Pi OS (Trixie-based) only. Maintaining both floors was an ongoing tax: scipy was capped below 1.18 solely because that series drops 3.11, numba's compatible-numpy range and the `audioop-lts` marker both existed to branch on the interpreter version, and CI ran the whole suite twice per PR to catch drift between them.
