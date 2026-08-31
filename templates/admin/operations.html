@@ -150,6 +150,22 @@
             <i class="fas fa-exclamation-triangle"></i> <strong>Warning:</strong> System upgrades may cause temporary downtime. Ensure you have a recent backup before proceeding.
         </div>
 
+        <!-- Answers the one question the button gave no way to answer before
+             clicking it: is there anything to upgrade *to*. git fetch (what
+             backs this) only updates this checkout's own remote-tracking
+             refs -- it never touches the working tree -- so it's safe to run
+             on page load without asking first, unlike the upgrade itself. -->
+        <div class="d-flex align-items-center gap-2 mb-3" id="upgrade-check-row">
+            <span class="admin-badge admin-badge-muted" id="upgrade-check-badge">
+                <i class="fas fa-spinner fa-spin"></i> Checking for updates…
+            </span>
+            <span id="upgrade-check-detail" class="text-muted small"></span>
+            <button type="button" class="btn btn-link btn-sm p-0 ms-auto" id="upgrade-check-again"
+                    onclick="checkForUpgrade()" style="display: none;">
+                <i class="fas fa-rotate"></i> Check again
+            </button>
+        </div>
+
         <div class="row mb-3">
             <div class="col-md-6">
                 <label for="upgrade-checkout" class="form-label">Git Branch/Tag (optional)</label>
@@ -208,7 +224,55 @@ document.addEventListener('DOMContentLoaded', function() {
     pollOperationStatus();
     startStatusPolling();
     startUpgradeProgressPolling();
+    checkForUpgrade();
 });
+
+// Check whether the target branch/tag has anything new to offer before the
+// operator commits to running the upgrade. Purely informational -- doesn't
+// gate the Start Upgrade button, since a custom checkout (a tag, a specific
+// commit) can't always be compared this way (see the route's docstring).
+async function checkForUpgrade() {
+    const badge = document.getElementById('upgrade-check-badge');
+    const detail = document.getElementById('upgrade-check-detail');
+    const againBtn = document.getElementById('upgrade-check-again');
+    const checkoutField = document.getElementById('upgrade-checkout');
+
+    badge.className = 'admin-badge admin-badge-muted';
+    badge.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking for updates…';
+    detail.textContent = '';
+    againBtn.style.display = 'none';
+
+    const ref = checkoutField.value.trim();
+    const url = '/admin/operations/upgrade/check' + (ref ? '?ref=' + encodeURIComponent(ref) : '');
+
+    let data;
+    try {
+        const response = await fetch(url);
+        data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || ('HTTP ' + response.status));
+        }
+    } catch (error) {
+        badge.className = 'admin-badge admin-badge-muted';
+        badge.innerHTML = '<i class="fas fa-question-circle"></i> Could not check for updates';
+        detail.textContent = error.message || '';
+        againBtn.style.display = 'inline-block';
+        return;
+    }
+
+    if (data.update_available) {
+        badge.className = 'admin-badge admin-badge-info';
+        badge.innerHTML = '<i class="fas fa-circle-up"></i> Update available';
+        const commitWord = data.commits_behind === 1 ? 'commit' : 'commits';
+        detail.textContent = `${data.current_version} → ${data.remote_version} `
+            + `(${data.commits_behind} ${commitWord} behind ${data.ref})`;
+    } else {
+        badge.className = 'admin-badge admin-badge-success';
+        badge.innerHTML = '<i class="fas fa-check-circle"></i> Up to date';
+        detail.textContent = `${data.current_version} (${data.ref})`;
+    }
+    againBtn.style.display = 'inline-block';
+}
 
 // Handle WebSocket operation status update
 function handleOperationStatusUpdate(data) {

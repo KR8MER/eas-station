@@ -35,6 +35,7 @@ from typing import List
 from flask import current_app, jsonify, request
 
 from app_core.auth.roles import require_permission
+from app_utils.versioning import get_current_version, get_git_metadata
 from webapp.routes_logs import get_systemd_logs
 
 from .blueprint import maintenance_bp
@@ -161,6 +162,67 @@ def run_one_click_backup():
     if sanitized_label:
         message = f"Backup started (label: {sanitized_label})."
     return jsonify({"message": message, "operation": _serialize_operation_state("backup")})
+
+@maintenance_bp.route("/admin/operations/upgrade/check", methods=["GET"])
+@require_permission('system.configure')
+def check_for_upgrade():
+    """Compare the running install against a branch's remote HEAD.
+
+    Read-only from the operator's point of view: `git fetch` only updates
+    this checkout's remote-tracking refs (origin/<branch>), the same thing
+    `git status` implicitly keeps current -- it never touches the working
+    tree, so this is safe to call from a page-load handler without asking
+    first, unlike the upgrade itself. Answers the question the button gave
+    no way to answer before: is there anything to upgrade *to*.
+    """
+    ref = (request.args.get("ref") or "").strip()
+    if not ref:
+        ref = get_git_metadata().get("branch") or "main"
+        if ref == "unknown":
+            ref = "main"
+
+    def _run(args: List[str], timeout: int) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            args, cwd=repo_root, capture_output=True, text=True, timeout=timeout,
+        )
+
+    try:
+        fetch = _run(["git", "fetch", "origin", ref, "--quiet"], 20)
+        if fetch.returncode != 0:
+            return jsonify({"error": (fetch.stderr or "git fetch failed").strip()[:300]}), 502
+
+        remote_version_proc = _run(["git", "show", f"origin/{ref}:VERSION"], 10)
+        remote_version = (
+            remote_version_proc.stdout.strip()
+            if remote_version_proc.returncode == 0 else "unknown"
+        )
+
+        local_head = _run(["git", "rev-parse", "HEAD"], 5).stdout.strip()
+        remote_head_proc = _run(["git", "rev-parse", f"origin/{ref}"], 5)
+        if remote_head_proc.returncode != 0:
+            return jsonify({"error": f"No such branch or tag on origin: {ref}"}), 404
+        remote_head = remote_head_proc.stdout.strip()
+
+        commits_behind = 0
+        update_available = local_head != remote_head
+        if update_available:
+            count_proc = _run(["git", "rev-list", "--count", f"{local_head}..origin/{ref}"], 10)
+            if count_proc.returncode == 0 and count_proc.stdout.strip().isdigit():
+                commits_behind = int(count_proc.stdout.strip())
+
+        return jsonify({
+            "ref": ref,
+            "current_version": get_current_version(),
+            "remote_version": remote_version,
+            "update_available": update_available,
+            "commits_behind": commits_behind,
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Timed out reaching the remote repository"}), 504
+    except Exception as exc:  # pragma: no cover - defensive
+        current_app.logger.warning("check_for_upgrade failed: %s", exc)
+        return jsonify({"error": "Could not check for updates"}), 500
+
 
 @maintenance_bp.route("/admin/operations/upgrade", methods=["POST"])
 @require_permission('system.configure')
