@@ -8,6 +8,12 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.210.0] - 2026-08-31 - Add boundary layer toggles to the alert detail map
+
+- The alert detail page's Alert Coverage Map fetched all 8 boundary types (counties, fire, ems, electric, townships, villages, telephone, school) on every load but only ever showed counties — the rest were invisible dead weight with no way to see them. Added a row of toggle switches (mirroring the dashboard's existing "Map Layers" panel in `templates/index.html`) below the map so any of the 8 can be shown on demand.
+- Counties stay on by default — no change to the page's existing default appearance, just a way to opt into the others without editing the map itself.
+- Layer color swatches reuse `getBoundaryColor()`, already defined on this page and shared with the boundary popups.
+
 ## [2.209.0] - 2026-08-31 - Load incorporated city/village boundaries for the "affected municipalities" display
 
 - New `scripts/load_municipality_boundaries.py` loads US Census incorporated-place (city/village) boundaries from the TIGER/Line cartographic "Places" file into the existing generic `boundaries` table (type `villages`, already a recognized, colored, grouped type in `app_core/boundaries.py`'s `BOUNDARY_TYPE_CONFIG`). Once loaded, the alert detail page's existing boundary-intersection display — which already lists every boundary type an alert's polygon intersects — starts showing named cities and villages for free, with no new UI work.
