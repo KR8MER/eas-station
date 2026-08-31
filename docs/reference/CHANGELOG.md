@@ -8,6 +8,11 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.206.0] - 2026-08-31 - Pin the one-click upgrade to a specific release, and fix the upgrade docs
+
+- The "Version to install" field on Admin → Operations' System Upgrade card is now a dropdown populated from the repository's actual release tags (via a new `GET /admin/operations/upgrade/tags` endpoint), instead of a blank text box requiring an operator to already know the exact tag spelling. "Track main (latest)" stays the default and behaves exactly as before; a "Custom branch, tag, or commit…" option keeps the free-text field available for anything not in the list.
+- Rewrote `docs/guides/one_button_upgrade.md`, which described a Docker-image-based upgrade pipeline (`kr8mer/eas-station:latest`, a nonexistent `.github/workflows/build.yml`) this project has never used — EAS Station deploys bare-metal via `install.sh`/`update.sh`. It now accurately documents the real `update.sh`-via-systemd-unit mechanism.
+
 ## [2.205.0] - 2026-08-31 - Bracket the weekly test with optional spoken announcements and a guaranteed lead-in silence
 
 - The automated Required Weekly Test can now play optional station courtesy announcements before the SAME header ("This station is conducting a test of the Emergency Alert System...") and after the EOM ("This concludes this test..."), synthesized via the configured TTS provider and enabled/edited from the Weekly Test Automation page (`/rwt-schedule`). They play outside the encoded SAME/EOM burst, so they never affect RWT format compliance under 47 CFR §11.61(a)(1)(ii).

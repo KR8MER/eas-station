@@ -168,8 +168,15 @@
 
         <div class="row mb-3">
             <div class="col-md-6">
-                <label for="upgrade-checkout" class="form-label">Git Branch/Tag (optional)</label>
-                <input type="text" class="form-control" id="upgrade-checkout" placeholder="e.g., main, v2.0.0">
+                <label for="upgrade-checkout-select" class="form-label">Version to install</label>
+                <select class="form-select" id="upgrade-checkout-select" onchange="onUpgradeCheckoutSelectChange()">
+                    <option value="" selected>Track main (latest)</option>
+                    <option value="__custom__">Custom branch, tag, or commit…</option>
+                </select>
+            </div>
+            <div class="col-md-6" id="upgrade-checkout-custom-wrap" style="display: none;">
+                <label for="upgrade-checkout" class="form-label">Custom ref</label>
+                <input type="text" class="form-control" id="upgrade-checkout" placeholder="e.g., main, v2.0.0, a commit SHA">
             </div>
         </div>
 
@@ -224,8 +231,52 @@ document.addEventListener('DOMContentLoaded', function() {
     pollOperationStatus();
     startStatusPolling();
     startUpgradeProgressPolling();
+    populateUpgradeTags();
     checkForUpgrade();
 });
+
+// The dropdown's options besides "Track main" and "Custom…" are release
+// tags fetched from the remote, so operators pick a known-good published
+// version instead of having to already know its exact tag spelling.
+async function populateUpgradeTags() {
+    const select = document.getElementById('upgrade-checkout-select');
+    try {
+        const response = await fetch('/admin/operations/upgrade/tags');
+        const data = await response.json();
+        if (!response.ok) return;
+
+        if (data.branch) {
+            select.options[0].textContent = `Track ${data.branch} (latest)`;
+        }
+        const customOption = select.querySelector('option[value="__custom__"]');
+        (data.tags || []).forEach(tag => {
+            const opt = document.createElement('option');
+            opt.value = tag;
+            opt.textContent = tag;
+            select.insertBefore(opt, customOption);
+        });
+    } catch (error) {
+        // Non-fatal -- "Track main" and "Custom…" still work without this.
+        console.warn('Could not load release tags:', error);
+    }
+}
+
+// Reads the operator's chosen checkout ref: the select's value, unless
+// "Custom…" is chosen, in which case the free-text field next to it.
+function getUpgradeCheckoutRef() {
+    const select = document.getElementById('upgrade-checkout-select');
+    if (select.value === '__custom__') {
+        return document.getElementById('upgrade-checkout').value.trim();
+    }
+    return select.value;
+}
+
+function onUpgradeCheckoutSelectChange() {
+    const select = document.getElementById('upgrade-checkout-select');
+    const wrap = document.getElementById('upgrade-checkout-custom-wrap');
+    wrap.style.display = select.value === '__custom__' ? '' : 'none';
+    checkForUpgrade();
+}
 
 // Check whether the target branch/tag has anything new to offer before the
 // operator commits to running the upgrade. Purely informational -- doesn't
@@ -235,14 +286,13 @@ async function checkForUpgrade() {
     const badge = document.getElementById('upgrade-check-badge');
     const detail = document.getElementById('upgrade-check-detail');
     const againBtn = document.getElementById('upgrade-check-again');
-    const checkoutField = document.getElementById('upgrade-checkout');
 
     badge.className = 'admin-badge admin-badge-muted';
     badge.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking for updates…';
     detail.textContent = '';
     againBtn.style.display = 'none';
 
-    const ref = checkoutField.value.trim();
+    const ref = getUpgradeCheckoutRef();
     const url = '/admin/operations/upgrade/check' + (ref ? '?ref=' + encodeURIComponent(ref) : '');
 
     let data;
@@ -512,7 +562,7 @@ async function startBackup() {
 
 // Start upgrade
 async function startUpgrade() {
-    const checkout = document.getElementById('upgrade-checkout').value.trim();
+    const checkout = getUpgradeCheckoutRef();
     const skipBackup = document.getElementById('upgrade-skip-backup').checked;
     const btn = document.getElementById('upgrade-btn');
 
