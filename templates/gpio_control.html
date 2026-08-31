@@ -399,7 +399,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Activate pin button click
     document.querySelectorAll('.activate-pin').forEach(btn => {
         btn.addEventListener('click', function() {
-            console.log('Activate button clicked for pin:', this.dataset.pin);
             currentPin = parseInt(this.dataset.pin);
             const modalPinName = document.getElementById('modal-pin-name');
             if (modalPinName) {
@@ -407,7 +406,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const modalElement = document.getElementById('activationModal');
             if (modalElement) {
-                console.log('Showing activation modal');
                 try {
                     const modal = new bootstrap.Modal(modalElement);
                     modal.show();
@@ -421,15 +419,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
-    
-    console.log(`Found ${document.querySelectorAll('.activate-pin').length} activate buttons`);
 
     // Confirm activation
     const confirmActivateBtn = document.getElementById('confirm-activate');
     if (confirmActivateBtn) {
-        console.log('Confirm activate button found');
         confirmActivateBtn.addEventListener('click', async function() {
-            console.log('Confirm activate clicked for pin:', currentPin);
             const reasonInput = document.getElementById('activation-reason');
             const typeInput = document.getElementById('activation-type');
             
@@ -442,23 +436,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const reason = reasonInput.value.trim();
             const activationType = typeInput.value;
 
-            console.log('Activation request:', { pin: currentPin, reason, activationType });
-
             if (!reason) {
                 alert('Please enter a reason for activation');
                 return;
             }
 
             try {
-                console.log('Sending activation request...');
                 const response = await fetch(`/api/gpio/activate/${currentPin}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ reason, activation_type: activationType })
                 });
 
-                console.log('Activation response status:', response.status);
-                
                 // Handle authentication/authorization errors
                 if (response.status === 401) {
                     console.error('Authentication required');
@@ -472,10 +461,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 
                 const data = await response.json();
-                console.log('Activation response data:', data);
 
                 if (data.success) {
-                    console.log('Activation successful, reloading page');
                     const modalElement = document.getElementById('activationModal');
                     if (modalElement) {
                         const modalInstance = bootstrap.Modal.getInstance(modalElement);

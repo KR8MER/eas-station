@@ -9,8 +9,6 @@
 <script src="{{ url_for('static', filename='vendor/jspdf/html2canvas.min.js') }}"></script>
 
 <script>
-console.log('Statistics dashboard initializing...');
-
 // Register Chart.js plugins
 Chart.register(ChartDataLabels);
 
@@ -1380,8 +1378,6 @@ function initializeDashboard() {
     initCountUps();
     updateDashboard();
     buildQuickNav();
-
-    console.log('Dashboard ready');
 }
 
 document.addEventListener('DOMContentLoaded', () => {

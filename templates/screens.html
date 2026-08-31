@@ -897,15 +897,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Load all screens
 async function loadScreens() {
-    console.log('Loading screens...');
     try {
         const response = await fetch('/api/screens');
-        console.log('Screens API response status:', response.status);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         const data = await response.json();
-        console.log('Screens loaded:', data.screens?.length || 0);
         allScreens = data.screens || [];
         renderScreens();
         updateScreenStats();
@@ -997,15 +994,12 @@ async function hydrateScreenPreviews(screens) {
 
 // Load rotations
 async function loadRotations() {
-    console.log('Loading rotations...');
     try {
         const response = await fetch('/api/rotations');
-        console.log('Rotations API response status:', response.status);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         const data = await response.json();
-        console.log('Rotations loaded:', data.rotations?.length || 0);
         allRotations = data.rotations || [];
         renderRotations();
         updateScreenStats();

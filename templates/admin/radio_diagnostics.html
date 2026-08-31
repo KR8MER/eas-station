@@ -1384,21 +1384,9 @@ sudo systemctl restart eas-station</code></pre>
                 );
             }
             const gain = result.selected_gain_db;
-            const decision = result.decision || 'selected';
             const persistedLabel = result.persisted ? ' (saved)' : '';
             gainBtn.innerHTML =
                 `<i class="fas fa-check"></i> ${gain != null ? gain.toFixed(1) : '?'} dB${persistedLabel}`;
-            const measured = result.selected_measurement || {};
-            console.info('auto-gain result', {
-                receiverId,
-                gain,
-                decision,
-                rms_dbfs: measured.rms_dbfs,
-                peak_dbfs: measured.peak_dbfs,
-                clipping_fraction: measured.clipping_fraction,
-                persisted: result.persisted,
-                measurements: result.measurements,
-            });
             setTimeout(() => {
                 gainBtn.disabled = false;
                 gainBtn.innerHTML = originalHtml;

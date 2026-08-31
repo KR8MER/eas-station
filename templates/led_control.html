@@ -2704,7 +2704,6 @@ function getSignStatus() {
     .then(result => {
         if (result.success) {
             showToast('Sign status retrieved', 'success');
-            console.log('Sign Status:', result.status);
         } else {
             showToast('Failed to get sign status', 'error');
         }
@@ -2748,11 +2747,6 @@ function loadLEDStatus() {
     .then(data => {
         ledStatus = data;
         updateStatusDisplay();
-
-        // Log health check results for debugging
-        if (data.health_checked) {
-            console.log(`LED health check: ${data.connected ? 'PASS' : 'FAIL'} at ${data.timestamp}`);
-        }
     })
     .catch(error => {
         console.error('Error loading LED status:', error);
@@ -2825,7 +2819,6 @@ function loadMessageHistory() {
 function loadSerialConfig() {
     // Serial configuration has moved to Hardware Settings
     // This function no longer loads or displays serial settings
-    console.log('Serial configuration UI has been moved to /admin/hardware');
 }
 
 function updateStatusDisplay() {

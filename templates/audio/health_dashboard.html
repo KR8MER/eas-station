@@ -648,8 +648,6 @@ function formatUptime(seconds) {
 
 // Listen for theme changes and reinitialize charts
 window.addEventListener('theme-changed', () => {
-    console.log('🎨 Audio health dashboard: Theme changed, reinitializing charts...');
-
     // initializeCharts() destroys any existing instances itself now.
     initializeCharts();
 

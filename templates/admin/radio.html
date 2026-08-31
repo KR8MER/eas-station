@@ -1342,21 +1342,18 @@ function initRadioReceiversPage() {
 
             // If a device was pre-selected, populate hidden fields and trigger sample rate population
             if (preSelectedDevice) {
-                console.log('[SDR] Auto-selected device:', preSelectedDevice);
                 const driverField = document.getElementById('receiverDriver');
                 const serialField = document.getElementById('receiverSerial');
 
                 if (driverField && serialField) {
                     driverField.value = preSelectedDevice.driver;
                     serialField.value = preSelectedDevice.serial || '';
-                    console.log('[SDR] Driver field set to:', driverField.value);
                 } else {
                     console.error('[SDR] Hidden fields not found!', {driverField, serialField});
                 }
 
                 // Trigger sample rate population if service type is already selected
                 if (currentServiceType) {
-                    console.log('[SDR] Current service type:', currentServiceType);
                     await populateSampleRates(currentServiceType);
                 }
             }
@@ -1461,7 +1458,6 @@ function initRadioReceiversPage() {
         const sampleRateSelect = document.getElementById('receiverSampleRate');
         const sampleRateHelp = document.getElementById('sampleRateHelp');
 
-        console.log('[SDR] populateSampleRates called with serviceType:', serviceType);
 
         if (!serviceType) {
             sampleRateSelect.disabled = true;
@@ -1483,14 +1479,12 @@ function initRadioReceiversPage() {
             if (selectedOption && selectedOption.dataset.driver) {
                 driver = selectedOption.dataset.driver;
                 serial = selectedOption.dataset.serial || '';
-                console.log('[SDR] FAILSAFE: Read driver from dropdown:', driver);
                 // Also update hidden fields
                 if (driverField) driverField.value = driver;
                 if (serialField) serialField.value = serial;
             }
         }
 
-        console.log('[SDR] Driver field value:', driver, 'Serial:', serial);
 
         // Try to get hardware capabilities if driver is selected (works for any driver type)
         if (driver) {
@@ -1500,9 +1494,7 @@ function initRadioReceiversPage() {
                     params.append('serial', serial);
                 }
                 const capUrl = `/api/radio/capabilities/${encodeURIComponent(driver)}${params.toString() ? '?' + params.toString() : ''}`;
-                console.log('[SDR] Fetching capabilities from:', capUrl);
                 const response = await fetch(capUrl);
-                console.log('[SDR] API response status:', response.status, response.ok);
 
                 if (response.ok) {
                     const capabilities = await response.json();
@@ -1744,7 +1736,6 @@ function initRadioReceiversPage() {
         // IMPORTANT: When editing an existing receiver, don't overwrite user's saved settings
         // with service defaults. Only apply defaults when creating a new receiver.
         if (isEditingExistingReceiver) {
-            console.log('[SDR] Skipping service config application - editing existing receiver');
             // Only update UI constraints (like NFM mono-only) but keep user values
             const modulationType = document.getElementById('receiverModulation').value;
             const isNFM = modulationType === 'NFM';
@@ -1894,16 +1885,12 @@ function initRadioReceiversPage() {
 
             // After loadSDRDevices completes, check what serial was set
             const serialField = document.getElementById('receiverSerial');
-            console.log('[SDR] After loadSDRDevices, serial field value:', serialField.value);
-            console.log('[SDR] Receiver serial from DB:', receiver.serial);
 
             // If serial field is still empty but we have one from DB, use it
             if (!serialField.value && receiver.serial) {
-                console.log('[SDR] Setting serial from DB:', receiver.serial);
                 serialField.value = receiver.serial;
             }
 
-            console.log('[SDR] Final serial field value before showing modal:', serialField.value);
 
             // Determine service type based on frequency
             let detectedServiceType = 'NOAA'; // Default
@@ -2185,13 +2172,11 @@ function initRadioReceiversPage() {
 
         // Debug: Check serial field value before creating FormData
         const serialFieldDebug = document.getElementById('receiverSerial');
-        console.log('[SDR] Serial field value at submit time:', serialFieldDebug?.value);
 
         const formData = new FormData(form);
         const payload = Object.fromEntries(formData.entries());
 
         // Debug: Check serial in payload
-        console.log('[SDR] Serial in payload from FormData:', payload.serial);
 
         payload.enabled = formData.get('enabled') !== null;
         payload.auto_start = formData.get('auto_start') !== null;
@@ -2216,30 +2201,23 @@ function initRadioReceiversPage() {
         const endpoint = receiverId ? `${CRUD_ENDPOINT}/${receiverId}` : CRUD_ENDPOINT;
 
         try {
-            console.log('[SDR] Submitting receiver:', method, endpoint, payload);
             const response = await fetch(endpoint, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
 
-            console.log('[SDR] Response status:', response.status, response.ok);
             const result = await response.json();
-            console.log('[SDR] Response data:', result);
 
             if (!response.ok) {
                 throw new Error(result.error || 'Request failed');
             }
 
-            console.log('[SDR] Closing modal...');
             receiverModal.hide();
-            console.log('[SDR] Modal closed successfully');
 
             setStatus(receiverId ? 'Receiver updated successfully.' : 'Receiver created successfully.', 'success');
 
-            console.log('[SDR] Refreshing receivers...');
             await refreshReceivers({ endpoint: CRUD_ENDPOINT, silent: true });
-            console.log('[SDR] Receivers refreshed');
 
             scheduleAutoRefresh();
         } catch (error) {
