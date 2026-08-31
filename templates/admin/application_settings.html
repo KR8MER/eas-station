@@ -291,7 +291,12 @@
                                     <input type="number" class="form-control" id="audio_metrics_max_age_days" min="0" max="3650">
                                     <span class="input-group-text">days</span>
                                 </div>
-                                <div class="form-text">Per-batch audio level metric rows.</div>
+                                <div class="form-text">
+                                    Per-batch audio level metric rows &mdash; this table can grow
+                                    fast (several rows/sec across all sources). Only recent data
+                                    is ever read; long-term history lives in the separate,
+                                    much smaller aggregated statistics table.
+                                </div>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label for="received_alert_audio_max_age_days" class="form-label">Received Alert Audio</label>
@@ -302,6 +307,18 @@
                                 <div class="form-text">
                                     Strips the stored audio recording only &mdash;
                                     received alert records are never deleted.
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="system_log_max_age_days" class="form-label">System Log</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="system_log_max_age_days" min="0" max="3650">
+                                    <span class="input-group-text">days</span>
+                                </div>
+                                <div class="form-text">
+                                    General operational log rows (Admin &rarr; Logs). Not
+                                    compliance history &mdash; that's alert records and audio,
+                                    which are covered separately and never touched by this.
                                 </div>
                             </div>
                         </div>
@@ -431,7 +448,8 @@ document.addEventListener('DOMContentLoaded', function() {
         'stream_metadata_max_age_days',
         'audio_alert_max_age_days',
         'audio_metrics_max_age_days',
-        'received_alert_audio_max_age_days'
+        'received_alert_audio_max_age_days',
+        'system_log_max_age_days'
     ];
 
     function applyRetentionSettings(s) {

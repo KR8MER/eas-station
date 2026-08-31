@@ -8,6 +8,13 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.211.0] - 2026-08-31 - Add retention for system_log, shrink the audio metrics retention window
+
+- Found while auditing database size during the load-time investigation (2.210.3/2.210.4): `system_log` had **no retention policy at all** — confirmed by checking both `app_core/retention.py`'s field list and `alert_purge.py` (which only ever writes audit entries to it, never prunes it). It had grown to 1M+ rows / 850+ MB with nothing capping it. Added `system_log_max_age_days` (default 90 days, matching the existing `audio_alert_max_age_days` precedent for operational logs) and wired `SystemLog` into `RetentionScheduler`'s sweep.
+- `audio_metrics_max_age_days` lowered from 30 to 3 (on both the model default and the already-persisted settings row, via migration). Nothing in the codebase reads raw `audio_source_metrics` samples older than a short troubleshooting window — the "latest value" and recent-trend endpoints only ever need current data, and `app_core/analytics/aggregator.py` already rolls raw samples into the separate, much smaller, permanent `MetricSnapshot` table for long-term history. 30 days of raw per-sample data (at ~288K rows/day) was pure bloat with nothing reading it once it aged past a few hours.
+- New "System Log" field added to Settings → Application → Data Retention alongside the existing fields, following the same pattern (day-count input, help text explaining what it covers and doesn't).
+- Verified live: migration applied cleanly, settings API round-trips the new field correctly (GET/PUT/GET), admin UI renders and saves it correctly.
+
 ## [2.210.4] - 2026-08-31 - Fix a 20+ second query behind GET /api/audio/sources
 
 - Same load-time investigation as 2.210.3: `/api/audio/sources` had a 64-second worst case in the site's own request timing data, and the server log showed real `psycopg2.errors.QueryCanceled: canceling statement due to statement timeout` failures. Root cause: `audio_source_metrics` is an append-only time-series table (~3.3 rows/sec across all sources, 1.55M rows / 2.8GB at the time of this fix) and the "get the latest reading per source" helper backing this endpoint fetched *every* matching row, sorted them all in Postgres, and kept only the first one seen per source in Python -- confirmed via `EXPLAIN ANALYZE` at 21+ seconds with a 400+MB disk-spilled sort.

@@ -34,6 +34,7 @@ from app_core._models_audio import (
     AudioSourceMetrics,
     StreamMetadataLog,
 )
+from app_core._models_admin import SystemLog
 from app_core._models_settings import RetentionSettings
 from app_core.extensions import db
 from app_utils import utc_now
@@ -66,6 +67,7 @@ def app():
                 AudioAlert.__table__,
                 AudioSourceMetrics.__table__,
                 ReceivedEASAlert.__table__,
+                SystemLog.__table__,
             ],
         )
         yield flask_app
@@ -173,8 +175,9 @@ class TestRetentionSettings:
         assert settings.temp_audio_max_age_days == 7
         assert settings.stream_metadata_max_age_days == 90
         assert settings.audio_alert_max_age_days == 90
-        assert settings.audio_metrics_max_age_days == 30
+        assert settings.audio_metrics_max_age_days == 3
         assert settings.received_alert_audio_max_age_days == 30
+        assert settings.system_log_max_age_days == 90
 
         # Second call returns the same row
         again = retention.get_retention_settings()
@@ -239,6 +242,8 @@ def _seed_rows(now):
             received_at=recent, source_name="src",
             forwarding_decision="forwarded", raw_audio_data=b"NEWWAV",
         ),
+        SystemLog(timestamp=old, level="INFO", message="old log line"),
+        SystemLog(timestamp=recent, level="INFO", message="new log line"),
     ])
     db.session.commit()
 
@@ -259,10 +264,12 @@ class TestDatabasePruning:
         assert summary["audio_alert_rows_deleted"] == 1
         assert summary["audio_metrics_rows_deleted"] == 1
         assert summary["received_alert_audio_stripped"] == 1
+        assert summary["system_log_rows_deleted"] == 1
 
         assert db.session.query(StreamMetadataLog).count() == 1
         assert db.session.query(AudioAlert).count() == 1
         assert db.session.query(AudioSourceMetrics).count() == 1
+        assert db.session.query(SystemLog).count() == 1
 
         # Received alert ROWS are never deleted — only the blob is stripped.
         alerts = (
@@ -287,6 +294,7 @@ class TestDatabasePruning:
             "audio_alert_max_age_days": 0,
             "audio_metrics_max_age_days": 0,
             "received_alert_audio_max_age_days": 0,
+            "system_log_max_age_days": 0,
         })
 
         summary = retention.run_sweep(settings)
@@ -295,6 +303,7 @@ class TestDatabasePruning:
         assert db.session.query(StreamMetadataLog).count() == 2
         assert db.session.query(AudioAlert).count() == 2
         assert db.session.query(AudioSourceMetrics).count() == 2
+        assert db.session.query(SystemLog).count() == 2
         stripped = (
             db.session.query(ReceivedEASAlert)
             .filter(ReceivedEASAlert.raw_audio_data.is_(None))
@@ -351,6 +360,7 @@ class TestDatabasePruning:
         assert summary["audio_alert_rows_deleted"] == 1
         assert summary["audio_metrics_rows_deleted"] == 1
         assert summary["received_alert_audio_stripped"] == 1
+        assert summary["system_log_rows_deleted"] == 1
 
 
 # ---------------------------------------------------------------------------
