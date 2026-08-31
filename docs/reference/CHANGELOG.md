@@ -8,6 +8,14 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.209.0] - 2026-08-31 - Load incorporated city/village boundaries for the "affected municipalities" display
+
+- New `scripts/load_municipality_boundaries.py` loads US Census incorporated-place (city/village) boundaries from the TIGER/Line cartographic "Places" file into the existing generic `boundaries` table (type `villages`, already a recognized, colored, grouped type in `app_core/boundaries.py`'s `BOUNDARY_TYPE_CONFIG`). Once loaded, the alert detail page's existing boundary-intersection display — which already lists every boundary type an alert's polygon intersects — starts showing named cities and villages for free, with no new UI work.
+- Deliberately scoped to the station's own coverage counties via `RWTScheduleConfig.same_codes` (not `AlertFilterSettings.fips_codes`, which carries non-geographic wildcard entries) so the boundaries table isn't bloated with the ~32,000-record national dataset. Unincorporated Census Designated Places (CDPs) are filtered out — this is meant to show real municipalities, not census-only place designations.
+- The Places file has no per-record county field (a place isn't nested inside exactly one county the way a township is), so county scoping uses a real PostGIS `ST_Intersects` test against the already-loaded `us_county_boundaries` geometry rather than a FIPS-string compare.
+- Verified end-to-end against the live database: loaded 99 real cities/villages across the station's 8-county coverage area, recalculated intersections for a real historical alert, and confirmed named cities (e.g. "Lima city", "Defiance city") and villages now appear in its stored intersections.
+- Fixed a SAME-code/plain-FIPS format mismatch caught during testing: SAME codes are 6-digit PSSCCC (portion digit + state + county), while the Census shapefile's own STATEFP+COUNTYFP is 5-digit — comparing them directly matched nothing. Added `tests/test_load_municipality_boundaries.py` as a regression test for the normalization.
+
 ## [2.208.0] - 2026-08-31 - Add a High-Resolution (Level II) radar loop with a velocity overlay
 
 - New **High-Resolution Radar Loop** card on the alert detail page, below the existing (Level III) Radar Loop card — an explicitly separate, distinctly-labeled feature, not a silent upgrade to it. `maps.py`'s `_render_map()` used to always prefer a sharper Level II render when a site was in range, but that was reverted because the exported/looped image could then disagree pixel-for-pixel with the live "Radar (at time of alert)" toggle (different resolution, different color ramp). This reintroduces Level II behind its own opt-in `radar_source='level2'` parameter, used by exactly one caller, so the toggle, share-card, and standard loop are all unaffected.
