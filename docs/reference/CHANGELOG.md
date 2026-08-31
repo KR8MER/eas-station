@@ -8,6 +8,12 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.207.2] - 2026-08-31 - Bump numba to 0.67, lifting the previous llvmlite-size cap
+
+- `numba` now floats `>=0.67.0,<0.68.0` (was `>=0.61.0,<0.64.0`). The old cap existed specifically to avoid numba 0.64+'s heavier llvmlite dependency; verified that cost is real (llvmlite 0.49.0's aarch64 wheel is ~58MB) but accepted it deliberately as a one-time download rather than staying capped indefinitely.
+- Verified end-to-end on the real target platform (aarch64) before merging: installed numba 0.67.0 into an isolated copy of the deployment venv (pulls llvmlite 0.49.0, keeps numpy at the already-pinned 2.3.5 — numba 0.67's own requirement, `numpy<2.6`, is looser than before), confirmed `app_core/radio/demod/kernels.py` JIT-compiles, and ran the full demod/RBDS test suite (93 tests) against it.
+- Updated the Numba badges (README top badge, attribution table, footer partial) to the new range.
+
 ## [2.207.1] - 2026-08-31 - Fix a startup crash from Flask-Caching 2.5.0's dropped CACHE_TYPE aliases
 
 - Bumped `Flask-Caching` to 2.5.0 (a Dependabot PR for this had failed CI: `flask_caching.backends.redis` no longer exists in that release). `Cache._set_cache()` builds an import path from `CACHE_TYPE` and imports it; 2.5.0 dropped the lowercase short aliases (`redis`, `simple`, `filesystem`, `null`) that `flask_caching.backends` used to expose, keeping only the actual class names (`RedisCache`, `SimpleCache`, `FileSystemCache`, `NullCache`). Passing the old alias straight through raised an `ImportError` from `init_cache()`, which runs unconditionally during app creation — this would have crashed the whole web service on boot, not just broken caching.
