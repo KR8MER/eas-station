@@ -8,6 +8,28 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.204.0] - 2026-08-31 - Show whether an upgrade is actually available before running one
+
+The one-click "System Upgrade" button gave no way to tell whether there
+was anything to upgrade *to* -- clicking Start Upgrade was the only way to
+find out, and it always restarts every service even when the box is
+already current.
+
+Added a new `GET /admin/operations/upgrade/check` route: `git fetch`s the
+target branch (defaulting to whatever branch is currently checked out,
+usually `main`) and compares local `HEAD` against `origin/<branch>`,
+reporting the current and remote `VERSION` file contents and how many
+commits behind. `git fetch` only updates this checkout's own
+remote-tracking refs -- the same thing `git status` implicitly keeps
+current -- so it never touches the working tree, which is what makes it
+safe to run automatically on page load rather than waiting for a click.
+
+The Operations page now shows "Up to date (2.204.0)" or "Update available:
+2.204.0 → 2.205.0 (7 commits behind main)" above the Start Upgrade button,
+with a "Check again" link that re-reads whatever's in the Git Branch/Tag
+field. Purely informational -- doesn't gate the button, since a specific
+tag or commit checkout isn't always comparable this way.
+
 ## [2.203.7] - 2026-08-31 - Stop anonymous visitors' browsers from hitting a guaranteed-401 endpoint
 
 Checked the browser console on every public page (the dashboard, `/health`,

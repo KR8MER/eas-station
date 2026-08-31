@@ -45,6 +45,7 @@ from unittest.mock import MagicMock, patch
 
 from webapp.admin.maintenance.routes_operations import (
     _classify_upgrade_log_line,
+    check_for_upgrade,
     get_upgrade_progress,
 )
 
@@ -250,5 +251,118 @@ class TestUpgradeProgressEndpoint:
     def test_requires_authentication(self, app):
         # Called directly rather than through Flask's dispatcher, a (body,
         # status) tuple return doesn't get normalized into a Response.
+        _body, status = self._get(app)
+        assert status == 401
+
+
+def _proc(stdout="", returncode=0, stderr=""):
+    result = MagicMock()
+    result.stdout = stdout
+    result.stderr = stderr
+    result.returncode = returncode
+    return result
+
+
+class TestCheckForUpgrade:
+    """git fetch only updates this checkout's own remote-tracking refs, so
+    the endpoint is safe to call from a page-load handler -- unlike the
+    upgrade itself, it never touches the working tree. Every subprocess.run
+    call in check_for_upgrade() is mocked in the exact sequence the view
+    makes them: fetch, `git show origin/<ref>:VERSION`, `rev-parse HEAD`,
+    `rev-parse origin/<ref>`, and (only when the two heads differ)
+    `rev-list --count`.
+    """
+
+    URL = "/admin/operations/upgrade/check"
+
+    def _get(self, app, query_string=""):
+        url = self.URL + (f"?{query_string}" if query_string else "")
+        with app.test_request_context(url, headers={"Accept": "application/json"}):
+            return check_for_upgrade()
+
+    def test_up_to_date(self, app, authenticated_user):
+        same_head = "abc1234" * 5 + "abcd"  # 44 chars, arbitrary but consistent
+        with patch(
+            "webapp.admin.maintenance.routes_operations.get_git_metadata",
+            return_value={"branch": "main"},
+        ), patch(
+            "subprocess.run",
+            side_effect=[
+                _proc(),  # fetch
+                _proc(stdout="2.203.6\n"),  # show origin/main:VERSION
+                _proc(stdout=same_head + "\n"),  # rev-parse HEAD
+                _proc(stdout=same_head + "\n"),  # rev-parse origin/main
+            ],
+        ):
+            response = self._get(app)
+
+        data = response.get_json()
+        assert data["update_available"] is False
+        assert data["commits_behind"] == 0
+        assert data["remote_version"] == "2.203.6"
+        assert data["ref"] == "main"
+
+    def test_update_available_reports_commits_behind(self, app, authenticated_user):
+        with patch(
+            "webapp.admin.maintenance.routes_operations.get_git_metadata",
+            return_value={"branch": "main"},
+        ), patch(
+            "subprocess.run",
+            side_effect=[
+                _proc(),  # fetch
+                _proc(stdout="2.204.0\n"),  # show origin/main:VERSION
+                _proc(stdout="local000\n"),  # rev-parse HEAD
+                _proc(stdout="remote999\n"),  # rev-parse origin/main
+                _proc(stdout="14\n"),  # rev-list --count
+            ],
+        ):
+            response = self._get(app)
+
+        data = response.get_json()
+        assert data["update_available"] is True
+        assert data["commits_behind"] == 14
+        assert data["remote_version"] == "2.204.0"
+
+    def test_explicit_ref_query_param_is_used(self, app, authenticated_user):
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _proc(),
+                _proc(stdout="1.0.0\n"),
+                _proc(stdout="same\n"),
+                _proc(stdout="same\n"),
+            ]
+            self._get(app, query_string="ref=release-branch")
+
+        fetch_args = mock_run.call_args_list[0][0][0]
+        assert "release-branch" in fetch_args
+
+    def test_fetch_failure_returns_502(self, app, authenticated_user):
+        with patch(
+            "subprocess.run",
+            return_value=_proc(returncode=1, stderr="unable to access remote"),
+        ):
+            response, status = self._get(app)
+
+        assert status == 502
+        assert "unable to access remote" in response.get_json()["error"]
+
+    def test_unknown_ref_returns_404(self, app, authenticated_user):
+        with patch(
+            "webapp.admin.maintenance.routes_operations.get_git_metadata",
+            return_value={"branch": "main"},
+        ), patch(
+            "subprocess.run",
+            side_effect=[
+                _proc(),  # fetch succeeds (git fetch accepts a bogus short name)
+                _proc(returncode=1),  # show origin/<ref>:VERSION fails
+                _proc(stdout="local\n"),  # rev-parse HEAD
+                _proc(returncode=1),  # rev-parse origin/<ref> fails -- no such ref
+            ],
+        ):
+            response, status = self._get(app, query_string="ref=no-such-branch")
+
+        assert status == 404
+
+    def test_requires_authentication(self, app):
         _body, status = self._get(app)
         assert status == 401
