@@ -7,11 +7,18 @@ single most recent row per source, but without an index covering
 (source_name, timestamp) together, Postgres had no way to answer that
 cheaply -- it had to sequential-scan and sort the *entire* table, which
 measured at 21+ seconds and was intermittently hitting the statement
-timeout outright. This index, paired with rewriting that query to use
-DISTINCT ON instead of "fetch everything, keep the first row seen in
-Python", turns it into a fast per-source index lookup.
+timeout outright.
 
-Revision ID: 20260831_audio_metrics_latest_index
+The query itself ended up rewritten as N per-source "ORDER BY timestamp
+DESC LIMIT 1" lookups rather than a single DISTINCT ON query (Postgres has
+no loose/skip-scan index strategy, so DISTINCT ON with an IN-list still
+walked every matching row even with this index in place -- see
+webapp/admin/audio_ingest/listing.py's _latest_metrics_by_source()
+docstring). This index still matters for that per-source approach: without
+it, a source that had gone quiet for days needed to scan backward through
+every row every *other* source wrote since then before finding a match.
+
+Revision ID: 20260831_audio_metrics_idx
 Revises: 20260828_rwt_test_announcements
 Create Date: 2026-08-31
 """
@@ -20,7 +27,7 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "20260831_audio_metrics_latest_index"
+revision = "20260831_audio_metrics_idx"
 down_revision = "20260828_rwt_test_announcements"
 branch_labels = None
 depends_on = None
