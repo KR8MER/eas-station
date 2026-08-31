@@ -67,7 +67,7 @@ openpyxl==3.1.5
 
 # Production servers
 gunicorn==26.1.0  # WSGI server for Flask
-gevent>=25.9.1    # Async worker for Flask-SocketIO with Gunicorn (Python 3.13+ compatible)
+gevent>=26.8.0    # Async worker for Flask-SocketIO with Gunicorn (Python 3.13+ compatible)
 
 # Redis for state management and worker coordination
 # Replaces fragile file-based coordination with robust distributed state
