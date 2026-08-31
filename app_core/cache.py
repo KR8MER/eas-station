@@ -32,6 +32,22 @@ from app_core.config.redis_config import get_cache_redis_url
 # Initialize cache instance (will be configured by init_cache)
 cache = Cache()
 
+# Flask-Caching 2.5.0 dropped its lowercase CACHE_TYPE aliases ('redis',
+# 'simple', 'filesystem', ...): Cache._set_cache() builds an import path as
+# "flask_caching.backends." + CACHE_TYPE and imports it, but the backends
+# package now only exposes the actual class names (RedisCache, SimpleCache,
+# FileSystemCache, ...) as attributes -- there is no backends.redis module
+# or attribute anymore. CACHE_TYPE stays lowercase everywhere else in this
+# app (env var, the Settings -> Environment dropdown, existing .env files
+# on already-deployed stations) -- only the value actually handed to
+# Flask-Caching is translated here.
+_CACHE_TYPE_ALIASES = {
+    'redis': 'RedisCache',
+    'simple': 'SimpleCache',
+    'filesystem': 'FileSystemCache',
+    'null': 'NullCache',
+}
+
 
 def init_cache(app):
     """Initialize Flask-Caching with the application.
@@ -94,10 +110,16 @@ def init_cache(app):
             config['CACHE_TYPE'] = 'simple'
             config.pop('CACHE_REDIS_URL', None)
 
+    logger.info("Cache initialized with type: %s", config['CACHE_TYPE'])
+
+    # Translate the friendly lowercase alias to the class name Flask-Caching
+    # 2.5+ actually resolves, right at the boundary -- everything above this
+    # point (branching, logging, the env var, the Settings UI) keeps using
+    # the lowercase form.
+    config['CACHE_TYPE'] = _CACHE_TYPE_ALIASES.get(config['CACHE_TYPE'], config['CACHE_TYPE'])
+
     app.config.update(config)
     cache.init_app(app)
-
-    logger.info("Cache initialized with type: %s", config['CACHE_TYPE'])
 
     return cache
 
