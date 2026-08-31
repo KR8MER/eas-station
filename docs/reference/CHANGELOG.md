@@ -8,6 +8,12 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.207.1] - 2026-08-31 - Fix a startup crash from Flask-Caching 2.5.0's dropped CACHE_TYPE aliases
+
+- Bumped `Flask-Caching` to 2.5.0 (a Dependabot PR for this had failed CI: `flask_caching.backends.redis` no longer exists in that release). `Cache._set_cache()` builds an import path from `CACHE_TYPE` and imports it; 2.5.0 dropped the lowercase short aliases (`redis`, `simple`, `filesystem`, `null`) that `flask_caching.backends` used to expose, keeping only the actual class names (`RedisCache`, `SimpleCache`, `FileSystemCache`, `NullCache`). Passing the old alias straight through raised an `ImportError` from `init_cache()`, which runs unconditionally during app creation — this would have crashed the whole web service on boot, not just broken caching.
+- `app_core/cache.py` now translates the lowercase alias to the class name right at the Flask-Caching boundary. Everything else — the `CACHE_TYPE` env var, the Settings → Environment dropdown, already-deployed `.env` files — keeps using the lowercase form; only the value actually handed to Flask-Caching changed.
+- Added `tests/test_app_cache_type_resolution.py` covering all four aliases plus the "already a resolvable class name" passthrough case.
+
 ## [2.207.0] - 2026-08-31 - Require Python 3.13 / Debian 13 (Trixie); drop 3.11/3.12 support
 
 - **Breaking for Debian 12 / Python 3.11 or 3.12 installs.** The project now requires Python 3.13 and targets Debian 13 (Trixie) / Raspberry Pi OS (Trixie-based) only. Maintaining both floors was an ongoing tax: scipy was capped below 1.18 solely because that series drops 3.11, numba's compatible-numpy range and the `audioop-lts` marker both existed to branch on the interpreter version, and CI ran the whole suite twice per PR to catch drift between them.
