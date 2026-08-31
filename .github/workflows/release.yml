@@ -75,6 +75,35 @@ jobs:
             --output="dist/eas-station-${{ steps.version.outputs.version }}.tar.gz" \
             HEAD
 
+      - name: Build minimal source tarball
+        if: steps.guard.outputs.exists == 'false'
+        run: |
+          # A slimmer download for people who just want to run the app, not
+          # develop it. Drops dev/CI-only content: the test suite, GitHub
+          # Actions workflows and issue/PR templates, one-off dev diagnostic
+          # scripts, and repo-root tool config that nothing at runtime reads
+          # (mkdocs.yml, pyproject.toml, CodeRabbit config, editor settings).
+          #
+          # docs/ stays IN: webapp/documentation.py and webapp/public/
+          # read it straight off disk at runtime to power the in-app /docs
+          # browser and the /terms, /privacy, and other policy pages, so it
+          # is a runtime dependency, not dev-only content, despite living
+          # next to the other docs. static/ and data/ also stay -- required
+          # assets and boundary data, not optional.
+          git archive \
+            --format=tar.gz \
+            --prefix="eas-station-${{ steps.version.outputs.version }}-minimal/" \
+            --output="dist/eas-station-${{ steps.version.outputs.version }}-minimal.tar.gz" \
+            HEAD -- . \
+            ':!tests' \
+            ':!.github' \
+            ':!scripts/diagnostics' \
+            ':!.vscode' \
+            ':!.claude' \
+            ':!.coderabbit.yaml' \
+            ':!mkdocs.yml' \
+            ':!pyproject.toml'
+
       - name: Generate checksums
         if: steps.guard.outputs.exists == 'false'
         working-directory: dist

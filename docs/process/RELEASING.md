@@ -22,17 +22,42 @@ signing step — but publishing the release is a deliberate, on-demand action.
    reads the current `VERSION` and releases that version.
 4. **The workflow then:**
    - re-validates the release metadata (`tests/test_release_metadata.py`);
-   - builds a reproducible source tarball
-     (`eas-station-X.Y.Z.tar.gz`) with `git archive` from the exact commit
-     being released;
-   - writes a `SHA256SUMS` checksum manifest;
-   - **signs both artifacts** with a GitHub artifact attestation (see below);
-   - creates the `vX.Y.Z` tag and publishes a GitHub Release with the
-     tarball, checksums, and the changelog section for that version as the
+   - builds two reproducible source tarballs with `git archive` from the
+     exact commit being released — a full one (`eas-station-X.Y.Z.tar.gz`)
+     and a minimal one (`eas-station-X.Y.Z-minimal.tar.gz`), see below;
+   - writes a `SHA256SUMS` checksum manifest covering both;
+   - **signs all artifacts** with a GitHub artifact attestation (see below);
+   - creates the `vX.Y.Z` tag and publishes a GitHub Release with both
+     tarballs, checksums, and the changelog section for that version as the
      release notes.
 
 The workflow is idempotent: if a release for the current `VERSION` already
 exists, it exits without doing anything, so re-running it is safe.
+
+## Full vs. minimal tarball
+
+Every release publishes two source tarballs:
+
+- **`eas-station-X.Y.Z.tar.gz`** — the complete repository at the released
+  commit: application code, the test suite, CI workflow files, and every
+  dev-tooling config. Use this if you plan to develop, test, or contribute.
+- **`eas-station-X.Y.Z-minimal.tar.gz`** — everything needed to actually
+  *run* EAS Station, with dev/CI-only content removed: `tests/`, `.github/`,
+  `scripts/diagnostics/`, `.vscode/`, `.claude/`, and repo-root tool config
+  that nothing at runtime reads (`mkdocs.yml`, `pyproject.toml`,
+  `.coderabbit.yaml`). Use this for an actual deployment.
+
+  `docs/` is **not** trimmed from the minimal tarball even though it isn't
+  needed to develop the app — `webapp/documentation.py` and
+  `webapp/public/` read it straight off disk at runtime to power the in-app
+  `/docs` browser and the `/terms`/`/privacy`/policy pages, so it is a
+  runtime dependency of the deployed app, not dev-only content. This is
+  unrelated to the GitHub Pages documentation site, which is built by a
+  separate workflow (`docs-pages.yml`) directly from the repository, not
+  from either release tarball.
+
+Both tarballs are built from the same commit, checksummed together in the
+same `SHA256SUMS`, and signed the same way — see below.
 
 ## How releases are signed
 
