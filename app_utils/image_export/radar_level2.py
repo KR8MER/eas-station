@@ -75,6 +75,22 @@ _STOP_R = np.array([100, 40, 240, 250, 220, 200], dtype=float)
 _STOP_G = np.array([200, 160, 230, 160, 40, 60], dtype=float)
 _STOP_B = np.array([100, 40, 60, 40, 40, 200], dtype=float)
 
+# Base velocity (product V06's "velocity" moment), m/s, NWS convention:
+# negative = inbound (toward the radar, green), positive = outbound (away
+# from the radar, red). +/-32 m/s is the legacy WSR-88D Nyquist limit for
+# the lowest-tilt base-velocity scan most VCPs use -- the practical range
+# real returns fall in, not an arbitrary round number. Raw as decoded by
+# Py-ART: no de-aliasing is applied, so a return right at the edge of this
+# range can wrap to the opposite color (a known limitation of the base
+# product, same as any other raw-velocity display).
+VELOCITY_LEGEND = [
+    ('-32', (0, 200, 0)),
+    ('-16', (0, 120, 0)),
+    ('0', (130, 130, 130)),
+    ('+16', (140, 0, 0)),
+    ('+32', (230, 0, 0)),
+]
+
 
 def _legend_hex_colors() -> List[str]:
     """REFLECTIVITY_LEGEND's colors as ``#rrggbb`` strings, in stop order --
@@ -254,6 +270,29 @@ def _soften_beam_edges(img: Image.Image, sigma: float = _SOFTEN_SIGMA_PX) -> Ima
     return Image.fromarray(out.astype(np.uint8), mode='RGBA')
 
 
+# Per-field plot configuration: the Py-ART field name, the cmweather
+# colormap, and the (vmin, vmax) range plot_ppi_map colors against.
+# Reflectivity is single-direction (dBZ, floored at the legend's stated 5
+# dBZ minimum); velocity is signed and symmetric around 0 (see
+# VELOCITY_LEGEND's docstring for why +/-32 m/s).
+_FIELD_CONFIG = {
+    'reflectivity': {
+        'pyart_field': 'reflectivity',
+        'cmap': 'NWSRef',
+        'vmin': _STOP_VALUES[0],
+        'vmax': 75.0,
+        'mask_below': _STOP_VALUES[0],
+    },
+    'velocity': {
+        'pyart_field': 'velocity',
+        'cmap': 'NWSVel',
+        'vmin': -32.0,
+        'vmax': 32.0,
+        'mask_below': None,
+    },
+}
+
+
 def _plot_ppi(
     radar: Any,
     center_lat: float,
@@ -263,16 +302,17 @@ def _plot_ppi(
     canvas_w: int,
     canvas_h: int,
     opacity: float = 1.0,
+    field: str = 'reflectivity',
 ) -> Optional[Image.Image]:
-    """Render the lowest sweep's reflectivity as a geographic PPI plot via
-    Py-ART's own ``RadarMapDisplay.plot_ppi_map`` -- each gate drawn as its
-    true azimuth/range quadrilateral (matplotlib ``pcolormesh`` under the
-    hood), not interpolated onto a Cartesian grid the way
-    ``pyart.map.grid_from_radars`` does. That interpolation was tried
-    first and produced a visibly smoothed result -- blurry blobs even at
-    very high output resolution, confirmed by requesting the same bbox at
-    increasing pixel counts and finding no new detail appeared. This is
-    the sharp, gate-accurate look public radar apps show.
+    """Render the lowest sweep's *field* ('reflectivity' or 'velocity') as
+    a geographic PPI plot via Py-ART's own ``RadarMapDisplay.plot_ppi_map``
+    -- each gate drawn as its true azimuth/range quadrilateral (matplotlib
+    ``pcolormesh`` under the hood), not interpolated onto a Cartesian grid
+    the way ``pyart.map.grid_from_radars`` does. That interpolation was
+    tried first and produced a visibly smoothed result -- blurry blobs
+    even at very high output resolution, confirmed by requesting the same
+    bbox at increasing pixel counts and finding no new detail appeared.
+    This is the sharp, gate-accurate look public radar apps show.
 
     Returns None (not raises) on any rendering failure, same contract as
     the rest of this module -- a bad sweep must fall back to WMS, not
@@ -281,33 +321,39 @@ def _plot_ppi(
     import io
 
     import cartopy.crs as ccrs
-    import cmweather  # noqa: F401 -- registers the 'NWSRef' colormap on import
+    import cmweather  # noqa: F401 -- registers the 'NWSRef'/'NWSVel' colormaps on import
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     import pyart
 
-    # cmweather's 'NWSRef' is the standard ~15-band NWS reflectivity scale
-    # (the same one RadarScope, GRLevel3 and NWS's own displays use) --
-    # far finer than a hand-rolled 6-color ramp, which is coarse enough to
-    # flatten real storm structure (hook echoes, gradient detail) into
-    # solid blocks. REFLECTIVITY_LEGEND's 6 labels stay as the on-page
-    # legend's tick marks (RadarScope's legend does the same -- a handful
-    # of labels along a much finer continuous scale, not one label per
-    # color actually drawn).
+    config = _FIELD_CONFIG[field]
+    pyart_field = config['pyart_field']
+
+    # cmweather's 'NWSRef'/'NWSVel' are the standard NWS scales (the same
+    # ones RadarScope, GRLevel3 and NWS's own displays use) -- far finer
+    # than a hand-rolled few-color ramp, which is coarse enough to flatten
+    # real storm structure (hook echoes, gradient detail, rotation
+    # couplets) into solid blocks. REFLECTIVITY_LEGEND/VELOCITY_LEGEND's
+    # few labels stay as the on-page legend's tick marks (RadarScope's
+    # legend does the same -- a handful of labels along a much finer
+    # continuous scale, not one label per color actually drawn).
     #
-    # Sub-5-dBZ returns are masked out before plotting (matches the
-    # legend's stated floor and the WMS mosaic's own convention) rather
-    # than via vmin, so they render fully transparent instead of the
-    # colormap's bottom color.
-    field = radar.fields['reflectivity']['data']
-    radar.fields['reflectivity']['data'] = np.ma.masked_less(field, _STOP_VALUES[0])
+    # Reflectivity: sub-5-dBZ returns are masked out before plotting
+    # (matches the legend's stated floor and the WMS mosaic's own
+    # convention) rather than via vmin, so they render fully transparent
+    # instead of the colormap's bottom color. Velocity has no such floor
+    # -- 0 m/s (no motion, or motion purely tangential to the beam) is a
+    # real, meaningful reading, not noise to hide.
+    field_data = radar.fields[pyart_field]['data']
+    if config['mask_below'] is not None:
+        radar.fields[pyart_field]['data'] = np.ma.masked_less(field_data, config['mask_below'])
 
     fig = plt.figure(figsize=(canvas_w / 100, canvas_h / 100), dpi=100)
     try:
         display = pyart.graph.RadarMapDisplay(radar)
         display.plot_ppi_map(
-            'reflectivity', sweep=0,
+            pyart_field, sweep=0,
             min_lon=center_lon - deg_lon, max_lon=center_lon + deg_lon,
             min_lat=center_lat - deg_lat, max_lat=center_lat + deg_lat,
             # Web Mercator, matching the OSM basemap tiles this composites
@@ -316,7 +362,7 @@ def _plot_ppi(
             # misaligned/distorted the overlay against the basemap and
             # hazard polygon underneath it.
             projection=ccrs.epsg(3857),
-            cmap='NWSRef', vmin=_STOP_VALUES[0], vmax=75, alpha=opacity,
+            cmap=config['cmap'], vmin=config['vmin'], vmax=config['vmax'], alpha=opacity,
             colorbar_flag=False, title_flag=False,
             add_grid_lines=False, embellish=False,
             fig=fig,
@@ -345,16 +391,28 @@ def render_frame(
     canvas_w: int,
     canvas_h: int,
     opacity: float = 1.0,
-) -> Optional[Image.Image]:
-    """Colorized base-reflectivity RGBA image, rendered as a geographic PPI
-    plot (real gate quadrilaterals, no interpolation -- see _plot_ppi) at
-    (canvas_w x canvas_h) spanning +/-half_width_m around (center_lat,
-    center_lon) at *when* (None = latest/live).
+    field: str = 'reflectivity',
+) -> Optional[Tuple[Image.Image, datetime]]:
+    """Colorized *field* ('reflectivity' or 'velocity') RGBA image,
+    rendered as a geographic PPI plot (real gate quadrilaterals, no
+    interpolation -- see _plot_ppi) at (canvas_w x canvas_h) spanning
+    +/-half_width_m around (center_lat, center_lon) at *when* (None =
+    latest/live).
+
+    Returns ``(image, scan_time)`` -- *scan_time* is the matched volume's
+    actual timestamp, which can differ from *when* by up to the lookup
+    tolerance (see find_volume_key), same "don't just echo the request
+    time back" contract maps.py's Level III path follows.
 
     Best-effort: returns None on any failure (no site in range, no volume
     near *when*, download/decode/grid error). Callers fall back to the
-    Level III WMS mosaic.
+    Level III WMS mosaic (reflectivity only -- there is no Level III
+    velocity product to fall back to).
     """
+    if field not in _FIELD_CONFIG:
+        logger.warning("Level II: unknown field %r", field)
+        return None
+
     site = nearest_site(center_lat, center_lon)
     if site is None:
         logger.debug("Level II: no WSR-88D site within range of (%.3f, %.3f)", center_lat, center_lon)
@@ -377,12 +435,21 @@ def render_frame(
         s3.download_file(_L2_BUCKET, key, tmp_path)
         radar = pyart.io.read_nexrad_archive(tmp_path)
 
+        if _FIELD_CONFIG[field]['pyart_field'] not in radar.fields:
+            logger.debug("Level II: %s has no %r field in volume %s", site, field, key)
+            return None
+
+        scan_time = _parse_key_time(key) or (when or datetime.now(timezone.utc))
+
         deg_lat = half_width_m / 111000.0
         deg_lon = half_width_m / (111000.0 * math.cos(math.radians(center_lat)))
-        return _plot_ppi(
+        img = _plot_ppi(
             radar, center_lat, center_lon, deg_lat, deg_lon, canvas_w, canvas_h,
-            opacity=opacity,
+            opacity=opacity, field=field,
         )
+        if img is None:
+            return None
+        return img, scan_time
     except Exception as exc:
         logger.warning("Level II render failed (site=%s, key=%s): %s", site, key, exc)
         return None

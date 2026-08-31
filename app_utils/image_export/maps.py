@@ -170,12 +170,16 @@ def _fetch_radar_overlay(
 # only needs this as a reference scale) and imported here so the legend
 # always matches what either source actually drew.
 _REFLECTIVITY_LEGEND = _radar_level2.REFLECTIVITY_LEGEND
+_VELOCITY_LEGEND = _radar_level2.VELOCITY_LEGEND
 
 
 def _draw_radar_legend(img: Image.Image, fonts: Dict,
                        scan_time: Optional[datetime] = None,
+                       field: str = 'reflectivity',
                        ) -> Tuple[int, int, int, int]:
-    """Draw a small reflectivity (dBZ) color-scale reference, upper-right.
+    """Draw a small color-scale reference, upper-right -- reflectivity
+    (dBZ) by default, or velocity (m/s) when *field* == 'velocity' (only
+    meaningful for a Level II frame; Level III has no velocity product).
 
     Without this, "green vs red" on the radar overlay means nothing to a
     reader who doesn't already read weather radar -- this is the same
@@ -186,23 +190,24 @@ def _draw_radar_legend(img: Image.Image, fonts: Dict,
     either.
 
     *scan_time*, when given, adds a small "Radar 2:08 PM" caption -- the
-    WMS-T service snaps to its own 5-minute cadence, so the reflectivity
-    shown can be a few minutes older than the alert's own timestamps, and
-    without this the card never says so.
+    underlying service snaps to its own cadence, so the reflectivity/
+    velocity shown can be a few minutes older than the alert's own
+    timestamps, and without this the card never says so.
 
     Returns the drawn box (x0, y0, x1, y1) so the caller can add it to the
     county-label keep-out list -- this is drawn *before* labels are placed
     (see _render_map), so without that a county name could land right on
     top of it.
     """
+    legend = _VELOCITY_LEGEND if field == 'velocity' else _REFLECTIVITY_LEGEND
     map_w, map_h = img.size
     chip_w, chip_h = 20, 12
     pad = 6
     fnt = fonts.get('tiny', fonts.get('small'))
-    title = 'REFLECTIVITY (dBZ)'
-    n = len(_REFLECTIVITY_LEGEND)
+    title = 'VELOCITY (m/s)' if field == 'velocity' else 'REFLECTIVITY (dBZ)'
+    n = len(legend)
     bar_w = chip_w * n
-    label_h = max(_th(fnt, label) for label, _ in _REFLECTIVITY_LEGEND)
+    label_h = max(_th(fnt, label) for label, _ in legend)
     title_h = _th(fnt, title)
 
     scan_text = f'Radar {_short_local_dt(scan_time, ref=None)}' if scan_time else None
@@ -224,7 +229,7 @@ def _draw_radar_legend(img: Image.Image, fonts: Dict,
     d = ImageDraw.Draw(img)
     d.text((x0 + pad, y0 + pad), title, font=fnt, fill=(220, 225, 235))
     chips_y = y0 + pad + title_h + 4
-    for i, (label, color) in enumerate(_REFLECTIVITY_LEGEND):
+    for i, (label, color) in enumerate(legend):
         cx = x0 + pad + i * chip_w
         d.rectangle((cx, chips_y, cx + chip_w - 1, chips_y + chip_h - 1), fill=color)
         d.text((cx, chips_y + chip_h + 2), label, font=fnt, fill=(220, 225, 235))
@@ -404,8 +409,21 @@ def _render_map(geom: Dict, severity: str,
                 *, map_w: int = MAP_W, map_h: int = MAP_H,
                 db_session: Any = None,
                 category: Optional[str] = None,
-                sent: Optional[datetime] = None) -> Image.Image:
+                sent: Optional[datetime] = None,
+                radar_source: str = 'level3',
+                radar_field: str = 'reflectivity') -> Image.Image:
     """Return a *map_w*×*map_h* RGB map image with the alert polygon overlaid.
+
+    *radar_source*: 'level3' (default, unchanged behaviour -- the WMS-T
+    national mosaic every other caller uses) or 'level2' (single-site raw
+    volume scan via radar_level2.py, much sharper but not always
+    available). Deliberately opt-in and used by exactly one caller
+    (radar_loop_hires.py's clearly-separate "High-Resolution Radar Loop")
+    -- see that module's docstring for why Level II was *not* made the
+    default here again after already being tried and reverted once.
+    *radar_field*: 'reflectivity' (default) or 'velocity' -- only
+    meaningful when radar_source='level2'; Level III has no velocity
+    product.
 
     *theme* drives the polygon stroke / storm-motion accent colours; if
     omitted we fall back to the severity palette (legacy behaviour).
@@ -485,25 +503,48 @@ def _render_map(geom: Dict, severity: str,
     # (static/js/core/map_theme.js). category != 'Met' or a fetch failure
     # both just skip this -- never a reason to break the share card.
     #
-    # Always the Level III WMS mosaic (_fetch_radar_overlay) -- the same
-    # service and layer static/js/core/map_theme.js's radarLayer() uses for
-    # the in-app "Radar (at time of alert)" toggle, so a share card and the
-    # live map agree pixel-for-pixel on what "the radar" looked like. This
-    # used to prefer a sharper Level II render (radar_level2.py, raw
-    # per-site volume scans via Py-ART) when a site was in range, but that
-    # meant the exported/looped image could look nothing like the in-app
-    # toggle for the same alert -- different resolution and a different
-    # color ramp (cmweather's 'NWSRef' vs. IEM's own mosaic colors).
-    # radar_level2.py is kept for its REFLECTIVITY_LEGEND (still the
-    # legend's source of truth) but render_frame() is no longer called here.
+    # Defaults to the Level III WMS mosaic (_fetch_radar_overlay) -- the
+    # same service and layer static/js/core/map_theme.js's radarLayer()
+    # uses for the in-app "Radar (at time of alert)" toggle, so a share
+    # card and the live map agree pixel-for-pixel on what "the radar"
+    # looked like by default. This module used to *always* prefer a
+    # sharper Level II render (radar_level2.py, raw per-site volume scans
+    # via Py-ART) when a site was in range, but that meant the exported/
+    # looped image could look nothing like the in-app toggle for the same
+    # alert -- different resolution and a different color ramp
+    # (cmweather's 'NWSRef' vs. IEM's own mosaic colors) -- so it was
+    # pulled back out as the default. radar_source='level2' opts back into
+    # that sharper render explicitly; the only caller is
+    # radar_loop_hires.py's clearly-separate, clearly-labeled "High-
+    # Resolution Radar Loop", which never claims to match the toggle.
     radar_drawn = False
     radar_scan_time: Optional[datetime] = None
     if category == 'Met':
-        radar_result = _fetch_radar_overlay(
-            tx_min, ty_min, tx_max, ty_max, z, canvas_w, canvas_h, sent,
-        )
-        if radar_result is not None:
-            radar_img, radar_scan_time = radar_result
+        if radar_source == 'level2':
+            # Square degree-window centered on the padded bbox, sized to
+            # its larger dimension so the Level II frame fully covers it
+            # (the crop below trims any excess) -- render_frame() only
+            # takes a single half_width_m (a square meters window), not
+            # independent lat/lon extents, so a non-square bbox means a
+            # slight, accepted stretch rather than a mismatch in coverage.
+            l2_center_lat = (min_lat + max_lat) / 2
+            l2_center_lon = (min_lon + max_lon) / 2
+            l2_half_width_m = max(
+                (max_lon - min_lon) / 2 * 111000.0 * math.cos(math.radians(l2_center_lat)),
+                (max_lat - min_lat) / 2 * 111000.0,
+            )
+            level2_result = _radar_level2.render_frame(
+                l2_center_lat, l2_center_lon, sent, l2_half_width_m,
+                canvas_w, canvas_h, field=radar_field,
+            )
+            radar_img, radar_scan_time = level2_result if level2_result is not None else (None, None)
+        else:
+            radar_result = _fetch_radar_overlay(
+                tx_min, ty_min, tx_max, ty_max, z, canvas_w, canvas_h, sent,
+            )
+            radar_img, radar_scan_time = radar_result if radar_result is not None else (None, None)
+
+        if radar_img is not None:
             canvas = canvas.convert('RGBA')
             canvas.alpha_composite(radar_img)
             canvas = canvas.convert('RGB')
@@ -699,7 +740,7 @@ def _render_map(geom: Dict, severity: str,
     radar_legend_box = None
     if radar_drawn:
         try:
-            radar_legend_box = _draw_radar_legend(cropped, fonts, radar_scan_time)
+            radar_legend_box = _draw_radar_legend(cropped, fonts, radar_scan_time, field=radar_field)
         except Exception:
             pass
 
