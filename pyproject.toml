@@ -30,14 +30,10 @@ markers = [
 
 filterwarnings = [
     "default",
-    # audioop is deprecated in 3.11/3.12 and removed in 3.13, where the
-    # audioop-lts backfill takes over. The warning is expected on <= 3.12 and
-    # would otherwise be emitted on every single test run.
-    "ignore:'audioop' is deprecated:DeprecationWarning",
 ]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py313"
 # AGENTS.md asks for lines under 100 characters where practical.
 line-length = 100
 exclude = [

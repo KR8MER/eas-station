@@ -56,9 +56,10 @@ developer's own machine.
 ### Continuous Integration
 
 `.github/workflows/tests.yml` runs this suite on every pull request and on
-pushes to `main` / `develop`, across Python 3.11 and 3.13, with a Redis service
-container. A separate `lint` job runs `ruff check .` against the enforced rule
-set declared in `pyproject.toml`.
+pushes to `main` / `develop`, on Python 3.13 (the project's floor -- see
+README.md's System Requirements table), with a Redis service container. A
+separate `lint` job runs `ruff check .` against the enforced rule set
+declared in `pyproject.toml`.
 
 ### Known failures
 

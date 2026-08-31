@@ -86,10 +86,7 @@ pytest-asyncio==1.4.0  # For async test support
 pyttsx3==2.99  # Offline text-to-speech engine for the pyttsx3 provider
 
 # Audio processing for EAS decoding
-scipy==1.17.1  # Optional: Advanced signal processing (not used for EAS resampling)
-# Note: scipy is capped below 1.18 -- that series requires Python >=3.12, and
-# this project's CI matrix (and supported install target) includes 3.11.
-# 1.17.1 is the newest release that still supports 3.11.
+scipy==1.18.1  # Optional: Advanced signal processing (not used for EAS resampling)
 pydub==0.25.1  # Audio stream decoding (MP3, AAC, OGG) for HTTP/Icecast streams
 numba>=0.61.0,<0.64.0  # JIT compilation for real-time FM demodulation (RBDS performance, 10-100x speedup). Requires 0.61.0+ for Python 3.13 support
 # Note: pydub requires ffmpeg to be installed via system packages (libavcodec, libavformat)
@@ -169,12 +166,10 @@ matplotlib==3.11.1  # plot_ppi_map's rendering backend (Agg, headless) -- pcolor
 # made (see app_core/analytics/geo.py).
 geoip2>=4.8.0
 
-# Audio processing - audioop replacement for Python 3.13+
-# Marker required: audioop-lts only publishes wheels for Python >= 3.13. Without
-# the marker `pip install -r requirements.txt` hard-fails on 3.11/3.12, which
-# install.sh explicitly suggests as a fallback when SoapySDR bindings mismatch.
-# On <= 3.12 the stdlib `audioop` module is still present, so nothing is needed.
-audioop-lts==0.2.2; python_version >= "3.13"  # Drop-in replacement for audioop (removed in Python 3.13)
+# Audio processing - audioop replacement for Python 3.13+ (the stdlib audioop
+# module was removed in 3.13; Python 3.13 is this project's floor, so no
+# version marker is needed here -- see README.md's System Requirements table)
+audioop-lts==0.2.2  # Drop-in replacement for audioop (removed in Python 3.13)
 
 # Cryptography - Ed25519 signatures for the tamper-evident audit-log chain
 # (see app_core/auth/audit.py AuditLogger.verify_chain).  Pinned >=46.0.5 to

@@ -1065,7 +1065,7 @@ set +e
 
 # Packages the application cannot run without. If any of these fail to
 # install, the installation aborts. Package names in this list must exist on
-# every supported release (Debian 12/13, Ubuntu 22.04/24.04, Raspberry Pi OS).
+# every supported release (Debian 13 / Trixie, Raspberry Pi OS Trixie-based).
 REQUIRED_PACKAGES=(
     python3
     python3-pip
@@ -1241,16 +1241,10 @@ if python3 -c "import SoapySDR" 2>/dev/null; then
 else
     echo_error "❌ SoapySDR Python bindings NOT found for Python $PYTHON_VERSION"
     SDR_VERIFICATION_FAILED=1
-    
-    # Check if this is a Python 3.13 compatibility issue
-    if python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 13) else 1)" 2>/dev/null; then
-        echo_warning "⚠️  Python 3.13 detected - python3-soapysdr may not be available yet"
-        echo_warning "   Solutions:"
-        echo_warning "   1. Build SoapySDR Python bindings from source (see docs/troubleshooting/PYTHON_313_SOAPYSDR.md)"
-        echo_warning "   2. Or downgrade to Python 3.12: sudo apt-get install python3.12"
-    else
-        echo_warning "   Run: sudo apt-get install python3-soapysdr"
-    fi
+    echo_warning "   python3-soapysdr may not be packaged for this Python version yet."
+    echo_warning "   Solutions:"
+    echo_warning "   1. Run: sudo apt-get install python3-soapysdr"
+    echo_warning "   2. If unavailable, build SoapySDR Python bindings from source (see docs/troubleshooting/PYTHON_313_SOAPYSDR.md)"
 fi
 
 # Check for airspy_info utility (critical for Airspy support)

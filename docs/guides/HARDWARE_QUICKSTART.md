@@ -298,7 +298,7 @@ fetch('/api/environment/restart-services', {
 ### Requirements
 
 - **Raspberry Pi 3, 4, or 5** (for GPIO/I2C)
-- **Python 3.11+** with required packages
+- **Python 3.13** with required packages
 - **I2C enabled** for OLED (raspi-config → Interface Options → I2C)
 - **Network access** for network-based devices
 

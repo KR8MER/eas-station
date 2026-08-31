@@ -8,6 +8,16 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.207.0] - 2026-08-31 - Require Python 3.13 / Debian 13 (Trixie); drop 3.11/3.12 support
+
+- **Breaking for Debian 12 / Python 3.11 or 3.12 installs.** The project now requires Python 3.13 and targets Debian 13 (Trixie) / Raspberry Pi OS (Trixie-based) only. Maintaining both floors was an ongoing tax: scipy was capped below 1.18 solely because that series drops 3.11, numba's compatible-numpy range and the `audioop-lts` marker both existed to branch on the interpreter version, and CI ran the whole suite twice per PR to catch drift between them.
+- `requirements.txt`: unpinned scipy's 3.11-driven cap (now `1.18.1`) and removed `audioop-lts`'s `python_version >= "3.13"` marker (unconditional now that 3.13 is the floor).
+- `.github/workflows/tests.yml`: CI matrix is now Python 3.13 only (was `['3.11', '3.13']`); the `lint` job also moved off 3.11.
+- `.github/workflows/release.yml`, `.github/workflows/docs-pages.yml`: bumped their own Python setup steps to 3.13 for consistency.
+- `pyproject.toml`: ruff `target-version` is now `py313`; removed the now-dead `audioop` deprecation-warning filter (that warning only ever fired on <3.13, which no longer runs in CI).
+- `install.sh`, `sdr_hardware_service.py`, `scripts/fix_soapysdr_venv.sh`: removed the "downgrade to Python 3.12" SoapySDR troubleshooting suggestion and the Python 3.10-3.12 site-packages fallback paths, since downgrading is no longer a supported workaround.
+- Updated `README.md`'s System Requirements table, `docs/reference/ABOUT.md`, `docs/guides/HARDWARE_QUICKSTART.md`, `templates/help.html`, and `tests/README.md` to state the new floor.
+
 ## [2.206.0] - 2026-08-31 - Pin the one-click upgrade to a specific release, and fix the upgrade docs
 
 - The "Version to install" field on Admin → Operations' System Upgrade card is now a dropdown populated from the repository's actual release tags (via a new `GET /admin/operations/upgrade/tags` endpoint), instead of a blank text box requiring an operator to already know the exact tag spelling. "Track main (latest)" stays the default and behaves exactly as before; a "Custom branch, tag, or commit…" option keeps the free-text field available for anything not in the list.
