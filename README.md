@@ -15,8 +15,8 @@
 [![Alembic](https://img.shields.io/badge/Alembic-1.19.1-6BA3BE?style=flat-square&logo=sqlalchemy&logoColor=white)](https://alembic.sqlalchemy.org/)
 [![PostgreSQL + PostGIS](https://img.shields.io/badge/PostgreSQL-17%20%2B%20PostGIS-0093D0?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-8.0-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
-[![Gunicorn](https://img.shields.io/badge/Gunicorn-26.1.0-499848?style=flat-square&logo=gunicorn&logoColor=white)](https://gunicorn.org/)
-[![gevent](https://img.shields.io/badge/gevent-25.9.1-1F8B4C?style=flat-square)](https://www.gevent.org/)
+[![Gunicorn](https://img.shields.io/badge/Gunicorn-26.2.0-499848?style=flat-square&logo=gunicorn&logoColor=white)](https://gunicorn.org/)
+[![gevent](https://img.shields.io/badge/gevent-26.8.0-1F8B4C?style=flat-square)](https://www.gevent.org/)
 [![Nginx](https://img.shields.io/badge/Nginx-system-009639?style=flat-square&logo=nginx&logoColor=white)](https://nginx.org/)
 [![Let's Encrypt](https://img.shields.io/badge/Let's%20Encrypt-Certbot-003A70?style=flat-square&logo=letsencrypt&logoColor=white)](https://letsencrypt.org/)
 [![Systemd](https://img.shields.io/badge/Systemd-Services-33A9DC?style=flat-square&logo=systemd&logoColor=white)](https://systemd.io/)
@@ -503,8 +503,8 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 | Redis (server) | 8.0 | RSAL/SSPL/AGPL (per upstream) | Pub/sub bus between the web app and the SDR / hardware services; cache; rate‑limit store; capture registry; live spectrum + waterfall feed. | https://redis.io/ |
 | redis (Python) | 8.1.0 | MIT | Python client for the Redis server. | https://github.com/redis/redis-py |
 | hiredis | 3.4.1 | BSD‑3‑Clause | C parser accelerator for `redis‑py` (faster pub/sub fan‑out). | https://github.com/redis/hiredis-py |
-| Gunicorn | 26.1.0 | MIT | Production WSGI server fronting the Flask app. | https://gunicorn.org/ |
-| gevent | 25.9.1+ | MIT | Async worker class for Gunicorn so Flask‑SocketIO can hold thousands of concurrent WebSocket connections. | https://www.gevent.org/ |
+| Gunicorn | 26.2.0 | MIT | Production WSGI server fronting the Flask app. | https://gunicorn.org/ |
+| gevent | 26.8.0+ | MIT | Async worker class for Gunicorn so Flask‑SocketIO can hold thousands of concurrent WebSocket connections. | https://www.gevent.org/ |
 | Nginx | system (apt) | BSD‑2‑Clause | Reverse proxy / TLS terminator / static file server in front of Gunicorn and Icecast. Installed via `install.sh`'s `apt-get install nginx` — no version pin, and no Docker/Alpine image is involved despite this table's earlier claim. | https://nginx.org/ |
 | systemd | system | LGPL‑2.1+ | Process supervisor for `eas-station`, `sdr_hardware_service`, `hardware_service`, `gps_manager`, Icecast, Redis. | https://systemd.io/ |
 | Let's Encrypt / Certbot | — | Apache‑2.0 / ISRG | Automated TLS certificate issuance and renewal for the public HTTPS endpoint. | https://letsencrypt.org/ |
