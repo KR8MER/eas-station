@@ -209,6 +209,87 @@ class TestBuildFilesIncludesEOM:
             f"EOM duration ({eom_duration:.2f}s) is unreasonably long."
         )
 
+class TestBuildFilesHasLeadInSilence:
+    """build_files() must open with a second of silence before the SAME
+    header burst, mirroring the second of silence that already trails the
+    EOM.  Confirmed missing in production 2026-09-01: the GPIO subprocess
+    keys the relay off the broadcast_active marker, which tracks actual
+    audio playback, so a composite that starts right on the first FSK bit
+    keys the relay with no time to stabilize -- unlike the tail, which was
+    already correct, and unlike build_manual_components() (the manual-send
+    path), which already had this same lead-in silence.
+    """
+
+    def _same_segment_samples(self, wav_bytes: bytes):
+        with wave.open(io.BytesIO(wav_bytes)) as wf:
+            frame_count = wf.getnframes()
+            raw = wf.readframes(frame_count)
+            rate = wf.getframerate()
+        sample_count = len(raw) // 2
+        samples = struct.unpack(f'<{sample_count}h', raw)
+        return samples, rate
+
+    def test_same_segment_opens_with_a_second_of_silence(self):
+        gen = _build_generator()
+        alert = _build_minimal_alert()
+        payload = _build_payload()
+        header = 'ZCZC-WXR-RWT-039137+0100-0011200-EASNODES-'
+
+        _, _, _, _, _, segment_payload = gen.build_files(
+            alert, payload, header, ['039137']
+        )
+
+        same_bytes = segment_payload['same']['wav_bytes']
+        samples, rate = self._same_segment_samples(same_bytes)
+
+        one_second = int(rate * 1.0)
+        assert len(samples) > one_second, (
+            "'same' segment must be longer than 1 s to hold both the "
+            "lead-in silence and the header burst."
+        )
+
+        lead_in = samples[:one_second]
+        after_lead_in = samples[one_second:one_second + int(rate * 0.1)]
+
+        lead_in_peak = max(abs(s) for s in lead_in)
+        after_peak = max(abs(s) for s in after_lead_in)
+
+        assert lead_in_peak == 0, (
+            f"First second of the 'same' segment must be pure silence "
+            f"(peak amplitude {lead_in_peak}) so the relay has a full "
+            "second to stabilize before the FSK burst starts."
+        )
+        assert after_peak > 1000, (
+            "Audio immediately after the 1-second mark must be the SAME "
+            f"header FSK burst (peak amplitude {after_peak} too low)."
+        )
+
+    def test_header_seconds_passed_to_broadcast_state_includes_lead_in(self):
+        """header_seconds (read from segment_payload['same']'s own duration
+        by the EASBroadcaster caller) must include the lead-in silence, not
+        just the header burst -- otherwise the countdown overlay's header
+        phase boundary drifts 1 s early relative to true elapsed playback
+        time.
+        """
+        gen = _build_generator()
+        alert = _build_minimal_alert()
+        payload = _build_payload()
+        header = 'ZCZC-WXR-RWT-039137+0100-0011200-EASNODES-'
+
+        _, _, _, _, _, segment_payload = gen.build_files(
+            alert, payload, header, ['039137']
+        )
+
+        same_duration = _parse_wav_duration(segment_payload['same']['wav_bytes'])
+        # 3 header bursts + 2 inter-burst silences (no lead-in) would already
+        # be several seconds; the lead-in silence adds exactly 1 more full
+        # second on top of that structure.
+        assert same_duration >= 1.0, (
+            f"'same' segment duration ({same_duration:.2f}s) must include "
+            "the 1-second lead-in silence."
+        )
+
+
 class TestHandleAlertEOMInSegmentPayload:
     """handle_alert() must pass EOM audio to the model constructor via segment_payload."""
 

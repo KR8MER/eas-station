@@ -3050,6 +3050,24 @@ class EASAudioGenerator:
         if pre_chime_samples:
             samples.extend(pre_chime_samples)
             samples.extend(_generate_silence(1.0, self.sample_rate))
+        else:
+            # Guarantee a lead-in gap before the first SAME header burst even
+            # when no pre-chime is configured, mirroring the trailing silence
+            # that already follows the EOM below (see the post_chime_samples
+            # branch further down) and the equivalent fix already shipped in
+            # build_manual_components() for manually-generated broadcasts.
+            # The GPIO subprocess keys the relay off the broadcast_active
+            # marker, which tracks actual audio playback -- so this silence
+            # is what gives the transmitter a full second to come up and
+            # stabilize before the FSK burst starts, the same way the
+            # trailing silence holds the relay a second past the EOM.
+            # Folded into the 'same' segment (not 'buffer') so header_seconds
+            # -- read back out of segment_payload['same'] by the caller that
+            # drives the countdown overlay -- still measures true elapsed
+            # time from the very start of the composite audio.
+            lead_in_silence = _generate_silence(1.0, self.sample_rate)
+            samples.extend(lead_in_silence)
+            segment_samples['same'].extend(lead_in_silence)
 
         for burst_index in range(3):
             samples.extend(header_samples)
