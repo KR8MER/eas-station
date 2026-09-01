@@ -66,7 +66,7 @@ import pytz
 import certifi
 import redis
 from dotenv import load_dotenv
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from app_utils.system.sd_notify import notify as sd_notify, Watchdog
 print("[CAP_POLLER_INIT] pytz, certifi, redis, dotenv, urllib imported", flush=True)
@@ -264,6 +264,23 @@ def _env_flag(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on", "t", "y"}
+
+
+def _endpoint_host_matches(url: str, domain: str) -> bool:
+    """True if `url`'s hostname is exactly `domain` or a subdomain of it.
+
+    Plain substring checks like ``'weather.gov' in url`` also match a
+    malicious/misconfigured endpoint such as
+    ``https://evil.example/weather.gov`` or ``https://weather.gov.evil.com``;
+    parsing the hostname avoids that class of mismatch (flagged by CodeQL as
+    incomplete URL substring sanitization).
+    """
+    try:
+        hostname = (urlparse(url).hostname or '').lower()
+    except ValueError:
+        return False
+    domain = domain.lower()
+    return hostname == domain or hostname.endswith('.' + domain)
 
 
 def _serialize_alert_for_sig(alert_elem) -> str:
@@ -1086,7 +1103,7 @@ class CAPPoller:
                 if old_zone_codes != new_zone_codes:
                     new_noaa_endpoints = self._build_batched_noaa_endpoints(list(new_zone_codes))
                     # Keep IPAWS endpoints, replace NOAA endpoints
-                    ipaws_endpoints = [ep for ep in self.cap_endpoints if 'fema.gov' in ep or 'IPAWS' in ep]
+                    ipaws_endpoints = [ep for ep in self.cap_endpoints if _endpoint_host_matches(ep, 'fema.gov') or 'IPAWS' in ep]
                     self.cap_endpoints = ipaws_endpoints + new_noaa_endpoints
                     self.logger.info(f"🌐 Rebuilt NOAA endpoints: {len(new_noaa_endpoints)} endpoint(s) for {len(new_zone_codes)} zone(s)")
 
@@ -1959,11 +1976,11 @@ class CAPPoller:
 
         for endpoint in self.cap_endpoints:
             # Determine endpoint type before the try block so errors are attributed correctly
-            if 'tdl.apps.fema.gov' in endpoint:
+            if _endpoint_host_matches(endpoint, 'tdl.apps.fema.gov'):
                 endpoint_type = "IPAWS"
-            elif 'apps.fema.gov' in endpoint:
+            elif _endpoint_host_matches(endpoint, 'apps.fema.gov'):
                 endpoint_type = "IPAWS"
-            elif 'weather.gov' in endpoint:
+            elif _endpoint_host_matches(endpoint, 'weather.gov'):
                 endpoint_type = "NOAA"
             else:
                 endpoint_type = "CUSTOM"
@@ -2041,7 +2058,7 @@ class CAPPoller:
                         if not source_value:
                             if alert.get('raw_xml') is not None or 'ipaws' in endpoint.lower():
                                 source_value = ALERT_SOURCE_IPAWS
-                            elif 'weather.gov' in endpoint.lower():
+                            elif _endpoint_host_matches(endpoint, 'weather.gov'):
                                 source_value = ALERT_SOURCE_NOAA
                             else:
                                 source_value = ALERT_SOURCE_UNKNOWN
@@ -4173,11 +4190,11 @@ class CAPPoller:
         # Build endpoint info for logging
         endpoints_info = []
         for ep in self.cap_endpoints:
-            if 'tdl.apps.fema.gov' in ep:
+            if _endpoint_host_matches(ep, 'tdl.apps.fema.gov'):
                 ep_type = "IPAWS"
-            elif 'apps.fema.gov' in ep:
+            elif _endpoint_host_matches(ep, 'apps.fema.gov'):
                 ep_type = "IPAWS"
-            elif 'weather.gov' in ep:
+            elif _endpoint_host_matches(ep, 'weather.gov'):
                 ep_type = "NOAA"
             else:
                 ep_type = "CUSTOM"
@@ -4236,11 +4253,11 @@ class CAPPoller:
             self.logger.info("-" * 70)
             self.logger.info(f"Polling {len(self.cap_endpoints)} endpoint(s):")
             for idx, endpoint in enumerate(self.cap_endpoints, 1):
-                if 'tdl.apps.fema.gov' in endpoint:
+                if _endpoint_host_matches(endpoint, 'tdl.apps.fema.gov'):
                     env_marker = " [STAGING/TDL]"
-                elif 'apps.fema.gov' in endpoint:
+                elif _endpoint_host_matches(endpoint, 'apps.fema.gov'):
                     env_marker = " [IPAWS PRODUCTION]"
-                elif 'weather.gov' in endpoint:
+                elif _endpoint_host_matches(endpoint, 'weather.gov'):
                     env_marker = " [NOAA Weather]"
                 else:
                     env_marker = ""
@@ -4561,9 +4578,9 @@ class CAPPoller:
             self.logger.info("═══════════════════════════════════════════════════════════════")
             self.logger.info(f"ENDPOINTS POLLED: {len(self.cap_endpoints)}")
             for ep in self.cap_endpoints:
-                if 'weather.gov' in ep:
+                if _endpoint_host_matches(ep, 'weather.gov'):
                     self.logger.info(f"  [NOAA] {ep}")
-                elif 'fema.gov' in ep:
+                elif _endpoint_host_matches(ep, 'fema.gov'):
                     self.logger.info(f"  [IPAWS] {ep}")
                 else:
                     self.logger.info(f"  [CUSTOM] {ep}")

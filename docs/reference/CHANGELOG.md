@@ -8,6 +8,12 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.213.2] - 2026-09-01 - Fix incomplete hostname checks in the CAP poller's endpoint classification
+
+- CodeQL flagged `poller/cap_poller.py:2044` (`elif 'weather.gov' in endpoint.lower()`) as "Incomplete URL substring sanitization" on PR #2549: a plain substring check matches a malicious or misconfigured endpoint like `https://evil.example/weather.gov` or `https://weather.gov.evil.com`, not just the real NOAA API.
+- The same anti-pattern existed at five other call sites classifying `self.cap_endpoints` entries as NOAA/IPAWS/CUSTOM for logging and source-tagging (`poll_and_process`, `get_poller_status`, the startup endpoint log, the poll-summary log, and the zone-code-rebuild filter).
+- Added `_endpoint_host_matches(url, domain)`, which parses the URL with `urllib.parse.urlparse` and compares the actual hostname (exact match or subdomain) instead of doing a substring search, and switched all six call sites to use it.
+
 ## [2.213.1] - 2026-09-01 - Isolate per-item failures in the CAP poller's processing loops
 
 - The 2026-08-31 outage (fixed in 2.211.2) was caused by one unhandled data-shape variance in one alert's `<references>` field crashing the *entire* poll cycle, not just that alert — because `poll_and_process()`'s main per-alert loop had only one `try` around the whole cycle, not one per alert. That specific field bug was fixed, but the structural gap that let it take down every other alert in the batch was not.
