@@ -50,6 +50,8 @@ from app_core.models import AdminUser, EASMessage, LocalAuthority, ManualEASActi
 from werkzeug.utils import secure_filename
 
 from app_utils.eas import (
+    BROADCAST_LEAD_IN_SECONDS,
+    BROADCAST_LEAD_OUT_SECONDS,
     EASAudioGenerator,
     _convert_audio_to_samples,
     _wav_duration_seconds,
@@ -1354,12 +1356,16 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             send_result['gpio_activated'] = set_broadcast_active(
                 event_code=event_code or '',
                 label=_elabel,
-                duration_seconds=playback_duration,
+                duration_seconds=BROADCAST_LEAD_IN_SECONDS + playback_duration + BROADCAST_LEAD_OUT_SECONDS,
                 source='manual',
                 identifier=alert_id or '',
-                header_seconds=header_seconds,
-                eom_seconds=eom_seconds,
+                header_seconds=header_seconds + BROADCAST_LEAD_IN_SECONDS,
+                eom_seconds=eom_seconds + BROADCAST_LEAD_IN_SECONDS,
             )
+            # Relay lead-in: the marker above already fired the rising edge
+            # the GPIO subprocess keys off of; this sleep gives the
+            # transmitter this long to stabilize before real audio starts.
+            time.sleep(BROADCAST_LEAD_IN_SECONDS)
 
             # Inject into the live Icecast air-chain, same as every other
             # broadcast path (live auto-forward via EASBroadcaster.
@@ -1442,6 +1448,9 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                 time.sleep(remaining_playout)
 
         finally:
+            # Relay lead-out: hold the relay this much longer past the actual
+            # end of playout before releasing it.
+            time.sleep(BROADCAST_LEAD_OUT_SECONDS)
             # Falling edge: clearing the broadcast marker is what the
             # eas-station-gpio subprocess watches to release the relay (it also
             # self-releases on the marker TTL as a backstop).  Pass the

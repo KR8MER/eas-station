@@ -69,6 +69,28 @@ def _get_oled_enabled_status():
 
 _BROADCAST_STATE_KEY = 'eas:broadcast_active'
 _INCOMING_STATE_KEY = 'eas:incoming_alert'
+# Seconds the GPIO relay is keyed before actual audio playout begins, and
+# held after it ends -- giving the transmitter time to come up to full power
+# and stabilize before the SAME burst starts, and preventing the tail of the
+# broadcast from being clipped by an instant carrier drop.
+#
+# This is a *program*-level timing concern (how long the relay stays
+# asserted relative to actual audio playback), not audio content. It used
+# to be implemented as literal silence samples embedded in the generated
+# WAV -- which broke the moment a stored alert was resent (resend replays
+# the exact stored bytes rather than regenerating audio, so padding baked
+# in at generation time can never retroactively apply to already-stored
+# messages), and meant every consumer of that audio -- Icecast stream
+# listeners, FCC-compliance exports, archived recordings -- got artificial
+# dead air mixed into the actual alert content. Every caller that drives
+# the airchain (EASBroadcaster.handle_alert, the manual send route, the RWT
+# scheduler, and the resend script) instead sleeps this long immediately
+# after set_broadcast_active() (before starting real playout) and again
+# immediately before clear_broadcast_active() (after playout ends), so the
+# relay's on-air window brackets the actual audio symmetrically without
+# the audio file itself ever containing the padding.
+BROADCAST_LEAD_IN_SECONDS = 1.0
+BROADCAST_LEAD_OUT_SECONDS = 1.0
 # Seconds the on-air overlay / tower light may linger past the broadcast's own
 # end-of-message (start_ts + duration_seconds) before the state is reported
 # inactive.  This decouples the indicators from the send worker: the worker
@@ -3050,24 +3072,6 @@ class EASAudioGenerator:
         if pre_chime_samples:
             samples.extend(pre_chime_samples)
             samples.extend(_generate_silence(1.0, self.sample_rate))
-        else:
-            # Guarantee a lead-in gap before the first SAME header burst even
-            # when no pre-chime is configured, mirroring the trailing silence
-            # that already follows the EOM below (see the post_chime_samples
-            # branch further down) and the equivalent fix already shipped in
-            # build_manual_components() for manually-generated broadcasts.
-            # The GPIO subprocess keys the relay off the broadcast_active
-            # marker, which tracks actual audio playback -- so this silence
-            # is what gives the transmitter a full second to come up and
-            # stabilize before the FSK burst starts, the same way the
-            # trailing silence holds the relay a second past the EOM.
-            # Folded into the 'same' segment (not 'buffer') so header_seconds
-            # -- read back out of segment_payload['same'] by the caller that
-            # drives the countdown overlay -- still measures true elapsed
-            # time from the very start of the composite audio.
-            lead_in_silence = _generate_silence(1.0, self.sample_rate)
-            samples.extend(lead_in_silence)
-            segment_samples['same'].extend(lead_in_silence)
 
         for burst_index in range(3):
             samples.extend(header_samples)
@@ -3291,9 +3295,15 @@ class EASAudioGenerator:
         if post_chime_samples:
             samples.extend(_generate_silence(POST_ALERT_SIGNAL_GAP_SECONDS, self.sample_rate))
             samples.extend(post_chime_samples)
-        else:
-            # End-of-message tail when no post-alert signal follows.
-            samples.extend(_generate_silence(1.0, self.sample_rate))
+        # No unconditional trailing silence tail here: the composite audio
+        # ends at the true end of content (EOM, or post-chime when
+        # configured). The 1-second post-broadcast relay hold is a
+        # program-level GPIO timing concern, not audio content -- see
+        # BROADCAST_LEAD_OUT_SECONDS and EASBroadcaster.handle_alert().
+        # Baking it into the audio would freeze it into every stored/
+        # archived/resent copy (including Icecast listeners and FCC-report
+        # exports) and make it impossible to change without regenerating
+        # every alert's audio.
 
         wav_bytes = samples_to_wav_bytes(samples, self.sample_rate)
         try:
@@ -3438,7 +3448,6 @@ class EASAudioGenerator:
         include_tts: bool = True,
         silence_between_headers: float = 1.0,
         silence_after_header: float = 1.0,
-        silence_before_header: float = 1.0,
         narration_upload_samples: Optional[List[int]] = None,
         pre_alert_samples: Optional[List[int]] = None,
         post_alert_samples: Optional[List[int]] = None,
@@ -3655,13 +3664,12 @@ class EASAudioGenerator:
         if pre_chime_samples_list:
             composite_samples.extend(pre_chime_samples_list)
             composite_samples.extend(chime_separator)
-        else:
-            # Guarantee a lead-in gap before the SAME header even when no
-            # pre-chime is configured, mirroring the trailing silence that
-            # already follows the EOM below -- so a downstream encoder /
-            # attentive listener always gets a clean beat of dead air before
-            # the FSK burst starts, whether or not an announcement preceded it.
-            composite_samples.extend(_generate_silence(silence_before_header, self.sample_rate))
+        # No unconditional lead-in silence here when no pre-chime is
+        # configured: the 1-second relay pre-roll is a program-level GPIO
+        # timing concern (BROADCAST_LEAD_IN_SECONDS, applied by every
+        # caller that drives the airchain), not audio content -- baking it
+        # into the WAV would freeze it into every stored/archived/resent
+        # copy and make it impossible to adjust without regenerating audio.
         composite_samples.extend(same_samples)
         composite_samples.extend(trailing_silence)
         composite_samples.extend(attention_samples)
@@ -3679,11 +3687,10 @@ class EASAudioGenerator:
         if post_chime_samples_list:
             composite_samples.extend(_generate_silence(POST_ALERT_SIGNAL_GAP_SECONDS, self.sample_rate))
             composite_samples.extend(post_chime_samples_list)
-        else:
-            # End-of-message tail when no post-alert signal follows. This is
-            # the gap that holds the air-chain open for a beat after the test
-            # concludes before control returns to normal programming.
-            composite_samples.extend(_generate_silence(1.0, self.sample_rate))
+        # No unconditional trailing silence tail here when no post-chime is
+        # configured: the 1-second relay hold past end-of-message is a
+        # program-level GPIO timing concern (BROADCAST_LEAD_OUT_SECONDS),
+        # not audio content -- see the note above the lead-in silence removal.
         if norm_trail_announcement:
             composite_samples.extend(norm_trail_announcement)
 
@@ -4072,12 +4079,17 @@ class EASBroadcaster:
         set_broadcast_active(
             event_code=event_code or '',
             label=_event_label,
-            duration_seconds=_duration_hint,
+            duration_seconds=BROADCAST_LEAD_IN_SECONDS + _duration_hint + BROADCAST_LEAD_OUT_SECONDS,
             source=_bcast_source,
             identifier=str(alert_identifier) if alert_identifier else '',
-            header_seconds=_header_seconds,
-            eom_seconds=_eom_seconds,
+            header_seconds=_header_seconds + BROADCAST_LEAD_IN_SECONDS,
+            eom_seconds=_eom_seconds + BROADCAST_LEAD_IN_SECONDS,
         )
+        # Relay lead-in: the marker above already fired the rising edge the
+        # GPIO subprocess keys off of, so the relay is asserting now -- this
+        # sleep is what actually gives the transmitter this long to
+        # stabilize before real audio starts. See BROADCAST_LEAD_IN_SECONDS.
+        time.sleep(BROADCAST_LEAD_IN_SECONDS)
 
         playout_start = time.monotonic()
         try:
@@ -4126,6 +4138,9 @@ class EASBroadcaster:
             if remaining_playout > 0:
                 time.sleep(remaining_playout)
         finally:
+            # Relay lead-out: hold the relay this much longer past the actual
+            # end of playout before releasing it. See BROADCAST_LEAD_OUT_SECONDS.
+            time.sleep(BROADCAST_LEAD_OUT_SECONDS)
             # Falling edge: the GPIO subprocess releases the relay when this
             # marker clears (and self-releases on the marker TTL as a backstop).
             # Pass the identifier so an overlapping newer broadcast's marker is

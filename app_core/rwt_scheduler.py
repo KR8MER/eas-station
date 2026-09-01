@@ -39,6 +39,8 @@ from app_core.extensions import db
 from app_core.models import RWTScheduleConfig, ManualEASActivation, SystemLog
 from app_utils import utc_now
 from app_utils.eas import (
+    BROADCAST_LEAD_IN_SECONDS,
+    BROADCAST_LEAD_OUT_SECONDS,
     EASAudioGenerator,
     _wav_duration_seconds,
     build_same_header,
@@ -269,12 +271,16 @@ def _drive_rwt_airchain(
         set_broadcast_active(
             event_code=event_code,
             label='Required Weekly Test',
-            duration_seconds=playback_duration,
+            duration_seconds=BROADCAST_LEAD_IN_SECONDS + playback_duration + BROADCAST_LEAD_OUT_SECONDS,
             source='automated_rwt',
             identifier=alert_id,
-            header_seconds=header_seconds,
-            eom_seconds=eom_seconds,
+            header_seconds=header_seconds + BROADCAST_LEAD_IN_SECONDS,
+            eom_seconds=eom_seconds + BROADCAST_LEAD_IN_SECONDS,
         )
+        # Relay lead-in: the marker above already fired the rising edge the
+        # GPIO subprocess keys off of; this sleep gives the transmitter this
+        # long to stabilize before real audio starts.
+        time.sleep(BROADCAST_LEAD_IN_SECONDS)
 
         # Inject into the live Icecast air-chain, same as every other
         # broadcast path (live auto-forward, resend, manual Send -- see
@@ -351,6 +357,9 @@ def _drive_rwt_airchain(
             time.sleep(remaining)
 
     finally:
+        # Relay lead-out: hold the relay this much longer past the actual end
+        # of playout before releasing it.
+        time.sleep(BROADCAST_LEAD_OUT_SECONDS)
         # Clearing the marker is the falling edge the GPIO subprocess watches to
         # release the relay.  Pass the identifier so an overlapping newer
         # broadcast's marker is never erased by this RWT finishing.
@@ -700,14 +709,19 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
             )
         broadcast_duration = _wav_duration_seconds(broadcast_audio) if broadcast_audio else 0.0
         if broadcast_duration > 0:
+            # Same lead-in/lead-out padding as _drive_rwt_airchain's own
+            # set_broadcast_active() call below, which re-anchors this marker
+            # to the actual playout start moments later -- keeping the two
+            # calls consistent means the overlay's countdown doesn't visibly
+            # jump when the re-anchor happens.
             set_broadcast_active(
                 event_code='RWT',
                 label='Required Weekly Test',
-                duration_seconds=broadcast_duration,
+                duration_seconds=BROADCAST_LEAD_IN_SECONDS + broadcast_duration + BROADCAST_LEAD_OUT_SECONDS,
                 source='automated_rwt',
                 identifier=identifier,
-                header_seconds=header_seconds,
-                eom_seconds=eom_seconds,
+                header_seconds=header_seconds + BROADCAST_LEAD_IN_SECONDS,
+                eom_seconds=eom_seconds + BROADCAST_LEAD_IN_SECONDS,
             )
 
         # Drive the airchain: hold GPIO and play the composite WAV for the

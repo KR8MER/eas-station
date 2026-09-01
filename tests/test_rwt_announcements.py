@@ -17,27 +17,30 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Regression tests for the RWT pre/post announcement + lead-in silence feature.
+"""Regression tests for the RWT pre/post announcement feature and the
+absence of transmitter-stabilization silence in the generated audio.
 
 User request: spoken station announcements bracketing the automated weekly
 test ("This station is conducting a test of the Emergency Alert System" /
-"This concludes this test..."), plus a guaranteed second of silence before
-the SAME header begins -- mirroring the second of silence that already
-follows the EOM before the air-chain returns to normal programming.
+"This concludes this test...").
 
-EASAudioGenerator.build_manual_components() previously started the composite
-audio immediately with the SAME header (zero lead-in silence) whenever no
-pre-alert chime was configured, and had no way to bracket the whole test
-with spoken announcements outside the encoded SAME/EOM burst. This file
-guards the fix:
+A 1-second relay lead-in/lead-out used to be baked into this composite audio
+as literal silence samples whenever no pre/post chime was configured. That
+was wrong: it froze the padding into every stored/archived/resent copy of
+the audio (including what stream listeners heard and what FCC-compliance
+exports contained) and made the duration impossible to change without
+regenerating every alert's audio. The relay lead-in/lead-out is now a
+program-level GPIO timing concern applied by every caller that drives the
+airchain (BROADCAST_LEAD_IN_SECONDS / BROADCAST_LEAD_OUT_SECONDS in
+app_utils/eas.py) -- this file now guards the opposite invariant: the
+composite audio itself must contain NO such padding.
 
-  1. With no chime and no announcement configured, the composite still opens
-     with >=1s of true silence before the header's own energy begins.
+  1. With no chime and no announcement configured, the composite opens with
+     the header's own energy immediately -- no silent lead-in baked in.
   2. A configured lead announcement plays first, unmodified in length,
-     immediately followed by the (unchanged) rest of the composite -- so the
-     guaranteed lead-in silence still separates it from the header.
-  3. A configured trail announcement is appended after the (unchanged) rest
-     of the composite, i.e. after the existing post-EOM tail silence.
+     immediately followed by the (unchanged) rest of the composite.
+  3. A configured trail announcement is appended immediately after the
+     (unchanged) rest of the composite.
 """
 
 import tempfile
@@ -86,35 +89,31 @@ def _build_alert() -> SimpleNamespace:
     )
 
 
-class TestLeadInSilenceGuarantee:
-    def test_composite_opens_with_at_least_one_second_of_true_silence(self):
-        """No chime, no announcement: the header must still not start at t=0."""
+class TestNoEmbeddedLeadInSilence:
+    def test_composite_opens_with_header_energy_not_silence(self):
+        """No chime, no announcement: the header's own energy must start
+        immediately -- no silent lead-in baked into the audio. The 1-second
+        relay pre-roll is applied at the program level instead (see
+        BROADCAST_LEAD_IN_SECONDS)."""
         gen = _build_generator()
         alert = _build_alert()
 
         components = gen.build_manual_components(alert, RWT_HEADER)
         composite = components['composite_samples']
 
-        lead_window = composite[: SAMPLE_RATE]  # first 1.0s
-        assert lead_window == [0] * SAMPLE_RATE, (
-            "Expected a full second of true silence before the SAME header; "
-            "found non-zero samples in the lead-in window."
+        first_window = composite[: int(SAMPLE_RATE * 0.05)]
+        assert any(s != 0 for s in first_window), (
+            "Composite audio must not open with silence -- the relay "
+            "lead-in belongs to the caller's GPIO timing, not the audio."
         )
-        # And the header's own energy must actually start right after --
-        # otherwise this would trivially pass on an all-silent composite.
-        assert any(s != 0 for s in composite[SAMPLE_RATE: SAMPLE_RATE * 2])
 
-    def test_custom_silence_before_header_is_honored(self):
-        gen = _build_generator()
-        alert = _build_alert()
-
-        components = gen.build_manual_components(
-            alert, RWT_HEADER, silence_before_header=2.0,
-        )
-        composite = components['composite_samples']
-
-        assert composite[: SAMPLE_RATE * 2] == [0] * (SAMPLE_RATE * 2)
-        assert any(s != 0 for s in composite[SAMPLE_RATE * 2: SAMPLE_RATE * 3])
+    def test_silence_before_header_is_no_longer_a_parameter(self):
+        """The parameter that used to control embedded lead-in silence
+        duration was removed along with the silence itself."""
+        import inspect
+        from app_utils.eas import EASAudioGenerator
+        sig = inspect.signature(EASAudioGenerator.build_manual_components)
+        assert 'silence_before_header' not in sig.parameters
 
 
 class TestAnnouncementBracketing:
