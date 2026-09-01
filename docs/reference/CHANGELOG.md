@@ -8,6 +8,13 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.211.2] - 2026-09-01 - CRITICAL: fix a poller crash that stopped all alert ingestion for ~9 hours
+
+- The CAP poller crashed on *every* polling cycle starting 2026-08-31 ~20:54 EDT, silently dropping every alert fetched from NOAA/IPAWS for roughly 9 hours until diagnosed and fixed live. `poller/cap_poller.py`'s `(properties.get('references') or '').strip()` assumed CAP's `<references>` field is always a string (`sender,identifier,sent` triples, space-separated, per CAP 1.2 §3.3.2.3), but api.weather.gov's JSON API represents the same field as a list of `{identifier, sender, sent, @id}` objects instead. The first "Update" message carrying that shape (a Heat Advisory) crashed `AttributeError: 'list' object has no attribute 'strip'` — and since this check runs unconditionally before the Cancel/Update type check, it took down the *entire* poll cycle, not just that one alert, for every cycle afterward.
+- Fixed at the one shared point all three affected call sites already go through: `parse_cap_reference_identifiers()` now accepts either shape (the legacy CAP-string format from IPAWS, or api.weather.gov's list-of-objects), extracting identifiers correctly from both instead of assuming a string.
+- Also added a full traceback (`exc_info=True`) to the poller's top-level exception log — the bare `str(e)` this incident originally logged took real production reproduction plus a temporary diagnostic change to pin down; a traceback would have shown the exact line immediately.
+- Verified live against the real alert that was crashing every cycle: after the fix, the poller correctly processed and saved it (`status: SUCCESS`), restoring ingestion. Added regression coverage in `tests/test_cap_references_cancellation.py` for both shapes, including the exact real-world payload that crashed production, and confirmed all existing tests (CAP-string format, Update-supersession) still pass unchanged.
+
 ## [2.211.1] - 2026-08-31 - Fix an 8x-slower-than-needed query on the /stats dashboard
 
 - Continuation of the same load-time investigation as 2.210.3/2.210.4: profiling every section of `/stats`'s data pipeline individually found `collect_polling_trend()` alone taking 7.7 of the page's ~8.5 total seconds — every other section combined ran in well under a second.

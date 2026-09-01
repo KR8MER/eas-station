@@ -58,7 +58,7 @@ import math
 print("[CAP_POLLER_INIT] requests, logging, hashlib, math imported", flush=True)
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 import argparse
 print("[CAP_POLLER_INIT] datetime, pathlib, typing, argparse imported", flush=True)
 
@@ -206,18 +206,49 @@ def parse_nws_datetime(dt_string):
     return util_parse_nws_datetime(dt_string, logger=logging.getLogger(__name__))
 
 
-def parse_cap_reference_identifiers(references: Optional[str]) -> List[str]:
-    """Extract the identifier from each triple in a CAP <references> value.
+def parse_cap_reference_identifiers(references: Union[str, list, None]) -> List[str]:
+    """Extract the identifier from each reference in a CAP <references> value.
 
     Per CAP 1.2 sec 3.3.2.3, ``references`` is a space-separated list of one
     or more ``sender,identifier,sent`` triples naming earlier message(s) this
-    one relates to. Used by both Cancel (marks the referenced alert
-    cancelled) and Update (marks it superseded) handling -- a Cancel or
-    Update product gets its own new identifier per spec rather than reusing
-    the original's, so this is the only way to know what it refers to.
+    one relates to -- that's the shape used by IPAWS and by CAP-XML sources
+    generally. Used by both Cancel (marks the referenced alert cancelled)
+    and Update (marks it superseded) handling -- a Cancel or Update product
+    gets its own new identifier per spec rather than reusing the original's,
+    so this is the only way to know what it refers to.
+
+    api.weather.gov's JSON API represents the same CAP field differently:
+    a list of ``{"@id": ..., "identifier": ..., "sender": ..., "sent": ...}``
+    objects, one per referenced alert, rather than the packed triple string
+    -- confirmed 2026-09-01 against a real "Update" Heat Advisory after it
+    crashed the whole poll cycle (every alert in the batch, not just this
+    one) with ``AttributeError: 'list' object has no attribute 'strip'``,
+    since the caller's ``.strip()`` assumed a string. Handle both shapes
+    here, in the one place every caller already goes through, rather than
+    each of the three call sites needing to know which source format it's
+    looking at.
     """
-    identifiers: List[str] = []
-    for triple in (references or '').split():
+    if not references:
+        return []
+
+    if isinstance(references, list):
+        identifiers: List[str] = []
+        for ref in references:
+            if isinstance(ref, dict):
+                ref_id = ref.get('identifier')
+                if ref_id:
+                    identifiers.append(str(ref_id))
+            elif isinstance(ref, str) and ref.strip():
+                # Not observed in practice, but a bare identifier string
+                # inside the list would be unambiguous enough to accept.
+                identifiers.append(ref.strip())
+        return identifiers
+
+    if not isinstance(references, str):
+        return []
+
+    identifiers = []
+    for triple in references.split():
         parts = triple.split(',')
         if len(parts) >= 2 and parts[1].strip():
             identifiers.append(parts[1].strip())
@@ -3184,7 +3215,11 @@ class CAPPoller:
         """
         properties = alert_data.get('properties', {})
         message_type = properties.get('messageType')
-        references = (properties.get('references') or '').strip()
+        # Raw value, not pre-stripped -- api.weather.gov's JSON API sends
+        # this as a list of reference objects, not a string; see
+        # parse_cap_reference_identifiers's docstring for the shape and why
+        # it must be the one place that normalizes this.
+        references = properties.get('references')
 
         if not is_cancellation(message_type, None) or not references:
             return False
@@ -3253,7 +3288,7 @@ class CAPPoller:
             alert.cancelled_at = utc_now()
         return True
 
-    def _mark_cap_references_superseded(self, new_alert: CAPAlert, references: Optional[str]) -> int:
+    def _mark_cap_references_superseded(self, new_alert: CAPAlert, references: Union[str, list, None]) -> int:
         """Mark prior alert(s) referenced by a CAP Update as superseded by it.
 
         Mirrors ``_mark_vtec_chain_superseded``, but keyed off CAP
@@ -4500,7 +4535,7 @@ class CAPPoller:
             stats['status'] = 'ERROR'
             stats['error_message'] = str(e)
             stats['execution_time_ms'] = int((time.time() - start) * 1000)
-            self.logger.error(f"Error in polling cycle: {e}")
+            self.logger.error(f"Error in polling cycle: {e}", exc_info=True)
 
             # If this exception came from a DB statement, self.db_session's
             # transaction is now aborted; every statement below (including

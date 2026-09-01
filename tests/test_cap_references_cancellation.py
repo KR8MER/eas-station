@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 pytestmark = pytest.mark.unit
 
-from poller.cap_poller import CAPPoller
+from poller.cap_poller import CAPPoller, parse_cap_reference_identifiers
 
 
 def _fake_self():
@@ -174,3 +174,96 @@ def test_multiple_references_in_one_cancel_message():
     assert handled is True
     assert alert_a.status == 'Cancelled'
     assert alert_b.status == 'Cancelled'
+
+
+# ---------------------------------------------------------------------------
+# api.weather.gov's JSON API shape: a list of reference objects, not the
+# CAP-XML space-separated triple string.
+#
+# Confirmed against production 2026-09-01: an "Update" Heat Advisory carried
+# references == [{"@id": ..., "identifier": "urn:oid:...", "sender": ...,
+# "sent": ...}], and the poller's `(properties.get('references') or
+# '').strip()` crashed with AttributeError: 'list' object has no attribute
+# 'strip' -- which took down the *entire* poll cycle (not just this one
+# alert), stopping all alert ingestion for ~9 hours until diagnosed. The fix
+# lives in parse_cap_reference_identifiers(), the one place every caller of
+# this field already goes through.
+# ---------------------------------------------------------------------------
+
+def test_parse_cap_reference_identifiers_handles_api_weather_gov_list_shape():
+    references = [{
+        '@id': 'https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.eec6307a2bcf28b37b68f56f69c42f9d135ceb7f.001.1',
+        'identifier': 'urn:oid:2.49.0.1.840.0.eec6307a2bcf28b37b68f56f69c42f9d135ceb7f.001.1',
+        'sender': 'w-nws.webmaster@noaa.gov',
+        'sent': '2026-08-31T20:55:00-04:00',
+    }]
+    assert parse_cap_reference_identifiers(references) == [
+        'urn:oid:2.49.0.1.840.0.eec6307a2bcf28b37b68f56f69c42f9d135ceb7f.001.1'
+    ]
+
+
+def test_parse_cap_reference_identifiers_handles_multiple_list_entries():
+    references = [
+        {'identifier': 'urn:oid:first'},
+        {'identifier': 'urn:oid:second'},
+    ]
+    assert parse_cap_reference_identifiers(references) == ['urn:oid:first', 'urn:oid:second']
+
+
+def test_parse_cap_reference_identifiers_skips_list_entries_with_no_identifier():
+    references = [{'sender': 'x@example.com'}, {'identifier': 'urn:oid:good'}]
+    assert parse_cap_reference_identifiers(references) == ['urn:oid:good']
+
+
+def test_parse_cap_reference_identifiers_still_handles_legacy_cap_string():
+    references = 'sender@example.com,OHDOT-original-id,2026-08-27T05:52:00-04:00'
+    assert parse_cap_reference_identifiers(references) == ['OHDOT-original-id']
+
+
+def test_parse_cap_reference_identifiers_handles_none_and_empty():
+    assert parse_cap_reference_identifiers(None) == []
+    assert parse_cap_reference_identifiers('') == []
+    assert parse_cap_reference_identifiers([]) == []
+
+
+def test_cancel_with_list_shaped_references_does_not_crash_and_still_cancels():
+    """The actual crash reproduction: a Cancel-type message whose
+    <references> arrived as api.weather.gov's list-of-objects shape must
+    not raise, and must still cancel the referenced alert."""
+    fake_self = _fake_self()
+    stored_alert = SimpleNamespace(
+        identifier='urn:oid:original',
+        event='Heat Advisory',
+        status='Actual',
+        cancelled_at=None,
+    )
+    fake_self.db_session.query.return_value.filter_by.return_value.first.return_value = stored_alert
+
+    references = [{
+        'identifier': 'urn:oid:original',
+        'sender': 'w-nws.webmaster@noaa.gov',
+        'sent': '2026-08-31T20:55:00-04:00',
+    }]
+    handled = CAPPoller._process_cap_references_cancellation(
+        fake_self, _cancel_message(references)
+    )
+
+    assert handled is True
+    assert stored_alert.status == 'Cancelled'
+    fake_self.db_session.commit.assert_called_once()
+
+
+def test_update_message_with_list_shaped_references_is_not_treated_as_cancel():
+    """The crashing alert in production was messageType='Update', not
+    'Cancel' -- confirms the fix doesn't just avoid the crash but also
+    preserves the existing "only Cancels are handled here" behavior once
+    the references value can actually be inspected."""
+    fake_self = _fake_self()
+    references = [{'identifier': 'urn:oid:original'}]
+    message = _cancel_message(references)
+    message['properties']['messageType'] = 'Update'
+
+    handled = CAPPoller._process_cap_references_cancellation(fake_self, message)
+
+    assert handled is False
+    fake_self.db_session.commit.assert_not_called()
