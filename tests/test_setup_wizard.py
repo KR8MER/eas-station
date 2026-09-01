@@ -36,11 +36,7 @@ def _build_minimal_form(secret: str = None) -> dict:
         secret = "a" * 32
     return {
         "SECRET_KEY": secret,
-        "POSTGRES_HOST": "db",
-        "POSTGRES_PORT": "5432",
-        "POSTGRES_DB": "alerts",
-        "POSTGRES_USER": "alerts",
-        "POSTGRES_PASSWORD": "password",
+        "DATABASE_URL": "postgresql+psycopg2://alerts:password@db:5432/alerts",
         "DEFAULT_TIMEZONE": "America/New_York",
         "DEFAULT_COUNTY_NAME": "Putnam County",
     }
@@ -118,19 +114,54 @@ def test_generate_secret_key_uniqueness():
 def test_clean_submission_validates_port_range():
     """Reject invalid port numbers."""
     form = _build_minimal_form()
-    form["POSTGRES_PORT"] = "99999"
+    form["ICECAST_EXTERNAL_PORT"] = "99999"
     with pytest.raises(SetupValidationError) as excinfo:
         clean_submission(form)
-    assert "POSTGRES_PORT" in excinfo.value.errors
+    assert "ICECAST_EXTERNAL_PORT" in excinfo.value.errors
 
 
 def test_clean_submission_validates_port_numeric():
     """Reject non-numeric port values."""
     form = _build_minimal_form()
-    form["POSTGRES_PORT"] = "not-a-number"
+    form["ICECAST_EXTERNAL_PORT"] = "not-a-number"
     with pytest.raises(SetupValidationError) as excinfo:
         clean_submission(form)
-    assert "POSTGRES_PORT" in excinfo.value.errors
+    assert "ICECAST_EXTERNAL_PORT" in excinfo.value.errors
+
+
+# ============================================================================
+# Database URL Validation Tests
+# ============================================================================
+
+def test_clean_submission_rejects_database_url_without_scheme():
+    form = _build_minimal_form()
+    form["DATABASE_URL"] = "db:5432/alerts"
+    with pytest.raises(SetupValidationError) as excinfo:
+        clean_submission(form)
+    assert "DATABASE_URL" in excinfo.value.errors
+
+
+def test_clean_submission_rejects_database_url_without_database_name():
+    form = _build_minimal_form()
+    form["DATABASE_URL"] = "postgresql+psycopg2://user:pass@host:5432"
+    with pytest.raises(SetupValidationError) as excinfo:
+        clean_submission(form)
+    assert "DATABASE_URL" in excinfo.value.errors
+
+
+def test_clean_submission_rejects_database_url_placeholder_password():
+    form = _build_minimal_form()
+    form["DATABASE_URL"] = "postgresql+psycopg2://eas_station:change-me@127.0.0.1:5432/alerts"
+    with pytest.raises(SetupValidationError) as excinfo:
+        clean_submission(form)
+    assert "DATABASE_URL" in excinfo.value.errors
+
+
+def test_clean_submission_accepts_valid_database_url():
+    form = _build_minimal_form()
+    form["DATABASE_URL"] = "postgresql+psycopg2://eas_station:s3cret@127.0.0.1:5432/alerts"
+    cleaned = clean_submission(form)
+    assert cleaned["DATABASE_URL"] == form["DATABASE_URL"]
 
 
 # ============================================================================
@@ -244,7 +275,7 @@ def test_clean_submission_accepts_empty_optional_fields():
     form = _build_minimal_form()
     cleaned = clean_submission(form)
     assert "SECRET_KEY" in cleaned
-    assert "POSTGRES_HOST" in cleaned
+    assert "DATABASE_URL" in cleaned
 
 
 def test_clean_submission_accepts_full_form():
@@ -283,10 +314,7 @@ def test_core_section_has_required_fields():
     core_section = next(s for s in WIZARD_SECTIONS if s.name == "core")
     field_keys = [f.key for f in core_section.fields]
     assert "SECRET_KEY" in field_keys
-    assert "POSTGRES_HOST" in field_keys
-    assert "POSTGRES_DB" in field_keys
-    assert "POSTGRES_USER" in field_keys
-    assert "POSTGRES_PASSWORD" in field_keys
+    assert "DATABASE_URL" in field_keys
 
 
 # ============================================================================
@@ -295,14 +323,10 @@ def test_core_section_has_required_fields():
 
 def test_partial_form_preserves_unspecified_keys():
     """When only some fields are provided, unspecified keys should not be blanked."""
-    # Simulate user only updating database password, not touching audio settings
+    # Simulate user only updating the database URL, not touching audio settings
     partial_form = {
         "SECRET_KEY": "a" * 32,
-        "POSTGRES_HOST": "db",
-        "POSTGRES_PORT": "5432",
-        "POSTGRES_DB": "alerts",
-        "POSTGRES_USER": "alerts",
-        "POSTGRES_PASSWORD": "new_password",  # Changed
+        "DATABASE_URL": "postgresql+psycopg2://alerts:new_password@db:5432/alerts",
         "DEFAULT_TIMEZONE": "America/New_York",
         "DEFAULT_COUNTY_NAME": "Putnam County",
         # Note: Audio settings NOT included (simulating skipped section)
@@ -312,7 +336,7 @@ def test_partial_form_preserves_unspecified_keys():
     cleaned = clean_submission(partial_form)
 
     # Required fields should be present
-    assert cleaned["POSTGRES_PASSWORD"] == "new_password"
+    assert cleaned["DATABASE_URL"] == "postgresql+psycopg2://alerts:new_password@db:5432/alerts"
     assert cleaned["SECRET_KEY"] == "a" * 32
 
     # Optional fields that weren't provided should not be in the cleaned result

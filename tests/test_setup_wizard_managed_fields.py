@@ -61,14 +61,26 @@ class TestIsManagedFieldPresent:
         secret_field = next(f for f in SYSTEM_MANAGED_FIELDS if f.key == "SECRET_KEY")
         assert _is_managed_field_present(secret_field, "a" * 64) is True
 
-    def test_postgres_field_with_a_real_value_is_present(self):
-        host_field = next(f for f in SYSTEM_MANAGED_FIELDS if f.key == "POSTGRES_HOST")
-        assert _is_managed_field_present(host_field, "127.0.0.1") is True
+    def test_database_url_field_with_a_real_value_is_present(self):
+        db_field = next(f for f in SYSTEM_MANAGED_FIELDS if f.key == "DATABASE_URL")
+        assert _is_managed_field_present(
+            db_field, "postgresql+psycopg2://eas_station:s3cret@127.0.0.1:5432/alerts"
+        ) is True
 
-    def test_postgres_port_rejects_invalid_value_via_its_validator(self):
-        port_field = next(f for f in SYSTEM_MANAGED_FIELDS if f.key == "POSTGRES_PORT")
-        assert _is_managed_field_present(port_field, "not-a-port") is False
-        assert _is_managed_field_present(port_field, "5432") is True
+    def test_database_url_rejects_invalid_value_via_its_validator(self):
+        db_field = next(f for f in SYSTEM_MANAGED_FIELDS if f.key == "DATABASE_URL")
+        assert _is_managed_field_present(db_field, "not-a-url") is False
+        assert _is_managed_field_present(
+            db_field, "postgresql+psycopg2://eas_station:s3cret@127.0.0.1:5432/alerts"
+        ) is True
+
+    def test_database_url_placeholder_password_is_not_present(self):
+        """A DATABASE_URL still carrying .env.example's literal 'change-me'
+        password must not be treated as already configured."""
+        db_field = next(f for f in SYSTEM_MANAGED_FIELDS if f.key == "DATABASE_URL")
+        assert _is_managed_field_present(
+            db_field, "postgresql+psycopg2://eas_station:change-me@127.0.0.1:5432/alerts"
+        ) is False
 
     def test_every_system_managed_field_with_a_value_is_detected(self):
         """Every field install.sh is documented to configure must be
@@ -76,11 +88,7 @@ class TestIsManagedFieldPresent:
         is what drives blanking it in the wizard form."""
         sample_values = {
             "SECRET_KEY": "b" * 64,
-            "POSTGRES_HOST": "localhost",
-            "POSTGRES_PORT": "5432",
-            "POSTGRES_DB": "eas_station",
-            "POSTGRES_USER": "eas_station",
-            "POSTGRES_PASSWORD": "hunter2",
+            "DATABASE_URL": "postgresql+psycopg2://eas_station:s3cret@127.0.0.1:5432/alerts",
         }
         for field in SYSTEM_MANAGED_FIELDS:
             assert field.key in sample_values, f"Add a sample value for {field.key}"
