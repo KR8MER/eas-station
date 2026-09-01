@@ -31,27 +31,49 @@ sudo systemctl restart eas-station-web eas-station-poller
 
 ## Setup Wizard Features
 
-The web-based setup wizard provides:
+The web-based setup wizard organizes configuration into seven collapsible
+sections instead of one long form. **Location Settings** and **EAS
+Broadcast** — the two every install needs — are open by default; everything
+else starts collapsed so hardware and streaming options you're not using
+don't get in the way. A section auto-expands if one of its fields fails
+validation, so an error is never hidden behind a collapsed header. A
+"Before you start" panel at the top explains what information to have
+ready before you begin.
 
-### Core Configuration
-- **SECRET_KEY** - One-click generation of secure 64-character token
-- **Database Connection** - PostgreSQL host, port, credentials
+### Core Settings (collapsed by default)
+- **SECRET_KEY** and the four **PostgreSQL** connection fields — install.sh
+  already configures these. Whenever a field already holds a valid value,
+  the wizard blanks the input and shows *"Already configured — leave blank
+  to keep the current value"* instead of re-displaying (or re-prompting
+  for) something you never chose. Leaving it blank on save keeps the
+  existing value; typing a new one replaces it.
+
+### Location Settings (open by default)
 - **Timezone** - Dropdown selection of US timezones
-- **Location** - State code dropdown, county name
-
-### EAS Broadcast Settings
-- **EAS Originator** - Dropdown of FCC-authorized codes (WXR, EAS, CIV, PEP)
-- **Station ID** - Validated to 8 characters, no dashes
-- **FIPS Codes** - Authorized county codes for manual broadcasts
+- **County / State** - State code dropdown, county name
 - **Zone Codes** - Auto-derive from FIPS codes with one click
 
-### Audio & TTS
-- **Audio Ingest** - Enable/disable SDR and ALSA sources
-- **TTS Provider** - Dropdown selection (pyttsx3, Azure, Azure OpenAI)
+### EAS Broadcast (open by default)
+- **EAS Originator** - Dropdown of FCC-authorized codes (WXR, EAS, CIV, PEP)
+- **Station ID** - Validated to 8 characters, no dashes
+- **FIPS Codes** - Authorized county codes for manual broadcasts, via an
+  interactive state/county picker
 
-### Hardware Integration
+### Audio Ingest (collapsed by default)
+- Enable/disable SDR and ALSA capture sources
+
+### Icecast Streaming (collapsed by default)
+- Public hostname, ports, listener limits, and source/relay/admin passwords
+  for streaming audio to remote listeners
+
+### Text-to-Speech (collapsed by default)
+- **TTS Provider** - Dropdown selection (pyttsx3, Azure, Azure OpenAI) and
+  provider credentials
+
+### Hardware Integration (collapsed by default)
 - **LED Sign** - IP address configuration
 - **VFD Display** - Serial port configuration
+- **OLED Module** - I2C bus/address, panel size, and rotation
 
 ## Troubleshooting
 

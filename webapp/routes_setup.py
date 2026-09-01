@@ -27,7 +27,9 @@ from flask import flash, g, jsonify, redirect, render_template, request, send_fi
 
 from app_utils.setup_wizard import (
     PLACEHOLDER_SECRET_VALUES,
+    SYSTEM_MANAGED_FIELDS,
     WIZARD_FIELDS,
+    WIZARD_SECTIONS,
     SetupValidationError,
     clean_submission,
     format_led_lines_for_display,
@@ -69,6 +71,26 @@ def _ensure_csrf_token():
         token = secrets.token_urlsafe(32)
         session[CSRF_SESSION_KEY] = token
     return token
+
+
+def _is_managed_field_present(field, value: str) -> bool:
+    """True if *value* is a real, already-valid value for a system-managed
+    field (SECRET_KEY or a POSTGRES_* credential) -- i.e. install.sh already
+    configured it and the wizard should hide it rather than prompt the user
+    to re-enter something they never chose. Mirrors the check SECRET_KEY
+    alone used to get, generalised to every field in SYSTEM_MANAGED_FIELDS.
+    """
+    value = (value or "").strip()
+    if not value:
+        return False
+    if field.key == "SECRET_KEY" and value in PLACEHOLDER_SECRET_VALUES:
+        return False
+    if field.validator is not None:
+        try:
+            field.validator(value)
+        except ValueError:
+            return False
+    return True
 
 
 def register(app, logger):
@@ -142,12 +164,14 @@ def register(app, logger):
             return render_template(
                 "setup_wizard.html",
                 env_fields=WIZARD_FIELDS,
+                env_sections=WIZARD_SECTIONS,
                 form_data={},
                 errors={},
                 env_exists=False,
                 setup_reasons=reason_messages,
                 setup_active=setup_active,
                 secret_present=False,
+                managed_present={},
                 csrf_token=csrf_token,
             )
 
@@ -155,14 +179,19 @@ def register(app, logger):
             key: (value or "")
             for key, value in state.defaults.items()
         }
-        existing_secret = state.current_values.get("SECRET_KEY", "").strip()
-        has_valid_secret = (
-            bool(existing_secret)
-            and existing_secret not in PLACEHOLDER_SECRET_VALUES
-            and len(existing_secret) >= 32
-        )
-        if has_valid_secret:
-            defaults["SECRET_KEY"] = ""
+        # Fields install.sh already configured (SECRET_KEY, the four
+        # POSTGRES_* credentials) are blanked in the form whenever they
+        # already hold a real, valid value -- the user never chose these and
+        # re-prompting for them is confusing at best. A blank submission
+        # keeps the existing value; see the POST handling below.
+        managed_present = {
+            field.key: _is_managed_field_present(field, state.current_values.get(field.key, ""))
+            for field in SYSTEM_MANAGED_FIELDS
+        }
+        for key, present in managed_present.items():
+            if present:
+                defaults[key] = ""
+        has_valid_secret = managed_present.get("SECRET_KEY", False)
         defaults["DEFAULT_LED_LINES"] = format_led_lines_for_display(
             defaults.get("DEFAULT_LED_LINES", "")
         )
@@ -179,8 +208,9 @@ def register(app, logger):
             if "DEFAULT_LED_LINES" in submitted:
                 submitted["DEFAULT_LED_LINES"] = submitted["DEFAULT_LED_LINES"].replace("\r", "")
 
-            if has_valid_secret and not submitted["SECRET_KEY"].strip():
-                submitted["SECRET_KEY"] = existing_secret
+            for field in SYSTEM_MANAGED_FIELDS:
+                if managed_present.get(field.key) and not submitted[field.key].strip():
+                    submitted[field.key] = state.current_values.get(field.key, "").strip()
 
             # Auto-populate zone codes from FIPS codes if zone codes are empty
             fips_codes_raw = submitted.get("EAS_MANUAL_FIPS_CODES", "").strip()
@@ -264,12 +294,14 @@ def register(app, logger):
         return render_template(
             "setup_wizard.html",
             env_fields=WIZARD_FIELDS,
+            env_sections=WIZARD_SECTIONS,
             form_data=form_data,
             errors=errors,
             env_exists=state.env_exists,
             setup_reasons=reason_messages,
             setup_active=setup_active,
             secret_present=has_valid_secret,
+            managed_present=managed_present,
             csrf_token=csrf_token,
         )
 

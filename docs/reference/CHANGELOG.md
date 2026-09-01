@@ -8,6 +8,16 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.213.0] - 2026-09-01 - Reorganize the setup wizard into collapsible sections
+
+- The setup wizard at `/setup` rendered all ~35 configuration fields as one flat, unbroken form with no section headers, no progress indication, and no visual grouping — despite the backend already modeling the config as 7 logical sections (`WIZARD_SECTIONS` in `app_utils/setup_wizard.py`). A first-time user got a wall of inputs before being told what any of it meant.
+- `templates/setup_wizard.html` now renders those sections as a Bootstrap accordion with real headers, descriptions, and per-section field counts. **Location Settings** and **EAS Broadcast** — the two every install needs — are open by default; **Core Settings**, **Audio Ingest**, **Icecast Streaming**, **Text-to-Speech**, and **Hardware Integration** start collapsed. A section auto-expands regardless of category if one of its fields fails validation, so a resubmitted error can never end up hidden behind a collapsed header.
+- Added a "Before you start" intro panel explaining what EAS Station is and what information to have ready, so the field wall isn't the first thing a new user sees.
+- Fixed a real bug found while implementing this: only `SECRET_KEY` was blanked in the form when it already held a real, install.sh-configured value — the four `POSTGRES_*` credential fields (explicitly commented "NOT shown in wizard, managed by install.sh" in the code) were still rendered with their real values, prompting a user to re-enter database credentials they never chose. `webapp/routes_setup.py`'s new `_is_managed_field_present()` generalizes the SECRET_KEY-only check to all five system-managed fields.
+- Separately confirmed live (not fixed, out of scope for this pass): an install configured via a single `DATABASE_URL` rather than discrete `POSTGRES_*` variables shows those four fields as unmanaged/editable, since the wizard's schema only recognizes the discrete vars.
+- Verified live via CDP screenshot against the actual running instance: intro panel and section badges render correctly, Location/EAS Broadcast open with real pre-filled data, all four optional sections collapsed, Core Settings expands on click and shows the new "Already configured" placeholder for SECRET_KEY. Checked at a 360px mobile viewport with no new horizontal overflow introduced.
+- Documented the new section layout in `docs/guides/SETUP_INSTRUCTIONS.md`.
+
 ## [2.212.1] - 2026-09-01 - Add friendly error pages for gateway-down and oversized-upload failures
 
 - Previously, if the Flask app (gunicorn, behind nginx on port 5000) was down or restarting — mid-deploy, crashed, or overloaded — nginx served its bare stock "502 Bad Gateway" page, which gives a visitor no information and no path forward. Same problem for an upload over the size limit: nginx's bare stock "413 Request Entity Too Large" page.
