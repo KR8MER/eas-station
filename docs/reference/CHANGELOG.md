@@ -8,6 +8,12 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.211.3] - 2026-09-01 - Add missing lead-in silence before the SAME header on automatic broadcasts
+
+- `EASAudioGenerator.build_files()` — the path used for every automatic and forwarded alert (CAP poller auto-forward, OTA relay) — started the composite audio right on the first SAME header FSK bit when no pre-alert chime was configured, the default. The GPIO subprocess keys the relay off the `broadcast_active` marker, which tracks actual audio playback, so the transmitter got no lead time to come up and stabilize before the header burst — unlike the tail end, which already had a full second of trailing silence after the EOM (holding the relay a second past end-of-message), and unlike `build_manual_components()` (the manual-send/RWT path), which already had this same lead-in silence.
+- Fixed by adding the same unconditional 1-second lead-in silence `build_manual_components()` already uses, folded into the `'same'` audio segment so `header_seconds` (read by the caller that drives the countdown overlay) still measures true elapsed time from the start of the composite audio.
+- No GPIO code changes were needed — the relay already keys and releases off actual audio playback duration via the `broadcast_active` marker's edges, so extending the audio symmetrically on both ends was sufficient to extend the relay hold symmetrically too.
+
 ## [2.211.2] - 2026-09-01 - CRITICAL: fix a poller crash that stopped all alert ingestion for ~9 hours
 
 - The CAP poller crashed on *every* polling cycle starting 2026-08-31 ~20:54 EDT, silently dropping every alert fetched from NOAA/IPAWS for roughly 9 hours until diagnosed and fixed live. `poller/cap_poller.py`'s `(properties.get('references') or '').strip()` assumed CAP's `<references>` field is always a string (`sender,identifier,sent` triples, space-separated, per CAP 1.2 §3.3.2.3), but api.weather.gov's JSON API represents the same field as a list of `{identifier, sender, sent, @id}` objects instead. The first "Update" message carrying that shape (a Heat Advisory) crashed `AttributeError: 'list' object has no attribute 'strip'` — and since this check runs unconditionally before the Cancel/Update type check, it took down the *entire* poll cycle, not just that one alert, for every cycle afterward.
