@@ -230,6 +230,36 @@ def _validate_timezone(value: str) -> str:
     return value
 
 
+def _validate_database_url(value: str) -> str:
+    """Validate a PostgreSQL connection URL.
+
+    app.py reads DATABASE_URL directly and raises at startup if it's
+    missing -- there is no discrete POSTGRES_HOST/PORT/DB/USER/PASSWORD
+    fallback in the running application (app_core.config.database.
+    build_database_url() still supports one, but app.py never calls it).
+    install.sh and .env.example both only ever set this single variable.
+    """
+    if not value:
+        return value
+    valid_schemes = ("postgresql://", "postgresql+psycopg2://", "postgres://")
+    if not value.startswith(valid_schemes):
+        raise ValueError(
+            "Must be a PostgreSQL connection URL, e.g. "
+            "postgresql+psycopg2://user:password@host:port/database"
+        )
+    _, _, rest = value.partition("@")
+    if not rest or "/" not in rest:
+        raise ValueError(
+            "Must include credentials, host, and database name, e.g. "
+            "postgresql+psycopg2://user:password@host:port/database"
+        )
+    if "change-me" in value:
+        raise ValueError(
+            "Replace the placeholder password ('change-me') with your actual database password."
+        )
+    return value
+
+
 def _normalise_led_lines(value: str) -> str:
     lines = [segment.strip() for segment in value.replace("\r", "").splitlines()]
     cleaned = [segment for segment in lines if segment]
@@ -387,7 +417,20 @@ def _validate_icecast_password(value: str) -> str:
 
 
 # Core section - System-managed settings (NOT shown in wizard, managed by install.sh)
-# These are set during installation and should not be exposed to users
+# These are set during installation and should not be exposed to users.
+#
+# DATABASE_URL is the one variable app.py actually reads (it raises at
+# startup if missing); it used to be assembled from discrete
+# POSTGRES_HOST/PORT/DB/USER/PASSWORD fields, which is why those used to be
+# listed here individually. install.sh and .env.example were changed to
+# write a single DATABASE_URL instead, but this list wasn't updated to
+# match -- so the wizard kept prompting for five variables the app no
+# longer reads, and (since none of them ever held a value on a
+# DATABASE_URL-based install) never recognized them as "already
+# configured." A discrete POSTGRES_* fallback still exists in
+# app_core.config.database.build_database_url() for a couple of standalone
+# scripts, but the running web app and every current install path use
+# DATABASE_URL only.
 SYSTEM_MANAGED_FIELDS = [
     WizardField(
         key="SECRET_KEY",
@@ -396,31 +439,14 @@ SYSTEM_MANAGED_FIELDS = [
         validator=_validate_secret_key,
     ),
     WizardField(
-        key="POSTGRES_HOST",
-        label="PostgreSQL Host",
-        description="Configured during installation.",
-    ),
-    WizardField(
-        key="POSTGRES_PORT",
-        label="PostgreSQL Port",
-        description="Configured during installation.",
-        validator=_validate_port,
-    ),
-    WizardField(
-        key="POSTGRES_DB",
-        label="Database Name",
-        description="Configured during installation.",
-    ),
-    WizardField(
-        key="POSTGRES_USER",
-        label="Database Username",
-        description="Configured during installation.",
-    ),
-    WizardField(
-        key="POSTGRES_PASSWORD",
-        label="Database Password",
-        description="Configured during installation.",
-        input_type="password",
+        key="DATABASE_URL",
+        label="Database Connection URL",
+        description=(
+            "Complete PostgreSQL connection URL (credentials, host, port, and "
+            "database name in one string). Configured during installation."
+        ),
+        placeholder="postgresql+psycopg2://eas_station:password@127.0.0.1:5432/alerts",
+        validator=_validate_database_url,
     ),
 ]
 

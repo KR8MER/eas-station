@@ -35,6 +35,7 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 from flask import Flask, jsonify, render_template
 
@@ -242,7 +243,13 @@ def check_environment_config() -> CheckResult:
     else:
         out["passed"].append(f".env file located at {env_file}")
 
-    critical_vars = ["SECRET_KEY", "POSTGRES_PASSWORD", "DEFAULT_STATE_CODE", "DEFAULT_COUNTY_NAME"]
+    # DATABASE_URL, not POSTGRES_PASSWORD: app.py reads DATABASE_URL directly
+    # and raises at startup if it's missing -- there's no discrete
+    # POSTGRES_HOST/PORT/DB/USER/PASSWORD fallback in the running app.
+    # install.sh and .env.example both only ever set DATABASE_URL, so
+    # checking POSTGRES_PASSWORD here always reported "not set" on every
+    # current-style install, a permanent false-positive warning.
+    critical_vars = ["SECRET_KEY", "DATABASE_URL", "DEFAULT_STATE_CODE", "DEFAULT_COUNTY_NAME"]
     for var in critical_vars:
         value = os.getenv(var, "")
         if not value:
@@ -258,11 +265,12 @@ def check_environment_config() -> CheckResult:
                 )
             else:
                 out["passed"].append("SECRET_KEY is configured (≥16 chars, not a placeholder)")
-        elif var == "POSTGRES_PASSWORD":
-            if value.lower() in _BAD_DB_PASSWORDS:
-                out["warnings"].append("POSTGRES_PASSWORD uses a known weak/default value")
+        elif var == "DATABASE_URL":
+            db_password = (urlparse(value).password or "").lower()
+            if db_password in _BAD_DB_PASSWORDS:
+                out["warnings"].append("DATABASE_URL uses a known weak/default database password")
             else:
-                out["passed"].append("POSTGRES_PASSWORD is configured (not a default)")
+                out["passed"].append("DATABASE_URL is configured (not a default password)")
         else:
             out["passed"].append(f"{var} is configured")
 

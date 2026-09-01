@@ -183,10 +183,51 @@
                     </div>
                     {% endif %}
 
+                    <!-- Intro: what EAS Station is and what to have ready, so the
+                         field wall below isn't the first thing a new user sees. -->
+                    <div class="card mb-4 border-primary-subtle bg-primary bg-opacity-10">
+                        <div class="card-body py-3">
+                            <h3 class="h6 mb-2"><i class="fas fa-circle-info me-2 text-primary"></i>Before you start</h3>
+                            <p class="mb-2 small">
+                                EAS Station monitors NOAA/IPAWS emergency alerts for your area and can
+                                automatically generate and broadcast SAME-encoded audio. The sections
+                                below configure it — most are optional and collapsed by default; the
+                                required ones (<strong>Location</strong> and <strong>EAS Broadcast</strong>)
+                                are open to start.
+                            </p>
+                            <p class="mb-0 small text-muted">
+                                Have ready: your county/state and timezone. Optional, only if you'll use
+                                them now: a TTS provider API key, and IP/port details for any LED sign,
+                                VFD display, or Icecast streaming server. Everything here can be changed
+                                later from Admin → Settings.
+                            </p>
+                        </div>
+                    </div>
+
                     <form method="post" class="mt-3" id="setup-form">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-                        {% for field in env_fields %}
+                        <div class="accordion mb-4" id="setupWizardAccordion">
+                        {% for section in env_sections %}
+                        {% set section_has_error = section.fields | selectattr('key', 'in', errors) | list | length > 0 %}
+                        {% set expand_by_default = section.name in ['location', 'eas'] or (section.name == 'core' and not env_exists) or section_has_error %}
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="heading-{{ section.name }}">
+                                <button class="accordion-button {% if not expand_by_default %}collapsed{% endif %}" type="button"
+                                        data-bs-toggle="collapse" data-bs-target="#collapse-{{ section.name }}"
+                                        aria-expanded="{{ 'true' if expand_by_default else 'false' }}"
+                                        aria-controls="collapse-{{ section.name }}">
+                                    <span class="fw-semibold">{{ section.title }}</span>
+                                    <span class="badge bg-secondary ms-2">{{ section.fields|length }} field{{ 's' if section.fields|length != 1 else '' }}</span>
+                                    {% if section_has_error %}<span class="badge bg-danger ms-2"><i class="fas fa-exclamation-circle me-1"></i>Needs attention</span>{% endif %}
+                                </button>
+                            </h2>
+                            <div id="collapse-{{ section.name }}"
+                                 class="accordion-collapse collapse {% if expand_by_default %}show{% endif %}"
+                                 aria-labelledby="heading-{{ section.name }}">
+                                <div class="accordion-body">
+                                    <p class="text-muted small mb-3">{{ section.description }}</p>
+                                    {% for field in section.fields %}
                         {% if field.key == 'EAS_MANUAL_FIPS_CODES' %}
                         <!-- Custom FIPS County Selector -->
                         <div class="mb-4">
@@ -302,9 +343,10 @@
                             </select>
                             {% else %}
                             <div class="input-group">
+                                {% set is_managed = managed_present.get(field.key, False) %}
                                 {% set placeholder = field.placeholder or '' %}
-                                {% if field.key == 'SECRET_KEY' and secret_present %}
-                                    {% set placeholder = 'Leave blank to keep the existing secret key' %}
+                                {% if is_managed %}
+                                    {% set placeholder = 'Already configured — leave blank to keep the current value' %}
                                 {% endif %}
                                 <input type="{{ field.input_type }}" class="form-control {% if errors.get(field.key) %}is-invalid{% endif %}"
                                        id="field-{{ field.key }}"
@@ -326,13 +368,18 @@
                             {% endif %}
                             <small class="form-text text-muted">
                                 {{ field.description }}
-                                {% if field.key == 'SECRET_KEY' and secret_present %}
-                                    <br>Existing secrets are hidden for security. Leave blank to keep current value.
+                                {% if field.key in managed_present and managed_present.get(field.key) %}
+                                    <br>Configured during installation and hidden for security. Leave blank to keep the current value.
                                 {% endif %}
                             </small>
                         </div>
                         {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
                         {% endfor %}
+                        </div>
 
                         <div class="form-check form-switch mb-4">
                             <input class="form-check-input" type="checkbox" role="switch" id="backup-switch" name="create_backup" value="yes" checked>
