@@ -125,3 +125,14 @@ tests/test_stream_auth.py::test_stderr_pump_marks_403_fatal
 
 # tests/test_support_smoke.py (1) — Renders a page requiring database-backed settings tables.
 tests/test_support_smoke.py::test_support_page_renders
+
+# tests/test_upload_too_large_handler.py (3) — Same root cause as
+# test_support_smoke.py above: dispatching any real request through the
+# app_client fixture triggers db.create_all() against the sqlite test DB,
+# which can't compile the JSONB column on received_eas_alerts. The app
+# fixture forces DATABASE_URL to sqlite unconditionally (conftest.py), so
+# this can't be worked around with a real Postgres URL either. Verified
+# manually with live curl requests against a running deployment instead.
+tests/test_upload_too_large_handler.py::test_oversized_body_gets_app_level_413_not_nginx_default
+tests/test_upload_too_large_handler.py::test_oversized_body_on_api_path_gets_json_error
+tests/test_upload_too_large_handler.py::test_body_under_the_limit_does_not_trigger_413

@@ -341,6 +341,20 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 # so a new deploy bumps the URL and the browser refetches automatically.
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31_536_000  # 1 year
 
+# Must match (or sit at/under) nginx's client_max_body_size in
+# config/nginx-eas-station.conf. Enforcing the real limit here rather than
+# relying on nginx alone matters specifically for HTTP/2: nginx's HTTP/2
+# module checks an oversized request body at the protocol/framing layer and
+# returns its own bare 413 response, bypassing the normal error_page/
+# location pipeline entirely -- a documented nginx limitation, still present
+# as of 1.26. HTTP/1.1 doesn't have this problem, but HTTP/2 is what most
+# browsers negotiate by default over HTTPS. Setting this makes Flask itself
+# reject an oversized body with a normal application response (rendered by
+# the 413 handler below via error.html), which nginx proxies through
+# unchanged regardless of protocol. nginx's own limit is kept slightly
+# higher as a hard backstop against truly extreme payloads.
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB
+
 # Compress text responses (HTML/CSS/JS/JSON/SVG) with Brotli when the client
 # supports it, falling back to gzip. Registered before our @app.after_request
 # header hook so the compression layer runs LAST (Flask invokes after_request
@@ -1177,6 +1191,28 @@ def bad_request_error(error):
     return render_template('error.html',
                          error='400 - Bad Request',
                          details='The request was malformed or invalid.'), 400
+
+
+@app.errorhandler(413)
+def request_entity_too_large_error(error):
+    """413 Request Entity Too Large error page.
+
+    Fires when MAX_CONTENT_LENGTH (set above) is exceeded. Requests over
+    nginx's own client_max_body_size never reach here at all -- see the
+    comment on MAX_CONTENT_LENGTH for why this app-level limit exists
+    specifically (HTTP/2 compatibility), not just nginx's.
+    """
+    max_mb = app.config.get('MAX_CONTENT_LENGTH', 0) // (1024 * 1024)
+    if request.path.startswith('/api/'):
+        return jsonify({
+            'error': f'Upload exceeds the {max_mb} MB size limit.',
+        }), 413
+    return render_template('error.html',
+                         error='413 - Upload Too Large',
+                         details=(
+                             f'That file is larger than the {max_mb} MB upload limit. '
+                             'Try a smaller file, a lower bitrate, or splitting it into parts.'
+                         )), 413
 
 
 # =============================================================================
