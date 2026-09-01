@@ -8,6 +8,13 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.212.1] - 2026-09-01 - Add a friendly gateway-down page for when the web app is unreachable
+
+- Previously, if the Flask app (gunicorn, behind nginx on port 5000) was down or restarting — mid-deploy, crashed, or overloaded — nginx served its bare stock "502 Bad Gateway" page, which gives a visitor no information and no path forward.
+- Added `static/errors/gateway-down.html`, a self-contained page (no external assets besides the wordmark, which nginx also serves directly) explaining the web dashboard is temporarily unavailable, auto-rechecking every 15 seconds, and — importantly — reassuring the visitor that alert monitoring, the CAP poller, audio decoding, and GPIO/transmitter control are independent background services unaffected by the web app being down.
+- Wired into `config/nginx-eas-station.conf` via `error_page 502 503 504` pointing at an `internal`-only `location` block, so nginx serves it directly without proxying to the (unreachable) backend.
+- Verified live: stopped `eas-station-web.service`, confirmed `curl` returns HTTP 502 with the new page's `<title>`, confirmed the page is not reachable by direct URL (404, `internal` guard working), restarted the service, and confirmed normal requests return HTTP 200 again.
+
 ## [2.212.0] - 2026-09-01 - Move the relay lead-in/lead-out from embedded audio silence to program-level GPIO timing
 
 - 2.211.3 (below) added the relay lead-in as 1 second of silence embedded directly in the generated WAV. That was the wrong layer: resend/replay (`/messages/<id>/resend`) plays back the *stored* audio bytes from the original broadcast rather than regenerating them, so a message generated before this fix deployed could never retroactively show the lead-in — confirmed live by resending a pre-fix alert and finding no lead-in, since resend by design never re-runs audio generation. More broadly, baking transmitter-stabilization silence into the audio content meant every consumer of that audio (Icecast stream listeners, FCC-compliance exports, archived recordings) got artificial dead air mixed into the actual alert, permanently and unadjustably.
