@@ -53,6 +53,8 @@ def _run(message_id: int, operator: str | None) -> int:
     from app_core.models import SystemLog
     from app_core.auth.audit import AuditAction, AuditLogger
     from app_utils.eas import (
+        BROADCAST_LEAD_IN_SECONDS,
+        BROADCAST_LEAD_OUT_SECONDS,
         load_eas_config,
         set_broadcast_active,
         clear_broadcast_active,
@@ -149,12 +151,16 @@ def _run(message_id: int, operator: str | None) -> int:
             airchain_signalled = set_broadcast_active(
                 event_code=event_code,
                 label=event_label,
-                duration_seconds=playback_duration,
+                duration_seconds=BROADCAST_LEAD_IN_SECONDS + playback_duration + BROADCAST_LEAD_OUT_SECONDS,
                 source='resend',
                 identifier=str(message_id),
-                header_seconds=header_seconds,
-                eom_seconds=eom_seconds,
+                header_seconds=header_seconds + BROADCAST_LEAD_IN_SECONDS,
+                eom_seconds=eom_seconds + BROADCAST_LEAD_IN_SECONDS,
             )
+            # Relay lead-in: the marker above already fired the rising edge
+            # the GPIO subprocess keys off of; this sleep gives the
+            # transmitter this long to stabilize before real audio starts.
+            time.sleep(BROADCAST_LEAD_IN_SECONDS)
 
             # Re-inject the stored composite audio into the live Icecast
             # air-chain so stream listeners hear the resend exactly as they
@@ -216,6 +222,9 @@ def _run(message_id: int, operator: str | None) -> int:
                 message_id, exc, exc_info=True,
             )
         finally:
+            # Relay lead-out: hold the relay this much longer past the actual
+            # end of playout before releasing it.
+            time.sleep(BROADCAST_LEAD_OUT_SECONDS)
             # Falling edge: clearing the marker releases the relay in the GPIO
             # subprocess (which also self-releases on the marker TTL).  Pass the
             # identifier so an overlapping newer broadcast's marker isn't erased.

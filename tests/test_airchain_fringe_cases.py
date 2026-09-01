@@ -227,6 +227,81 @@ class TestHandleAlertDbFailure:
 
 
 # ===========================================================================
+# Program-level relay lead-in/lead-out (replaces audio-embedded silence)
+# ===========================================================================
+
+class TestHandleAlertBroadcastLeadTimes:
+    """handle_alert() must key the relay BROADCAST_LEAD_IN_SECONDS before
+    real audio playout starts, and hold it BROADCAST_LEAD_OUT_SECONDS after
+    playout ends, entirely at the program level -- no silence embedded in
+    the generated audio (see TestBuildFilesHasNoEmbeddedLeadInSilence in
+    tests/test_forwarded_alert_audio_flow.py for the audio-side guard).
+
+    User-reported bug this replaces: the lead-in/lead-out used to be baked
+    into the WAV as literal silence samples. That broke resend (which
+    replays stored bytes rather than regenerating audio, so old messages
+    could never show the padding) and mixed artificial dead air into every
+    consumer of the stored audio (Icecast, FCC exports, archives).
+    """
+
+    def test_sleeps_bracket_playout_in_the_right_order(self):
+        from app_utils.eas import BROADCAST_LEAD_IN_SECONDS, BROADCAST_LEAD_OUT_SECONDS
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            broadcaster, _ = _make_broadcaster(tmpdir)
+
+            calls = []
+            with patch('app_utils.eas.time.sleep', side_effect=lambda s: calls.append(('sleep', s))), \
+                 patch('app_utils.eas.set_broadcast_active',
+                       side_effect=lambda **kw: calls.append(('set_broadcast_active', kw)) or True), \
+                 patch('app_utils.eas.clear_broadcast_active',
+                       side_effect=lambda **kw: calls.append(('clear_broadcast_active', kw))), \
+                 patch.object(broadcaster, '_play_audio_or_bytes',
+                              side_effect=lambda *a, **kw: calls.append(('play', None))):
+                result = broadcaster.handle_alert(_build_minimal_alert(), _build_payload())
+
+            assert result.get('same_triggered') is True
+
+            kinds = [c[0] for c in calls]
+            # Between 'play' and 'clear_broadcast_active' there may also be a
+            # pre-existing reconciliation sleep (holding the marker for the
+            # full playback duration when the mocked player returns
+            # instantly) -- that's unrelated, expected behavior, not part of
+            # what this test guards. What matters: set_broadcast_active is
+            # immediately followed by the lead-in sleep and then playout; and
+            # clear_broadcast_active is immediately preceded by the lead-out
+            # sleep.
+            assert kinds[0] == 'set_broadcast_active'
+            assert kinds[1] == 'sleep'
+            assert kinds[2] == 'play'
+            assert kinds[-1] == 'clear_broadcast_active'
+            assert kinds[-2] == 'sleep'
+
+            assert calls[1] == ('sleep', BROADCAST_LEAD_IN_SECONDS)
+            assert calls[-2] == ('sleep', BROADCAST_LEAD_OUT_SECONDS)
+
+    def test_set_broadcast_active_duration_and_phases_are_padded_by_lead_in(self):
+        from app_utils.eas import BROADCAST_LEAD_IN_SECONDS, BROADCAST_LEAD_OUT_SECONDS
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            broadcaster, _ = _make_broadcaster(tmpdir)
+
+            captured = {}
+            with patch('app_utils.eas.time.sleep'), \
+                 patch('app_utils.eas.set_broadcast_active',
+                       side_effect=lambda **kw: captured.update(kw) or True), \
+                 patch('app_utils.eas.clear_broadcast_active'), \
+                 patch.object(broadcaster, '_play_audio_or_bytes'):
+                broadcaster.handle_alert(_build_minimal_alert(), _build_payload())
+
+            # duration_seconds must include both the lead-in and lead-out padding
+            # on top of the real playback length; header/eom phase boundaries
+            # only shift by the lead-in (they anchor to when real audio starts).
+            assert captured['duration_seconds'] >= BROADCAST_LEAD_IN_SECONDS + BROADCAST_LEAD_OUT_SECONDS
+            assert captured['header_seconds'] >= BROADCAST_LEAD_IN_SECONDS
+
+
+# ===========================================================================
 # Bug 3 — load_eas_config() must use db_session for EASSettings outside Flask
 # ===========================================================================
 
