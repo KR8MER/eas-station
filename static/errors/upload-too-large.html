@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upload Too Large — EAS Station&trade;</title>
+<style>
+    :root {
+        --bg: #0b1220;
+        --surface: #131c30;
+        --border: #263149;
+        --text: #eef1f8;
+        --text-muted: #9aa5bd;
+        --accent: #4f8cff;
+        --accent-soft: rgba(79, 140, 255, 0.14);
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: radial-gradient(circle at 50% -10%, #1a2540 0%, var(--bg) 55%);
+        color: var(--text);
+        font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .card {
+        width: 100%;
+        max-width: 560px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 40px 36px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+    }
+    .wordmark {
+        display: block;
+        height: 34px;
+        width: auto;
+        margin-bottom: 28px;
+    }
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        margin-bottom: 18px;
+    }
+    .badge svg { width: 14px; height: 14px; flex: none; }
+    h1 {
+        margin: 0 0 12px;
+        font-size: 24px;
+        line-height: 1.3;
+        text-wrap: balance;
+    }
+    p {
+        margin: 0 0 16px;
+        color: var(--text-muted);
+        line-height: 1.6;
+        font-size: 15px;
+    }
+    p:last-of-type { margin-bottom: 0; }
+    .limit-line {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin-top: 24px;
+        padding: 16px 18px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: rgba(79, 140, 255, 0.06);
+    }
+    .limit-line .label {
+        font-size: 14px;
+        color: var(--text);
+    }
+    .limit-line .value {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--accent);
+        font-variant-numeric: tabular-nums;
+    }
+    ul {
+        margin: 16px 0 0;
+        padding-left: 20px;
+        color: var(--text-muted);
+        font-size: 14px;
+        line-height: 1.7;
+    }
+    li strong { color: var(--text); }
+    .meta {
+        margin-top: 28px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: flex-end;
+    }
+    .back-btn {
+        appearance: none;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    .back-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+</style>
+</head>
+<body>
+<div class="card">
+    <img class="wordmark" src="/static/img/eas-system-wordmark.svg" alt="EAS Station">
+
+    <div class="badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+        Upload rejected
+    </div>
+
+    <h1>That file is larger than the upload limit</h1>
+    <p>
+        The reverse proxy rejected this upload before it reached the application
+        &mdash; nothing was partially saved. This applies to any upload: audio
+        files, boundary shapefiles, narration recordings, and similar.
+    </p>
+
+    <div class="limit-line">
+        <span class="label">Maximum upload size</span>
+        <span class="value">100 MB</span>
+    </div>
+
+    <ul>
+        <li><strong>Audio uploads</strong> &mdash; try a lower bitrate or a shorter clip.</li>
+        <li><strong>Shapefiles</strong> &mdash; upload the individual .shp/.shx/.dbf components, or simplify the geometry, instead of one large bundle.</li>
+        <li>Still too large? An administrator can raise <code>client_max_body_size</code> in the nginx configuration.</li>
+    </ul>
+
+    <div class="meta">
+        <button class="back-btn" onclick="history.back()">Go back</button>
+    </div>
+</div>
+</body>
+</html>
