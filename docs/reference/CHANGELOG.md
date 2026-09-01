@@ -8,6 +8,14 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.213.1] - 2026-09-01 - Isolate per-item failures in the CAP poller's processing loops
+
+- The 2026-08-31 outage (fixed in 2.211.2) was caused by one unhandled data-shape variance in one alert's `<references>` field crashing the *entire* poll cycle, not just that alert — because `poll_and_process()`'s main per-alert loop had only one `try` around the whole cycle, not one per alert. That specific field bug was fixed, but the structural gap that let it take down every other alert in the batch was not.
+- An investigation this session (prompted by a broader stability review) found four loops in `poller/cap_poller.py` with the same shape — one bad item's exception propagating out of the loop and aborting everything else in that batch/cycle — while confirming every other external-data ingestion point in the codebase (audio capture, GPS parsing, GPIO events, boundary uploads) already isolates per-item failures correctly.
+- Wrapped each loop's per-item body in its own `try/except` that logs the offending item's identifier with a full traceback and moves on to the next item: `poll_and_process()`'s main per-alert loop (the one that caused the outage), `fetch_cap_alerts()`'s per-alert dedup/normalize loop, `_parse_ipaws_xml_feed()`'s per-`<alert>` XML conversion loop, and `_process_cap_references_cancellation()`'s per-reference loop (a single Cancel message can reference several prior alerts; one bad reference no longer blocks the others from being cancelled).
+- Also added `db_session.rollback()` to the per-alert catch in the main loop: `_process_cap_references_cancellation()` mutates ORM objects and commits conditionally with no rollback path of its own, so a failure partway through one alert could otherwise leave dirty, uncommitted session state that cascades into the *next* alert's processing.
+- New regression tests (`tests/test_cap_poller_per_item_isolation.py`) feed one malformed item alongside valid ones into each of the three functionally-testable loops and assert the valid items are still processed; the fourth (`poll_and_process()` itself, which needs a full Flask/DB context to exercise functionally) is guarded structurally, asserting the try/except-with-rollback wrapping is present around the exact loop that crashed in production.
+
 ## [2.213.0] - 2026-09-01 - Reorganize the setup wizard into collapsible sections
 
 - The setup wizard at `/setup` rendered all ~35 configuration fields as one flat, unbroken form with no section headers, no progress indication, and no visual grouping — despite the backend already modeling the config as 7 logical sections (`WIZARD_SECTIONS` in `app_utils/setup_wizard.py`). A first-time user got a wall of inputs before being told what any of it meant.
