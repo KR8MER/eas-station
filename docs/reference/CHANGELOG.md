@@ -8,6 +8,12 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.216.1] - 2026-09-02 - Retry the LAN NTP Server's config write once on a transient failure
+
+- Confirmed live: `webapp/admin/ntp_server.py`'s `sudo tee` write of the chrony conf.d fragment hit a transient `Read-only file system` error for about 15 minutes right after this feature's first deploy, then self-resolved on its own with no code change and no repeat since. The exact trigger was never confirmed — it wasn't real filesystem corruption (no matching kernel/dmesg errors, and the target path is directly writable when tested from inside the service's own mount namespace afterward) — so this isn't a root-cause fix, but a short retry costs nothing on the common (successful) case and may ride out a similarly brief blip without the admin needing to notice the error and click Apply again themselves.
+- Extracted the write into `_write_chrony_conf()`, which retries once after a 1-second pause on either a non-zero exit or a raised exception before giving up and surfacing the existing error message.
+- New tests in `tests/test_ntp_server.py`: unit-level coverage of `_write_chrony_conf()` (succeeds without retrying, recovers after one failure, gives up after exhausting the retry, recovers from a raised exception the same as a bad return code) plus one integration-level test confirming the `/configure` route as a whole succeeds when the underlying write recovers on its retry.
+
 ## [2.216.0] - 2026-09-02 - Add a LAN NTP Server admin page
 
 - chrony is installed and running on every deployment (it's the box's own time sync, and on GPS-HAT hardware the stratum-1 source), but by default it only ever acts as a *client* -- nothing in `chrony.conf` grants any subnet permission to query it, so a request from a LAN device is silently ignored. Which subnets should be trusted is inherently a per-deployment decision (a home LAN, an office VLAN, a Tailscale range, or nothing at all) with no correct default, so this needed to be admin-configured rather than something `install.sh` could set up once.

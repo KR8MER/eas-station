@@ -46,6 +46,7 @@ import logging
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -275,6 +276,54 @@ def _render_conf(subnets: list[str]) -> str:
     return "\n".join(lines)
 
 
+def _write_chrony_conf(content: str, *, retries: int = 1, retry_delay: float = 1.0) -> tuple[bool, str]:
+    """Write *content* to the chrony conf.d fragment via sudo tee, retrying
+    once after a brief pause on failure.
+
+    Confirmed live 2026-09-02: this exact write hit a transient "Read-only
+    file system" error for about 15 minutes right after this feature's
+    first deploy, then self-resolved on its own -- no code change, no
+    repeat since. The exact trigger was never confirmed (it wasn't real
+    filesystem corruption: no matching kernel/dmesg errors, and the target
+    path is directly writable when tested from inside this very service's
+    mount namespace afterward), so this can't fix a specific root cause --
+    but a short retry costs nothing on the common (successful) case and may
+    ride out a similarly brief blip without forcing the admin to notice the
+    error and click Apply again themselves.
+
+    Returns ``(success, last_error)`` -- *last_error* is the stripped
+    stderr/exception text from the final attempt, empty on success.
+    """
+    last_error = ""
+    for attempt in range(retries + 1):
+        try:
+            proc = subprocess.run(
+                ["sudo", "tee", str(_CHRONY_CONF_FILE)],
+                input=content,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            if proc.returncode == 0:
+                return True, ""
+            last_error = proc.stderr.strip()
+        except Exception as exc:
+            last_error = str(exc)
+
+        if attempt < retries:
+            logger.warning(
+                "Chrony NTP-server config write failed (attempt %d/%d): %s -- retrying",
+                attempt + 1, retries + 1, last_error,
+            )
+            time.sleep(retry_delay)
+
+    logger.error(
+        "Failed to write chrony NTP-server config after %d attempt(s): %s",
+        retries + 1, last_error,
+    )
+    return False, last_error
+
+
 @ntp_server_bp.route("/", methods=["GET"])
 @require_auth
 @require_permission("system.configure")
@@ -318,18 +367,8 @@ def configure_ntp_server():
             return jsonify({"success": False, "error": str(exc)}), 400
 
     # Write the conf.d fragment (web process can't write /etc/chrony directly).
-    try:
-        proc = subprocess.run(
-            ["sudo", "tee", str(_CHRONY_CONF_FILE)],
-            input=_render_conf(desired),
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        if proc.returncode != 0:
-            raise RuntimeError(proc.stderr.strip())
-    except Exception as exc:
-        logger.error("Failed to write chrony NTP-server config: %s", exc)
+    ok_write, _write_error = _write_chrony_conf(_render_conf(desired))
+    if not ok_write:
         return jsonify({"success": False, "error": "Failed to write chrony configuration. Check server logs."}), 500
 
     ok_restart, restart_out = _run(["systemctl", "restart", _CHRONY_SERVICE])

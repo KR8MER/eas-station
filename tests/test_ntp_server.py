@@ -41,6 +41,7 @@ from webapp.admin.ntp_server import (
     _format_last_seen,
     _render_conf,
     _validate_cidr,
+    _write_chrony_conf,
     configure_ntp_server,
     ntp_server_status,
 )
@@ -329,6 +330,92 @@ class TestConfigureNtpServerRoute:
             ["sudo", "-n", "ufw", "delete", "allow", "from", "192.168.1.0/24", "to", "any",
              "port", "123", "proto", "udp"]
         ]
+
+
+class TestWriteChronyConf:
+    """Confirmed live 2026-09-02: the chrony conf.d write hit a transient
+    'Read-only file system' error for about 15 minutes right after this
+    feature's first deploy, then self-resolved with no code change and no
+    repeat since. _write_chrony_conf() retries once so a similarly brief
+    blip doesn't force the admin to notice the error and click Apply again.
+    """
+
+    def test_succeeds_on_first_try_without_retrying(self):
+        with patch("webapp.admin.ntp_server.subprocess.run", return_value=_proc(0, "")) as mock_run, \
+             patch("webapp.admin.ntp_server.time.sleep") as mock_sleep:
+            ok, error = _write_chrony_conf("allow 192.168.1.0/24\n")
+        assert ok is True
+        assert error == ""
+        assert mock_run.call_count == 1
+        mock_sleep.assert_not_called()
+
+    def test_recovers_after_one_transient_failure(self):
+        attempts = [_proc(1, "", "tee: ...: Read-only file system"), _proc(0, "")]
+        with patch("webapp.admin.ntp_server.subprocess.run", side_effect=attempts) as mock_run, \
+             patch("webapp.admin.ntp_server.time.sleep") as mock_sleep:
+            ok, error = _write_chrony_conf("allow 192.168.1.0/24\n")
+        assert ok is True
+        assert error == ""
+        assert mock_run.call_count == 2
+        mock_sleep.assert_called_once()
+
+    def test_gives_up_after_exhausting_the_retry(self):
+        attempts = [
+            _proc(1, "", "tee: ...: Read-only file system"),
+            _proc(1, "", "tee: ...: Read-only file system"),
+        ]
+        with patch("webapp.admin.ntp_server.subprocess.run", side_effect=attempts) as mock_run, \
+             patch("webapp.admin.ntp_server.time.sleep"):
+            ok, error = _write_chrony_conf("allow 192.168.1.0/24\n")
+        assert ok is False
+        assert "Read-only file system" in error
+        assert mock_run.call_count == 2
+
+    def test_recovers_from_a_raised_exception_too_not_just_a_bad_returncode(self):
+        attempts = [OSError("timed out"), _proc(0, "")]
+        with patch("webapp.admin.ntp_server.subprocess.run", side_effect=attempts), \
+             patch("webapp.admin.ntp_server.time.sleep"):
+            ok, error = _write_chrony_conf("allow 192.168.1.0/24\n")
+        assert ok is True
+
+
+class TestConfigureNtpServerRouteRetriesTransientWriteFailure:
+    """Integration-level: the /configure route as a whole must succeed when
+    the underlying write recovers on its retry, not just the unit-level
+    _write_chrony_conf() function in isolation."""
+
+    URL = "/admin/ntp-server/configure"
+
+    def test_route_succeeds_when_write_recovers_on_retry(self, app, authenticated_user, tmp_path):
+        conf_file = tmp_path / "eas-station-ntp-server.conf"
+        tee_attempts = {"count": 0}
+
+        def fake_run(cmd, **kwargs):
+            if cmd[:2] == ["sudo", "tee"]:
+                tee_attempts["count"] += 1
+                if tee_attempts["count"] == 1:
+                    return _proc(1, "", "tee: ...: Read-only file system")
+                conf_file.write_text(kwargs.get("input", ""))
+                return _proc(0, "")
+            if "systemctl" in cmd and "restart" in cmd:
+                return _proc(0, "")
+            if "ufw" in cmd and "status" in cmd:
+                return _proc(0, "")
+            if "ufw" in cmd and "allow" in cmd:
+                return _proc(0, "Rule added")
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        with patch("webapp.admin.ntp_server._chronyd_installed", return_value=True), \
+             patch("webapp.admin.ntp_server._CHRONY_CONF_FILE", conf_file), \
+             patch("webapp.admin.ntp_server.subprocess.run", side_effect=fake_run), \
+             patch("webapp.admin.ntp_server.time.sleep"):
+            with app.test_request_context(self.URL, method="POST", json={"enabled": True, "subnets": ["192.168.1.0/24"]}):
+                response = configure_ntp_server()
+
+        data = response.get_json()
+        assert data["success"] is True
+        assert tee_attempts["count"] == 2
+        assert "allow 192.168.1.0/24" in conf_file.read_text()
 
 
 class TestNtpServerStatusRoute:
