@@ -77,7 +77,8 @@ ProtectHome=true
 # - /run: Required for nginx -t (certbot nginx plugin)
 # - /etc/nginx: Required for certbot nginx plugin to modify config
 # - /etc/letsencrypt: Standard Let's Encrypt directory (if used)
-ReadWritePaths=/opt/eas-station /var/log/eas-station /var/www /run /etc/nginx /etc/letsencrypt /etc/icecast2
+# - /etc/chrony: LAN NTP Server admin page writes conf.d/eas-station-ntp-server.conf here
+ReadWritePaths=/opt/eas-station /var/log/eas-station /var/www /run /etc/nginx /etc/letsencrypt /etc/icecast2 /etc/chrony
 
 # GPIO device access for OLED button on Pi 5
 DeviceAllow=/dev/gpiochip0 rw
