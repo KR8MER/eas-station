@@ -34,20 +34,9 @@ pre-filled with the real value, so most saves submit it blank).
 
 import pytest
 from flask import Flask
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.compiler import compiles
 
 from app_core.extensions import db
 from app_core.tts_settings import update_tts_settings
-
-
-@compiles(JSONB, "sqlite")
-def _compile_jsonb_sqlite(element, compiler, **kw):
-    # db.create_all() registers every model on the shared metadata, including
-    # ones using Postgres-only JSONB columns unrelated to TTSSettings; this
-    # mirrors the shim in tests/test_audit_config_changes.py so the full
-    # schema can still be created against SQLite for this focused test.
-    return "TEXT"
 
 
 @pytest.fixture
@@ -63,7 +52,15 @@ def app_context(tmp_path):
     )
     db.init_app(app)
     with app.app_context():
-        db.create_all()
+        # Create only the one table this file touches, not db.create_all() --
+        # the full shared metadata includes a PostGIS Geometry column
+        # (boundaries.geom), and geoalchemy2 registers a SQLite DDL hook for
+        # it that calls the real SpatiaLite RecoverGeometryColumn() function;
+        # under plain sqlite3 (no mod_spatialite loaded) that errors with
+        # "no such function". Mirrors the scoped Table.create() pattern in
+        # tests/test_audit_config_changes.py.
+        from app_core._models_settings import TTSSettings
+        TTSSettings.__table__.create(bind=db.engine)
         yield app
 
 

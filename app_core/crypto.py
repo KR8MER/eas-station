@@ -121,9 +121,17 @@ def pepper_password(password: str) -> str:
     The pepper is a secret independent of anything stored in the database
     (unlike the per-hash salt scrypt already applies), so a stolen database
     dump alone -- without SECRET_KEY -- isn't enough to brute-force offline.
+
+    CodeQL flags the SHA256 use below as "weak hashing of sensitive data" --
+    a false positive here: this is HMAC-SHA256 (a keyed PRF/MAC, secure and
+    standard for this purpose; its security doesn't depend on SHA256 being
+    slow) used only to compute an *intermediate* peppered value, never
+    stored or compared directly. The actual, computationally-expensive
+    password hash is werkzeug_generate_password_hash() (scrypt), applied to
+    this value's output in _models_admin.py -- see AdminUser.set_password().
     """
     key = _derive_key(_PEPPER_INFO)
-    return hmac.new(key, password.encode("utf-8"), hashlib.sha256).hexdigest()
+    return hmac.new(key, password.encode("utf-8"), hashlib.sha256).hexdigest()  # lgtm[py/weak-sensitive-data-hashing]
 
 
 # Every (table, column) EncryptedString applies to. Kept as a single list so

@@ -201,6 +201,7 @@ nav:
       - Releasing: process/RELEASING.md
       - Certification Reliability Plan: process/certification_reliability_plan.md
       - FCC Part 11 Compliance Matrix: process/FCC_PART11_COMPLIANCE_MATRIX.md
+      - FCC 26-38 EAS Cybersecurity Compliance: compliance/FCC_26-38_EAS_CYBERSECURITY.md
   - Reference:
       - About: reference/ABOUT.md
       - Attribution & Credits: reference/dependency_attribution.md

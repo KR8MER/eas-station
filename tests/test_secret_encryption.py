@@ -33,16 +33,9 @@ existed.
 
 import pytest
 from flask import Flask
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.compiler import compiles
 from werkzeug.security import generate_password_hash
 
 from app_core.extensions import db
-
-
-@compiles(JSONB, "sqlite")
-def _compile_jsonb_sqlite(element, compiler, **kw):
-    return "TEXT"
 
 
 def _make_app(tmp_path, name, secret_key="a" * 40):
@@ -61,7 +54,19 @@ def _make_app(tmp_path, name, secret_key="a" * 40):
 def app_context(tmp_path):
     app = _make_app(tmp_path, "secret-encryption-test")
     with app.app_context():
-        db.create_all()
+        # Create only the tables these tests touch, not db.create_all() --
+        # the full shared metadata includes a PostGIS Geometry column
+        # (boundaries.geom), and geoalchemy2 registers a SQLite DDL hook for
+        # it that calls the real SpatiaLite RecoverGeometryColumn() function;
+        # under plain sqlite3 (no mod_spatialite loaded) that errors with
+        # "no such function". Mirrors the scoped Table.create() pattern in
+        # tests/test_audit_config_changes.py.
+        from app_core._models_admin import AdminUser
+        from app_core._models_settings import TailscaleSettings, TTSSettings
+        engine = db.engine
+        TTSSettings.__table__.create(bind=engine)
+        TailscaleSettings.__table__.create(bind=engine)
+        AdminUser.__table__.create(bind=engine)
         yield app
 
 
