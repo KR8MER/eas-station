@@ -48,13 +48,13 @@ def _load_password_policy() -> dict:
     settings = ApplicationSettings.query.first()
     if settings:
         return {
-            'min_length': settings.password_min_length or 8,
+            'min_length': settings.password_min_length or 15,
             'require_uppercase': bool(settings.password_require_uppercase),
             'require_lowercase': bool(settings.password_require_lowercase),
             'require_digits': bool(settings.password_require_digits),
             'require_special': bool(settings.password_require_special),
         }
-    return {'min_length': 8, 'require_uppercase': False, 'require_lowercase': False,
+    return {'min_length': 15, 'require_uppercase': False, 'require_lowercase': False,
             'require_digits': False, 'require_special': False}
 
 

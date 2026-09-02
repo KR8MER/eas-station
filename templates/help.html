@@ -756,6 +756,10 @@
                                         <i class="fas fa-shield-alt me-2"></i>
                                         Traffic data is stored locally in the station database and pruned automatically past the retention window; nothing is sent to any third party.
                                     </div>
+                                    <div class="alert alert-light mb-0 mt-3">
+                                        <i class="fas fa-lock me-2"></i>
+                                        <strong>Credential protection (background, no setup needed):</strong> every stored API key, streaming/SMTP password, SNMP community string, and MFA secret is encrypted at rest, and admin password hashes are peppered (a server-side secret independent of the database) in addition to being salted. Nothing to configure — see <a href="/docs/security/SECURITY#7-credential-encryption-at-rest">Credential Encryption at Rest</a> for details.
+                                    </div>
                                 </div>
                             </div>
                         </div>

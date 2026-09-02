@@ -35,11 +35,11 @@
                         </div>
                         <div class="mb-3">
                             <label for="password" class="form-label">Password</label>
-                            <input type="password" class="form-control {% if errors.password %}is-invalid{% endif %}" id="password" name="password" required minlength="12">
+                            <input type="password" class="form-control {% if errors.password %}is-invalid{% endif %}" id="password" name="password" required minlength="15">
                             {% if errors.password %}
                             <div class="invalid-feedback d-block">{{ errors.password }}</div>
                             {% else %}
-                            <div class="form-text">Passwords must be at least 12 characters.</div>
+                            <div class="form-text">Passwords must be at least 15 characters (FCC 47 CFR 11.35(d) minimum for EAS equipment).</div>
                             {% endif %}
                         </div>
                         <div class="mb-3">

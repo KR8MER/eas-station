@@ -791,6 +791,50 @@ Comprehensive audit trail of all security events including:
 - IP filter changes
 - Permission denials
 
+### 7. Credential Encryption at Rest
+
+**Location**: `app_core/crypto.py`
+
+Every stored credential the application needs to reuse — as opposed to a
+login password, which is only ever *verified*, never read back — is
+encrypted at rest: the Icecast source/admin passwords, the Azure OpenAI TTS
+API key, the SMTP password, the Twilio (SMS) auth token, the SNMP community
+string, the Tailscale pre-auth key, the Tickstem API key, and each user's
+TOTP (MFA) secret.
+
+**How it works**: `EncryptedString`, a SQLAlchemy column type backed by
+[Fernet](https://cryptography.io/en/latest/fernet/) (AES-128-CBC + HMAC),
+encrypts on write and decrypts on read transparently — model code reads and
+writes these columns exactly like any other string field. The encryption key
+is derived from the application's `SECRET_KEY` via HKDF-SHA256 with a
+purpose-specific label, so no second secret needs to be deployed or
+protected — `SECRET_KEY` is already required and already validated for
+length at setup. A database dump alone (e.g. from a stolen backup or a SQL
+injection read) yields ciphertext, not usable credentials.
+
+⚠️ Rotating `SECRET_KEY` invalidates every encrypted value, since the
+encryption key derives from it — back up secrets before rotating, or expect
+to re-enter them afterward.
+
+**Password hashing vs. encryption**: login passwords and MFA backup codes
+use one-way hashing (`werkzeug.security`, scrypt) with a per-hash salt —
+correct, since the application only ever needs to *verify* them, never read
+the original value back. As of `2.214.0`, those hashes are additionally
+**peppered**: `pepper_password()` HMACs the password with a second
+HKDF-derived secret (independent of anything stored in the database) before
+hashing, so a stolen database dump alone — without `SECRET_KEY` — is not
+enough to brute-force credentials offline even with the correct per-hash
+salt. Hashes and backup codes written before peppering was added still
+verify (a fallback check) and upgrade to the peppered format transparently
+on next successful use; no forced password resets.
+
+As of `2.214.0`, the minimum admin password length is also **15 characters**
+by default — the floor set by FCC 47 CFR § 11.35(d)(1)(i) (added by
+FCC 26-38) for EAS equipment. See
+[FCC 26-38 EAS Cybersecurity Compliance Reference](../compliance/FCC_26-38_EAS_CYBERSECURITY.md)
+for the full rule text, a requirement-by-requirement mapping to this
+platform's features, and an operator compliance checklist.
+
 ---
 
 ## fail2ban Integration

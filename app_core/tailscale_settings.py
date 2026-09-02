@@ -68,8 +68,18 @@ def update_tailscale_settings(data: Dict[str, Any]) -> TailscaleSettings:
 
     if 'enabled' in data:
         settings.enabled = bool(data['enabled'])
-    if 'auth_key' in data:
-        settings.auth_key = str(data['auth_key']).strip()
+    if data.get('clear_auth_key'):
+        # Explicit "switch to browser-based login" action from the UI --
+        # the only way to blank out an existing key, since a bare empty
+        # submission below means "no change" instead.
+        settings.auth_key = ''
+    elif 'auth_key' in data:
+        submitted_key = str(data['auth_key']).strip()
+        # The form field is never pre-filled with the real secret, so a
+        # blank or masked-placeholder submission means "no change", not
+        # "clear the key" -- mirrors update_tts_settings() in tts_settings.py.
+        if submitted_key and submitted_key != '••••••••':
+            settings.auth_key = submitted_key
     if 'hostname' in data:
         settings.hostname = str(data['hostname']).strip()
     if 'advertise_exit_node' in data:

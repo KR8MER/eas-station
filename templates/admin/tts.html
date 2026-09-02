@@ -57,10 +57,10 @@
 
             <div class="mb-3">
                 <label for="azure_openai_key" class="form-label">API Key *</label>
-                <input type="text" class="form-control" id="azure_openai_key" name="azure_openai_key" 
-                       value="{{ settings.azure_openai_key or '' }}" 
-                       placeholder="Enter your Azure OpenAI API key">
-                <div class="form-text">Your Azure OpenAI API key (stored in database)</div>
+                <input type="password" class="form-control" id="azure_openai_key" name="azure_openai_key"
+                       value="" autocomplete="new-password"
+                       placeholder="{% if settings.azure_openai_key %}•••••••••••••••••••• (leave blank to keep the current key){% else %}Enter your Azure OpenAI API key{% endif %}">
+                <div class="form-text">Your Azure OpenAI API key (stored in database, never displayed once saved). Leave blank when saving other settings to keep the current key.</div>
             </div>
 
             <div class="row">
@@ -192,6 +192,29 @@ const MEDIA_ERROR_MESSAGES = {
     4: 'The audio source is not supported by this browser.',
 };
 
+// WebKit (Safari, and Chrome on iOS - which is WebKit under the hood) fails
+// to play <audio> sourced from an inline `data:` URI with
+// MEDIA_ERR_SRC_NOT_SUPPORTED even when the underlying audio is perfectly
+// valid. Confirmed by regenerating the same audio server-side and validating
+// it with ffprobe/ffmpeg - clean decode, no corruption. Blob object URLs are
+// the standard workaround: WebKit handles them far more reliably than data
+// URIs for programmatically generated audio.
+function setAudioSourceFromBase64(audioEl, base64Data, mimeType) {
+    if (audioEl.dataset.objectUrl) {
+        URL.revokeObjectURL(audioEl.dataset.objectUrl);
+        delete audioEl.dataset.objectUrl;
+    }
+    const byteChars = atob(base64Data);
+    const byteNumbers = new Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) {
+        byteNumbers[i] = byteChars.charCodeAt(i);
+    }
+    const blob = new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
+    const objectUrl = URL.createObjectURL(blob);
+    audioEl.dataset.objectUrl = objectUrl;
+    audioEl.src = objectUrl;
+}
+
 function wireAudioErrorReporting(audioElementId, warningElementId) {
     const audioEl = document.getElementById(audioElementId);
     const warningEl = document.getElementById(warningElementId);
@@ -300,7 +323,7 @@ document.getElementById('testTtsBtn').addEventListener('click', async function()
             
             // If audio data is included, show the audio player
             if (result.audio_data && result.audio_type) {
-                audioElement.src = `data:${result.audio_type};base64,${result.audio_data}`;
+                setAudioSourceFromBase64(audioElement, result.audio_data, result.audio_type);
                 audioPlayerDiv.style.display = 'block';
                 // Auto-play the audio
                 try {
@@ -395,7 +418,7 @@ async function runNormalizationPreview(generateAudio) {
         warningEl.style.display = 'none';
 
         if (result.audio_data) {
-            audioEl.src = `data:${result.audio_type};base64,${result.audio_data}`;
+            setAudioSourceFromBase64(audioEl, result.audio_data, result.audio_type);
             audioPlayer.style.display = 'block';
             try { await audioEl.play(); } catch (_) {}
         } else if (result.audio_warning) {

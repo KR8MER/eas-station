@@ -310,6 +310,13 @@ SETTINGS_SECTION = NavSection(
                     description="Upload and manage general boundary polygons (electric, fire, school, custom, ...) and the NOAA zone catalog.",
                     permissions=(SYSTEM_CONFIGURE,),
                 ),
+                NavItem(
+                    label="Database Browser (pgweb)",
+                    icon="fas fa-table",
+                    href="http://192.168.8.152:8081",
+                    description="Raw PostgreSQL browser/editor. LAN-only (not reachable off-network), and it has no login of its own -- see docs/guides/PGWEB_DATABASE_BROWSER.md before using it.",
+                    permissions=(SYSTEM_CONFIGURE,),
+                ),
             ),
         ),
         NavGroup(

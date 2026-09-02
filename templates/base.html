@@ -153,6 +153,19 @@
     </div>
     {% endif %}
 
+    <!-- FCC 47 CFR 11.35(d) Password Length Reminder (passive, dismissible) -->
+    {% if session.get('pw_predates_15char_policy') %}
+    <div class="container-fluid mt-2">
+        <div class="alert alert-info alert-dismissible fade show" role="alert">
+            <i class="fas fa-shield-halved me-2"></i>
+            <strong>Password policy update.</strong>
+            EAS equipment passwords must now be at least 15 characters (FCC 47 CFR 11.35(d)). This account's password was set before that requirement shipped and may not meet it.
+            <a href="/admin/users" class="alert-link">Update your password</a> when convenient — nothing is blocked in the meantime.
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Main Content -->
     <main class="page-shell">
         {% block content %}{% endblock %}

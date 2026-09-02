@@ -1849,6 +1849,14 @@ def initialize_database():
             except Exception as rbac_error:
                 logger.warning("Failed to initialize RBAC roles: %s", rbac_error)
 
+            # Encrypt any stored credential still sitting as plaintext from
+            # before EncryptedString existed (2.214.0) -- see app_core/crypto.py.
+            try:
+                from app_core.crypto import backfill_legacy_plaintext_secrets
+                backfill_legacy_plaintext_secrets(db.session)
+            except Exception as crypto_backfill_error:
+                logger.warning("Legacy secret backfill encryption failed: %s", crypto_backfill_error)
+
             # Radio receivers are handled by the dedicated audio service
             # The web application serves the UI and reads metrics from Redis
             logger.info("Radio receiver initialization handled by audio service")

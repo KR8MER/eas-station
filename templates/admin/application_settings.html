@@ -141,7 +141,7 @@
                             </label>
                             <input type="number" class="form-control" id="password_min_length"
                                    name="password_min_length" min="1" max="128"
-                                   value="{{ settings.password_min_length or 8 }}" required>
+                                   value="{{ settings.password_min_length or 15 }}" required>
                             <div class="form-text">
                                 Minimum number of characters required. Must be between 1 and 128.
                             </div>
@@ -359,7 +359,7 @@
                         </li>
                         <li class="mb-2">
                             <strong>Min Password Length:</strong>
-                            <span class="badge bg-info" id="pwMinLengthBadge">{{ settings.password_min_length or 8 }}</span>
+                            <span class="badge bg-info" id="pwMinLengthBadge">{{ settings.password_min_length or 15 }}</span>
                         </li>
                         <li class="mb-0">
                             <strong>Last Updated:</strong>

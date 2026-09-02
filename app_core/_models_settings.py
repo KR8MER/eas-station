@@ -30,6 +30,7 @@ from ._models_base import (
     db,
     utc_now,
 )
+from .crypto import EncryptedString
 
 
 class LocationSettings(db.Model):
@@ -422,9 +423,9 @@ class IcecastSettings(db.Model):
     public_hostname = db.Column(db.String(255), nullable=True)  # Public hostname/IP
 
     # Authentication
-    source_password = db.Column(db.String(255), nullable=False, default='')
+    source_password = db.Column(EncryptedString, nullable=False, default='')
     admin_user = db.Column(db.String(255), nullable=True)
-    admin_password = db.Column(db.String(255), nullable=True)
+    admin_password = db.Column(EncryptedString, nullable=True)
 
     # Stream Settings
     default_mount = db.Column(db.String(255), nullable=False, default='monitor.mp3')
@@ -570,7 +571,7 @@ class TTSSettings(db.Model):
 
     # Azure OpenAI Settings
     azure_openai_endpoint = db.Column(db.String(500), nullable=True)
-    azure_openai_key = db.Column(db.String(500), nullable=True)
+    azure_openai_key = db.Column(EncryptedString, nullable=True)
     azure_openai_model = db.Column(db.String(100), nullable=False, default='tts-1')
     azure_openai_voice = db.Column(db.String(50), nullable=False, default='alloy')
     azure_openai_speed = db.Column(db.Float, nullable=False, default=1.0)
@@ -579,12 +580,20 @@ class TTSSettings(db.Model):
     updated_at = db.Column(db.DateTime, nullable=True, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def to_dict(self):
-        """Convert model to dictionary."""
+        """Convert model to dictionary.
+
+        azure_openai_key is a secret and must never reach the browser in
+        plaintext (this dict feeds both the /api/tts/settings JSON response
+        and, indirectly, page templates) - only a masked placeholder and a
+        has-value flag are exposed. Callers that need the real key (the TTS
+        engine itself) must read the `azure_openai_key` column directly.
+        """
         return {
             "enabled": self.enabled,
             "provider": self.provider,
             "azure_openai_endpoint": self.azure_openai_endpoint,
-            "azure_openai_key": self.azure_openai_key,
+            "azure_openai_key": "••••••••" if self.azure_openai_key else "",
+            "azure_openai_key_set": bool(self.azure_openai_key),
             "azure_openai_model": self.azure_openai_model,
             "azure_openai_voice": self.azure_openai_voice,
             "azure_openai_speed": self.azure_openai_speed,
@@ -947,7 +956,7 @@ class NotificationSettings(db.Model):
     smtp_username = db.Column(db.String(255), nullable=False, default='')
     # SMTP authentication username / login email
 
-    smtp_password = db.Column(db.String(255), nullable=False, default='')
+    smtp_password = db.Column(EncryptedString, nullable=False, default='')
     # SMTP authentication password
 
     smtp_security = db.Column(db.String(10), nullable=False, default='starttls')
@@ -990,7 +999,7 @@ class NotificationSettings(db.Model):
     sms_account_sid = db.Column(db.String(255), nullable=False, default='')
     # Twilio Account SID
 
-    sms_auth_token = db.Column(db.String(255), nullable=False, default='')
+    sms_auth_token = db.Column(EncryptedString, nullable=False, default='')
     # Twilio Auth Token
 
     sms_from_number = db.Column(db.String(50), nullable=False, default='')
@@ -1008,7 +1017,7 @@ class NotificationSettings(db.Model):
     snmp_targets = db.Column(JSONB, nullable=False, default=list)
     # List of SNMP trap targets in "host:port" format (port defaults to 162)
 
-    snmp_community = db.Column(db.String(255), nullable=False, default='public')
+    snmp_community = db.Column(EncryptedString, nullable=False, default='public')
     # SNMP community string for trap authentication
 
     # ========================================================================
@@ -1089,7 +1098,7 @@ class ApplicationSettings(db.Model):
     # ========================================================================
     # Password Policy
     # ========================================================================
-    password_min_length = db.Column(db.Integer, nullable=False, default=8)
+    password_min_length = db.Column(db.Integer, nullable=False, default=15)
     # Minimum number of characters required in a password
 
     password_require_uppercase = db.Column(db.Boolean, nullable=False, default=False)
@@ -1289,7 +1298,7 @@ class TailscaleSettings(db.Model):
     enabled = db.Column(db.Boolean, nullable=False, default=False)
     # Master switch: when enabled, tailscaled will be started/maintained
 
-    auth_key = db.Column(db.String(500), nullable=False, default='')
+    auth_key = db.Column(EncryptedString, nullable=False, default='')
     # Pre-authentication key from Tailscale admin console
 
     hostname = db.Column(db.String(255), nullable=False, default='')
@@ -1322,10 +1331,16 @@ class TailscaleSettings(db.Model):
     updated_at = db.Column(db.DateTime, nullable=True, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def to_dict(self):
-        """Convert model to dictionary."""
+        """Convert model to dictionary.
+
+        auth_key is a secret (a Tailscale pre-auth key) and must never reach
+        the browser in plaintext -- only a masked placeholder and a
+        has-value flag are exposed, matching TTSSettings.to_dict().
+        """
         return {
             "enabled": self.enabled,
-            "auth_key": self.auth_key,
+            "auth_key": "••••••••" if self.auth_key else "",
+            "auth_key_set": bool(self.auth_key),
             "hostname": self.hostname,
             "advertise_exit_node": self.advertise_exit_node,
             "accept_routes": self.accept_routes,

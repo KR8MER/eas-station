@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ._models_base import datetime, db, utc_now
+from .crypto import EncryptedString
 
 
 class TickstemSettings(db.Model):
@@ -20,7 +21,7 @@ class TickstemSettings(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
 
-    api_key = db.Column(db.String(500), nullable=True)
+    api_key = db.Column(EncryptedString, nullable=True)
     # Tickstem account API key (from app.tickstem.dev -> API Keys). Sent as
     # "Authorization: Bearer <api_key>" on every Monitors API call. Only
     # used server-side -- never exposed to the browser beyond the masked

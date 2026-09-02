@@ -8,6 +8,15 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.214.0] - 2026-09-02 - Encrypt stored credentials at rest and pepper password hashes
+
+- Every stored credential in the database was plaintext: Icecast source/admin passwords, the Azure OpenAI TTS key, SMTP password, Twilio auth token, the SNMP community string, the Tailscale pre-auth key, the Tickstem API key, and per-user TOTP (MFA) secrets. Found while investigating a related browser-exposure bug (2.213.2/2.213.3) and confirming passwords are salted (they are, via werkzeug's scrypt) -- these reversible secrets weren't, because hashing doesn't apply to a credential the app has to hand back to a third-party API.
+- Added `app_core/crypto.py`: an `EncryptedString` SQLAlchemy column type (Fernet, keyed via HKDF-SHA256 derived from the app's `SECRET_KEY` -- no new required env var) that encrypts on write and decrypts on read transparently, so every existing read/write call site kept working unchanged. Legacy plaintext rows are tolerated (decrypted as-is) and get encrypted automatically on next save; a `SECRET_KEY` rotation fails closed (empty string, logged) instead of crashing.
+- Applied it to all nine columns above. Added migration `20260902_encrypt_stored_secrets` widening them from `VARCHAR` to `TEXT`, since Fernet ciphertext runs longer than the plaintext it replaces.
+- Also found `TailscaleSettings.auth_key` had the same browser-exposure bug already fixed for the TTS key: pre-filled in plaintext in both the page template and the `/api/tailscale/settings` JSON response. Fixed the same way (masked in `to_dict()`, field left blank on page load, blank submission preserves the existing key) with one addition -- an explicit "clear the saved key" checkbox, since blank already had a meaning here (switch to browser-based login) distinct from "no change."
+- Added a server-side password pepper (a second HKDF-derived secret, independent of anything in the database) to `AdminUser.set_password`/`check_password` and MFA backup-code hashing, so a stolen database dump alone isn't enough to brute-force credentials offline even with correct per-hash salts. Existing pre-pepper hashes/backup codes still verify via a fallback check and upgrade transparently in place on next successful use -- no forced password resets.
+- New tests: `tests/test_secret_encryption.py` (encrypt/decrypt round-trip, legacy-plaintext tolerance, key-rotation failure mode, at-rest verification via a raw SQL read, peppered-hash verification, pre-pepper hash/backup-code upgrade paths).
+
 ## [2.213.4] - 2026-09-02 - Add the standard page header to the documentation viewer
 
 - `doc_viewer.html` (the single-document reader behind `/docs/<path>` and the policy pages) rendered straight into a breadcrumb + card with no page header, unlike its sibling pages `docs_index.html`, `docs/search.html`, and `docs/rbac_visual.html`, which all use the standard `components/page_header.html` component. Added the same header, using the page's resolved title.
