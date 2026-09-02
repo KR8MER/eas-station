@@ -8,6 +8,10 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.213.4] - 2026-09-02 - Add the standard page header to the documentation viewer
+
+- `doc_viewer.html` (the single-document reader behind `/docs/<path>` and the policy pages) rendered straight into a breadcrumb + card with no page header, unlike its sibling pages `docs_index.html`, `docs/search.html`, and `docs/rbac_visual.html`, which all use the standard `components/page_header.html` component. Added the same header, using the page's resolved title.
+
 ## [2.213.3] - 2026-09-02 - Surface real playback errors on the TTS admin test player
 
 - The Test TTS and Pronunciation Preview `<audio>` players had no `error` event handling at all: a genuine browser-side playback failure (bad decode, unsupported source, network error) rendered as the native control's bare "Error" label with zero diagnostic text, while the generated audio itself could be perfectly valid — confirmed by regenerating the same request server-side and validating the WAV with `ffprobe`/`ffmpeg` (clean `pcm_s16le`, 16kHz mono, decodes with no errors).
