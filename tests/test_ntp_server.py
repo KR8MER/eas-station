@@ -203,10 +203,13 @@ class TestClientSummary:
             "localhost                       0      0   -   -     -  910780      0   2     3\n"
             "192.168.1.50                     3      0   6   -    12       0      0   -     -\n"
         )
-        with patch("webapp.admin.ntp_server.subprocess.run", return_value=_proc(0, stdout)):
+        with patch("webapp.admin.ntp_server.subprocess.run", return_value=_proc(0, stdout)), \
+             patch("webapp.admin.ntp_server._reverse_dns", return_value="workstation.lan"):
             summary = _client_summary()
         assert summary["available"] is True
-        assert summary["clients"] == [{"host": "192.168.1.50", "last_seen": "12s ago"}]
+        assert summary["clients"] == [
+            {"host": "192.168.1.50", "hostname": "workstation.lan", "last_seen": "12s ago"}
+        ]
 
     def test_client_that_has_never_synced_shows_never(self):
         stdout = (
@@ -214,9 +217,12 @@ class TestClientSummary:
             "===============================================================================\n"
             "192.168.1.60                     0      0   -   -     -       2      0   1     1\n"
         )
-        with patch("webapp.admin.ntp_server.subprocess.run", return_value=_proc(0, stdout)):
+        with patch("webapp.admin.ntp_server.subprocess.run", return_value=_proc(0, stdout)), \
+             patch("webapp.admin.ntp_server._reverse_dns", return_value=None):
             summary = _client_summary()
-        assert summary["clients"] == [{"host": "192.168.1.60", "last_seen": "never"}]
+        assert summary["clients"] == [
+            {"host": "192.168.1.60", "hostname": None, "last_seen": "never"}
+        ]
 
     def test_command_failure_reports_unavailable(self):
         with patch("webapp.admin.ntp_server.subprocess.run", return_value=_proc(1, "", "not permitted")):

@@ -45,6 +45,7 @@ import ipaddress
 import logging
 import re
 import shutil
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -62,6 +63,11 @@ ntp_server_bp = Blueprint("ntp_server", __name__, url_prefix="/admin/ntp-server"
 _CHRONY_SERVICE = "chrony"
 _CHRONY_CONF_FILE = Path("/etc/chrony/conf.d/eas-station-ntp-server.conf")
 _NTP_PORT = "123"
+
+# Capped so one client with no PTR record (very common on a home LAN -- most
+# phones/laptops/IoT devices never get one) can't stall the whole clients
+# list. Best-effort display only, never a correctness concern.
+_PTR_LOOKUP_TIMEOUT_SECONDS = 1.0
 
 # Fixed, literal tag -- never derived from user input -- so the sudoers
 # entries for `ufw allow`/`ufw delete allow` can be scoped to this exact
@@ -208,6 +214,24 @@ def _format_last_seen(raw: str) -> str:
     return f"{hours // 24}d ago"
 
 
+def _reverse_dns(ip: str) -> str | None:
+    """Best-effort PTR lookup for the clients list. None if there's no
+    record, the lookup errors, or it doesn't finish within
+    _PTR_LOOKUP_TIMEOUT_SECONDS -- absence is normal (most LAN clients,
+    especially phones and IoT devices, are never registered in reverse DNS)
+    and never treated as a failure worth logging.
+    """
+    prior_timeout = socket.getdefaulttimeout()
+    try:
+        socket.setdefaulttimeout(_PTR_LOOKUP_TIMEOUT_SECONDS)
+        hostname, _aliases, _addrs = socket.gethostbyaddr(ip)
+        return hostname
+    except (socket.herror, socket.gaierror, OSError):
+        return None
+    finally:
+        socket.setdefaulttimeout(prior_timeout)
+
+
 def _client_summary() -> dict[str, Any]:
     """A quick "is this actually being used" signal via `chronyc clients`:
     which hosts have queried this server for time, and how recently.
@@ -237,7 +261,11 @@ def _client_summary() -> dict[str, Any]:
         host = parts[0]
         if host == "127.0.0.1" or host == "localhost":
             continue
-        clients.append({"host": host, "last_seen": _format_last_seen(parts[5])})
+        clients.append({
+            "host": host,
+            "hostname": _reverse_dns(host),
+            "last_seen": _format_last_seen(parts[5]),
+        })
     return {"available": True, "clients": clients}
 
 

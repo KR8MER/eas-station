@@ -143,16 +143,18 @@
                     <h2 class="mb-0 h5"><i class="fas fa-users"></i> Recent Clients</h2>
                 </div>
                 <div class="card-body">
+                    <div class="table-responsive">
                     <table class="table table-sm mb-0 font-monospace small {{ 'd-none' if not status.clients.clients else '' }}" id="clientsTable">
                         <thead>
-                            <tr><th>Client</th><th>Last Synced</th></tr>
+                            <tr><th>Client</th><th>Hostname</th><th>Last Synced</th></tr>
                         </thead>
                         <tbody id="clientsList">
                         {% for client in status.clients.clients %}
-                            <tr><td>{{ client.host }}</td><td>{{ client.last_seen }}</td></tr>
+                            <tr><td class="text-break-anywhere">{{ client.host }}</td><td class="text-break-anywhere">{{ client.hostname or '—' }}</td><td>{{ client.last_seen }}</td></tr>
                         {% endfor %}
                         </tbody>
                     </table>
+                    </div>
                     <p class="text-muted mb-0 small {{ 'd-none' if status.clients.clients else '' }}" id="clientsEmpty">
                         No non-local clients have queried this host yet
                         {% if status.enabled %}— that's expected right after enabling.{% else %}.{% endif %}
@@ -270,7 +272,7 @@ document.addEventListener('DOMContentLoaded', function () {
         function esc(s) { return String(s).replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch])); }
         if (list) {
             list.innerHTML = clients
-                .map(c => '<tr><td>' + esc(c.host) + '</td><td>' + esc(c.last_seen) + '</td></tr>')
+                .map(c => '<tr><td class="text-break-anywhere">' + esc(c.host) + '</td><td class="text-break-anywhere">' + esc(c.hostname || '—') + '</td><td>' + esc(c.last_seen) + '</td></tr>')
                 .join('');
         }
         if (table) table.classList.toggle('d-none', clients.length === 0);

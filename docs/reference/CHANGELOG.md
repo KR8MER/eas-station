@@ -8,6 +8,12 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.217.0] - 2026-09-02 - Show hostnames in the LAN NTP Server's Recent Clients list
+
+- `webapp/admin/ntp_server.py`'s `_client_summary()` now attempts a reverse-DNS (PTR) lookup for each client IP via `_reverse_dns()`, capped at 1 second so a client with no PTR record -- normal for most phones, laptops, and IoT devices on a home LAN -- can't stall the whole list. `templates/admin/ntp_server.html` adds a "Hostname" column (both the server-rendered initial table and the JS-driven Refresh path), showing `—` when no record resolves.
+- Wrapped the clients table in `.table-responsive` and added `.text-break-anywhere` to the IP/hostname cells while touching this template, per the mobile-friendly requirement in `docs/development/AGENTS.md` -- the new column made overflow at narrow viewports more likely.
+- Whether this actually shows anything depends entirely on the deployment's DNS setup: a resolver that doesn't serve PTR records for RFC1918 addresses (e.g. a public DoH/DoT forwarder, which most `resolv.conf`s on this kind of deployment end up pointing at) will show `—` for every client regardless of how well the feature works, since there's no PTR data to find. A home router that also acts as local DNS for its DHCP leases is the common case where this actually resolves something.
+
 ## [2.216.3] - 2026-09-02 - Fix the LAN NTP Server's Recent Clients list always showing empty
 
 - A second, independent sandboxing bug in the same feature: `chronyc clients` (used to populate the "Recent Clients" list) connects to chronyd over a UNIX socket at `/run/chrony/chronyd.sock`, whose containing directory is `drwx------`, owned by `_chrony`. `eas-station-web.service`'s `CapabilityBoundingSet=` caps what the `sudo`-escalated root process inside its sandbox can do, and it was missing `CAP_DAC_OVERRIDE` -- so that "root" can't traverse a directory it doesn't own. chronyc silently fell back to the legacy cmdmon protocol and got `501 Not authorised`.
