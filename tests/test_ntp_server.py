@@ -39,8 +39,12 @@ from webapp.admin.ntp_server import (
     _detect_local_subnets,
     _firewall_subnets,
     _format_last_seen,
+    _lookup_client_hostname,
+    _netbios_encode_wildcard,
+    _parse_netbios_response,
     _render_conf,
     _validate_cidr,
+    _write_chrony_conf,
     configure_ntp_server,
     ntp_server_status,
 )
@@ -194,6 +198,80 @@ class TestFormatLastSeen:
         assert _format_last_seen("12m") == "12m"
 
 
+class TestNetbiosWildcardEncoding:
+    def test_encodes_to_32_bytes_of_uppercase_letters(self):
+        encoded = _netbios_encode_wildcard()
+        assert len(encoded) == 32
+        # RFC 1002 first-level encoding always produces bytes in 'A'..'P'
+        # (0x41-0x50), one nibble of the padded name per byte.
+        assert all(0x41 <= b <= 0x50 for b in encoded)
+
+    def test_first_two_bytes_encode_the_asterisk(self):
+        # '*' is 0x2A: high nibble 0x2 -> 'A'+2='C', low nibble 0xA -> 'A'+10='K'.
+        encoded = _netbios_encode_wildcard()
+        assert encoded[0:2] == b"CK"
+
+
+class TestParseNetbiosResponse:
+    @staticmethod
+    def _response(name: bytes, suffix: int, flags: int) -> bytes:
+        assert len(name) == 15
+        header = b"\x13\x37\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+        answer_name = b"\xc0\x0c"  # compression pointer back into the header
+        type_class_ttl = b"\x00\x21\x00\x01\x00\x00\x00\x00"
+        entry = name + bytes([suffix]) + flags.to_bytes(2, "big")
+        rdata = bytes([1]) + entry  # NUM_NAMES=1, one name entry
+        rdlength = len(rdata).to_bytes(2, "big")
+        return header + answer_name + type_class_ttl + rdlength + rdata
+
+    def test_extracts_the_unique_computer_name(self):
+        data = self._response(b"TESTPC         ", suffix=0x00, flags=0x0000)
+        assert _parse_netbios_response(data) == "TESTPC"
+
+    def test_skips_group_names_looking_for_the_unique_one(self):
+        header = b"\x13\x37\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+        answer_name = b"\xc0\x0c"
+        type_class_ttl = b"\x00\x21\x00\x01\x00\x00\x00\x00"
+        group_entry = b"WORKGROUP      " + bytes([0x00]) + (0x8000).to_bytes(2, "big")
+        unique_entry = b"TESTPC         " + bytes([0x00]) + (0x0000).to_bytes(2, "big")
+        rdata = bytes([2]) + group_entry + unique_entry
+        rdlength = len(rdata).to_bytes(2, "big")
+        data = header + answer_name + type_class_ttl + rdlength + rdata
+        assert _parse_netbios_response(data) == "TESTPC"
+
+    def test_truncated_packet_returns_none_not_raise(self):
+        assert _parse_netbios_response(b"\x00" * 5) is None
+
+    def test_no_matching_suffix_returns_none(self):
+        # Only a group name (suffix 0x00 but group bit set) and a
+        # differently-suffixed record (0x20, "file server service") --
+        # neither is the unique computer-name record this looks for.
+        data = self._response(b"FILESERVER     ", suffix=0x20, flags=0x0000)
+        assert _parse_netbios_response(data) is None
+
+
+class TestLookupClientHostname:
+    def test_prefers_reverse_dns_over_netbios(self):
+        with patch("webapp.admin.ntp_server._reverse_dns", return_value="host.lan") as mock_ptr, \
+             patch("webapp.admin.ntp_server._netbios_name") as mock_nb:
+            result = _lookup_client_hostname("192.168.1.50")
+        assert result == "host.lan"
+        mock_ptr.assert_called_once_with("192.168.1.50")
+        mock_nb.assert_not_called()
+
+    def test_falls_back_to_netbios_when_ptr_comes_up_empty(self):
+        with patch("webapp.admin.ntp_server._reverse_dns", return_value=None), \
+             patch("webapp.admin.ntp_server._netbios_name", return_value="WINPC") as mock_nb:
+            result = _lookup_client_hostname("192.168.1.60")
+        assert result == "WINPC"
+        mock_nb.assert_called_once_with("192.168.1.60")
+
+    def test_none_when_neither_resolves(self):
+        with patch("webapp.admin.ntp_server._reverse_dns", return_value=None), \
+             patch("webapp.admin.ntp_server._netbios_name", return_value=None):
+            assert _lookup_client_hostname("192.168.1.70") is None
+
+
 class TestClientSummary:
     def test_excludes_localhost_row_and_includes_last_seen(self):
         stdout = (
@@ -202,10 +280,13 @@ class TestClientSummary:
             "localhost                       0      0   -   -     -  910780      0   2     3\n"
             "192.168.1.50                     3      0   6   -    12       0      0   -     -\n"
         )
-        with patch("webapp.admin.ntp_server.subprocess.run", return_value=_proc(0, stdout)):
+        with patch("webapp.admin.ntp_server.subprocess.run", return_value=_proc(0, stdout)), \
+             patch("webapp.admin.ntp_server._lookup_client_hostname", return_value="workstation.lan"):
             summary = _client_summary()
         assert summary["available"] is True
-        assert summary["clients"] == [{"host": "192.168.1.50", "last_seen": "12s ago"}]
+        assert summary["clients"] == [
+            {"host": "192.168.1.50", "hostname": "workstation.lan", "last_seen": "12s ago"}
+        ]
 
     def test_client_that_has_never_synced_shows_never(self):
         stdout = (
@@ -213,9 +294,26 @@ class TestClientSummary:
             "===============================================================================\n"
             "192.168.1.60                     0      0   -   -     -       2      0   1     1\n"
         )
-        with patch("webapp.admin.ntp_server.subprocess.run", return_value=_proc(0, stdout)):
+        with patch("webapp.admin.ntp_server.subprocess.run", return_value=_proc(0, stdout)), \
+             patch("webapp.admin.ntp_server._lookup_client_hostname", return_value=None):
             summary = _client_summary()
-        assert summary["clients"] == [{"host": "192.168.1.60", "last_seen": "never"}]
+        assert summary["clients"] == [
+            {"host": "192.168.1.60", "hostname": None, "last_seen": "never"}
+        ]
+
+    def test_hostname_lookup_failure_does_not_crash_the_summary(self):
+        stdout = (
+            "Hostname                      NTP   Drop Int IntL Last     Cmd   Drop Int  Last\n"
+            "===============================================================================\n"
+            "192.168.1.70                     1      0   4   -     5       0      0   -     -\n"
+        )
+        with patch("webapp.admin.ntp_server.subprocess.run", return_value=_proc(0, stdout)), \
+             patch("webapp.admin.ntp_server._lookup_client_hostname", side_effect=RuntimeError("boom")):
+            summary = _client_summary()
+        assert summary["available"] is True
+        assert summary["clients"] == [
+            {"host": "192.168.1.70", "hostname": None, "last_seen": "5s ago"}
+        ]
 
     def test_command_failure_reports_unavailable(self):
         with patch("webapp.admin.ntp_server.subprocess.run", return_value=_proc(1, "", "not permitted")):
@@ -329,6 +427,92 @@ class TestConfigureNtpServerRoute:
             ["sudo", "-n", "ufw", "delete", "allow", "from", "192.168.1.0/24", "to", "any",
              "port", "123", "proto", "udp"]
         ]
+
+
+class TestWriteChronyConf:
+    """Confirmed live 2026-09-02: the chrony conf.d write hit a transient
+    'Read-only file system' error for about 15 minutes right after this
+    feature's first deploy, then self-resolved with no code change and no
+    repeat since. _write_chrony_conf() retries once so a similarly brief
+    blip doesn't force the admin to notice the error and click Apply again.
+    """
+
+    def test_succeeds_on_first_try_without_retrying(self):
+        with patch("webapp.admin.ntp_server.subprocess.run", return_value=_proc(0, "")) as mock_run, \
+             patch("webapp.admin.ntp_server.time.sleep") as mock_sleep:
+            ok, error = _write_chrony_conf("allow 192.168.1.0/24\n")
+        assert ok is True
+        assert error == ""
+        assert mock_run.call_count == 1
+        mock_sleep.assert_not_called()
+
+    def test_recovers_after_one_transient_failure(self):
+        attempts = [_proc(1, "", "tee: ...: Read-only file system"), _proc(0, "")]
+        with patch("webapp.admin.ntp_server.subprocess.run", side_effect=attempts) as mock_run, \
+             patch("webapp.admin.ntp_server.time.sleep") as mock_sleep:
+            ok, error = _write_chrony_conf("allow 192.168.1.0/24\n")
+        assert ok is True
+        assert error == ""
+        assert mock_run.call_count == 2
+        mock_sleep.assert_called_once()
+
+    def test_gives_up_after_exhausting_the_retry(self):
+        attempts = [
+            _proc(1, "", "tee: ...: Read-only file system"),
+            _proc(1, "", "tee: ...: Read-only file system"),
+        ]
+        with patch("webapp.admin.ntp_server.subprocess.run", side_effect=attempts) as mock_run, \
+             patch("webapp.admin.ntp_server.time.sleep"):
+            ok, error = _write_chrony_conf("allow 192.168.1.0/24\n")
+        assert ok is False
+        assert "Read-only file system" in error
+        assert mock_run.call_count == 2
+
+    def test_recovers_from_a_raised_exception_too_not_just_a_bad_returncode(self):
+        attempts = [OSError("timed out"), _proc(0, "")]
+        with patch("webapp.admin.ntp_server.subprocess.run", side_effect=attempts), \
+             patch("webapp.admin.ntp_server.time.sleep"):
+            ok, error = _write_chrony_conf("allow 192.168.1.0/24\n")
+        assert ok is True
+
+
+class TestConfigureNtpServerRouteRetriesTransientWriteFailure:
+    """Integration-level: the /configure route as a whole must succeed when
+    the underlying write recovers on its retry, not just the unit-level
+    _write_chrony_conf() function in isolation."""
+
+    URL = "/admin/ntp-server/configure"
+
+    def test_route_succeeds_when_write_recovers_on_retry(self, app, authenticated_user, tmp_path):
+        conf_file = tmp_path / "eas-station-ntp-server.conf"
+        tee_attempts = {"count": 0}
+
+        def fake_run(cmd, **kwargs):
+            if cmd[:2] == ["sudo", "tee"]:
+                tee_attempts["count"] += 1
+                if tee_attempts["count"] == 1:
+                    return _proc(1, "", "tee: ...: Read-only file system")
+                conf_file.write_text(kwargs.get("input", ""))
+                return _proc(0, "")
+            if "systemctl" in cmd and "restart" in cmd:
+                return _proc(0, "")
+            if "ufw" in cmd and "status" in cmd:
+                return _proc(0, "")
+            if "ufw" in cmd and "allow" in cmd:
+                return _proc(0, "Rule added")
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        with patch("webapp.admin.ntp_server._chronyd_installed", return_value=True), \
+             patch("webapp.admin.ntp_server._CHRONY_CONF_FILE", conf_file), \
+             patch("webapp.admin.ntp_server.subprocess.run", side_effect=fake_run), \
+             patch("webapp.admin.ntp_server.time.sleep"):
+            with app.test_request_context(self.URL, method="POST", json={"enabled": True, "subnets": ["192.168.1.0/24"]}):
+                response = configure_ntp_server()
+
+        data = response.get_json()
+        assert data["success"] is True
+        assert tee_attempts["count"] == 2
+        assert "allow 192.168.1.0/24" in conf_file.read_text()
 
 
 class TestNtpServerStatusRoute:
