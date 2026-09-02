@@ -134,6 +134,12 @@
                 <i class="fas fa-network-wired"></i> Host Firewall
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="checkup-tab" data-bs-toggle="tab"
+                    data-bs-target="#checkup-pane" type="button" role="tab">
+                <i class="fas fa-stethoscope"></i> Checkup
+            </button>
+        </li>
     </ul>
 
     <div class="tab-content" id="securityTabsContent">
@@ -381,6 +387,34 @@
                     <div id="f2b-ssh-banned-list">
                         <p class="text-muted mb-0">No SSH bans.</p>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ CHECKUP TAB ============ -->
+        <div class="tab-pane fade" id="checkup-pane" role="tabpanel" aria-labelledby="checkup-tab">
+            <div class="container">
+                <div class="admin-warning-box mb-3">
+                    <h3 class="h5"><i class="fas fa-stethoscope"></i> Security Checkup</h3>
+                    <p class="mb-0">Checks this host's baseline hardening — the host firewall and
+                    fail2ban's ban-list enforcement — and offers a one-click fix for anything that's
+                    missing. Built after finding a real deployment silently running with <strong>no
+                    host firewall at all</strong>: <code>update.sh</code> only updates the
+                    application, it never re-runs the one-time firewall setup <code>install.sh</code>
+                    performs on a fresh install (added in v2.19.7) — so a deployment provisioned
+                    before that version, or one where the firewall was later removed, stays exposed
+                    through every subsequent update with nothing to flag it. Run this after every
+                    update if you're not sure.</p>
+                </div>
+
+                <div class="d-flex justify-content-end mb-2">
+                    <button class="btn btn-sm btn-secondary" onclick="SC.loadCheckupStatus()">
+                        <i class="fas fa-sync-alt"></i> Re-run checks
+                    </button>
+                </div>
+
+                <div id="checkup-status">
+                    <span class="text-muted">Loading…</span>
                 </div>
             </div>
         </div>

@@ -8,6 +8,13 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.215.0] - 2026-09-02 - Security Center "Checkup" tab: detect and fix a missing host firewall
+
+- Found (on a real deployment, by hand) a host running with no firewall at all: `install.sh` only configures UFW automatically on a *fresh* install (v2.19.7+), and `update.sh` never re-runs that one-time provisioning — a deployment first installed before that version, or one where UFW was later removed, stays silently exposed through every subsequent application update. Also found that `Fail2banSettings.enabled` can be `true` in the database while the `eas-station` jail was never actually loaded — the enforcement toggle looked "on" while nothing was actually being mirrored to the host firewall.
+- Added a new **Checkup** tab to Security Center (`webapp/admin/security_checkup.py`, `/admin/security-checkup/status`, `/admin/security-checkup/fix-ufw`): detects whether UFW is installed, active, default-deny-incoming, and has the baseline 22/80/443 rules, and reuses `webapp.admin.fail2ban`'s already-accurate live jail state (it distinguishes the stored "enabled" flag from the real `actuator_jail_loaded` check) rather than duplicating that logic. A "Fix now" button reproduces `install.sh`'s own baseline UFW setup as an idempotent, web-triggered action — no SSH required — without touching any rule an operator has added beyond that baseline (Icecast, pgweb, etc.).
+- New sudoers entries (`config/sudoers-eas-station`) scoped to exactly the six commands the fix needs, following the same least-privilege pattern as every other privileged action in this file.
+- New `tests/test_security_checkup.py` covers the UFW status parser against captured real output: inactive, properly baselined, active-but-missing-a-port, and the specific dangerous misconfiguration (active with a default-allow-incoming policy) this check exists to catch.
+
 ## [2.214.0] - 2026-09-02 - Encrypt stored credentials at rest and pepper password hashes
 
 - Every stored credential in the database was plaintext: Icecast source/admin passwords, the Azure OpenAI TTS key, SMTP password, Twilio auth token, the SNMP community string, the Tailscale pre-auth key, the Tickstem API key, and per-user TOTP (MFA) secrets. Found while investigating a related browser-exposure bug (2.213.2/2.213.3) and confirming passwords are salted (they are, via werkzeug's scrypt) -- these reversible secrets weren't, because hashing doesn't apply to a credential the app has to hand back to a third-party API.
