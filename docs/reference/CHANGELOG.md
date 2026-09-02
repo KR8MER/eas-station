@@ -8,6 +8,12 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.217.1] - 2026-09-02 - NetBIOS hostname fallback, and fix chronyc's own resolution clashing with it
+
+- Added a NetBIOS (NBT-NS Node Status, UDP/137) fallback in `_lookup_client_hostname()` for when reverse DNS comes up empty -- the common case for a Windows PC on a LAN whose resolver has no PTR records for it, since Windows doesn't register itself in DNS by default. Hand-rolled the query/response (RFC 1002 wildcard-name encoding, minimal Node Status response parser) rather than adding a dependency for a two-message UDP protocol.
+- Fixed a regression the hostname feature itself exposed once reverse DNS started working on a given deployment: `chronyc clients`' own first column does its *own* reverse-DNS resolution and truncates long names to fit a fixed-width text column, so once PTR records resolve, `_client_summary()`'s parser -- which expects that column to always be a numeric IP -- started reading truncated hostnames instead. Fixed by adding `-n` (raw IPs only) to the `chronyc clients` call, and updated the scoped sudoers entry in `config/sudoers-eas-station` to match the new exact command (`/usr/bin/chronyc -n clients`).
+- Not a chrony bug or anything wrong with this feature in isolation -- it only ever showed up because this same session's earlier fix made PTR resolution actually work end-to-end for the first time, which is exactly the condition needed to expose it.
+
 ## [2.217.0] - 2026-09-02 - Show hostnames in the LAN NTP Server's Recent Clients list
 
 - `webapp/admin/ntp_server.py`'s `_client_summary()` now attempts a reverse-DNS (PTR) lookup for each client IP via `_reverse_dns()`, capped at 1 second so a client with no PTR record -- normal for most phones, laptops, and IoT devices on a home LAN -- can't stall the whole list. `templates/admin/ntp_server.html` adds a "Hostname" column (both the server-rendered initial table and the JS-driven Refresh path), showing `—` when no record resolves.

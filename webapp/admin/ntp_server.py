@@ -41,6 +41,7 @@ tagged itself, never anything an operator added by hand (Icecast's 8000,
 pgweb's 8081, etc.).
 """
 
+import concurrent.futures
 import ipaddress
 import logging
 import re
@@ -68,6 +69,17 @@ _NTP_PORT = "123"
 # phones/laptops/IoT devices never get one) can't stall the whole clients
 # list. Best-effort display only, never a correctness concern.
 _PTR_LOOKUP_TIMEOUT_SECONDS = 1.0
+
+# NetBIOS Node Status (UDP/137) fallback timeout, tried only when PTR comes
+# up empty. Kept short since it's the second of two sequential lookups per
+# client.
+_NETBIOS_LOOKUP_TIMEOUT_SECONDS = 0.5
+
+# Hostname lookups for every client run concurrently (each one is a
+# best-effort network round trip that can take up to _PTR_LOOKUP_TIMEOUT_SECONDS
+# + _NETBIOS_LOOKUP_TIMEOUT_SECONDS on its own) so the page doesn't get
+# slower every time a new device shows up in the clients list.
+_MAX_CONCURRENT_HOSTNAME_LOOKUPS = 8
 
 # Fixed, literal tag -- never derived from user input -- so the sudoers
 # entries for `ufw allow`/`ufw delete allow` can be scoped to this exact
@@ -218,8 +230,17 @@ def _reverse_dns(ip: str) -> str | None:
     """Best-effort PTR lookup for the clients list. None if there's no
     record, the lookup errors, or it doesn't finish within
     _PTR_LOOKUP_TIMEOUT_SECONDS -- absence is normal (most LAN clients,
-    especially phones and IoT devices, are never registered in reverse DNS)
-    and never treated as a failure worth logging.
+    especially phones and IoT devices, are never registered in reverse DNS,
+    and a deployment whose resolver is a public DoH/DoT forwarder has no
+    PTR data for RFC1918 addresses at all) and never treated as a failure
+    worth logging.
+
+    socket.gethostbyaddr() has no per-call timeout, only the process-global
+    default, so concurrent lookups (see _client_summary()) briefly share
+    whatever value the most recent setter installed. Harmless here since
+    every caller sets the same constant before its own call and restores the
+    same prior value after -- there's no case where one lookup's timeout
+    could leak a *different* value into another's.
     """
     prior_timeout = socket.getdefaulttimeout()
     try:
@@ -232,13 +253,105 @@ def _reverse_dns(ip: str) -> str | None:
         socket.setdefaulttimeout(prior_timeout)
 
 
+def _netbios_encode_wildcard() -> bytes:
+    """RFC 1002 first-level NetBIOS name encoding of the 16-byte wildcard
+    name "*" (padded with NULs) used in a Node Status query -- it asks
+    whatever's listening on UDP/137 to identify itself, regardless of what
+    name it's actually registered under.
+    """
+    padded = b"*" + b"\x00" * 15
+    encoded = bytearray()
+    for byte in padded:
+        encoded.append(0x41 + (byte >> 4))
+        encoded.append(0x41 + (byte & 0x0F))
+    return bytes(encoded)
+
+
+def _parse_netbios_response(data: bytes) -> str | None:
+    """Pull the machine's own "unique" (non-group) NetBIOS name -- suffix
+    0x00, the standard computer-name record -- out of a Node Status
+    response. Best-effort: any malformed/short packet just yields None
+    rather than raising, since this is parsing an untrusted UDP reply.
+    """
+    if len(data) < 13:
+        return None
+    pos = 12
+    if data[pos] == 0xC0:  # name compression pointer, 2 bytes
+        pos += 2
+    else:  # length-prefixed encoded name: 1 length byte + bytes + null
+        name_len = data[pos]
+        pos += 1 + name_len + 1
+    pos += 4 + 4  # TYPE + CLASS, then TTL
+    if pos + 2 > len(data):
+        return None
+    pos += 2  # RDLENGTH -- unused, the per-name loop below is self-limiting
+    if pos >= len(data):
+        return None
+    num_names = data[pos]
+    pos += 1
+    for _ in range(num_names):
+        if pos + 18 > len(data):
+            break
+        raw_name, suffix = data[pos:pos + 15], data[pos + 15]
+        flags = int.from_bytes(data[pos + 16:pos + 18], "big")
+        pos += 18
+        if suffix != 0x00 or flags & 0x8000:  # not the computer name, or a group name
+            continue
+        name = raw_name.decode("ascii", errors="replace").rstrip(" \x00")
+        if name:
+            return name
+    return None
+
+
+def _netbios_name(ip: str) -> str | None:
+    """Best-effort NetBIOS (NBT-NS) Node Status query, UDP/137 -- the
+    traditional way LAN tools get a Windows PC's real computer name when
+    there's no PTR record for it, since Windows doesn't register itself in
+    DNS by default. None for anything that doesn't answer: non-Windows
+    devices, or a Windows PC with its firewall blocking 137/udp.
+    """
+    query = (
+        b"\x13\x37"  # transaction ID -- arbitrary, fixed
+        b"\x00\x00"  # flags: standard query
+        b"\x00\x01"  # QDCOUNT=1
+        b"\x00\x00\x00\x00\x00\x00"  # ANCOUNT/NSCOUNT/ARCOUNT=0
+        + bytes([0x20]) + _netbios_encode_wildcard() + b"\x00"  # question name
+        b"\x00\x21"  # QTYPE = NBSTAT
+        b"\x00\x01"  # QCLASS = IN
+    )
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.settimeout(_NETBIOS_LOOKUP_TIMEOUT_SECONDS)
+        sock.sendto(query, (ip, 137))
+        data, _addr = sock.recvfrom(1024)
+        return _parse_netbios_response(data)
+    except OSError:
+        return None
+    finally:
+        sock.close()
+
+
+def _lookup_client_hostname(ip: str) -> str | None:
+    """Best-effort hostname for one clients-list entry: reverse DNS first,
+    then NetBIOS as a fallback since a deployment's resolver commonly has no
+    PTR records for LAN addresses at all (see _reverse_dns) while a Windows
+    PC will usually still answer a Node Status query directly.
+    """
+    return _reverse_dns(ip) or _netbios_name(ip)
+
+
 def _client_summary() -> dict[str, Any]:
     """A quick "is this actually being used" signal via `chronyc clients`:
     which hosts have queried this server for time, and how recently.
     Best-effort -- absent/parsed-empty is not treated as an error, since a
     freshly-enabled server legitimately has zero clients yet.
     """
-    ok, output = _run(["chronyc", "clients"], timeout=5)
+    # -n: raw IPs only. Without it, chronyc does its own reverse-DNS
+    # resolution and truncates long names to fit its fixed-width column --
+    # both wrong here, since the parser below expects column 0 to be a
+    # numeric address and this module does its own (untruncated, NetBIOS-
+    # backed) hostname lookup per client afterward.
+    ok, output = _run(["chronyc", "-n", "clients"], timeout=5)
     if not ok:
         # Distinguishable from a genuinely empty list in the logs -- the UI
         # itself intentionally shows the same "no clients yet" copy either
@@ -249,7 +362,7 @@ def _client_summary() -> dict[str, Any]:
         logger.warning("chronyc clients failed, reporting zero clients: %s", output)
         return {"available": False, "clients": []}
 
-    clients = []
+    rows: list[tuple[str, str]] = []
     for line in output.splitlines()[2:]:  # skip the two header lines
         # Hostname, NTP, Drop, Int, IntL, Last, Cmd, Drop, Int, Last -- the
         # 6th column (index 5) is time since this client's last plain-NTP
@@ -261,11 +374,31 @@ def _client_summary() -> dict[str, Any]:
         host = parts[0]
         if host == "127.0.0.1" or host == "localhost":
             continue
-        clients.append({
-            "host": host,
-            "hostname": _reverse_dns(host),
-            "last_seen": _format_last_seen(parts[5]),
-        })
+        rows.append((host, parts[5]))
+
+    # Hostname lookups run concurrently -- each is a best-effort network
+    # round trip (PTR, then a NetBIOS fallback) that can take up to
+    # roughly a second and a half on its own, and doing them one at a time
+    # would make the page progressively slower as more devices show up.
+    hostnames: dict[str, str | None] = {}
+    if rows:
+        hosts = [host for host, _last_seen in rows]
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(len(hosts), _MAX_CONCURRENT_HOSTNAME_LOOKUPS)
+        ) as pool:
+            future_to_host = {pool.submit(_lookup_client_hostname, host): host for host in hosts}
+            for future in concurrent.futures.as_completed(future_to_host):
+                host = future_to_host[future]
+                try:
+                    hostnames[host] = future.result()
+                except Exception as exc:  # best-effort display only -- never fail the page over it
+                    logger.warning("Hostname lookup failed for %s: %s", host, exc)
+                    hostnames[host] = None
+
+    clients = [
+        {"host": host, "hostname": hostnames.get(host), "last_seen": _format_last_seen(last_seen)}
+        for host, last_seen in rows
+    ]
     return {"available": True, "clients": clients}
 
 

@@ -219,6 +219,6 @@ eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw --force enable
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/chrony/conf.d/eas-station-ntp-server.conf
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active --quiet chrony
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart chrony
-eas-station ALL=(ALL) NOPASSWD: /usr/bin/chronyc clients
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/chronyc -n clients
 eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw allow from * to any port 123 proto udp comment eas-station-ntp-server
 eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw delete allow from * to any port 123 proto udp
