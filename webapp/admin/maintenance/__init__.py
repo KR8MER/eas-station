@@ -42,6 +42,7 @@ Dependencies run one way::
     noaa                  -> (its own constants)
     serialization         -> (its own helper)
     routes_operations     -> blueprint, operations, paths
+    routes_upgrade_progress -> blueprint
     routes_database       -> blueprint
     routes_env            -> blueprint, paths
     routes_poll           -> blueprint
@@ -78,6 +79,7 @@ from . import (  # noqa: F401  - imported for their side effect of registering r
     routes_location,
     routes_operations,
     routes_poll,
+    routes_upgrade_progress,
     serialization,
 )
 from .blueprint import maintenance_bp

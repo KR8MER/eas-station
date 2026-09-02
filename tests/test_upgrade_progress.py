@@ -17,6 +17,8 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 
 Tests for the one-click upgrade's live progress feed
+(webapp/admin/maintenance/routes_upgrade_progress.py) and its two
+same-package siblings, check_for_upgrade/list_upgrade_tags
 (webapp/admin/maintenance/routes_operations.py).
 
 The one-click "System Upgrade" button runs update.sh as its own systemd
@@ -47,11 +49,13 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from webapp.admin.maintenance.routes_operations import (
+    check_for_upgrade,
+    list_upgrade_tags,
+)
+from webapp.admin.maintenance.routes_upgrade_progress import (
     _classify_upgrade_log_line,
     _tail_update_log,
-    check_for_upgrade,
     get_upgrade_progress,
-    list_upgrade_tags,
 )
 
 
@@ -130,7 +134,7 @@ class TestTailUpdateLog:
 
     def test_missing_file_returns_empty(self, tmp_path):
         with patch(
-            "webapp.admin.maintenance.routes_operations._UPDATE_LOG_FILE",
+            "webapp.admin.maintenance.routes_upgrade_progress._UPDATE_LOG_FILE",
             tmp_path / "does-not-exist.log",
         ):
             assert _tail_update_log() == []
@@ -138,7 +142,7 @@ class TestTailUpdateLog:
     def test_reads_lines_in_order(self, tmp_path):
         log_file = tmp_path / "eas-update.log"
         log_file.write_text("[ OK ]  Root privileges confirmed\n--- Step 1/12: Pre-flight Checks ---\n")
-        with patch("webapp.admin.maintenance.routes_operations._UPDATE_LOG_FILE", log_file):
+        with patch("webapp.admin.maintenance.routes_upgrade_progress._UPDATE_LOG_FILE", log_file):
             assert _tail_update_log() == [
                 "[ OK ]  Root privileges confirmed",
                 "--- Step 1/12: Pre-flight Checks ---",
@@ -147,7 +151,7 @@ class TestTailUpdateLog:
     def test_caps_at_max_lines_keeping_the_most_recent(self, tmp_path):
         log_file = tmp_path / "eas-update.log"
         log_file.write_text("".join(f"line {i}\n" for i in range(10)))
-        with patch("webapp.admin.maintenance.routes_operations._UPDATE_LOG_FILE", log_file):
+        with patch("webapp.admin.maintenance.routes_upgrade_progress._UPDATE_LOG_FILE", log_file):
             result = _tail_update_log(max_lines=3)
         assert result == ["line 7", "line 8", "line 9"]
 
@@ -181,10 +185,10 @@ class TestUpgradeProgressEndpoint:
     def test_unit_never_run_is_idle(self, app, authenticated_user):
         with patch("subprocess.run", return_value=_fake_systemctl_show()), \
              patch(
-                 "webapp.admin.maintenance.routes_operations._tail_update_log",
+                 "webapp.admin.maintenance.routes_upgrade_progress._tail_update_log",
                  return_value=[],
              ), patch(
-                 "webapp.admin.maintenance.routes_operations.get_systemd_logs",
+                 "webapp.admin.maintenance.routes_upgrade_progress.get_systemd_logs",
                  return_value={"success": True, "logs": [], "count": 0},
              ):
             response = self._get(app)
@@ -204,10 +208,10 @@ class TestUpgradeProgressEndpoint:
             "subprocess.run",
             return_value=_fake_systemctl_show(active_state="active", sub_state="running"),
         ), patch(
-            "webapp.admin.maintenance.routes_operations._tail_update_log",
+            "webapp.admin.maintenance.routes_upgrade_progress._tail_update_log",
             return_value=log_lines,
         ), patch(
-            "webapp.admin.maintenance.routes_operations.get_systemd_logs",
+            "webapp.admin.maintenance.routes_upgrade_progress.get_systemd_logs",
             return_value={"success": True, "logs": [], "count": 0},
         ):
             response = self._get(app)
@@ -240,10 +244,10 @@ class TestUpgradeProgressEndpoint:
             "subprocess.run",
             return_value=_fake_systemctl_show(),
         ), patch(
-            "webapp.admin.maintenance.routes_operations._tail_update_log",
+            "webapp.admin.maintenance.routes_upgrade_progress._tail_update_log",
             return_value=log_lines,
         ), patch(
-            "webapp.admin.maintenance.routes_operations.get_systemd_logs",
+            "webapp.admin.maintenance.routes_upgrade_progress.get_systemd_logs",
             return_value=logs,
         ):
             response = self._get(app)
@@ -255,10 +259,10 @@ class TestUpgradeProgressEndpoint:
             "subprocess.run",
             return_value=_fake_systemctl_show(),
         ), patch(
-            "webapp.admin.maintenance.routes_operations._tail_update_log",
+            "webapp.admin.maintenance.routes_upgrade_progress._tail_update_log",
             return_value=["=== UPDATE RESULT: ISSUES DETECTED ==="],
         ), patch(
-            "webapp.admin.maintenance.routes_operations.get_systemd_logs",
+            "webapp.admin.maintenance.routes_upgrade_progress.get_systemd_logs",
             return_value={"success": True, "logs": [], "count": 0},
         ):
             response = self._get(app)
@@ -283,10 +287,10 @@ class TestUpgradeProgressEndpoint:
             "subprocess.run",
             return_value=_fake_systemctl_show(active_state="failed", sub_state="failed"),
         ), patch(
-            "webapp.admin.maintenance.routes_operations._tail_update_log",
+            "webapp.admin.maintenance.routes_upgrade_progress._tail_update_log",
             return_value=["[ERROR] Failed to change ownership"],
         ), patch(
-            "webapp.admin.maintenance.routes_operations.get_systemd_logs",
+            "webapp.admin.maintenance.routes_upgrade_progress.get_systemd_logs",
             return_value=logs,
         ):
             response = self._get(app)
@@ -310,10 +314,10 @@ class TestUpgradeProgressEndpoint:
             "subprocess.run",
             return_value=_fake_systemctl_show(),
         ), patch(
-            "webapp.admin.maintenance.routes_operations._tail_update_log",
+            "webapp.admin.maintenance.routes_upgrade_progress._tail_update_log",
             return_value=["=== UPDATE RESULT: SUCCESS ==="],
         ), patch(
-            "webapp.admin.maintenance.routes_operations.get_systemd_logs",
+            "webapp.admin.maintenance.routes_upgrade_progress.get_systemd_logs",
             return_value=logs,
         ):
             response = self._get(app)
