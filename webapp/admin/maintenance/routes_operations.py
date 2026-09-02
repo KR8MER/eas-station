@@ -50,10 +50,22 @@ from .paths import repo_root
 # The unit update.sh runs under (see bin/eas-station-run-update): giving it
 # its own transient systemd unit, rather than running as a direct child of
 # eas-station-web.service, means its "Restarting Services" step doesn't
-# kill the very process that launched it -- and its progress keeps landing
-# in the journal under this fixed name across that restart, for whichever
-# worker process answers the next poll.
+# kill the very process that launched it -- and its unit-lifecycle events
+# (start/fail/deactivate) keep landing in the journal under this fixed name
+# across that restart, for whichever worker process answers the next poll.
 _UPGRADE_UNIT = "eas-station-update.service"
+
+# update.sh's own log file (see update.sh: `exec 1>>"$LOG_FILE" 2>&1`, right
+# after its root check). That redirect means every echo_step/echo_info/...
+# line -- including the "=== UPDATE RESULT ===" marker _classify_upgrade_log_
+# line looks for -- only ever reaches this file, never the journal: the
+# redirect happens inside the script itself, replacing the fd 1 the
+# eas-station-update.service unit handed it, so journalctl for that unit
+# only ever sees systemd's own unit-lifecycle lines (and sudo/PAM session
+# noise from the commands update.sh runs) -- never update.sh's actual
+# progress output. This file is the primary source below; the journal is
+# only consulted for the unit-lifecycle fallback (see get_upgrade_progress).
+_UPDATE_LOG_FILE = Path("/var/log/eas-update.log")
 
 _STEP_LINE = re.compile(r"^--- Step (\d+)/(\d+): (.*?) ---$")
 _LEVEL_PREFIXES = (
@@ -70,8 +82,11 @@ def _classify_upgrade_log_line(text: str) -> dict:
     update.sh's echo_step/echo_info/echo_success/echo_warning/echo_error
     helpers (scripts/lib/ui.sh) always write a plain-text line in one of
     these exact forms regardless of whether a TTY is attached -- that
-    stability is what makes tailing the journal a faithful stand-in for
-    watching the script run interactively.
+    stability is what makes _UPDATE_LOG_FILE a faithful stand-in for
+    watching the script run interactively. Also used on the small number of
+    journal lines get_upgrade_progress reads for the unit-lifecycle
+    fallback, which land in the same "level" vocabulary via the two
+    `_UPGRADE_UNIT in stripped` branches below.
     """
     stripped = text.strip()
     step_match = _STEP_LINE.match(stripped)
@@ -107,6 +122,21 @@ def _classify_upgrade_log_line(text: str) -> dict:
     if _UPGRADE_UNIT in stripped and "Deactivated successfully" in stripped:
         return {"text": text, "level": "unit-deactivated-ok", "step": None}
     return {"text": text, "level": "plain", "step": None}
+
+
+def _tail_update_log(max_lines: int = 1000) -> List[str]:
+    """Read update.sh's own progress, from the log file it actually writes to.
+
+    See _UPDATE_LOG_FILE above for why the journal alone can't be used.
+    Tolerates the file not existing yet (no update has ever run on this
+    host) or being unreadable -- either way, get_upgrade_progress's journal
+    fallback still covers unit-lifecycle detection.
+    """
+    try:
+        text = _UPDATE_LOG_FILE.read_text(errors="replace")
+    except OSError:
+        return []
+    return text.splitlines()[-max_lines:]
 
 
 # Route definitions
@@ -319,20 +349,21 @@ def run_one_click_upgrade():
 @maintenance_bp.route("/admin/operations/upgrade/progress", methods=["GET"])
 @require_permission('system.configure')
 def get_upgrade_progress():
-    """Step-by-step upgrade feedback, read from eas-station-update.service.
+    """Step-by-step upgrade feedback, read from update.sh's own log file.
 
     Deliberately not backed by ``_OPERATION_STATE`` (an in-memory dict that
     resets when this very worker restarts partway through the upgrade it is
-    reporting on). Everything here comes from systemd/the journal instead,
-    which survive that restart -- so whichever worker answers the next poll,
-    before or after it, sees the same picture.
+    reporting on). Everything here comes from the filesystem/systemd
+    instead, which survive that restart -- so whichever worker answers the
+    next poll, before or after it, sees the same picture.
     """
     # `systemctl show` is only trustworthy as a "still running right now"
     # signal: --collect (bin/eas-station-run-update) unloads the transient
     # unit within seconds of exit, success or failure, so by the time
     # anyone polls it has usually already gone back to looking exactly like
-    # a unit that never ran. Actual result detection below comes entirely
-    # from the journal, which does not get cleaned up.
+    # a unit that never ran. Actual result detection below comes from
+    # _UPDATE_LOG_FILE (which does not get cleaned up) and, as a fallback,
+    # the journal's own unit-lifecycle lines (which also survive it).
     unit_state = {"active_state": None, "sub_state": None}
     try:
         show = subprocess.run(
@@ -349,8 +380,24 @@ def get_upgrade_progress():
     except Exception as exc:
         current_app.logger.debug("Could not read %s unit state: %s", _UPGRADE_UNIT, exc)
 
+    lines = [_classify_upgrade_log_line(text) for text in _tail_update_log()]
+
+    # The journal never gets update.sh's own output (see _UPDATE_LOG_FILE),
+    # only systemd's own lines about the unit itself -- kept as a fallback
+    # for a crash so early update.sh never got to write anything to its log
+    # (e.g. failing to source scripts/lib/ui.sh at all). Only the most
+    # recent one is used, so a stale lifecycle line from a previous run
+    # sitting earlier in the journal's last-500-lines window can't override
+    # this run's own (fresher, more specific) log-file content.
     log_result = get_systemd_logs(_UPGRADE_UNIT, lines=500)
-    lines = [_classify_upgrade_log_line(entry["message"]) for entry in log_result.get("logs", [])]
+    unit_lifecycle_lines = [
+        entry
+        for entry in (
+            _classify_upgrade_log_line(item["message"]) for item in log_result.get("logs", [])
+        )
+        if entry["level"] in ("unit-failed", "unit-deactivated-ok")
+    ]
+    lines.extend(unit_lifecycle_lines[-1:])
 
     result = "running"
     for entry in lines:

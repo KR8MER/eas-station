@@ -27,16 +27,19 @@ reporting on it. get_upgrade_progress() reads that unit's state and journal
 back out, deliberately never touching the in-memory _OPERATION_STATE dict
 that resets when this worker restarts.
 
-Result detection is journal-first, not unit-state-first: manual testing
+Result detection is log-file-first, not unit-state-first: manual testing
 against a real systemd-run --collect unit showed it gets garbage-collected
 within a couple of seconds of exiting, success or failure alike, so
 `systemctl show` reliably answers "is it running right now" but not "how
 did it end" -- by the time anything polls, the unit routinely already looks
-exactly like one that never ran. The journal doesn't get cleaned up, so
-update.sh's own "=== UPDATE RESULT: ... ===" marker (or, if it crashed
-before reaching that, systemd's own "Failed with result" / "Main process
-exited" / "Deactivated successfully" lines for the same unit) is what these
-tests -- and the endpoint -- actually rely on.
+exactly like one that never ran. update.sh redirects its own stdout/stderr
+to /var/log/eas-update.log right after its root check (`exec 1>>"$LOG_FILE"
+2>&1`), so that file -- not the journal -- is what actually accumulates
+update.sh's own "=== UPDATE RESULT: ... ===" marker; the journal only ever
+sees systemd's own lines about the unit itself ("Failed with result" /
+"Main process exited" / "Deactivated successfully"), used here purely as a
+fallback for a crash so early update.sh never got to write anything to its
+log. That's what these tests -- and the endpoint -- actually rely on.
 """
 
 from __future__ import annotations
@@ -45,6 +48,7 @@ from unittest.mock import MagicMock, patch
 
 from webapp.admin.maintenance.routes_operations import (
     _classify_upgrade_log_line,
+    _tail_update_log,
     check_for_upgrade,
     get_upgrade_progress,
     list_upgrade_tags,
@@ -117,6 +121,37 @@ class TestClassifyUpgradeLogLine:
         assert result["text"] == "  [ OK ]  padded  "
 
 
+class TestTailUpdateLog:
+    """_tail_update_log reads update.sh's own log file directly (see the
+    module docstring for why the journal can't be used for this), so these
+    tests exercise the real filesystem via tmp_path/monkeypatch rather than
+    mocking a subprocess call.
+    """
+
+    def test_missing_file_returns_empty(self, tmp_path):
+        with patch(
+            "webapp.admin.maintenance.routes_operations._UPDATE_LOG_FILE",
+            tmp_path / "does-not-exist.log",
+        ):
+            assert _tail_update_log() == []
+
+    def test_reads_lines_in_order(self, tmp_path):
+        log_file = tmp_path / "eas-update.log"
+        log_file.write_text("[ OK ]  Root privileges confirmed\n--- Step 1/12: Pre-flight Checks ---\n")
+        with patch("webapp.admin.maintenance.routes_operations._UPDATE_LOG_FILE", log_file):
+            assert _tail_update_log() == [
+                "[ OK ]  Root privileges confirmed",
+                "--- Step 1/12: Pre-flight Checks ---",
+            ]
+
+    def test_caps_at_max_lines_keeping_the_most_recent(self, tmp_path):
+        log_file = tmp_path / "eas-update.log"
+        log_file.write_text("".join(f"line {i}\n" for i in range(10)))
+        with patch("webapp.admin.maintenance.routes_operations._UPDATE_LOG_FILE", log_file):
+            result = _tail_update_log(max_lines=3)
+        assert result == ["line 7", "line 8", "line 9"]
+
+
 def _fake_systemctl_show(active_state="inactive", sub_state="dead"):
     result = MagicMock()
     result.stdout = f"ActiveState={active_state}\nSubState={sub_state}\n"
@@ -146,6 +181,9 @@ class TestUpgradeProgressEndpoint:
     def test_unit_never_run_is_idle(self, app, authenticated_user):
         with patch("subprocess.run", return_value=_fake_systemctl_show()), \
              patch(
+                 "webapp.admin.maintenance.routes_operations._tail_update_log",
+                 return_value=[],
+             ), patch(
                  "webapp.admin.maintenance.routes_operations.get_systemd_logs",
                  return_value={"success": True, "logs": [], "count": 0},
              ):
@@ -158,20 +196,19 @@ class TestUpgradeProgressEndpoint:
         assert data["lines"] == []
 
     def test_running_unit_with_no_result_marker_yet_reports_running(self, app, authenticated_user):
-        logs = {
-            "success": True,
-            "count": 2,
-            "logs": [
-                {"message": "--- Step 3/12: Stopping Services ---"},
-                {"message": "[INFO]  Stopping EAS Station services..."},
-            ],
-        }
+        log_lines = [
+            "--- Step 3/12: Stopping Services ---",
+            "[INFO]  Stopping EAS Station services...",
+        ]
         with patch(
             "subprocess.run",
             return_value=_fake_systemctl_show(active_state="active", sub_state="running"),
         ), patch(
+            "webapp.admin.maintenance.routes_operations._tail_update_log",
+            return_value=log_lines,
+        ), patch(
             "webapp.admin.maintenance.routes_operations.get_systemd_logs",
-            return_value=logs,
+            return_value={"success": True, "logs": [], "count": 0},
         ):
             response = self._get(app)
 
@@ -183,15 +220,18 @@ class TestUpgradeProgressEndpoint:
     def test_success_marker_wins_even_after_the_collected_unit_looks_gone(self, app, authenticated_user):
         # By the time the unit shows as inactive (post --collect, which in
         # practice happens within a couple of seconds of exit either way),
-        # the journal already has the final marker update.sh printed just
+        # the log file already has the final marker update.sh printed just
         # before exiting successfully -- that marker is authoritative
-        # regardless of what systemctl show currently reports.
+        # regardless of what systemctl show currently reports, and wins even
+        # though the journal's unit-lifecycle fallback is also present.
+        log_lines = [
+            "--- Step 12/12: Restarting Services ---",
+            "=== UPDATE RESULT: SUCCESS ===",
+        ]
         logs = {
             "success": True,
-            "count": 4,
+            "count": 2,
             "logs": [
-                {"message": "--- Step 12/12: Restarting Services ---"},
-                {"message": "=== UPDATE RESULT: SUCCESS ==="},
                 {"message": "eas-station-update.service: Deactivated successfully."},
                 {"message": "Finished eas-station-update.service - update.sh."},
             ],
@@ -199,6 +239,9 @@ class TestUpgradeProgressEndpoint:
         with patch(
             "subprocess.run",
             return_value=_fake_systemctl_show(),
+        ), patch(
+            "webapp.admin.maintenance.routes_operations._tail_update_log",
+            return_value=log_lines,
         ), patch(
             "webapp.admin.maintenance.routes_operations.get_systemd_logs",
             return_value=logs,
@@ -208,17 +251,15 @@ class TestUpgradeProgressEndpoint:
         assert response.get_json()["result"] == "success"
 
     def test_failure_marker_reports_failed(self, app, authenticated_user):
-        logs = {
-            "success": True,
-            "count": 1,
-            "logs": [{"message": "=== UPDATE RESULT: ISSUES DETECTED ==="}],
-        }
         with patch(
             "subprocess.run",
             return_value=_fake_systemctl_show(),
         ), patch(
+            "webapp.admin.maintenance.routes_operations._tail_update_log",
+            return_value=["=== UPDATE RESULT: ISSUES DETECTED ==="],
+        ), patch(
             "webapp.admin.maintenance.routes_operations.get_systemd_logs",
-            return_value=logs,
+            return_value={"success": True, "logs": [], "count": 0},
         ):
             response = self._get(app)
 
@@ -228,12 +269,12 @@ class TestUpgradeProgressEndpoint:
         # `set -e` killed update.sh on an early command failure, before it
         # ever reached its own success/failure summary block -- there is no
         # "=== UPDATE RESULT ===" line at all, only update.sh's own error
-        # output and systemd's record of the unit failing.
+        # output (in the log file) and systemd's record of the unit failing
+        # (in the journal, used here as the fallback it exists for).
         logs = {
             "success": True,
-            "count": 3,
+            "count": 2,
             "logs": [
-                {"message": "[ERROR] Failed to change ownership"},
                 {"message": "eas-station-update.service: Main process exited, code=exited, status=1/FAILURE"},
                 {"message": "eas-station-update.service: Failed with result 'exit-code'."},
             ],
@@ -242,12 +283,42 @@ class TestUpgradeProgressEndpoint:
             "subprocess.run",
             return_value=_fake_systemctl_show(active_state="failed", sub_state="failed"),
         ), patch(
+            "webapp.admin.maintenance.routes_operations._tail_update_log",
+            return_value=["[ERROR] Failed to change ownership"],
+        ), patch(
             "webapp.admin.maintenance.routes_operations.get_systemd_logs",
             return_value=logs,
         ):
             response = self._get(app)
 
         assert response.get_json()["result"] == "failed"
+
+    def test_stale_journal_lifecycle_line_does_not_override_fresh_log_file_success(
+        self, app, authenticated_user
+    ):
+        # A previous run's failure is still sitting in the journal's last-500
+        # -line window (journalctl -u persists across runs; the log file
+        # gets truncated fresh each run). Only the *most recent*
+        # unit-lifecycle line should be used, and even that loses to this
+        # run's own success marker from the log file.
+        logs = {
+            "success": True,
+            "count": 1,
+            "logs": [{"message": "eas-station-update.service: Failed with result 'exit-code'."}],
+        }
+        with patch(
+            "subprocess.run",
+            return_value=_fake_systemctl_show(),
+        ), patch(
+            "webapp.admin.maintenance.routes_operations._tail_update_log",
+            return_value=["=== UPDATE RESULT: SUCCESS ==="],
+        ), patch(
+            "webapp.admin.maintenance.routes_operations.get_systemd_logs",
+            return_value=logs,
+        ):
+            response = self._get(app)
+
+        assert response.get_json()["result"] == "success"
 
     def test_requires_authentication(self, app):
         # Called directly rather than through Flask's dispatcher, a (body,
