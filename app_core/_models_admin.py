@@ -32,6 +32,7 @@ from ._models_base import (
     werkzeug_check_password_hash,
     werkzeug_generate_password_hash,
 )
+from .crypto import EncryptedString, pepper_password
 
 
 class SystemLog(db.Model):
@@ -69,7 +70,7 @@ class AdminUser(db.Model):
 
     # MFA fields
     mfa_enabled = db.Column(db.Boolean, default=False, nullable=False)
-    mfa_secret = db.Column(db.String(255), nullable=True)  # Base32-encoded TOTP secret
+    mfa_secret = db.Column(EncryptedString, nullable=True)  # Base32-encoded TOTP secret
     mfa_backup_codes_hash = db.Column(db.Text, nullable=True)  # JSON array of hashed backup codes
     mfa_enrolled_at = db.Column(db.DateTime(timezone=True), nullable=True)
     mfa_last_totp_at = db.Column(db.DateTime(timezone=True), nullable=True)  # Last successful TOTP code timestamp
@@ -82,16 +83,17 @@ class AdminUser(db.Model):
     role = db.relationship('Role', back_populates='users', lazy='joined')
 
     def set_password(self, password: str) -> None:
-        self.password_hash = werkzeug_generate_password_hash(password)
+        self.password_hash = werkzeug_generate_password_hash(pepper_password(password))
         self.salt = "pbkdf2"
         self.password_changed_at = utc_now()
 
     def check_password(self, password: str) -> bool:
-        """Check password and flag for upgrade if using legacy format.
+        """Check password and flag for upgrade if using a legacy format.
 
-        Note: If using legacy SHA256 format, the password is upgraded in-place
-        but NOT committed. The caller is responsible for committing the session
-        after a successful authentication flow to avoid mid-request commits.
+        Note: If using the legacy SHA256 format, or a pre-pepper pbkdf2/scrypt
+        hash, the password is upgraded in-place but NOT committed. The caller
+        is responsible for committing the session after a successful
+        authentication flow to avoid mid-request commits.
         """
         if self.password_hash is None:
             return False
@@ -113,7 +115,17 @@ class AdminUser(db.Model):
             return False
 
         try:
-            return werkzeug_check_password_hash(self.password_hash, password)
+            if werkzeug_check_password_hash(self.password_hash, pepper_password(password)):
+                return True
+            # Pre-pepper pbkdf2/scrypt hash (written before server-side
+            # peppering was added): fall back to checking the raw password,
+            # and transparently upgrade to a peppered hash on success so
+            # this only runs once per account.
+            if werkzeug_check_password_hash(self.password_hash, password):
+                self.set_password(password)
+                _log_info(f"Password hash for user {self.username} upgraded to peppered format (pending commit)")
+                return True
+            return False
         except ValueError:
             _log_warning("Stored admin password hash has an unexpected format.")
             return False

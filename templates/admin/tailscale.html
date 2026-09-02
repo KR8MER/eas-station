@@ -172,8 +172,15 @@
                 <div class="mb-3">
                     <label for="auth_key" class="form-label">Auth Key</label>
                     <input type="password" class="form-control" id="auth_key" name="auth_key"
-                           value="{{ settings.auth_key }}" autocomplete="off">
-                    <div class="form-text">Pre-authentication key from your <a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener noreferrer">Tailscale admin console</a>. Leave blank for browser-based login.</div>
+                           value="" autocomplete="new-password"
+                           placeholder="{% if settings.auth_key %}•••••••••••••••••••• (leave blank to keep the current key){% else %}Paste a pre-authentication key, or leave blank for browser-based login{% endif %}">
+                    <div class="form-text">Pre-authentication key from your <a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener noreferrer">Tailscale admin console</a>. Never displayed once saved; leave blank when saving other settings to keep the current key.</div>
+                    {% if settings.auth_key %}
+                    <div class="form-check mt-1">
+                        <input class="form-check-input" type="checkbox" id="clear_auth_key" name="clear_auth_key">
+                        <label class="form-check-label" for="clear_auth_key">Clear the saved key (switch to browser-based login)</label>
+                    </div>
+                    {% endif %}
                 </div>
 
                 <div class="mb-3">

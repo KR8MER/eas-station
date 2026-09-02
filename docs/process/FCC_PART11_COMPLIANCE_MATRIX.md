@@ -107,6 +107,25 @@ operational logs; provide for repair/replacement within prescribed windows.
 **Gaps:** Map each failure mode (timing drift, source loss, decode failure) to a
 logged §11.35 readiness event.
 
+#### § 11.35(d) — Cybersecurity requirements (added by FCC 26-38, PS Docket Nos. 25-224 / 22-329, released 2026-06-29)
+
+**Requires:** change default/use strong (15+ character) passwords or equivalent
+alternative authentication; promptly install security patches and firmware
+updates; use a firewall or comparable network segmentation for remote
+management access. Compliance deadline: 60 days after *Federal Register*
+publication. Full traceability, rule text, and an operator checklist:
+[FCC 26-38 EAS Cybersecurity Compliance Reference](../compliance/FCC_26-38_EAS_CYBERSECURITY.md).
+
+| Element | Implementation | Status |
+|---|---|---|
+| 15-char minimum / no default password | Setup wizard + account creation/reset validation (`webapp/routes_setup.py`, `webapp/admin/dashboard.py`) | ✅ |
+| Dictionary-word rejection | No wordlist check implemented | 🔶 gap — operator responsibility until built |
+| Alternative authentication (MFA) | `app_core/auth/mfa.py` (TOTP) | ✅ |
+| Password not reused elsewhere | Not software-verifiable | ⚪ operator responsibility |
+| Prompt patching | One-click in-app upgrade (Admin → Admin Operations), backed by `update.sh` | ✅ |
+| Firewall / network segmentation | UFW default-deny (`install.sh`), fail2ban, optional Tailscale-only admin access | ✅ |
+| Credential encryption at rest (defense-in-depth, not itself required by (d)) | `app_core/crypto.py::EncryptedString` (2.214.0) | ✅ |
+
 ---
 
 ## Subpart C/D — Operations

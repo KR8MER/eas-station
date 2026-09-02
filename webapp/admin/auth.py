@@ -24,6 +24,7 @@ from __future__ import annotations
 from flask import Blueprint
 
 import secrets
+from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import urljoin, urlparse
 
@@ -66,6 +67,26 @@ def _check_password_expiry(user: 'AdminUser') -> tuple:
     except Exception as exc:  # pragma: no cover
         current_app.logger.warning("Password expiry check failed: %s", exc)
         return False, None
+
+
+# 2026-09-02: the day the 15-character minimum (FCC 47 CFR 11.35(d)(1)(i),
+# added by FCC 26-38) shipped in this codebase. A password can't be measured
+# for length after hashing, so this is a best-effort signal, not a guarantee:
+# any account whose password was last set before this date went through the
+# old (shorter) validation and *may* not meet the new floor. Accounts that
+# changed their password on or after this date already passed the new check.
+_FCC_15CHAR_POLICY_DATE = datetime(2026, 9, 2, tzinfo=timezone.utc)
+
+
+def _password_predates_fcc_length_floor(user: 'AdminUser') -> bool:
+    """True if this account's password was set before the 15-char floor
+    shipped, so a passive reminder banner is worth showing."""
+    changed = user.password_changed_at
+    if changed is None:
+        return True
+    if changed.tzinfo is None:
+        changed = changed.replace(tzinfo=timezone.utc)
+    return changed < _FCC_15CHAR_POLICY_DATE
 
 
 def _create_admin_session(user_id: int) -> None:
@@ -259,6 +280,9 @@ def login():
                                     session['pw_expired'] = True
                                 elif pw_days is not None and pw_days <= 14:
                                     session['pw_expires_in_days'] = pw_days
+
+                                if _password_predates_fcc_length_floor(user):
+                                    session['pw_predates_15char_policy'] = True
 
                                 target = next_param if _is_safe_redirect_target(next_param) else url_for('dashboard.admin')
                                 return redirect(target)

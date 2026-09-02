@@ -29,13 +29,13 @@
                         </div>
                         <div class="mb-3">
                             <label for="newUserPassword" class="form-label">Password</label>
-                            <input type="password" class="form-control" id="newUserPassword" name="password" minlength="8" required>
-                            <div class="form-text">Passwords are stored using salted SHA-256 hashes.</div>
-                            <div class="invalid-feedback">Password must be at least 8 characters long.</div>
+                            <input type="password" class="form-control" id="newUserPassword" name="password" minlength="15" required>
+                            <div class="form-text">Passwords are hashed (scrypt) with a per-hash salt and a server-side pepper, and must be at least 15 characters (FCC 47 CFR 11.35(d) minimum for EAS equipment).</div>
+                            <div class="invalid-feedback">Password must be at least 15 characters long.</div>
                         </div>
                         <div class="mb-3">
                             <label for="newUserPasswordConfirm" class="form-label">Confirm Password</label>
-                            <input type="password" class="form-control" id="newUserPasswordConfirm" minlength="8" required>
+                            <input type="password" class="form-control" id="newUserPasswordConfirm" minlength="15" required>
                             <div class="invalid-feedback">Passwords must match.</div>
                         </div>
                         <button type="submit" class="btn btn-success w-100">

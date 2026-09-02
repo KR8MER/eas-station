@@ -47,6 +47,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask import current_app
 
 from app_core.extensions import db
+from app_core.crypto import pepper_password
 from app_utils import utc_now
 
 #: Length of one TOTP time step, in seconds (RFC 6238 default, and what every
@@ -103,7 +104,7 @@ class MFAManager:
         Returns:
             JSON string of hashed codes
         """
-        hashed = [generate_password_hash(code) for code in codes]
+        hashed = [generate_password_hash(pepper_password(code)) for code in codes]
         return json.dumps(hashed)
 
     @staticmethod
@@ -123,8 +124,13 @@ class MFAManager:
         except (json.JSONDecodeError, TypeError):
             return False, None
 
+        peppered_code = pepper_password(code)
         for i, hashed_code in enumerate(hashed_codes):
-            if check_password_hash(hashed_code, code):
+            # Peppered is the current format; the raw fallback covers backup
+            # codes generated before server-side peppering was added. Either
+            # way the code is single-use and removed below, so there's no
+            # separate in-place upgrade step needed here (unlike passwords).
+            if check_password_hash(hashed_code, peppered_code) or check_password_hash(hashed_code, code):
                 # Remove used code
                 hashed_codes.pop(i)
                 return True, json.dumps(hashed_codes)

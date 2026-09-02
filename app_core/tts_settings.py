@@ -91,7 +91,13 @@ def update_tts_settings(data: Dict[str, Any]) -> TTSSettings:
     if 'azure_openai_endpoint' in data:
         settings.azure_openai_endpoint = str(data['azure_openai_endpoint']).strip() if data['azure_openai_endpoint'] else None
     if 'azure_openai_key' in data:
-        settings.azure_openai_key = str(data['azure_openai_key']).strip() if data['azure_openai_key'] else None
+        submitted_key = str(data['azure_openai_key']).strip() if data['azure_openai_key'] else ''
+        # The form field is intentionally left blank on page load (never
+        # pre-filled with the real secret) so a blank or masked-placeholder
+        # submission means "no change", not "clear the key". Only a real,
+        # newly-typed value overwrites the stored key.
+        if submitted_key and submitted_key != '••••••••':
+            settings.azure_openai_key = submitted_key
     if 'azure_openai_model' in data:
         settings.azure_openai_model = str(data['azure_openai_model']).strip()
     if 'azure_openai_voice' in data:

@@ -358,8 +358,11 @@ def register(app, logger):
                 if existing_user:
                     errors["username"] = "An account with that username already exists."
 
-            if len(password) < 12:
-                errors["password"] = "Password must be at least 12 characters long."
+            if len(password) < 15:
+                # 15 characters is the FCC's floor for EAS equipment passwords
+                # (47 CFR 11.35(d)(1)(i), added by FCC 26-38 / PS Docket Nos.
+                # 25-224, 22-329) -- see docs/compliance/FCC_26-38_EAS_CYBERSECURITY.md.
+                errors["password"] = "Password must be at least 15 characters long."
             elif password.strip() != password:
                 errors["password"] = "Password cannot begin or end with whitespace."
 
