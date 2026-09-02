@@ -66,7 +66,7 @@ import pytz
 import certifi
 import redis
 from dotenv import load_dotenv
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from app_utils.system.sd_notify import notify as sd_notify, Watchdog
 print("[CAP_POLLER_INIT] pytz, certifi, redis, dotenv, urllib imported", flush=True)
@@ -264,6 +264,23 @@ def _env_flag(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on", "t", "y"}
+
+
+def _endpoint_host_matches(url: str, domain: str) -> bool:
+    """True if `url`'s hostname is exactly `domain` or a subdomain of it.
+
+    Plain substring checks like ``'weather.gov' in url`` also match a
+    malicious/misconfigured endpoint such as
+    ``https://evil.example/weather.gov`` or ``https://weather.gov.evil.com``;
+    parsing the hostname avoids that class of mismatch (flagged by CodeQL as
+    incomplete URL substring sanitization).
+    """
+    try:
+        hostname = (urlparse(url).hostname or '').lower()
+    except ValueError:
+        return False
+    domain = domain.lower()
+    return hostname == domain or hostname.endswith('.' + domain)
 
 
 def _serialize_alert_for_sig(alert_elem) -> str:
@@ -1086,7 +1103,7 @@ class CAPPoller:
                 if old_zone_codes != new_zone_codes:
                     new_noaa_endpoints = self._build_batched_noaa_endpoints(list(new_zone_codes))
                     # Keep IPAWS endpoints, replace NOAA endpoints
-                    ipaws_endpoints = [ep for ep in self.cap_endpoints if 'fema.gov' in ep or 'IPAWS' in ep]
+                    ipaws_endpoints = [ep for ep in self.cap_endpoints if _endpoint_host_matches(ep, 'fema.gov') or 'IPAWS' in ep]
                     self.cap_endpoints = ipaws_endpoints + new_noaa_endpoints
                     self.logger.info(f"🌐 Rebuilt NOAA endpoints: {len(new_noaa_endpoints)} endpoint(s) for {len(new_zone_codes)} zone(s)")
 
@@ -1404,9 +1421,20 @@ class CAPPoller:
         }
 
         for alert_elem in root.findall('.//cap:alert', ns):
-            feature = self._convert_cap_alert(alert_elem, ns)
-            if feature:
-                alerts.append(feature)
+            try:
+                feature = self._convert_cap_alert(alert_elem, ns)
+                if feature:
+                    alerts.append(feature)
+            except Exception as exc:
+                try:
+                    bad_id = alert_elem.findtext('cap:identifier', default='unknown', namespaces=ns)
+                except Exception:
+                    bad_id = 'unknown'
+                self.logger.error(
+                    f"Unhandled error converting CAP XML alert {bad_id!r}: {exc}",
+                    exc_info=True,
+                )
+                continue
 
         return alerts
 
@@ -1948,11 +1976,11 @@ class CAPPoller:
 
         for endpoint in self.cap_endpoints:
             # Determine endpoint type before the try block so errors are attributed correctly
-            if 'tdl.apps.fema.gov' in endpoint:
+            if _endpoint_host_matches(endpoint, 'tdl.apps.fema.gov'):
                 endpoint_type = "IPAWS"
-            elif 'apps.fema.gov' in endpoint:
+            elif _endpoint_host_matches(endpoint, 'apps.fema.gov'):
                 endpoint_type = "IPAWS"
-            elif 'weather.gov' in endpoint:
+            elif _endpoint_host_matches(endpoint, 'weather.gov'):
                 endpoint_type = "NOAA"
             else:
                 endpoint_type = "CUSTOM"
@@ -2009,72 +2037,85 @@ class CAPPoller:
                     self.logger.info(f"  (no alerts from {endpoint_type})")
                 self.logger.info(f"=" * 60)
                 for alert in features:
-                    props = alert.get('properties', {})
-                    # Track which endpoint this alert came from
-                    props['_fetch_endpoint'] = endpoint
-                    props['_fetch_endpoint_type'] = endpoint_type
+                    _alert_id_for_log = 'unknown'
+                    try:
+                        if isinstance(alert, dict):
+                            _alert_id_for_log = (alert.get('properties') or {}).get('identifier', 'unknown')
+                    except Exception:
+                        pass
+                    try:
+                        props = alert.get('properties', {})
+                        # Track which endpoint this alert came from
+                        props['_fetch_endpoint'] = endpoint
+                        props['_fetch_endpoint_type'] = endpoint_type
 
-                    # NOAA API uses 'id' field, IPAWS/CAP uses 'identifier' - check both
-                    identifier = (props.get('identifier') or props.get('id') or '').strip()
-                    if identifier:
-                        props['identifier'] = identifier
+                        # NOAA API uses 'id' field, IPAWS/CAP uses 'identifier' - check both
+                        identifier = (props.get('identifier') or props.get('id') or '').strip()
+                        if identifier:
+                            props['identifier'] = identifier
 
-                    source_value = props.get('source')
-                    if not source_value:
-                        if alert.get('raw_xml') is not None or 'ipaws' in endpoint.lower():
-                            source_value = ALERT_SOURCE_IPAWS
-                        elif 'weather.gov' in endpoint.lower():
-                            source_value = ALERT_SOURCE_NOAA
+                        source_value = props.get('source')
+                        if not source_value:
+                            if alert.get('raw_xml') is not None or 'ipaws' in endpoint.lower():
+                                source_value = ALERT_SOURCE_IPAWS
+                            elif _endpoint_host_matches(endpoint, 'weather.gov'):
+                                source_value = ALERT_SOURCE_NOAA
+                            else:
+                                source_value = ALERT_SOURCE_UNKNOWN
+                        canonical_source = normalize_alert_source(source_value)
+                        props['source'] = canonical_source
+                        if canonical_source != ALERT_SOURCE_UNKNOWN:
+                            sources_seen.add(canonical_source)
+
+                        sender_name = (props.get('senderName') or '').strip().upper()
+                        sent_value = (props.get('sent') or '').strip()
+                        headline_value = (props.get('headline') or '').strip()
+                        signature_parts = [canonical_source or ALERT_SOURCE_UNKNOWN, identifier, sender_name, sent_value, headline_value]
+                        signature_text = "|".join(signature_parts)
+                        signature_hash = hashlib.sha256(signature_text.encode('utf-8', 'ignore')).hexdigest()
+
+                        if signature_hash in signature_cache:
+                            duplicates_filtered += 1
+                            self.logger.info(
+                                "Duplicate NOAA/IPAWS payload skipped (source=%s, identifier=%s)",
+                                canonical_source,
+                                identifier or 'unknown',
+                            )
+                            continue
+
+                        signature_cache.add(signature_hash)
+
+                        if identifier:
+                            existing_alert = alerts_by_identifier.get(identifier)
+                            if not existing_alert:
+                                alerts_by_identifier[identifier] = alert
+                            else:
+                                duplicates_filtered += 1
+                                if self._should_replace_alert(existing_alert, alert):
+                                    alerts_by_identifier[identifier] = alert
+                                    duplicates_replaced += 1
+                                    self.logger.info(
+                                        "Replacing alert %s with newer payload (sent=%s, type=%s)",
+                                        identifier,
+                                        props.get('sent'),
+                                        props.get('messageType'),
+                                    )
+                                else:
+                                    self.logger.info(
+                                        "Skipping older duplicate for %s (sent=%s, type=%s)",
+                                        identifier,
+                                        props.get('sent'),
+                                        props.get('messageType'),
+                                    )
                         else:
-                            source_value = ALERT_SOURCE_UNKNOWN
-                    canonical_source = normalize_alert_source(source_value)
-                    props['source'] = canonical_source
-                    if canonical_source != ALERT_SOURCE_UNKNOWN:
-                        sources_seen.add(canonical_source)
-
-                    sender_name = (props.get('senderName') or '').strip().upper()
-                    sent_value = (props.get('sent') or '').strip()
-                    headline_value = (props.get('headline') or '').strip()
-                    signature_parts = [canonical_source or ALERT_SOURCE_UNKNOWN, identifier, sender_name, sent_value, headline_value]
-                    signature_text = "|".join(signature_parts)
-                    signature_hash = hashlib.sha256(signature_text.encode('utf-8', 'ignore')).hexdigest()
-
-                    if signature_hash in signature_cache:
-                        duplicates_filtered += 1
-                        self.logger.info(
-                            "Duplicate NOAA/IPAWS payload skipped (source=%s, identifier=%s)",
-                            canonical_source,
-                            identifier or 'unknown',
+                            self.logger.warning("Alert has no identifier, including anyway")
+                            alerts_without_identifier.append(alert)
+                    except Exception as exc:
+                        self.logger.error(
+                            f"Unhandled error normalising alert {_alert_id_for_log!r} from {endpoint}: {exc}",
+                            exc_info=True,
                         )
                         continue
-
-                    signature_cache.add(signature_hash)
-
-                    if identifier:
-                        existing_alert = alerts_by_identifier.get(identifier)
-                        if not existing_alert:
-                            alerts_by_identifier[identifier] = alert
-                        else:
-                            duplicates_filtered += 1
-                            if self._should_replace_alert(existing_alert, alert):
-                                alerts_by_identifier[identifier] = alert
-                                duplicates_replaced += 1
-                                self.logger.info(
-                                    "Replacing alert %s with newer payload (sent=%s, type=%s)",
-                                    identifier,
-                                    props.get('sent'),
-                                    props.get('messageType'),
-                                )
-                            else:
-                                self.logger.info(
-                                    "Skipping older duplicate for %s (sent=%s, type=%s)",
-                                    identifier,
-                                    props.get('sent'),
-                                    props.get('messageType'),
-                                )
-                    else:
-                        self.logger.warning("Alert has no identifier, including anyway")
-                        alerts_without_identifier.append(alert)
             except requests.exceptions.SSLError as exc:
                 error_msg = (
                     f"TLS certificate verification failed for {endpoint}: {str(exc)}. "
@@ -3240,25 +3281,43 @@ class CAPPoller:
 
         matched = 0
         for ref_id in referenced_identifiers:
-            alert = self.db_session.query(CAPAlert).filter_by(identifier=ref_id).first()
-            if alert is None:
+            # One bad reference (e.g. a lookup/attribute error) must not
+            # abort the others in the same Cancel message -- a single
+            # <references> value commonly lists several prior alerts.
+            try:
+                alert = self.db_session.query(CAPAlert).filter_by(identifier=ref_id).first()
+                if alert is None:
+                    self.logger.info(
+                        "Cancel message %s references %s, which we never stored (not relevant to our area) -- nothing to cancel",
+                        cancel_identifier, ref_id,
+                    )
+                    continue
+                if alert.cancelled_at is not None:
+                    continue
+                alert.status = 'Cancelled'
+                alert.cancelled_at = cancelled_at
+                matched += 1
                 self.logger.info(
-                    "Cancel message %s references %s, which we never stored (not relevant to our area) -- nothing to cancel",
-                    cancel_identifier, ref_id,
+                    "Cancelled alert %s (%s) via CAP <references> from cancellation message %s",
+                    ref_id, alert.event, cancel_identifier,
                 )
-                continue
-            if alert.cancelled_at is not None:
-                continue
-            alert.status = 'Cancelled'
-            alert.cancelled_at = cancelled_at
-            matched += 1
-            self.logger.info(
-                "Cancelled alert %s (%s) via CAP <references> from cancellation message %s",
-                ref_id, alert.event, cancel_identifier,
-            )
+            except Exception as exc:
+                self.logger.error(
+                    f"Unhandled error cancelling referenced alert {ref_id!r} "
+                    f"from Cancel message {cancel_identifier!r}: {exc}",
+                    exc_info=True,
+                )
+                self.db_session.rollback()
 
         if matched:
-            self.db_session.commit()
+            try:
+                self.db_session.commit()
+            except Exception as exc:
+                self.logger.error(
+                    f"Failed to commit cancellations for Cancel message {cancel_identifier!r}: {exc}",
+                    exc_info=True,
+                )
+                self.db_session.rollback()
 
         return True
 
@@ -4131,11 +4190,11 @@ class CAPPoller:
         # Build endpoint info for logging
         endpoints_info = []
         for ep in self.cap_endpoints:
-            if 'tdl.apps.fema.gov' in ep:
+            if _endpoint_host_matches(ep, 'tdl.apps.fema.gov'):
                 ep_type = "IPAWS"
-            elif 'apps.fema.gov' in ep:
+            elif _endpoint_host_matches(ep, 'apps.fema.gov'):
                 ep_type = "IPAWS"
-            elif 'weather.gov' in ep:
+            elif _endpoint_host_matches(ep, 'weather.gov'):
                 ep_type = "NOAA"
             else:
                 ep_type = "CUSTOM"
@@ -4194,11 +4253,11 @@ class CAPPoller:
             self.logger.info("-" * 70)
             self.logger.info(f"Polling {len(self.cap_endpoints)} endpoint(s):")
             for idx, endpoint in enumerate(self.cap_endpoints, 1):
-                if 'tdl.apps.fema.gov' in endpoint:
+                if _endpoint_host_matches(endpoint, 'tdl.apps.fema.gov'):
                     env_marker = " [STAGING/TDL]"
-                elif 'apps.fema.gov' in endpoint:
+                elif _endpoint_host_matches(endpoint, 'apps.fema.gov'):
                     env_marker = " [IPAWS PRODUCTION]"
-                elif 'weather.gov' in endpoint:
+                elif _endpoint_host_matches(endpoint, 'weather.gov'):
                     env_marker = " [NOAA Weather]"
                 else:
                     env_marker = ""
@@ -4239,201 +4298,223 @@ class CAPPoller:
                 pass
 
             for alert_data in alerts_data:
-                props = alert_data.get('properties', {})
-                event = props.get('event', 'Unknown')
-                alert_id = props.get('identifier', 'No ID')
-                area_desc = props.get('areaDesc', 'Unknown area')
-                headline = props.get('headline', '')
-                endpoint_type = props.get('_fetch_endpoint_type', 'UNKNOWN')
-
-                # Accumulate per-source stats for this alert
-                if endpoint_type not in per_source_stats:
-                    per_source_stats[endpoint_type] = _init_source_stats()
-                per_source_stats[endpoint_type]['alerts_fetched'] += 1
-
-                self.logger.info(f"Processing alert from [{endpoint_type}]: {event} (ID: {alert_id[:20] if alert_id!='No ID' else 'No ID'}...)")
-
-                # Track this alert in fetched_alerts for visibility (even if filtered)
-                alert_summary = {
-                    'identifier': alert_id[:50] + '...' if len(alert_id) > 50 else alert_id,
-                    'event': event,
-                    'area': area_desc[:100] + '...' if len(area_desc) > 100 else area_desc,
-                    'headline': headline[:150] + '...' if len(headline) > 150 else headline,
-                    'sent': props.get('sent', 'Unknown'),
-                    'status': 'pending',  # Will be updated based on processing
-                    'reason': None,
-                }
-
-                # Log detailed alert information if enabled in database settings (helps debug missing alerts)
-                if log_fetched_alerts:
-                    sent = props.get('sent', 'Unknown')
-                    expires = props.get('expires', 'Unknown')
-                    effective = props.get('effective', 'Unknown')
-                    urgency = props.get('urgency', 'Unknown')
-                    severity = props.get('severity', 'Unknown')
-                    certainty = props.get('certainty', 'Unknown')
-                    area_desc = props.get('areaDesc', 'Unknown')
+                _alert_id_for_log = 'unknown'
+                try:
+                    if isinstance(alert_data, dict):
+                        _alert_id_for_log = (alert_data.get('properties') or {}).get('identifier', 'unknown')
+                except Exception:
+                    pass
+                try:
+                    props = alert_data.get('properties', {})
+                    event = props.get('event', 'Unknown')
+                    alert_id = props.get('identifier', 'No ID')
+                    area_desc = props.get('areaDesc', 'Unknown area')
                     headline = props.get('headline', '')
+                    endpoint_type = props.get('_fetch_endpoint_type', 'UNKNOWN')
 
-                    self.logger.info(f"  ├─ Full ID: {alert_id}")
-                    self.logger.info(f"  ├─ Event: {event}")
-                    self.logger.info(f"  ├─ Sent: {sent}")
-                    self.logger.info(f"  ├─ Effective: {effective}")
-                    self.logger.info(f"  ├─ Expires: {expires}")
-                    self.logger.info(f"  ├─ Urgency: {urgency} | Severity: {severity} | Certainty: {certainty}")
-                    self.logger.info(f"  ├─ Area: {area_desc}")
-                    if headline:
-                        self.logger.info(f"  └─ Headline: {headline}")
-                    else:
-                        self.logger.info(f"  └─ (No headline)")
+                    # Accumulate per-source stats for this alert
+                    if endpoint_type not in per_source_stats:
+                        per_source_stats[endpoint_type] = _init_source_stats()
+                    per_source_stats[endpoint_type]['alerts_fetched'] += 1
 
-                # A CAP Cancel commonly carries no <info> block (nothing left
-                # to describe) and refers to prior alerts via <references>
-                # rather than reusing their identifier -- handle that BEFORE
-                # the relevance filter below, which would otherwise reject it
-                # as event="Unknown" with no area codes and silently drop a
-                # real cancellation on the floor (see
-                # _process_cap_references_cancellation's docstring).
-                if self._process_cap_references_cancellation(alert_data):
-                    alert_summary['status'] = 'cancelled_by_reference'
-                    alert_summary['reason'] = 'CAP <references> cancellation applied to referenced alert(s)'
-                    stats['alerts_cancelled_by_reference'] += 1
-                    stats['fetched_alerts'].append(alert_summary)
-                    continue
+                    self.logger.info(f"Processing alert from [{endpoint_type}]: {event} (ID: {alert_id[:20] if alert_id!='No ID' else 'No ID'}...)")
 
-                relevance = self.get_alert_relevance_details(alert_data)
-                log_entry = relevance.get('log') or {}
-                message = log_entry.get('message')
-                if message:
-                    level = (log_entry.get('level') or 'info').lower()
-                    if level == 'error':
-                        self.logger.error(message)
-                    elif level == 'warning':
-                        self.logger.warning(message)
-                    else:
-                        self.logger.info(message)
-
-                # Only collect debug data if debug records are enabled (expensive)
-                if self._debug_records_enabled:
-                    debug_entry = self._initialise_debug_entry(alert_data, relevance, poll_run_id, poll_start_utc)
-                    debug_records.append(debug_entry)
-
-                if not relevance.get('is_relevant'):
-                    # Log detailed info about filtered alert so user can see what was fetched
-                    ugc_codes = relevance.get('ugc_codes', [])
-                    same_codes = relevance.get('same_codes', [])
-                    self.logger.info(f"╔═ FILTERED ALERT (not stored) ═══════════════════════════════")
-                    self.logger.info(f"║ Event: {event}")
-                    self.logger.info(f"║ ID: {alert_id[:60]}{'...' if len(alert_id) > 60 else ''}")
-                    self.logger.info(f"║ Area: {area_desc[:80]}{'...' if len(area_desc) > 80 else ''}")
-                    self.logger.info(f"║ Alert UGC codes: {', '.join(ugc_codes[:5]) if ugc_codes else 'None'}")
-                    self.logger.info(f"║ Alert SAME codes: {', '.join(same_codes[:5]) if same_codes else 'None'}")
-                    self.logger.info(f"║ Reason: Not relevant to {self.county_upper} - no matching location codes")
-                    self.logger.info(f"╚═══════════════════════════════════════════════════════════════")
-                    stats['alerts_filtered'] += 1
-                    per_source_stats[endpoint_type]['alerts_filtered'] += 1
-                    # Track filtered alert for visibility
-                    alert_summary['status'] = 'filtered'
-                    alert_summary['reason'] = f"Not relevant to {self.county_upper} - no matching location codes"
-                    alert_summary['ugc_codes'] = ugc_codes[:5] if ugc_codes else []
-                    alert_summary['same_codes'] = same_codes[:5] if same_codes else []
-                    stats['fetched_alerts'].append(alert_summary)
-                    if self._debug_records_enabled and 'debug_entry' in locals():
-                        debug_entry.setdefault('notes', []).append('Filtered out by strict location rules')
-                    continue
-
-                stats['alerts_accepted'] += 1
-                per_source_stats[endpoint_type]['alerts_accepted'] += 1
-                parsed = self.parse_cap_alert(alert_data)
-                if not parsed:
-                    self.logger.warning(f"Failed to parse: {event}")
-                    if self._debug_records_enabled and 'debug_entry' in locals():
-                        debug_entry['parse_error'] = 'parse_cap_alert returned None'
-                        debug_entry.setdefault('notes', []).append('Parsing failed')
-                    continue
-
-                if self._debug_records_enabled and 'debug_entry' in locals():
-                    debug_entry['parse_success'] = True
-                    debug_entry['identifier'] = parsed.get('identifier', '')
-                    debug_entry['source'] = parsed.get('source')
-                    debug_entry['alert_sent'] = parsed.get('sent')
-                    geometry_data = parsed.get('_geometry_data')
-                    if geometry_data:
-                        debug_entry['geometry_geojson'] = self._safe_json_copy(geometry_data)
-                        geom_type, polygon_count, preview = self._summarise_geometry(geometry_data)
-                        debug_entry['geometry_type'] = geom_type
-                        debug_entry['polygon_count'] = polygon_count
-                        debug_entry['geometry_preview'] = preview
-
-                # Check if this alert should be stored (SAME match) or broadcast-only (UGC match)
-                is_storage_relevant = relevance.get('is_storage_relevant', False)
-
-                if is_storage_relevant:
-                    # SAME code match: Save to database and calculate boundaries
-                    is_new, alert, _ = self.save_cap_alert(parsed)
-                    if is_new:
-                        stats['alerts_new'] += 1
-                        per_source_stats[endpoint_type]['alerts_new'] += 1
-                        self.logger.info(
-                            f"Saved new {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
-                        )
-                        # Track saved new alert
-                        alert_summary['status'] = 'saved_new'
-                        alert_summary['reason'] = 'New alert saved to database (SAME code match)'
-                    else:
-                        stats['alerts_updated'] += 1
-                        per_source_stats[endpoint_type]['alerts_updated'] += 1
-                        self.logger.info(
-                            f"Updated {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
-                        )
-                        # Track updated alert
-                        alert_summary['status'] = 'updated'
-                        alert_summary['reason'] = 'Existing alert updated in database'
-                    stats['fetched_alerts'].append(alert_summary)
-
-                    if self._debug_records_enabled:
-                        debug_entry['was_saved'] = bool(alert)
-                        debug_entry['was_new'] = bool(is_new and alert is not None)
-                        debug_entry['alert_db_id'] = getattr(alert, 'id', None) if alert else None
-                        if not alert:
-                            debug_entry.setdefault('notes', []).append('Database save failed')
-
-                else:
-                    # UGC/Zone match only: Broadcast but don't store or calculate boundaries
-                    # This happens when UGC codes match zone_codes but none match storage_zone_codes
-                    matched_ugcs = relevance.get('relevance_matches', [])
-                    alert_same_codes = relevance.get('same_codes', [])
-                    self.logger.info(f"╔═ BROADCAST-ONLY ALERT (not stored) ═══════════════════════════")
-                    self.logger.info(f"║ Event: {event}")
-                    self.logger.info(f"║ ID: {alert_id[:60]}{'...' if len(alert_id) > 60 else ''}")
-                    self.logger.info(f"║ Area: {area_desc[:80]}{'...' if len(area_desc) > 80 else ''}")
-                    self.logger.info(f"║ Matched UGC codes: {', '.join(matched_ugcs[:5]) if matched_ugcs else 'None'}")
-                    self.logger.info(f"║ Alert SAME codes: {', '.join(alert_same_codes[:5]) if alert_same_codes else 'None'}")
-                    self.logger.info(f"║ Your SAME codes: {', '.join(sorted(self.same_codes)[:5]) if self.same_codes else 'None configured'}")
-                    self.logger.info(f"║ Your storage zones: {', '.join(sorted(self.storage_zone_codes)[:5]) if self.storage_zone_codes else 'None configured'}")
-                    self.logger.info(f"║ Sent: {format_local_datetime(parsed.get('sent'))}")
-                    self.logger.info(f"║ Reason: Matched zone_codes for broadcast, but no match in SAME or storage_zone_codes")
-                    self.logger.info(f"╚═══════════════════════════════════════════════════════════════")
-                    # Track broadcast-only alert
-                    alert_summary['status'] = 'broadcast_only'
-                    alert_summary['reason'] = 'UGC/Zone match - broadcast to displays but not stored'
-                    alert_summary['ugc_codes'] = matched_ugcs[:5] if matched_ugcs else []
-                    stats['fetched_alerts'].append(alert_summary)
-                    if self._debug_records_enabled:
-                        debug_entry.setdefault('notes', []).append('Broadcast-only (UGC match, no storage)')
-                        debug_entry['was_saved'] = False
-                        debug_entry['was_new'] = False
-
-                    # Publish broadcast-only alert to Redis for EAS service
-                    self._publish_alert_event('alerts:broadcast_only', {
+                    # Track this alert in fetched_alerts for visibility (even if filtered)
+                    alert_summary = {
+                        'identifier': alert_id[:50] + '...' if len(alert_id) > 50 else alert_id,
                         'event': event,
-                        'severity': parsed.get('severity'),
-                        'urgency': parsed.get('urgency'),
-                        'certainty': parsed.get('certainty'),
-                        'sent': parsed.get('sent'),
-                        'expires': parsed.get('expires'),
-                        'raw_json': alert_data.get('raw_json', {})
-                    })
+                        'area': area_desc[:100] + '...' if len(area_desc) > 100 else area_desc,
+                        'headline': headline[:150] + '...' if len(headline) > 150 else headline,
+                        'sent': props.get('sent', 'Unknown'),
+                        'status': 'pending',  # Will be updated based on processing
+                        'reason': None,
+                    }
+
+                    # Log detailed alert information if enabled in database settings (helps debug missing alerts)
+                    if log_fetched_alerts:
+                        sent = props.get('sent', 'Unknown')
+                        expires = props.get('expires', 'Unknown')
+                        effective = props.get('effective', 'Unknown')
+                        urgency = props.get('urgency', 'Unknown')
+                        severity = props.get('severity', 'Unknown')
+                        certainty = props.get('certainty', 'Unknown')
+                        area_desc = props.get('areaDesc', 'Unknown')
+                        headline = props.get('headline', '')
+
+                        self.logger.info(f"  ├─ Full ID: {alert_id}")
+                        self.logger.info(f"  ├─ Event: {event}")
+                        self.logger.info(f"  ├─ Sent: {sent}")
+                        self.logger.info(f"  ├─ Effective: {effective}")
+                        self.logger.info(f"  ├─ Expires: {expires}")
+                        self.logger.info(f"  ├─ Urgency: {urgency} | Severity: {severity} | Certainty: {certainty}")
+                        self.logger.info(f"  ├─ Area: {area_desc}")
+                        if headline:
+                            self.logger.info(f"  └─ Headline: {headline}")
+                        else:
+                            self.logger.info(f"  └─ (No headline)")
+
+                    # A CAP Cancel commonly carries no <info> block (nothing left
+                    # to describe) and refers to prior alerts via <references>
+                    # rather than reusing their identifier -- handle that BEFORE
+                    # the relevance filter below, which would otherwise reject it
+                    # as event="Unknown" with no area codes and silently drop a
+                    # real cancellation on the floor (see
+                    # _process_cap_references_cancellation's docstring).
+                    if self._process_cap_references_cancellation(alert_data):
+                        alert_summary['status'] = 'cancelled_by_reference'
+                        alert_summary['reason'] = 'CAP <references> cancellation applied to referenced alert(s)'
+                        stats['alerts_cancelled_by_reference'] += 1
+                        stats['fetched_alerts'].append(alert_summary)
+                        continue
+
+                    relevance = self.get_alert_relevance_details(alert_data)
+                    log_entry = relevance.get('log') or {}
+                    message = log_entry.get('message')
+                    if message:
+                        level = (log_entry.get('level') or 'info').lower()
+                        if level == 'error':
+                            self.logger.error(message)
+                        elif level == 'warning':
+                            self.logger.warning(message)
+                        else:
+                            self.logger.info(message)
+
+                    # Only collect debug data if debug records are enabled (expensive)
+                    if self._debug_records_enabled:
+                        debug_entry = self._initialise_debug_entry(alert_data, relevance, poll_run_id, poll_start_utc)
+                        debug_records.append(debug_entry)
+
+                    if not relevance.get('is_relevant'):
+                        # Log detailed info about filtered alert so user can see what was fetched
+                        ugc_codes = relevance.get('ugc_codes', [])
+                        same_codes = relevance.get('same_codes', [])
+                        self.logger.info(f"╔═ FILTERED ALERT (not stored) ═══════════════════════════════")
+                        self.logger.info(f"║ Event: {event}")
+                        self.logger.info(f"║ ID: {alert_id[:60]}{'...' if len(alert_id) > 60 else ''}")
+                        self.logger.info(f"║ Area: {area_desc[:80]}{'...' if len(area_desc) > 80 else ''}")
+                        self.logger.info(f"║ Alert UGC codes: {', '.join(ugc_codes[:5]) if ugc_codes else 'None'}")
+                        self.logger.info(f"║ Alert SAME codes: {', '.join(same_codes[:5]) if same_codes else 'None'}")
+                        self.logger.info(f"║ Reason: Not relevant to {self.county_upper} - no matching location codes")
+                        self.logger.info(f"╚═══════════════════════════════════════════════════════════════")
+                        stats['alerts_filtered'] += 1
+                        per_source_stats[endpoint_type]['alerts_filtered'] += 1
+                        # Track filtered alert for visibility
+                        alert_summary['status'] = 'filtered'
+                        alert_summary['reason'] = f"Not relevant to {self.county_upper} - no matching location codes"
+                        alert_summary['ugc_codes'] = ugc_codes[:5] if ugc_codes else []
+                        alert_summary['same_codes'] = same_codes[:5] if same_codes else []
+                        stats['fetched_alerts'].append(alert_summary)
+                        if self._debug_records_enabled and 'debug_entry' in locals():
+                            debug_entry.setdefault('notes', []).append('Filtered out by strict location rules')
+                        continue
+
+                    stats['alerts_accepted'] += 1
+                    per_source_stats[endpoint_type]['alerts_accepted'] += 1
+                    parsed = self.parse_cap_alert(alert_data)
+                    if not parsed:
+                        self.logger.warning(f"Failed to parse: {event}")
+                        if self._debug_records_enabled and 'debug_entry' in locals():
+                            debug_entry['parse_error'] = 'parse_cap_alert returned None'
+                            debug_entry.setdefault('notes', []).append('Parsing failed')
+                        continue
+
+                    if self._debug_records_enabled and 'debug_entry' in locals():
+                        debug_entry['parse_success'] = True
+                        debug_entry['identifier'] = parsed.get('identifier', '')
+                        debug_entry['source'] = parsed.get('source')
+                        debug_entry['alert_sent'] = parsed.get('sent')
+                        geometry_data = parsed.get('_geometry_data')
+                        if geometry_data:
+                            debug_entry['geometry_geojson'] = self._safe_json_copy(geometry_data)
+                            geom_type, polygon_count, preview = self._summarise_geometry(geometry_data)
+                            debug_entry['geometry_type'] = geom_type
+                            debug_entry['polygon_count'] = polygon_count
+                            debug_entry['geometry_preview'] = preview
+
+                    # Check if this alert should be stored (SAME match) or broadcast-only (UGC match)
+                    is_storage_relevant = relevance.get('is_storage_relevant', False)
+
+                    if is_storage_relevant:
+                        # SAME code match: Save to database and calculate boundaries
+                        is_new, alert, _ = self.save_cap_alert(parsed)
+                        if is_new:
+                            stats['alerts_new'] += 1
+                            per_source_stats[endpoint_type]['alerts_new'] += 1
+                            self.logger.info(
+                                f"Saved new {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
+                            )
+                            # Track saved new alert
+                            alert_summary['status'] = 'saved_new'
+                            alert_summary['reason'] = 'New alert saved to database (SAME code match)'
+                        else:
+                            stats['alerts_updated'] += 1
+                            per_source_stats[endpoint_type]['alerts_updated'] += 1
+                            self.logger.info(
+                                f"Updated {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
+                            )
+                            # Track updated alert
+                            alert_summary['status'] = 'updated'
+                            alert_summary['reason'] = 'Existing alert updated in database'
+                        stats['fetched_alerts'].append(alert_summary)
+
+                        if self._debug_records_enabled:
+                            debug_entry['was_saved'] = bool(alert)
+                            debug_entry['was_new'] = bool(is_new and alert is not None)
+                            debug_entry['alert_db_id'] = getattr(alert, 'id', None) if alert else None
+                            if not alert:
+                                debug_entry.setdefault('notes', []).append('Database save failed')
+
+                    else:
+                        # UGC/Zone match only: Broadcast but don't store or calculate boundaries
+                        # This happens when UGC codes match zone_codes but none match storage_zone_codes
+                        matched_ugcs = relevance.get('relevance_matches', [])
+                        alert_same_codes = relevance.get('same_codes', [])
+                        self.logger.info(f"╔═ BROADCAST-ONLY ALERT (not stored) ═══════════════════════════")
+                        self.logger.info(f"║ Event: {event}")
+                        self.logger.info(f"║ ID: {alert_id[:60]}{'...' if len(alert_id) > 60 else ''}")
+                        self.logger.info(f"║ Area: {area_desc[:80]}{'...' if len(area_desc) > 80 else ''}")
+                        self.logger.info(f"║ Matched UGC codes: {', '.join(matched_ugcs[:5]) if matched_ugcs else 'None'}")
+                        self.logger.info(f"║ Alert SAME codes: {', '.join(alert_same_codes[:5]) if alert_same_codes else 'None'}")
+                        self.logger.info(f"║ Your SAME codes: {', '.join(sorted(self.same_codes)[:5]) if self.same_codes else 'None configured'}")
+                        self.logger.info(f"║ Your storage zones: {', '.join(sorted(self.storage_zone_codes)[:5]) if self.storage_zone_codes else 'None configured'}")
+                        self.logger.info(f"║ Sent: {format_local_datetime(parsed.get('sent'))}")
+                        self.logger.info(f"║ Reason: Matched zone_codes for broadcast, but no match in SAME or storage_zone_codes")
+                        self.logger.info(f"╚═══════════════════════════════════════════════════════════════")
+                        # Track broadcast-only alert
+                        alert_summary['status'] = 'broadcast_only'
+                        alert_summary['reason'] = 'UGC/Zone match - broadcast to displays but not stored'
+                        alert_summary['ugc_codes'] = matched_ugcs[:5] if matched_ugcs else []
+                        stats['fetched_alerts'].append(alert_summary)
+                        if self._debug_records_enabled:
+                            debug_entry.setdefault('notes', []).append('Broadcast-only (UGC match, no storage)')
+                            debug_entry['was_saved'] = False
+                            debug_entry['was_new'] = False
+
+                        # Publish broadcast-only alert to Redis for EAS service
+                        self._publish_alert_event('alerts:broadcast_only', {
+                            'event': event,
+                            'severity': parsed.get('severity'),
+                            'urgency': parsed.get('urgency'),
+                            'certainty': parsed.get('certainty'),
+                            'sent': parsed.get('sent'),
+                            'expires': parsed.get('expires'),
+                            'raw_json': alert_data.get('raw_json', {})
+                        })
+
+                except Exception as exc:
+                    self.logger.error(
+                        f"Unhandled error processing alert {_alert_id_for_log!r}: {exc}",
+                        exc_info=True,
+                    )
+                    # Reset session state so a failure mid-alert (e.g. a
+                    # mutated-but-uncommitted ORM object from
+                    # _process_cap_references_cancellation) can't cascade
+                    # into the next alert's processing.
+                    try:
+                        self.db_session.rollback()
+                    except Exception:
+                        pass
+                    continue
 
             self.cleanup_old_poll_history()
 
@@ -4497,9 +4578,9 @@ class CAPPoller:
             self.logger.info("═══════════════════════════════════════════════════════════════")
             self.logger.info(f"ENDPOINTS POLLED: {len(self.cap_endpoints)}")
             for ep in self.cap_endpoints:
-                if 'weather.gov' in ep:
+                if _endpoint_host_matches(ep, 'weather.gov'):
                     self.logger.info(f"  [NOAA] {ep}")
-                elif 'fema.gov' in ep:
+                elif _endpoint_host_matches(ep, 'fema.gov'):
                     self.logger.info(f"  [IPAWS] {ep}")
                 else:
                     self.logger.info(f"  [CUSTOM] {ep}")
