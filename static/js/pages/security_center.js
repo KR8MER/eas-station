@@ -48,6 +48,7 @@
         'malicious-tab': loadAttempts,
         'bans-tab': loadIPFilters,
         'fail2ban-tab': loadFail2banStatus,
+        'checkup-tab': loadCheckupStatus,
     };
     const loadedTabs = new Set();
 
@@ -83,6 +84,7 @@
             '#malicious': 'malicious-tab',
             '#bans': 'bans-tab',
             '#fail2ban': 'fail2ban-tab',
+            '#checkup': 'checkup-tab',
         };
         const tabId = map[window.location.hash];
         if (tabId) {
@@ -693,6 +695,66 @@
             .catch(error => notify('Error unbanning IP: ' + error, true));
     }
 
+    /* -------------------------------------------------------------- */
+    /* Checkup tab                                                     */
+    /* -------------------------------------------------------------- */
+
+    const CHECKUP_API = '/admin/security-checkup';
+
+    function renderCheckupStatus(data) {
+        const el = document.getElementById('checkup-status');
+        if (!el) return;
+        const rows = (data.checks || []).map(check => {
+            const badge = check.ok
+                ? '<span class="badge bg-success"><i class="fas fa-circle-check"></i> OK</span>'
+                : '<span class="badge bg-danger"><i class="fas fa-triangle-exclamation"></i> Needs attention</span>';
+            const fixBtn = check.fixable
+                ? `<button class="btn btn-sm btn-warning mt-2" onclick="SC.fixCheckupItem('${esc(check.id)}')">
+                       <i class="fas fa-wrench"></i> Fix now</button>`
+                : (check.fix_hint ? `<div class="form-text mt-1">${esc(check.fix_hint)}</div>` : '');
+            return `
+                <div class="admin-accent-card ${check.ok ? 'accent-success' : 'accent-danger'} mb-3">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                        <h3 class="h6 mb-1">${esc(check.label)}</h3>
+                        ${badge}
+                    </div>
+                    <p class="mb-0 text-muted">${esc(check.detail)}</p>
+                    ${fixBtn}
+                </div>`;
+        }).join('');
+        el.innerHTML = rows || '<span class="text-muted">No checks available.</span>';
+    }
+
+    function loadCheckupStatus() {
+        const el = document.getElementById('checkup-status');
+        if (el) el.innerHTML = '<span class="text-muted">Running checks…</span>';
+        fetch(`${CHECKUP_API}/status`)
+            .then(r => r.json())
+            .then(data => renderCheckupStatus(data))
+            .catch(error => notify('Error loading security checkup: ' + error, true));
+    }
+
+    function fixCheckupItem(checkId) {
+        if (checkId !== 'ufw') {
+            notify('No automatic fix available for this item.', true);
+            return;
+        }
+        const el = document.getElementById('checkup-status');
+        if (el) el.innerHTML = '<span class="text-muted">Applying firewall baseline…</span>';
+        fetch(`${CHECKUP_API}/fix-ufw`, { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    notify(data.message || 'Fixed.');
+                    renderCheckupStatus(data);
+                } else {
+                    notify(data.error || 'Fix failed', true);
+                    loadCheckupStatus();
+                }
+            })
+            .catch(error => notify('Error applying fix: ' + error, true));
+    }
+
     // Export only the handlers referenced by inline onclick=.
     window.SC = {
         loadAttempts: loadAttempts,
@@ -711,5 +773,7 @@
         resyncFail2ban: resyncFail2ban,
         saveFail2banConfig: saveFail2banConfig,
         sshUnban: sshUnban,
+        loadCheckupStatus: loadCheckupStatus,
+        fixCheckupItem: fixCheckupItem,
     };
 })();

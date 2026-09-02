@@ -189,3 +189,19 @@ eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee -a /var/log/eas-station/security.lo
 # fail2ban is shipped pre-installed via install.sh / update.sh (it is in the
 # base package list), so the web UI never installs packages itself — it only
 # configures, applies, and inspects the jails through the entries above.
+
+# Security Checkup (Security Center -> Checkup tab): detects and, on request,
+# repairs a host that's missing the baseline UFW firewall install.sh has
+# configured automatically since v2.19.7. Deployments provisioned before that
+# version never get it backfilled by update.sh (which only updates the
+# application, not one-time host setup), so this reproduces install.sh's own
+# Step 11 baseline (default-deny-incoming, 22/80/443 allowed, enabled) as an
+# idempotent, web-triggerable action instead of a manual SSH procedure.
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get install -y ufw
+eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw status verbose
+eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw default deny incoming
+eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw default allow outgoing
+eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw allow 22/tcp
+eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw allow 80/tcp
+eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw allow 443/tcp
+eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw --force enable
