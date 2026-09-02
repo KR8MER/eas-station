@@ -8,6 +8,11 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.216.1] - 2026-09-02 - Fix "Failed to write chrony configuration" on the LAN NTP Server page
+
+- Clicking Apply on Settings -> Network -> NTP Server (added in 2.216.0) always failed with "Failed to write chrony configuration. Check server logs." The sudoers entry for `tee /etc/chrony/conf.d/eas-station-ntp-server.conf` was correct and the command succeeds when run manually as the `eas-station` user -- but `eas-station-web.service` runs under `ProtectSystem=strict`, which mounts the whole filesystem read-only except the paths explicitly listed in `ReadWritePaths=`, and `/etc/chrony` was never added to that list when the NTP server page was built. `sudo` doesn't escape that mount namespace (it execs `tee` inside the same one), so the write failed with a read-only-filesystem error regardless of the elevated privileges.
+- Added `/etc/chrony` to `ReadWritePaths=` in `systemd/eas-station-web.service`, matching the same pattern already used for `/etc/nginx`/`/etc/letsencrypt` (certbot) and `/etc/icecast2` (streaming config).
+
 ## [2.216.0] - 2026-09-02 - Add a LAN NTP Server admin page
 
 - chrony is installed and running on every deployment (it's the box's own time sync, and on GPS-HAT hardware the stratum-1 source), but by default it only ever acts as a *client* -- nothing in `chrony.conf` grants any subnet permission to query it, so a request from a LAN device is silently ignored. Which subnets should be trusted is inherently a per-deployment decision (a home LAN, an office VLAN, a Tailscale range, or nothing at all) with no correct default, so this needed to be admin-configured rather than something `install.sh` could set up once.
