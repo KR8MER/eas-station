@@ -307,28 +307,54 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
                 device_result["overall_status"] = str(status_text)
             else:
                 # Fallback: infer health status from exit code and available data
-                # smartctl exit code bits 3-7 indicate disk problems:
+                # smartctl exit code bits, per its own man page:
+                #   bit 0 = command line did not parse
+                #   bit 1 = device open failed, or SMART command set unsupported
+                #   bit 2 = a SMART/ATA command to the disk failed
                 #   bit 3 = DISK FAILING, bit 4 = prefail attrs <= threshold,
                 #   bit 5 = usage attrs <= threshold, bit 6 = error log has errors,
                 #   bit 7 = self-test log has errors
+                # Bits 0-2 mean smartctl never actually got real SMART data at
+                # all -- there is nothing here to call "passed". Before this
+                # check existed, that case fell straight through to "bits 3-7
+                # are clear -> passed", which is how a virtio-blk-backed cloud
+                # VM (no ATA/NVMe protocol between guest and host at all, so
+                # every device-type probe returns exit code 2 with a mostly
+                # empty but validly-parsing JSON report) ended up reported as
+                # a healthy drive despite smartctl never having successfully
+                # talked to anything.
                 exit_code = completed.returncode
+                execution_failed_bits = exit_code & 0x07  # bits 0-2: no real data at all
                 disk_failing_bits = exit_code & 0x18  # bits 3-4: critical failures
                 disk_problem_bits = exit_code & 0xF8  # bits 3-7: any disk issues
 
-                nvme_info = report.get("nvme_smart_health_information_log")
-                if isinstance(nvme_info, dict):
-                    # NVMe: use critical_warning field as authoritative source
-                    critical_warning = _coerce_int(nvme_info.get("critical_warning"))
-                    if critical_warning is not None:
-                        device_result["overall_status"] = "failed" if critical_warning != 0 else "passed"
+                if execution_failed_bits:
+                    smartctl_messages = [
+                        msg["string"]
+                        for msg in (report.get("smartctl") or {}).get("messages") or []
+                        if isinstance(msg, dict) and msg.get("string")
+                    ]
+                    device_result["error"] = "; ".join(smartctl_messages) or (
+                        f"smartctl could not query this device (exit code {exit_code}) -- "
+                        "SMART data unavailable. Common on virtualized/cloud block storage "
+                        "(e.g. virtio-blk) where the guest has no ATA/NVMe protocol to the "
+                        "underlying disk at all."
+                    )
+                else:
+                    nvme_info = report.get("nvme_smart_health_information_log")
+                    if isinstance(nvme_info, dict):
+                        # NVMe: use critical_warning field as authoritative source
+                        critical_warning = _coerce_int(nvme_info.get("critical_warning"))
+                        if critical_warning is not None:
+                            device_result["overall_status"] = "failed" if critical_warning != 0 else "passed"
+                        elif disk_problem_bits == 0:
+                            device_result["overall_status"] = "passed"
+                    elif disk_failing_bits:
+                        # ATA/SATA with critical failure bits set
+                        device_result["overall_status"] = "failed"
                     elif disk_problem_bits == 0:
+                        # No disk problem bits set and we parsed valid data
                         device_result["overall_status"] = "passed"
-                elif disk_failing_bits:
-                    # ATA/SATA with critical failure bits set
-                    device_result["overall_status"] = "failed"
-                elif disk_problem_bits == 0:
-                    # No disk problem bits set and we parsed valid data
-                    device_result["overall_status"] = "passed"
 
                 if logger:
                     if device_result["overall_status"] != "unknown":
@@ -420,8 +446,11 @@ def _collect_smart_health(logger, devices: List[Dict[str, Any]]) -> Dict[str, An
                 device_result.get("media_errors"),
             )
 
-        # Only store stderr as error if it indicates a real problem
-        if stderr_output and completed.returncode != 0:
+        # Only store stderr as error if it indicates a real problem, and only
+        # when nothing more specific was already derived above (e.g. the
+        # execution_failed_bits branch's smartctl-JSON-messages/exit-code
+        # explanation, which is usually more informative than raw stderr).
+        if stderr_output and completed.returncode != 0 and not device_result["error"]:
             device_result["error"] = stderr_output
 
         result["devices"].append(device_result)
