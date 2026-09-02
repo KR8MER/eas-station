@@ -266,6 +266,10 @@
 {% endblock %}
 
 {% block content %}
+{% set header_icon = 'fas fa-file-alt' %}
+{% set header_title = title %}
+{% set header_subtitle = 'EAS Station™ documentation' %}
+{% include 'components/page_header.html' %}
 <div class="container-fluid">
     <div class="row">
         <!-- Sidebar Navigation -->
