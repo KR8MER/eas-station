@@ -23,12 +23,67 @@ import subprocess
 from typing import Any, Dict
 
 
+def _collect_orphaned_failed_services(logger, service_prefix: str, known_service_names: set) -> list:
+    """Any {service_prefix}-* unit systemd currently has in a failed state,
+    whether or not it's still one of the names EAS_SERVICES/POLLER_SERVICES
+    knows about.
+
+    Services get retired or renamed as the codebase evolves (e.g.
+    eas-station-eas.service, folded into -audio/-demod during the hardware
+    subsystem split) -- but update.sh never disables/removes the old unit on
+    a box that's been running since before the change, so systemd is left
+    holding a stale failed record for a unit whose definition no longer
+    exists anywhere in the current codebase. The fixed-allowlist loop below
+    only ever checks names it already knows about, so that stale record was
+    completely invisible to this dashboard -- confirmed on a real deployment
+    where `systemctl --failed` showed exactly this (a `not-found` unit,
+    killed by a stop timeout two weeks earlier) with nothing here reflecting
+    it at all.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "systemctl", "list-units", "--all", "--plain", "--no-legend",
+                "--state=failed", f"{service_prefix}-*",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception as exc:
+        if logger:
+            logger.debug("Could not list failed %s-* units: %s", service_prefix, exc)
+        return []
+
+    orphans = []
+    for line in (result.stdout or "").splitlines():
+        parts = line.split(None, 4)
+        if not parts:
+            continue
+        unit_name = parts[0]
+        if unit_name in known_service_names:
+            continue  # already reported by the per-name loop above
+        if "@" in unit_name:
+            # A template-instantiated unit (e.g.
+            # eas-station-failure-recovery@eas-station-audio.service) is
+            # expected to exist under a name the static allowlist above
+            # can't enumerate ahead of time -- it's legitimate, currently-
+            # relevant infrastructure, not a leftover from a retired
+            # service, so it must not get the "no longer part of this
+            # install" message. A real failure here is still worth
+            # surfacing, just not through this orphan-specific path.
+            continue
+        description = parts[4] if len(parts) > 4 else unit_name
+        orphans.append({"name": unit_name, "description": description})
+    return orphans
+
+
 def _collect_systemd_services(logger) -> Dict[str, Any]:
     """Collect status information for EAS Station systemd services."""
-    
+
     # Import here to avoid circular dependency (app_core imports app_utils)
-    from app_core.config import get_eas_services, INFRASTRUCTURE_SERVICES
-    
+    from app_core.config import SERVICE_PREFIX, get_eas_services, INFRASTRUCTURE_SERVICES
+
     result: Dict[str, Any] = {
         "available": False,
         "status": "unavailable",
@@ -121,7 +176,31 @@ def _collect_systemd_services(logger) -> Dict[str, Any]:
             except Exception as exc:
                 if logger:
                     logger.debug(f"Error checking service {service_name}: {exc}")
-        
+
+        # Catch failed units that aren't (or are no longer) in the allowlist
+        # above -- see _collect_orphaned_failed_services for why this exists.
+        for orphan in _collect_orphaned_failed_services(logger, SERVICE_PREFIX, set(all_services)):
+            services_data.append({
+                "name": orphan["name"],
+                "display_name": orphan["description"],
+                "active_state": "failed",
+                "sub_state": "failed",
+                "status": "failed",
+                "is_running": False,
+                "is_eas_service": True,
+                "category": "EAS Station",
+                "orphaned": True,
+            })
+            result["issues"].append({
+                "service": orphan["name"],
+                "issue": (
+                    f"{orphan['name']} is a failed systemd unit no longer part of this "
+                    "install (likely left over from a retired/renamed service) -- "
+                    f"run: sudo systemctl reset-failed {orphan['name']}"
+                ),
+                "severity": "error",
+            })
+
         if services_data:
             result["available"] = True
             result["status"] = "available"

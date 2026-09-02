@@ -96,7 +96,13 @@ DeviceAllow=block-sd r
 # CAP_SETUID and CAP_SETGID allow sudo to change user/group IDs
 # CAP_AUDIT_WRITE allows sudo to write audit records
 # CAP_SYS_ADMIN required for NVMe admin ioctls (SMART health queries)
-CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_AUDIT_WRITE CAP_SYS_ADMIN
+# CAP_NET_ADMIN required for `ufw`/iptables-nft to read and modify the
+# firewall ruleset (Security Center -> Checkup tab). Without it, sudo still
+# escalates to uid 0, but this bounding set caps what that root process can
+# do, and iptables-nft's netlink queries fail with "Could not fetch rule set
+# generation id: Permission denied" -- which the checkup then misreports as
+# "UFW is installed but not active" even when it's genuinely active.
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_AUDIT_WRITE CAP_SYS_ADMIN CAP_NET_ADMIN
 
 # Resource limits
 LimitNOFILE=65536

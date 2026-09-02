@@ -205,3 +205,20 @@ eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw allow 22/tcp
 eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw allow 80/tcp
 eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw allow 443/tcp
 eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw --force enable
+
+# LAN NTP Server (Settings -> Network -> NTP Server): lets an admin serve
+# chrony's already-synced time to a chosen set of subnets. Which subnets
+# should be trusted is a per-deployment decision with no correct default
+# (home LAN, office VLAN, Tailscale range, or nothing at all), so this is
+# admin-configured rather than something install.sh could set up once.
+# `ufw status verbose` above is reused for reading back the tagged rules;
+# the two `ufw ... comment eas-station-ntp-server` entries below are scoped
+# to that exact literal tag (never user input) so only rules this feature
+# created can ever be added or removed through it -- an operator's own
+# rules for other ports/services are never touched.
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/chrony/conf.d/eas-station-ntp-server.conf
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active --quiet chrony
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart chrony
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/chronyc clients
+eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw allow from * to any port 123 proto udp comment eas-station-ntp-server
+eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw delete allow from * to any port 123 proto udp

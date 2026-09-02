@@ -193,6 +193,10 @@ _tty_block() {
 # "3>&1 1>&2 2>&3" fd-swap trick; >/dev/tty only overrides fd1, leaving fd2
 # (the captured result) untouched.
 whiptail() {
+    if [ "$_UI_HAS_CONTROLLING_TTY" != "1" ]; then
+        command whiptail "$@"
+        return $?
+    fi
     command whiptail "$@" >/dev/tty
     local _ret=$?
     stty sane </dev/tty 2>/dev/null || true
@@ -299,7 +303,7 @@ ui_gauge_stop() {
     rm -f "$_UI_GAUGE_FIFO" 2>/dev/null
     _UI_GAUGE_ACTIVE=0
     _UI_GAUGE_PID=0
-    stty sane </dev/tty 2>/dev/null || true
+    [ "$_UI_HAS_CONTROLLING_TTY" = "1" ] && stty sane </dev/tty 2>/dev/null || true
 }
 
 # Lazily starts the gauge on the first real progress event (echo_step), not
@@ -863,7 +867,7 @@ cleanup_on_exit() {
                      --msgbox "Script exited with code $exit_code\n\nCheck log for details:\n${LOG_FILE:-/var/log/eas-install.log}" 10 65 2>/dev/null || true
         fi
     fi
-    stty sane </dev/tty 2>/dev/null || true
+    [ "$_UI_HAS_CONTROLLING_TTY" = "1" ] && stty sane </dev/tty 2>/dev/null || true
 }
 
 # Public alias for callers who want to register the trap explicitly.

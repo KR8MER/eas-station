@@ -56,6 +56,7 @@ from .alert_gating import alert_gating_bp
 from .pending_alerts import pending_alerts_bp
 from .alert_purge import alert_purge_bp
 from .mail_server import register_mail_server_routes
+from .ntp_server import register_ntp_server_routes
 from .fail2ban import register_fail2ban_routes
 from .security_checkup import register_security_checkup_routes
 from .eas_decoder_monitor import register_blueprint as register_eas_decoder_monitor_routes
@@ -110,6 +111,7 @@ def register(app, logger):
     register_local_authority_routes(app, logger)  # Local authority EAS access management
     register_tailscale_routes(app, logger)  # Tailscale VPN configuration
     register_mail_server_routes(app, logger)  # Local Postfix mail server management
+    register_ntp_server_routes(app, logger)  # LAN NTP server (chrony allow + firewall) management
     register_fail2ban_routes(app, logger)  # fail2ban host-level intrusion banning
     register_security_checkup_routes(app, logger)  # Security Center "Checkup" tab (UFW/fail2ban gap detection)
     register_eas_decoder_monitor_routes(app)  # EAS decoder audio monitor settings

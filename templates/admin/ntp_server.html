@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+
+{% block title %}NTP Server — EAS Station™{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set header_icon = 'fas fa-clock' %}
+{% set header_title = 'LAN NTP Server' %}
+{% set header_subtitle = 'Serve this host\'s already-synced time to chosen subnets on your network' %}
+{% include 'components/page_header.html' %}
+
+<div class="container-fluid">
+
+    <div class="row">
+
+        <!-- ════════════════════════════════════════════════════════════
+             LEFT COLUMN — Status + Configure
+             ════════════════════════════════════════════════════════════ -->
+        <div class="col-lg-8">
+
+            <!-- ── Status Card ─────────────────────────────────────────── -->
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h2 class="mb-0 h5"><i class="fas fa-circle-info"></i> chrony Status</h2>
+                    <div class="d-flex gap-2 align-items-center">
+                        <span id="installedBadge"
+                              class="badge bg-{{ 'success' if status.installed else 'secondary' }}">
+                            {{ 'Installed' if status.installed else 'Not Installed' }}
+                        </span>
+                        <span id="activeBadge"
+                              class="badge bg-{{ 'success' if status.active else 'secondary' }}">
+                            {{ 'Running' if status.active else 'Stopped' }}
+                        </span>
+                        <span id="enabledBadge"
+                              class="badge bg-{{ 'success' if status.enabled else 'secondary' }}">
+                            {{ 'Serving LAN' if status.enabled else 'Not Serving' }}
+                        </span>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="refreshStatusBtn">
+                            <i class="fas fa-rotate-right"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+
+                    {% if not status.installed %}
+                    <div class="alert alert-danger d-flex align-items-center mb-0">
+                        <i class="fas fa-triangle-exclamation fa-lg me-3"></i>
+                        <div>chrony is not installed on this host. It ships as part of the base
+                            install; if it's genuinely missing, install it manually
+                            (<code>apt install chrony</code>) before configuring this page.</div>
+                    </div>
+                    {% elif not status.active %}
+                    <div class="alert alert-warning d-flex align-items-center mb-0">
+                        <i class="fas fa-triangle-exclamation fa-lg me-3"></i>
+                        <div>chrony is installed but not running — this host's own clock sync is
+                            currently affected too, not just LAN serving. Check
+                            <code>systemctl status chrony</code>.</div>
+                    </div>
+                    {% elif status.enabled %}
+                    <div class="alert alert-success d-flex align-items-center mb-0">
+                        <i class="fas fa-circle-check fa-lg me-3"></i>
+                        <div>
+                            <strong>Serving time to {{ status.configured_subnets|length }}
+                                subnet{{ 's' if status.configured_subnets|length != 1 else '' }}.</strong>
+                            {% if not status.firewall_in_sync %}
+                            <br><span class="text-warning">Firewall rules don't currently match the
+                                configured subnets — click Apply below to reconcile.</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-secondary d-flex align-items-center mb-0">
+                        <i class="fas fa-circle-pause fa-lg me-3"></i>
+                        <div>Not currently serving NTP to anyone — this host only syncs its own
+                            clock. Add subnets below and enable to start serving.</div>
+                    </div>
+                    {% endif %}
+
+                </div>
+            </div>
+
+            <!-- ── Configuration Card ──────────────────────────────────── -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h2 class="mb-0 h5"><i class="fas fa-sliders"></i> Configuration</h2>
+                </div>
+                <div class="card-body">
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="ntpEnabled"
+                               {% if status.enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="ntpEnabled">
+                            Serve NTP to the subnets below
+                        </label>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="ntpSubnets" class="form-label">
+                            <i class="fas fa-network-wired"></i> Allowed subnets
+                        </label>
+                        <textarea class="form-control font-monospace" id="ntpSubnets" rows="4"
+                                  placeholder="192.168.1.0/24&#10;100.64.0.0/10">{{ status.configured_subnets|join('\n') }}</textarea>
+                        <div class="form-text">
+                            One CIDR range (or single IP) per line. Only these subnets will be able
+                            to query this host for time — scope it to your actual LAN or VPN range,
+                            never <code>0.0.0.0/0</code>. A matching firewall rule (UDP/123) is
+                            added and removed automatically to track this list.
+                        </div>
+                    </div>
+
+                    {% if status.detected_local_subnets %}
+                    <div class="mb-3 small">
+                        <span class="text-muted">This host's own interface subnet(s), for
+                            reference — on a cloud VPS this is usually the provider's public
+                            range, <strong>not</strong> your LAN, so nothing here is applied
+                            automatically:</span>
+                        {% for subnet in status.detected_local_subnets %}
+                        <button type="button" class="btn btn-outline-secondary btn-sm ms-1 add-detected-subnet"
+                                data-subnet="{{ subnet }}">
+                            <i class="fas fa-plus"></i> {{ subnet }}
+                        </button>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <div id="configOutput" class="alert d-none font-monospace small mb-3"
+                         style="max-height:150px; overflow-y:auto;"></div>
+
+                    <button type="button" class="btn btn-primary" id="applyConfigBtn"
+                            {% if not status.installed %}disabled{% endif %}>
+                        <i class="fas fa-check"></i> Apply
+                    </button>
+
+                </div>
+            </div>
+
+            <!-- ── Clients Card ─────────────────────────────────────────── -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h2 class="mb-0 h5"><i class="fas fa-users"></i> Recent Clients</h2>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0 font-monospace small {{ 'd-none' if not status.clients.clients else '' }}" id="clientsTable">
+                        <thead>
+                            <tr><th>Client</th><th>Last Synced</th></tr>
+                        </thead>
+                        <tbody id="clientsList">
+                        {% for client in status.clients.clients %}
+                            <tr><td>{{ client.host }}</td><td>{{ client.last_seen }}</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    <p class="text-muted mb-0 small {{ 'd-none' if status.clients.clients else '' }}" id="clientsEmpty">
+                        No non-local clients have queried this host yet
+                        {% if status.enabled %}— that's expected right after enabling.{% else %}.{% endif %}
+                    </p>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════════
+             RIGHT COLUMN — Help & Info
+             ════════════════════════════════════════════════════════════ -->
+        <div class="col-lg-4">
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h2 class="mb-0 h5"><i class="fas fa-circle-info"></i> How It Works</h2>
+                </div>
+                <div class="card-body small">
+                    <p>chrony already keeps this host's own clock synced — normally purely as a
+                       <em>client</em>. This page lets it also answer NTP queries from devices on
+                       subnets you choose, so they can sync to it instead of (or as a fallback to)
+                       the public internet.</p>
+                    <ol class="ps-3 mb-0">
+                        <li class="mb-2">List the subnet(s) that should be allowed to query this
+                            host (your LAN, a VPN range, etc.).</li>
+                        <li class="mb-2">Enable and click <strong>Apply</strong> — this writes a
+                            chrony config fragment, restarts chrony, and opens the matching
+                            firewall port for exactly those subnets.</li>
+                        <li>Point your LAN devices' NTP client at this host's address.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h2 class="mb-0 h5"><i class="fas fa-shield-halved"></i> Scope It Carefully</h2>
+                </div>
+                <div class="card-body small">
+                    <ul class="ps-3 mb-0">
+                        <li>Never allow <code>0.0.0.0/0</code> or <code>::/0</code> — an open
+                            NTP responder reachable from the whole internet is a known
+                            amplification-DoS vector.</li>
+                        <li>On a cloud VPS, the box's own public interface subnet is
+                            <strong>not</strong> your LAN — don't use the "for reference"
+                            suggestion(s) above blindly.</li>
+                        <li>Disabling clears both the chrony config and every firewall rule this
+                            feature added — nothing lingers.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="mb-0 h5"><i class="fas fa-terminal"></i> Quick Reference</h2>
+                </div>
+                <div class="card-body small font-monospace">
+                    <div class="text-muted mb-1"># Current sync sources</div>
+                    <code class="d-block mb-2">chronyc sources</code>
+                    <div class="text-muted mb-1"># Clients that have queried this host</div>
+                    <code class="d-block mb-2">chronyc clients</code>
+                    <div class="text-muted mb-1"># View chrony log</div>
+                    <code class="d-block">journalctl -u chrony -f</code>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+    function setBtn(btn, loading, label) {
+        const orig = btn.dataset.orig || btn.innerHTML;
+        if (!btn.dataset.orig) btn.dataset.orig = orig;
+        btn.disabled = loading;
+        btn.innerHTML = loading
+            ? '<i class="fas fa-spinner fa-spin"></i> ' + label
+            : orig;
+    }
+
+    function showOutput(elId, cls, msg) {
+        const el = document.getElementById(elId);
+        el.className = 'alert alert-' + cls + ' small mt-2 mb-3';
+        el.textContent = msg;
+        el.classList.remove('d-none');
+    }
+
+    async function apiCall(url, method, body) {
+        const opts = {
+            method: method || 'GET',
+            headers: { 'X-CSRF-Token': window.CSRF_TOKEN },
+        };
+        if (body) {
+            opts.headers['Content-Type'] = 'application/json';
+            opts.body = JSON.stringify(body);
+        }
+        const r = await fetch(url, opts);
+        return r.json();
+    }
+
+    function _applyStatus(d) {
+        _setBadge('installedBadge', d.installed, 'Installed', 'Not Installed');
+        _setBadge('activeBadge', d.active, 'Running', 'Stopped');
+        _setBadge('enabledBadge', d.enabled, 'Serving LAN', 'Not Serving');
+
+        const applyBtn = document.getElementById('applyConfigBtn');
+        if (applyBtn) applyBtn.disabled = !d.installed;
+
+        const clients = (d.clients && d.clients.clients) ? d.clients.clients : [];
+        const list = document.getElementById('clientsList');
+        const table = document.getElementById('clientsTable');
+        const empty = document.getElementById('clientsEmpty');
+        function esc(s) { return String(s).replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch])); }
+        if (list) {
+            list.innerHTML = clients
+                .map(c => '<tr><td>' + esc(c.host) + '</td><td>' + esc(c.last_seen) + '</td></tr>')
+                .join('');
+        }
+        if (table) table.classList.toggle('d-none', clients.length === 0);
+        if (empty) empty.classList.toggle('d-none', clients.length !== 0);
+    }
+
+    function _setBadge(id, condition, trueLabel, falseLabel) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = condition ? trueLabel : falseLabel;
+        el.className = 'badge bg-' + (condition ? 'success' : 'secondary');
+    }
+
+    document.getElementById('refreshStatusBtn').addEventListener('click', async function () {
+        const btn = this;
+        setBtn(btn, true, 'Refreshing…');
+        try {
+            const d = await apiCall('/admin/ntp-server/status');
+            _applyStatus(d);
+        } catch (e) {
+            if (window.showToast) window.showToast('Could not refresh status', 'danger');
+        } finally {
+            setBtn(btn, false);
+        }
+    });
+
+    document.querySelectorAll('.add-detected-subnet').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const textarea = document.getElementById('ntpSubnets');
+            const subnet = this.dataset.subnet;
+            const lines = textarea.value.split('\n').map(l => l.trim()).filter(Boolean);
+            if (!lines.includes(subnet)) lines.push(subnet);
+            textarea.value = lines.join('\n');
+        });
+    });
+
+    const applyConfigBtn = document.getElementById('applyConfigBtn');
+    if (applyConfigBtn) {
+        applyConfigBtn.addEventListener('click', async function () {
+            const enabled = document.getElementById('ntpEnabled').checked;
+            const subnets = document.getElementById('ntpSubnets').value
+                .split('\n').map(l => l.trim()).filter(Boolean);
+
+            if (enabled && subnets.length === 0) {
+                if (window.showToast) window.showToast('Add at least one subnet before enabling', 'warning');
+                return;
+            }
+
+            setBtn(this, true, 'Applying…');
+            try {
+                const d = await apiCall('/admin/ntp-server/configure', 'POST', { enabled, subnets });
+                if (d.success) {
+                    showOutput('configOutput', 'success', d.message);
+                    if (window.showToast) window.showToast(d.message, 'success');
+                    _applyStatus(d);
+                } else {
+                    showOutput('configOutput', 'danger', d.error);
+                    if (window.showToast) window.showToast('Configuration failed', 'danger');
+                }
+            } catch (e) {
+                showOutput('configOutput', 'danger', 'Request failed: ' + e);
+            } finally {
+                setBtn(this, false);
+            }
+        });
+    }
+
+});
+</script>
+{% endblock %}

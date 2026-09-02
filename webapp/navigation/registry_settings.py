@@ -201,6 +201,13 @@ SETTINGS_SECTION = NavSection(
                     permissions=(GPIO_VIEW, SYSTEM_CONFIGURE),
                 ),
                 NavItem(
+                    label="NTP Server",
+                    icon="fas fa-clock",
+                    href="/admin/ntp-server/",
+                    description="Serve this host's synced time to chosen LAN/VPN subnets.",
+                    permissions=(SYSTEM_CONFIGURE,),
+                ),
+                NavItem(
                     label="SSL Certificates",
                     icon="fas fa-certificate",
                     href="/admin/certbot",
