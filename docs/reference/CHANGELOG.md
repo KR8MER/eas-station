@@ -8,6 +8,12 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.213.3] - 2026-09-02 - Surface real playback errors on the TTS admin test player
+
+- The Test TTS and Pronunciation Preview `<audio>` players had no `error` event handling at all: a genuine browser-side playback failure (bad decode, unsupported source, network error) rendered as the native control's bare "Error" label with zero diagnostic text, while the generated audio itself could be perfectly valid — confirmed by regenerating the same request server-side and validating the WAV with `ffprobe`/`ffmpeg` (clean `pcm_s16le`, 16kHz mono, decodes with no errors).
+- Added a shared `wireAudioErrorReporting()` listener on both `ttsAudioElement` and `previewAudioElement` that reads the element's `MediaError` code and shows a concrete, human-readable message in a visible alert instead of leaving the user with an unexplained "Error" label.
+- Also reset the new error panel at the start of each test run, alongside the existing audio-player visibility reset, so a stale error from a previous attempt can't linger.
+
 ## [2.213.2] - 2026-09-01 - Fix incomplete hostname checks in the CAP poller's endpoint classification
 
 - CodeQL flagged `poller/cap_poller.py:2044` (`elif 'weather.gov' in endpoint.lower()`) as "Incomplete URL substring sanitization" on PR #2549: a plain substring check matches a malicious or misconfigured endpoint like `https://evil.example/weather.gov` or `https://weather.gov.evil.com`, not just the real NOAA API.

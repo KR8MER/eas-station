@@ -164,6 +164,7 @@
     <div id="testResultDetails"></div>
     <div id="testAudioPlayer" style="display: none; margin-top: 1rem;">
         <audio id="ttsAudioElement" controls style="width: 100%;"></audio>
+        <div id="testAudioError" class="alert alert-warning mt-2" style="display: none;"></div>
     </div>
 </div>
 
@@ -180,10 +181,36 @@ function updateProviderSections() {
     }
 }
 
+// Native <audio> elements fail silently in the UI on decode/network errors -
+// there's no visible feedback beyond the control's own terse "Error" label.
+// Surface the real MediaError so playback failures are diagnosable instead
+// of a dead end.
+const MEDIA_ERROR_MESSAGES = {
+    1: 'Playback aborted.',
+    2: 'Network error while loading the audio.',
+    3: 'The browser could not decode this audio (unsupported format).',
+    4: 'The audio source is not supported by this browser.',
+};
+
+function wireAudioErrorReporting(audioElementId, warningElementId) {
+    const audioEl = document.getElementById(audioElementId);
+    const warningEl = document.getElementById(warningElementId);
+    audioEl.addEventListener('error', function() {
+        const mediaError = audioEl.error;
+        const detail = mediaError
+            ? (MEDIA_ERROR_MESSAGES[mediaError.code] || `Playback error (code ${mediaError.code}).`)
+            : 'Unknown playback error.';
+        warningEl.textContent = `Audio playback failed: ${detail} The generated audio file itself may still be valid - try downloading it or testing in another browser.`;
+        warningEl.style.display = 'block';
+    });
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     updateProviderSections();
     document.getElementById('provider').addEventListener('change', updateProviderSections);
+    wireAudioErrorReporting('ttsAudioElement', 'testAudioError');
+    wireAudioErrorReporting('previewAudioElement', 'previewWarning');
 });
 
 // Form submission
@@ -246,10 +273,12 @@ document.getElementById('testTtsBtn').addEventListener('click', async function()
         const detailsDiv = document.getElementById('testResultDetails');
         const audioPlayerDiv = document.getElementById('testAudioPlayer');
         const audioElement = document.getElementById('ttsAudioElement');
-        
+        const audioErrorDiv = document.getElementById('testAudioError');
+
         // Hide audio player by default
         audioPlayerDiv.style.display = 'none';
-        
+        audioErrorDiv.style.display = 'none';
+
         if (result.success) {
             alertDiv.className = 'alert alert-success mt-3';
             titleDiv.innerHTML = '<i class="fas fa-circle-check"></i> TTS Test Successful';
