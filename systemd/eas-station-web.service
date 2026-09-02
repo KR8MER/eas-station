@@ -103,7 +103,16 @@ DeviceAllow=block-sd r
 # do, and iptables-nft's netlink queries fail with "Could not fetch rule set
 # generation id: Permission denied" -- which the checkup then misreports as
 # "UFW is installed but not active" even when it's genuinely active.
-CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_AUDIT_WRITE CAP_SYS_ADMIN CAP_NET_ADMIN
+# CAP_DAC_OVERRIDE required for `chronyc clients` (LAN NTP Server admin page's
+# Recent Clients list). chronyd's command socket lives at
+# /run/chrony/chronyd.sock inside a directory owned `_chrony` with mode 0700 --
+# without this capability, sudo still escalates to uid 0, but that root
+# process still can't traverse a directory it doesn't own, so chronyc falls
+# back to the legacy cmdmon protocol and gets "501 Not authorised". This
+# fails silently: _client_summary() treats it the same as a genuinely empty
+# client list, so the page always showed "no clients yet" even after real
+# clients had queried and synced successfully.
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_AUDIT_WRITE CAP_SYS_ADMIN CAP_NET_ADMIN CAP_DAC_OVERRIDE
 
 # Resource limits
 LimitNOFILE=65536

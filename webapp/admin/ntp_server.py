@@ -216,6 +216,13 @@ def _client_summary() -> dict[str, Any]:
     """
     ok, output = _run(["chronyc", "clients"], timeout=5)
     if not ok:
+        # Distinguishable from a genuinely empty list in the logs -- the UI
+        # itself intentionally shows the same "no clients yet" copy either
+        # way (see templates/admin/ntp_server.html), since a freshly-enabled
+        # server legitimately has zero clients and that shouldn't read as an
+        # error. But a real failure (e.g. a missing sandbox capability) must
+        # not vanish silently -- it did exactly that until this line existed.
+        logger.warning("chronyc clients failed, reporting zero clients: %s", output)
         return {"available": False, "clients": []}
 
     clients = []
