@@ -183,9 +183,7 @@ from .panels_broadcast import (  # noqa: F401
 )
 
 from .panels import (  # noqa: F401
-    _draw_areas, _draw_compass_section, _draw_coverage,
-    _draw_damage_callout, _draw_expires_block, _draw_hazard_stat_boxes,
-    _draw_storm_motion_line, _draw_threats,
+    _draw_areas, _draw_compass_section, _draw_coverage, _draw_threats,
 )
 
 from .render import (  # noqa: F401
