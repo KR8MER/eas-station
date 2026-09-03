@@ -8,6 +8,15 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.220.0] - 2026-09-03 - Search Settings by field name and stored value
+
+- **New: search box on the Settings hub** (`/settings`) that matches a setting's field label ("Stream Bitrate") *and* its currently-stored value ("128") -- not just the label of the settings page it lives on, which is all the existing Ctrl+K command palette could do. Deliberately scoped to the Settings page's own content, not a global header search bar.
+- `app_core/settings_search.py`: builds the index by querying each mapped settings model's single row and humanizing its columns into labels (`stream_bitrate` -> "Stream Bitrate", with acronym fixups for SMTP/GPIO/API/TTS/etc.). Covers the ~14 settings pages backed by a simple single-row model (Icecast, TTS, Notifications, Hardware, Location & Alert Filtering, Poller, Heartbeat, Tickstem, Alert Gating, Tailscale, Certbot, Application Settings, EAS Encoder Settings) -- pages that are actions or record lists rather than field/value forms (Backups, RBAC, User Accounts, Environment Variables, the pgweb link) are intentionally left out.
+- **Security, verified by test and live**: every field is checked against `app_core.crypto`'s encrypted-column list and an `isinstance(EncryptedString)` check before inclusion, plus a manual blocklist for the one plaintext-but-secret-shaped column found (`heartbeat_settings.ping_url`, a bearer-token URL). A value from an encrypted column (Icecast/SMTP/SNMP/Tailscale/Tickstem credentials) can never appear in a search result, searchable or not, regardless of query.
+- HardwareSettings (one ~60-column model shared by three pages) is routed by column prefix -- `gpio_*` to GPIO & Relays, `zigbee_*` to Zigbee, everything else to Hardware Settings -- rather than lumping every field under one page.
+- Reuses the exact permission filtering `webapp.navigation._flatten_settings_items()` already does for the command palette, so a viewer without access to a given settings page never sees that page's fields in search either -- no separate permission logic to keep in sync.
+- New tests in `tests/test_settings_search.py`.
+
 ## [2.219.1] - 2026-09-03 - Every page now shows the navigation breadcrumb
 
 - **Root cause found and fixed:** `static/js/core/nav-enhance.js`'s breadcrumb/command-palette indexer only ever scanned the *rendered navbar DOM*. The Settings section (`webapp/navigation/registry_settings.py`, ~35 pages -- Icecast, NTP Server, GPIO, TTS, Backups, etc.) renders in the navbar as a single link (its items only ever appear as cards on the `/settings` hub page), so every one of those pages has been missing a breadcrumb since the feature existed, no matter how it was organized in the registry. Fixed at the root: `webapp/navigation/__init__.py`'s `inject_navigation()` now also exposes a flat, already permission-filtered `nav_settings_items` list; `templates/components/navbar.html` embeds it as JSON; `nav-enhance.js` merges it into its index. One fix, all ~35 pages, no per-page registry duplication.

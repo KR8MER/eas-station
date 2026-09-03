@@ -24,11 +24,19 @@ from __future__ import annotations
 The card list comes from the `settings` section of the navigation registry
 (``webapp/navigation/registry.py``), injected into every template as
 ``nav_section_map`` and already filtered to the current user's permissions.
-This route therefore has nothing to compute — adding a settings page means
-editing the registry, not this file or the template.
+This route therefore has nothing to compute for the card grid — adding a
+settings page means editing the registry, not this file or the template.
+
+It does compute one thing: the field-label + stored-value search index
+(``app_core.settings_search``) behind the page's search box. That does real
+DB queries (one per mapped settings model), so unlike ``nav_settings_items``
+(a free in-memory walk injected globally by the navigation context
+processor) it's built here, only when `/settings` is actually requested.
 """
 
 from flask import Flask, render_template
+
+from app_core.settings_search import build_settings_search_index
 
 
 def register(app: Flask, logger) -> None:
@@ -37,4 +45,12 @@ def register(app: Flask, logger) -> None:
     @app.route("/settings")
     def settings_hub():
         """Render the unified settings hub page."""
-        return render_template("settings_hub.html")
+        from webapp.navigation import _flatten_settings_items, get_navigation
+
+        nav_settings_items = _flatten_settings_items(get_navigation())
+        try:
+            search_index = build_settings_search_index(nav_settings_items)
+        except Exception:
+            logger.error("Failed to build settings search index", exc_info=True)
+            search_index = []
+        return render_template("settings_hub.html", settings_search_index=search_index)

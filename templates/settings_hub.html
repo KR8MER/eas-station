@@ -69,6 +69,39 @@
         line-height: 1.4;
         margin: 0;
     }
+    #settingsSearchInput {
+        max-width: 480px;
+    }
+    .settings-search-hit {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.6rem 0.9rem;
+        border-radius: var(--radius-sm, 6px);
+        border: 1px solid var(--border-color, #dee2e6);
+        background: var(--surface-color, var(--bg-color));
+        color: var(--text-color);
+        text-decoration: none;
+        margin-bottom: 0.5rem;
+    }
+    .settings-search-hit:hover {
+        border-color: var(--primary-color);
+        color: var(--text-color);
+        text-decoration: none;
+    }
+    .settings-search-hit-field {
+        font-weight: 600;
+    }
+    .settings-search-hit-value {
+        font-weight: 400;
+        color: var(--text-secondary, #6c757d);
+    }
+    .settings-search-hit-page {
+        font-size: 0.78rem;
+        color: var(--text-secondary, #6c757d);
+        white-space: nowrap;
+    }
 </style>
 {% endblock %}
 
@@ -82,13 +115,32 @@
 <div class="container-fluid pb-4">
 
     {% if settings_section and settings_section.groups %}
+
+    <div class="mb-3">
+        <label for="settingsSearchInput" class="visually-hidden">Search settings</label>
+        <div class="input-group" id="settingsSearchInput">
+            <span class="input-group-text bg-transparent"><i class="fas fa-magnifying-glass"></i></span>
+            <input type="text" class="form-control" id="settingsSearchBox"
+                   placeholder="Search settings by name or value (e.g. a port number, hostname, zone code)…"
+                   autocomplete="off">
+        </div>
+        <div class="form-text" id="settingsSearchStatus"></div>
+    </div>
+
+    {# Matched-fields results: hidden until a query actually matches a stored
+       value, not just a page's own label (the card grid below already
+       covers page-label matches). #}
+    <div id="settingsSearchHits" class="mb-4" hidden></div>
+
+    <div id="settingsCardGrid">
         {% for group in settings_section.groups %}
     <h2 class="settings-category-title h6">
         <i class="{{ group.icon }} me-1"></i> {{ group.label }}
     </h2>
     <div class="row g-3 mb-2">
             {% for item in group.items %}
-        <div class="col-sm-6 col-md-4 col-xl-3">
+        <div class="col-sm-6 col-md-4 col-xl-3 settings-card-col"
+             data-label="{{ item.label | lower }}" data-desc="{{ item.description | lower }}">
             <a href="{{ item.url }}" class="settings-card">
                 <div class="settings-card-icon"><i class="{{ item.icon }}"></i></div>
                 <div class="settings-card-body">
@@ -100,6 +152,11 @@
             {% endfor %}
     </div>
         {% endfor %}
+    </div>
+    <p class="text-muted small mt-2 mb-0" id="settingsCardGridEmpty" hidden>
+        <i class="fas fa-info-circle me-1"></i>No settings pages match "<span></span>".
+    </p>
+
     {% else %}
     <div class="alert alert-info mt-4">
         <i class="fas fa-info-circle me-2"></i>
@@ -114,4 +171,9 @@
     </p>
 
 </div>
+<script type="application/json" id="eas-settings-search-index">{{ settings_search_index | default([]) | tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script defer src="{{ url_for('static', filename='js/core/settings-search.js') }}"></script>
 {% endblock %}
