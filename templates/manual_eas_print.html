@@ -2,6 +2,13 @@
 {% block title %}Manual EAS Activation — {{ event.identifier }}{% endblock %}
 {% block content %}
 <div class="container py-4 manual-eas-print">
+    <nav aria-label="breadcrumb" class="my-3 d-print-none">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">Home</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('eas.workflow_home') }}">Broadcast Builder</a></li>
+            <li class="breadcrumb-item active">{{ event.identifier }}</li>
+        </ol>
+    </nav>
     <div class="d-flex justify-content-between align-items-start mb-4">
         <div>
             <h1 class="h3 mb-2">{{ event.event_code }} — {{ event.event_name }}</h1>

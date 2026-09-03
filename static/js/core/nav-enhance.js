@@ -59,6 +59,25 @@
             });
         });
 
+        // Settings (webapp/navigation/registry_settings.py) renders in the
+        // navbar as a single link -- its own items are only ever DOM <a>
+        // elements on the /settings hub page itself, never in the navbar
+        // scanned above. templates/components/navbar.html embeds them
+        // separately as JSON for exactly this reason; without this, every
+        // Settings-hub page (Icecast, NTP Server, GPIO, ...) would have no
+        // breadcrumb and wouldn't appear in the command palette either.
+        const settingsDataEl = document.getElementById('eas-settings-nav-data');
+        if (settingsDataEl) {
+            try {
+                const settingsItems = JSON.parse(settingsDataEl.textContent);
+                settingsItems.forEach((it) => {
+                    add(it.label, it.url, ['Settings', it.group]);
+                });
+            } catch (e) {
+                // Malformed/missing data shouldn't break the navbar-derived index.
+            }
+        }
+
         return entries;
     }
 

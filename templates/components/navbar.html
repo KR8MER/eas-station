@@ -216,5 +216,18 @@
     </div>
 </nav>
 
+{# The Settings section renders in the navbar as a single link (NAVBAR_LINK
+   mode) -- its ~35 individual items only ever appear as cards on the
+   /settings hub page itself, never as navbar <a> elements. nav-enhance.js's
+   breadcrumb/palette indexer only scans the rendered navbar DOM, so without
+   this those pages (Icecast, NTP Server, GPIO, ...) would never get a
+   breadcrumb no matter how they're organized in the registry.
+   nav_settings_items (webapp/navigation/__init__.py) is already
+   permission-filtered the same way the navbar itself is, so this embeds
+   nothing a signed-in viewer couldn't already reach through /settings. #}
+{% if nav_settings_items is defined and nav_settings_items %}
+<script type="application/json" id="eas-settings-nav-data">{{ nav_settings_items | tojson }}</script>
+{% endif %}
+
 {% include 'components/navbar_styles.html' %}
 {% include 'components/navbar_scripts.html' %}

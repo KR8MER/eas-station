@@ -42,6 +42,13 @@
 {% endset %}
 {% include 'components/page_header.html' %}
 <div class="container-fluid">
+    <nav aria-label="breadcrumb" class="my-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">Home</a></li>
+            <li class="breadcrumb-item"><a href="/audio">Audio Archive</a></li>
+            <li class="breadcrumb-item active">#{{ message.id }}</li>
+        </ol>
+    </nav>
 
     {# ── FCC §11.31 Compliance panel ──────────────────────────────────────── #}
     {% set required_missing = broadcast_steps | selectattr('required') | rejectattr('present') | list %}
