@@ -105,15 +105,16 @@ def generate_alert_image(
             native canvas size and Lanczos-upscaled just before encode.
         radar_time:        Optional timestamp overriding which radar frame
             the map inset shows (default: the alert's own `sent` time).
-            Used by ``gif_export`` to re-render the same card once per
+            Used by ``video_export`` to re-render the same card once per
             cached radar-loop frame, animating only the map while the
             header/panels stay fixed.
         radar_show_polygon: When False, the map inset centers on the
             alert's eventual coverage area (unchanged) but omits the
             polygon outline/fill and storm-motion overlay -- used by
-            ``gif_export`` for the lead-in frames that show what the
-            radar looked like *before* this alert existed, so a GIF
-            never implies the warning was active earlier than it was.
+            ``video_export`` for the lead-in frames that show what the
+            radar looked like *before* this alert existed, so the
+            animation never implies the warning was active earlier than
+            it was.
 
     Returns:
         Raw image bytes in the requested container.

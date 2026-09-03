@@ -41,7 +41,7 @@ Dependencies run one way::
     routes_geometry        -> blueprint, county
     routes_alert_detail    -> blueprint, county, display_data
     routes_alert_export    -> blueprint, display_data
-    routes_alert_export_gif -> blueprint, display_data, routes_alert_export
+    routes_alert_export_video -> blueprint, display_data, routes_alert_export
     routes_alerts_list     -> blueprint, county
     routes_boundaries      -> blueprint
     routes_system          -> blueprint, hostinfo
@@ -72,7 +72,7 @@ from . import (  # noqa: F401  - imported for their side effect of registering r
     motion,
     routes_alert_detail,
     routes_alert_export,
-    routes_alert_export_gif,
+    routes_alert_export_video,
     routes_alerts_list,
     routes_boundaries,
     routes_geometry,

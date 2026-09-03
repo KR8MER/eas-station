@@ -8,6 +8,13 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.222.0] - 2026-09-03 - Replace animated GIF alert export with MP4 video
+
+- **Changed**: the animated share-card export for weather alerts (`/api/alerts/<id>/export-image.mp4`, reachable from the alert detail page's Export Social Image menu) is now an MP4 (H.264/yuv420p) instead of a GIF. Facebook and most other social platforms transcode an uploaded GIF into a silent looping MP4 on ingest anyway, so encoding straight to MP4 skips that lossy round-trip and sidesteps GIF's 256-colour palette entirely, which was producing visible banding/dithering on real radar reflectivity and multi-megabyte files for a ~10-frame loop.
+- Same behavior otherwise: plays the radar from ~15 minutes before the alert was issued, then reveals the warning polygon only on the frame matching the real issuance time.
+- `app_utils/image_export/gif_export.py` replaced by `video_export.py` -- reuses the same per-frame `generate_alert_image()` composition, then pipes the rendered PNG frames to ffmpeg (already a system dependency of this project) instead of Pillow's GIF encoder. `webapp/admin/api/routes_alert_export_gif.py` replaced by `routes_alert_export_video.py`.
+- New tests in `tests/test_image_export_video.py` exercise the real ffmpeg binary (already a CI dependency for the audio-source tests) rather than mocking the encode step, including a regression test for scaled card sizes rounding to an odd pixel width/height, which `yuv420p` cannot encode without an explicit even-dimension filter.
+
 ## [2.221.1] - 2026-09-03 - Fix encrypted settings unreadable outside a Flask app context
 
 - **Bug fix**: every `EncryptedString`-backed credential (TTS's Azure OpenAI key, Icecast source/admin passwords, SMTP password, Twilio auth token, SNMP community string, Tailscale auth key, Tickstem API key, admin MFA secrets) was silently unreadable from any process without an active Flask app context -- including the standalone CAP poller, which reads settings through its own `sessionmaker()` session with no Flask app ever pushed. Decrypting the column raised `RuntimeError: Working outside of application context` deep inside SQLAlchemy's row hydration (`current_app.secret_key`), which the poller's own error handling swallowed -- so a fully configured, enabled TTS provider was treated as unconfigured, and every forwarded alert went out tone-only with no spoken narration. The same silent failure applied to any other credential read the same way outside a request.
