@@ -2097,35 +2097,37 @@
                                         {% if alert.category == 'Met' %}
                                         <li><hr class="dropdown-divider"></li>
                                         <li>
-                                            <h4 class="dropdown-header h6">Animated GIF</h4>
+                                            <h4 class="dropdown-header h6">Animated Video · MP4</h4>
                                             <small class="text-muted d-block px-2 pb-1">
                                                 Plays the radar in the minutes before this alert was
                                                 issued, then reveals the warning polygon at the moment
-                                                it actually went out — never before.
+                                                it actually went out — never before. MP4 instead of
+                                                GIF since Facebook and most other platforms re-encode
+                                                uploaded GIFs into video anyway.
                                             </small>
                                         </li>
                                         <li>
                                             <a class="dropdown-item"
-                                               href="{{ url_for('api.alert_detail_gif', alert_id=alert.id, ratio='landscape') }}">
-                                                <i class="fas fa-images"></i> Landscape · 1200×630
+                                               href="{{ url_for('api.alert_detail_video', alert_id=alert.id, ratio='landscape') }}">
+                                                <i class="fas fa-film"></i> Landscape · 1200×630
                                             </a>
                                         </li>
                                         <li>
                                             <a class="dropdown-item"
-                                               href="{{ url_for('api.alert_detail_gif', alert_id=alert.id, ratio='square') }}">
-                                                <i class="fas fa-images"></i> Square · 1080×1080
+                                               href="{{ url_for('api.alert_detail_video', alert_id=alert.id, ratio='square') }}">
+                                                <i class="fas fa-film"></i> Square · 1080×1080
                                             </a>
                                         </li>
                                         <li>
                                             <a class="dropdown-item"
-                                               href="{{ url_for('api.alert_detail_gif', alert_id=alert.id, ratio='portrait') }}">
-                                                <i class="fas fa-images"></i> Portrait · 1080×1350
+                                               href="{{ url_for('api.alert_detail_video', alert_id=alert.id, ratio='portrait') }}">
+                                                <i class="fas fa-film"></i> Portrait · 1080×1350
                                             </a>
                                         </li>
                                         <li>
                                             <a class="dropdown-item"
-                                               href="{{ url_for('api.alert_detail_gif', alert_id=alert.id, ratio='story') }}">
-                                                <i class="fas fa-images"></i> Story · 1080×1920
+                                               href="{{ url_for('api.alert_detail_video', alert_id=alert.id, ratio='story') }}">
+                                                <i class="fas fa-film"></i> Story · 1080×1920
                                             </a>
                                         </li>
                                         {% endif %}

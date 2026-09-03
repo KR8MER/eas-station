@@ -64,7 +64,7 @@ This package was split out of the former single-file
     panels      drawing, fonts, icons, nws_text, palette, panels_text
     render      drawing, fonts, layout, logo, maps, palette, panels,
                 panels_text, text, theme, weather_fx
-    gif_export  palette, radar_loop, render
+    video_export  palette, radar_loop, render
 
 Every name the single-file module exposed is re-exported here, so
 ``from app_utils.image_export import <anything>`` keeps working — the one
@@ -183,10 +183,10 @@ from .render import (  # noqa: F401
     generate_alert_image,
 )
 
-from .gif_export import (  # noqa: F401
-    generate_alert_gif, GIF_FRAME_DURATION_MS, GIF_LAST_FRAME_DURATION_MS,
-    GIF_MAX_SCALE,
+from .video_export import (  # noqa: F401
+    generate_alert_video, VIDEO_FPS, VIDEO_LAST_FRAME_HOLD_COUNT,
+    VIDEO_MAX_SCALE,
 )
 
 
-__all__ = ['generate_alert_image', 'generate_alert_gif']
+__all__ = ['generate_alert_image', 'generate_alert_video']
