@@ -150,5 +150,5 @@ _SECTION_ICON_FN = {
     'STORM THREATS':  _icon_alert_triangle,
     'COVERAGE':       _icon_ring,
     'STORM MOTION':   _icon_needle,
-    'ACTION':         _icon_bolt,
+    'WHAT TO DO':     _icon_bolt,
 }

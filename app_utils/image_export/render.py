@@ -30,7 +30,7 @@ from PIL import Image, ImageDraw, ImageFont, PngImagePlugin
 
 from .logo import _load_logo
 from .layout import (
-    _LAYOUTS, _LAYOUT_LANDSCAPE,
+    _LAYOUTS, _LAYOUT_LANDSCAPE, INFO_NARROW_MAX_W,
 )
 from .palette import (
     WHITE, _BG, _DIVIDER, _SEVERITY, _STRIP,
@@ -55,7 +55,9 @@ from .maps import (
     _alert_same_codes, _fetch_same_union_geom, _render_map,
 )
 from .panels import (
-    _draw_areas, _draw_compass_section, _draw_coverage, _draw_threats,
+    _draw_areas, _draw_compass_section, _draw_coverage,
+    _draw_damage_callout, _draw_expires_block, _draw_hazard_stat_boxes,
+    _draw_storm_motion_line, _draw_threats,
 )
 from .panels_text import (
     _draw_description, _draw_instruction, _draw_nws_headline,
@@ -417,31 +419,54 @@ def generate_alert_image(
     iy  = iy_top
     bot = iy_top + ih
 
-    # Priority order for a share card: storm threats (when dangerous), the
-    # headline, WHO is affected, WHAT is happening, WHAT to do.  Coverage /
-    # storm motion come last so they only consume space the copy doesn't
-    # need.  VTAC codes and the issuing-office block are intentionally
-    # omitted — they're operator data, not share-worthy info, and were the
-    # main reason long descriptions were being clipped.
-    iy = _draw_threats(draw, fonts, alr_clr, ix, iy, iw, bot, ipaws_data)
-    iy = _draw_nws_headline(draw, fonts, alr_clr, ix, iy, iw, bot, alert, ipaws_data)
+    if iw < INFO_NARROW_MAX_W:
+        # Broadcast-style narrow column (see layout.py's landscape
+        # preset): the wide gauge-card / compass-rose treatment below
+        # doesn't fit here, so a compact stack leads with the highest-
+        # signal items instead -- damage tier, tornado tag, EXPIRES,
+        # hazard stat boxes, a one-line motion readout, then WHAT TO DO.
+        iy = _draw_damage_callout(draw, fonts, ix, iy, iw, bot, ipaws_data)
 
-    # Track whether the areas section actually rendered: when it did, the
-    # description's WHERE bullet is that same county list written out as a
-    # sentence, and repeating it costs two lines the hazard copy needs.
-    iy_before_areas = iy
-    iy = _draw_areas(draw, fonts, alr_clr, ix, iy, iw, bot, alert)
-    areas_shown = iy > iy_before_areas
+        tornado = ((ipaws_data or {}).get('threat_data') or {}).get('tornado')
+        if tornado and tornado.get('level', 'none') != 'none':
+            pill_text = f"TORNADO {tornado.get('display', 'POSSIBLE').upper()}"
+            pill_font = fonts['label']
+            pill_h = _th(pill_font, pill_text) + 6
+            if iy + pill_h <= bot:
+                _draw_pill(draw, pill_font, pill_text, _SEVERITY['severe'],
+                          ix, iy, text_color=WHITE)
+                iy += pill_h + 8
 
-    # Likewise the WHEN bullet ("Until 1245 PM EDT") only restates the
-    # expiry stamp the footer already carries.
-    timing_shown = bool(getattr(alert, 'expires', None))
+        iy = _draw_expires_block(draw, fonts, ix, iy, iw, bot, alert)
+        iy = _draw_hazard_stat_boxes(draw, fonts, ix, iy, iw, bot, ipaws_data)
+        iy = _draw_storm_motion_line(draw, fonts, ix, iy, iw, bot, ipaws_data)
+        iy = _draw_instruction(draw, fonts, alr_clr, ix, iy, iw, bot, alert)
+    else:
+        # Priority order for a share card: storm threats (when dangerous), the
+        # headline, WHO is affected, WHAT is happening, WHAT to do.  Coverage /
+        # storm motion come last so they only consume space the copy doesn't
+        # need.  VTAC codes and the issuing-office block are intentionally
+        # omitted — they're operator data, not share-worthy info, and were the
+        # main reason long descriptions were being clipped.
+        iy = _draw_threats(draw, fonts, alr_clr, ix, iy, iw, bot, ipaws_data)
+        iy = _draw_nws_headline(draw, fonts, alr_clr, ix, iy, iw, bot, alert, ipaws_data)
 
-    iy = _draw_description(draw, fonts, alr_clr, ix, iy, iw, bot, alert,
-                           areas_shown=areas_shown, timing_shown=timing_shown)
-    iy = _draw_instruction(draw, fonts, alr_clr, ix, iy, iw, bot, alert)
-    iy = _draw_coverage(draw, fonts, alr_clr, ix, iy, iw, bot, coverage_data, county_name)
-    iy = _draw_compass_section(draw, fonts, alr_clr, ix, iy, iw, bot, ipaws_data)
+        # Track whether the areas section actually rendered: when it did, the
+        # description's WHERE bullet is that same county list written out as a
+        # sentence, and repeating it costs two lines the hazard copy needs.
+        iy_before_areas = iy
+        iy = _draw_areas(draw, fonts, alr_clr, ix, iy, iw, bot, alert)
+        areas_shown = iy > iy_before_areas
+
+        # Likewise the WHEN bullet ("Until 1245 PM EDT") only restates the
+        # expiry stamp the footer already carries.
+        timing_shown = bool(getattr(alert, 'expires', None))
+
+        iy = _draw_description(draw, fonts, alr_clr, ix, iy, iw, bot, alert,
+                               areas_shown=areas_shown, timing_shown=timing_shown)
+        iy = _draw_instruction(draw, fonts, alr_clr, ix, iy, iw, bot, alert)
+        iy = _draw_coverage(draw, fonts, alr_clr, ix, iy, iw, bot, coverage_data, county_name)
+        iy = _draw_compass_section(draw, fonts, alr_clr, ix, iy, iw, bot, ipaws_data)
 
     # ── Footer ────────────────────────────────────────────────────────────────
     fy = layout.height - layout.footer_h

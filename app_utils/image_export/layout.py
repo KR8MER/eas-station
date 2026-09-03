@@ -67,12 +67,17 @@ class _Layout:
 
 
 # Facebook / Twitter / LinkedIn open-graph cards — horizontal split with
-# the map on the left and the text panel on the right.
+# the map on the left and the text panel on the right. The map is the
+# dominant element (75% of width) with a narrow broadcast-style callout
+# column alongside it -- panels.py's info-panel drawers switch to a
+# compact vertical stack (damage callout / EXPIRES / stat boxes / WHAT TO
+# DO) below INFO_NARROW_MAX_W rather than the wider gauge-card layout,
+# which doesn't fit a column this narrow.
 _LAYOUT_LANDSCAPE = _Layout(
     width=1200, height=630,
     header_h=90, footer_h=50,
-    map_rect=(0, 90, 582, 490),
-    info_rect=(590, 98, 594, 482),
+    map_rect=(0, 90, 900, 490),
+    info_rect=(908, 98, 284, 482),
     header_scrim_w=560,
     show_vertical_divider=True,
     map_corner_r=14,
@@ -137,6 +142,13 @@ MAP_H       = _LAYOUT_LANDSCAPE.map_rect[3]
 INFO_X      = _LAYOUT_LANDSCAPE.info_rect[0]
 INFO_W      = _LAYOUT_LANDSCAPE.info_rect[2]
 TILE_SIZE   = 256
+
+# Below this info-panel width, render.py switches from the wide gauge-card
+# info-panel stack to the compact broadcast-style column (damage callout,
+# EXPIRES block, stacked stat boxes, one-line motion readout, WHAT TO DO).
+# Keyed off actual geometry rather than aspect-ratio name so any future
+# narrow layout gets the same treatment automatically.
+INFO_NARROW_MAX_W = 400
 
 # Corner radius used for the outer canvas and inner panels — anything ≥ 10
 # rounds enough to read as "designed" instead of "screenshot" on a feed.

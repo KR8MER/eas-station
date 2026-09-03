@@ -8,6 +8,13 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.223.0] - 2026-09-03 - Broadcast-style landscape share card
+
+- **Changed**: the landscape (1200×630) alert share card is now a map-dominant broadcast-style graphic, modeled on RyanHallYall/WeatherWise-style warning cards -- the radar map now fills ~75% of the canvas (up from ~50%), with a narrow callout column carrying a bold "DESTRUCTIVE DAMAGE EXPECTED" / "CONSIDERABLE DAMAGE THREAT" box (for the two elevated NWS Impact-Based-Warning tiers), a TORNADO POSSIBLE pill, a hero-sized EXPIRES time, stacked WIND GUST / HAIL SIZE stat tiles, a one-line storm-motion readout, and the safety-instruction block (now titled "WHAT TO DO"). Square/portrait/story cards are unchanged for now.
+- This is a restyle, not new data: hail size, wind gust, tornado detection, and storm motion were already parsed (`webapp/admin/api/display_data.py`) and already rendered as gauge-style threat cards -- the new narrow column presents the same data as bold callouts/stat-boxes instead, since the wider gauge-card layout doesn't fit the narrower column. `render.py` switches between the two treatments based on the info panel's actual width (`layout.INFO_NARROW_MAX_W`), so a future wide-info layout keeps working unmodified.
+- New `app_utils/image_export/panels_broadcast.py` (the narrow-column drawers) and a new `_draw_stat_box` primitive in `drawing.py`; `app_utils/image_export/layout.py`'s landscape preset resized accordingly.
+- New tests in `tests/test_image_export_broadcast_panels.py`.
+
 ## [2.222.0] - 2026-09-03 - Replace animated GIF alert export with MP4 video
 
 - **Changed**: the animated share-card export for weather alerts (`/api/alerts/<id>/export-image.mp4`, reachable from the alert detail page's Export Social Image menu) is now an MP4 (H.264/yuv420p) instead of a GIF. Facebook and most other social platforms transcode an uploaded GIF into a silent looping MP4 on ingest anyway, so encoding straight to MP4 skips that lossy round-trip and sidesteps GIF's 256-colour palette entirely, which was producing visible banding/dithering on real radar reflectivity and multi-megabyte files for a ~10-frame loop.
