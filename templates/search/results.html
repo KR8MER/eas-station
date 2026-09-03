@@ -7,6 +7,12 @@
     {% set header_title = 'Multiple matches' %}
     {% set header_subtitle %}Pick the alert you meant for <code>{{ query }}</code>.{% endset %}
     {% include 'components/page_header.html' %}
+    <nav aria-label="breadcrumb" class="my-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">Home</a></li>
+            <li class="breadcrumb-item active">Search: {{ query }}</li>
+        </ol>
+    </nav>
 
     <div class="list-group mb-3">
         {% for match in matches %}

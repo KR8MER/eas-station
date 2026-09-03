@@ -19,6 +19,13 @@
 {% endset %}
 {% include 'components/page_header.html' %}
 <div class="container-fluid">
+    <nav aria-label="breadcrumb" class="my-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">Home</a></li>
+            <li class="breadcrumb-item"><a href="/audio/received">Received Alerts</a></li>
+            <li class="breadcrumb-item active">#{{ alert.id }}</li>
+        </ol>
+    </nav>
 
     <div class="row g-4">
         {# ── Left column ──────────────────────────────────────────────── #}

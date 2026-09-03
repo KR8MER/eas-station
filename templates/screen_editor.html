@@ -7,6 +7,13 @@
 {% endblock %}
 
 {% block content %}
+<nav aria-label="breadcrumb" class="my-3 container-fluid">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Home</a></li>
+        <li class="breadcrumb-item"><a href="/screens">OLED Screens</a></li>
+        <li class="breadcrumb-item active">{{ 'Edit: ' + screen.name if screen else 'New Screen' }}</li>
+    </ol>
+</nav>
 <div class="screen-editor-container">
     <!-- Header -->
     <div class="editor-header">

@@ -125,6 +125,28 @@ def get_user_menu():
         return ()
 
 
+def _flatten_settings_items(sections) -> list:
+    """Flat [{label, url, group}, ...] for the Settings section's items.
+
+    The Settings section renders in the navbar as a single link (its ~35
+    items only ever appear as cards on the /settings hub page, never as
+    navbar <a> elements), so static/js/core/nav-enhance.js -- which builds
+    its breadcrumb/command-palette index purely by scanning the rendered
+    navbar DOM -- can't see them there. This flat list is embedded as JSON
+    in templates/components/navbar.html so that script can index Settings
+    pages too, without duplicating each one into a navbar dropdown just to
+    get a breadcrumb. Already permission-filtered, since `sections` is.
+    """
+    settings = next((s for s in sections if s.key == "settings"), None)
+    if not settings:
+        return []
+    return [
+        {"label": item.label, "url": item.url, "group": group.label}
+        for group in settings.groups
+        for item in group.items
+    ]
+
+
 def inject_navigation() -> dict:
     """Flask context processor injecting the navigation tree into templates.
 
@@ -137,6 +159,7 @@ def inject_navigation() -> dict:
         "nav_sections": sections,
         "nav_section_map": {section.key: section for section in sections},
         "nav_user_menu": get_user_menu(),
+        "nav_settings_items": _flatten_settings_items(sections),
     }
 
 
