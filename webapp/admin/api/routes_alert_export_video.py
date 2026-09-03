@@ -67,7 +67,6 @@ def alert_detail_video(alert_id):
         isn't installed.
     """
     try:
-        from app_utils.image_export import generate_alert_video
         from app_core.location import get_location_settings
 
         alert = CAPAlert.query.get_or_404(alert_id)
@@ -105,11 +104,13 @@ def alert_detail_video(alert_id):
         except Exception:
             location_settings = {}
 
-        # Rendering up to ~15 full cards plus the ffmpeg encode is well
-        # beyond what's safe on the request greenlet -- see
-        # _run_off_worker's docstring. Same fresh-session-per-thread
-        # pattern as export-image.png.
+        # Rendering up to ~15 full cards is well beyond what's safe on the
+        # request greenlet -- see _run_off_worker's docstring. Same
+        # fresh-session-per-thread pattern as export-image.png.
         from sqlalchemy.orm import sessionmaker
+        from app_utils.image_export.video_export import (
+            encode_frames_to_mp4, render_alert_video_frames,
+        )
 
         engine = db.engine
         Session = sessionmaker(bind=engine)
@@ -117,14 +118,19 @@ def alert_detail_video(alert_id):
         def _render():
             render_session = Session()
             try:
-                return generate_alert_video(
+                return render_alert_video_frames(
                     alert, coverage_data, ipaws_data, location_settings, geom,
                     aspect_ratio=ratio, db_session=render_session, scale=scale,
                 )
             finally:
                 render_session.close()
 
-        video_bytes = _run_off_worker(_render)
+        frame_sequence = _run_off_worker(_render)
+        # The ffmpeg encode itself must run back on this request greenlet,
+        # not the threadpool _render() above just ran on -- see
+        # encode_frames_to_mp4's docstring for why gevent's cooperative
+        # subprocess handling only works there.
+        video_bytes = encode_frames_to_mp4(frame_sequence)
 
         response = Response(video_bytes, mimetype='video/mp4')
         safe_event = (alert.event or 'alert').replace(' ', '_').lower()

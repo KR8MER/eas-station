@@ -41,6 +41,32 @@ warning was issued" -- never the reverse.
 ffmpeg is already a system dependency of this project (audio pipeline,
 TTS fallback) -- this reuses it rather than adding a Python video-encoding
 library.
+
+Split into two stages -- render_alert_video_frames() then
+encode_frames_to_mp4() -- rather than one function, because they need to
+run in different places under gunicorn's gevent worker:
+
+* render_alert_video_frames() is CPU-bound (Pillow) and network-bound
+  (basemap/radar tile fetches), so routes_alert_export_video.py runs it
+  on gevent's real OS-thread threadpool (_run_off_worker) to avoid
+  stalling the worker's event loop.
+* encode_frames_to_mp4() MUST run back on the request's own greenlet, not
+  that threadpool. gevent monkey-patches subprocess so a plain
+  subprocess.run() call is cooperative -- it yields to other greenlets
+  while ffmpeg runs -- but that only works through a child watcher
+  registered on the hub's *default* event loop, which exists only on the
+  greenlets scheduled by the process's original hub. A threadpool worker
+  runs on its own separate per-thread hub (visible in a traceback as
+  "threadpool-hub=<Hub ...>"), and libev child watchers are a default-
+  loop-only mechanism -- calling subprocess.run() there always raises
+  "child watchers are only available on the default loop", including
+  through get_original('subprocess', 'run'): the "original" run() still
+  looks up Popen from the subprocess module's own (monkey-patched)
+  globals at call time, so even that ends up constructing gevent's Popen
+  anyway. generate_alert_video() below is a same-thread convenience
+  wrapper for callers that aren't inside a gevent threadpool at all
+  (scripts, the CLI, tests) -- routes_alert_export_video.py calls the two
+  stages separately instead of using it.
 """
 
 import io
@@ -78,13 +104,13 @@ VIDEO_LAST_FRAME_HOLD_COUNT = 4
 #: count -- capped lower than the PNG export's 3.0.
 VIDEO_MAX_SCALE = 2.0
 
-#: Generous but bounded -- a stuck/hung ffmpeg process must not hold the
-#: gevent threadpool slot (see routes_alert_export_video.py's
-#: _run_off_worker) forever.
+#: Generous but bounded -- a stuck/hung ffmpeg process shouldn't hang a
+#: request greenlet forever (see encode_frames_to_mp4's docstring for why
+#: it runs there rather than off-thread).
 _FFMPEG_TIMEOUT_SECONDS = 120
 
 
-def generate_alert_video(
+def render_alert_video_frames(
     alert: Any,
     coverage_data: Dict[str, Any],
     ipaws_data: Optional[Dict[str, Any]],
@@ -93,8 +119,10 @@ def generate_alert_video(
     aspect_ratio: str = 'landscape',
     db_session: Any = None,
     scale: float = 1.0,
-) -> bytes:
-    """Render an animated MP4 (H.264) share card for a weather alert.
+) -> List[bytes]:
+    """Render one full share-card PNG per radar-loop frame, in playback
+    order, with the final frame repeated to hold on screen -- everything
+    encode_frames_to_mp4() needs, in the form it needs it.
 
     Args:
         alert, coverage_data, ipaws_data, location_settings: Same as
@@ -104,25 +132,21 @@ def generate_alert_video(
             so it's taken as a parameter instead of re-querying it once
             per frame.
         aspect_ratio: Same options as generate_alert_image().
-        db_session: SQLAlchemy session for the per-frame renders. Video
-            assembly always runs off the request greenlet on a plain
-            thread (see routes_alert_export_video.py's _run_off_worker),
-            so there is no implicit Flask-SQLAlchemy session to fall back
-            to -- pass a session bound for that thread.
+        db_session: SQLAlchemy session for the per-frame renders. Safe to
+            call this from any thread -- pass a session bound for that
+            thread (see the module docstring for why this is the part
+            that runs off the request greenlet).
         scale: Output upscale factor, capped at VIDEO_MAX_SCALE.
 
     Returns:
-        Raw MP4 bytes (H.264/yuv420p, no audio track, plays once -- most
-        feeds that show a GIF-like card loop video automatically).
+        Ordered list of flattened RGB PNG bytes, one per output video
+        frame (the last source frame repeated VIDEO_LAST_FRAME_HOLD_COUNT
+        times).
 
     Raises:
         ValueError: if the alert isn't eligible for a radar loop (not a
-            weather alert, no `sent` time), no frames could be rendered,
-            or ffmpeg isn't installed.
+            weather alert, no `sent` time) or no frames could be rendered.
     """
-    if shutil.which('ffmpeg') is None:
-        raise ValueError('ffmpeg is not installed on this system; cannot encode video')
-
     loop_result = build_radar_loop(alert, geom, max_new_frames=RADAR_LOOP_MAX_FRAMES)
     if loop_result.get('error'):
         raise ValueError(loop_result['error'])
@@ -152,7 +176,23 @@ def generate_alert_video(
         flat.save(out, format='PNG')
         rendered.append(out.getvalue())
 
-    frame_sequence = rendered[:-1] + [rendered[-1]] * VIDEO_LAST_FRAME_HOLD_COUNT
+    return rendered[:-1] + [rendered[-1]] * VIDEO_LAST_FRAME_HOLD_COUNT
+
+
+def encode_frames_to_mp4(frame_sequence: List[bytes]) -> bytes:
+    """Encode an ordered list of same-size PNG frames into an MP4
+    (H.264/yuv420p, no audio) at VIDEO_FPS.
+
+    Must be called on a plain gevent greenlet, never from
+    gevent.get_hub().threadpool -- see the module docstring.
+
+    Raises:
+        ValueError: if ffmpeg isn't installed, times out, or fails.
+    """
+    if shutil.which('ffmpeg') is None:
+        raise ValueError('ffmpeg is not installed on this system; cannot encode video')
+    if not frame_sequence:
+        raise ValueError('No frames to encode')
 
     with tempfile.TemporaryDirectory(prefix='eas_alert_video_') as tmp_dir:
         tmp_path = Path(tmp_dir)
@@ -191,7 +231,35 @@ def generate_alert_video(
         return out_path.read_bytes()
 
 
+def generate_alert_video(
+    alert: Any,
+    coverage_data: Dict[str, Any],
+    ipaws_data: Optional[Dict[str, Any]],
+    location_settings: Optional[Dict[str, Any]],
+    geom: Dict[str, Any],
+    aspect_ratio: str = 'landscape',
+    db_session: Any = None,
+    scale: float = 1.0,
+) -> bytes:
+    """Convenience wrapper: render_alert_video_frames() then
+    encode_frames_to_mp4() in one call, on the calling thread/greenlet.
+
+    Only safe when the caller is NOT itself running inside
+    gevent.get_hub().threadpool -- see the module docstring.
+    routes_alert_export_video.py calls the two stages separately instead.
+
+    Returns:
+        Raw MP4 bytes (H.264/yuv420p, no audio track, plays once -- most
+        feeds that show a GIF-like card loop video automatically).
+    """
+    frames = render_alert_video_frames(
+        alert, coverage_data, ipaws_data, location_settings, geom,
+        aspect_ratio=aspect_ratio, db_session=db_session, scale=scale,
+    )
+    return encode_frames_to_mp4(frames)
+
+
 __all__ = [
-    'generate_alert_video', 'VIDEO_FPS', 'VIDEO_LAST_FRAME_HOLD_COUNT',
-    'VIDEO_MAX_SCALE',
+    'generate_alert_video', 'render_alert_video_frames', 'encode_frames_to_mp4',
+    'VIDEO_FPS', 'VIDEO_LAST_FRAME_HOLD_COUNT', 'VIDEO_MAX_SCALE',
 ]

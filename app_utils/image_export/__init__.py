@@ -184,8 +184,8 @@ from .render import (  # noqa: F401
 )
 
 from .video_export import (  # noqa: F401
-    generate_alert_video, VIDEO_FPS, VIDEO_LAST_FRAME_HOLD_COUNT,
-    VIDEO_MAX_SCALE,
+    generate_alert_video, render_alert_video_frames, encode_frames_to_mp4,
+    VIDEO_FPS, VIDEO_LAST_FRAME_HOLD_COUNT, VIDEO_MAX_SCALE,
 )
 
 
