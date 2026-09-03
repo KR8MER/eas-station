@@ -185,6 +185,92 @@ def test_backfill_encrypts_legacy_plaintext_rows(app_context):
 
 
 # ---------------------------------------------------------------------------
+# EncryptedString outside a Flask app context (standalone CAP poller shape)
+# ---------------------------------------------------------------------------
+
+
+def test_encrypted_column_readable_via_raw_session_outside_app_context(tmp_path, monkeypatch):
+    """Regression test for a real production bug: the standalone CAP poller
+    reads TTSSettings (and every other EncryptedString-backed settings row)
+    through its own ``sessionmaker(bind=engine)`` session with no Flask app
+    ever pushed in that process. Before this fix, decrypting the column
+    still called ``current_app.secret_key`` deep inside SQLAlchemy's row
+    hydration, which raised "Working outside of application context" --
+    silently swallowed by the poller's own error handling, so TTS narration
+    (and Icecast/SMTP/Tailscale/Tickstem credentials read the same way) was
+    treated as unconfigured even though it was fully set up in the web UI.
+    """
+    import app_core.crypto as crypto_module
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app_core._models_settings import TTSSettings
+
+    monkeypatch.setattr(crypto_module, "_fernet_cache", None)
+
+    secret_key = "c" * 40
+
+    # Write the value the normal way, inside a real app context -- mirrors
+    # the web UI's Settings save.
+    app_name = "poller-context-write"
+    app = _make_app(tmp_path, app_name, secret_key=secret_key)
+    database_path = tmp_path / f"{app_name}.db"
+    with app.app_context():
+        TTSSettings.__table__.create(bind=db.engine)
+        db.session.add(TTSSettings(
+            id=1, provider="azure_openai", enabled=True,
+            azure_openai_key="raw-api-key-value",
+        ))
+        db.session.commit()
+
+    # Read it back the way the CAP poller actually does: a plain
+    # sessionmaker() session bound directly to the engine, with zero Flask
+    # app pushed anywhere in this process. systemd's EnvironmentFile is what
+    # puts SECRET_KEY in that process's environment in production.
+    monkeypatch.setenv("SECRET_KEY", secret_key)
+    engine = create_engine(f"sqlite:///{database_path}")
+    raw_session = sessionmaker(bind=engine)()
+    try:
+        reloaded = raw_session.get(TTSSettings, 1)
+        assert reloaded.azure_openai_key == "raw-api-key-value"
+    finally:
+        raw_session.close()
+
+
+def test_encrypted_column_raises_without_app_context_or_env_secret_key(tmp_path, monkeypatch):
+    """Without a Flask app context AND without SECRET_KEY in the
+    environment, there's genuinely no key material available -- must still
+    fail loudly (RuntimeError) rather than silently return garbage."""
+    import app_core.crypto as crypto_module
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app_core._models_settings import TTSSettings
+
+    monkeypatch.setattr(crypto_module, "_fernet_cache", None)
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+
+    secret_key = "d" * 40
+
+    app_name = "poller-no-secret-write"
+    app = _make_app(tmp_path, app_name, secret_key=secret_key)
+    database_path = tmp_path / f"{app_name}.db"
+    with app.app_context():
+        TTSSettings.__table__.create(bind=db.engine)
+        db.session.add(TTSSettings(
+            id=1, provider="azure_openai", enabled=True,
+            azure_openai_key="raw-api-key-value",
+        ))
+        db.session.commit()
+
+    engine = create_engine(f"sqlite:///{database_path}")
+    raw_session = sessionmaker(bind=engine)()
+    try:
+        with pytest.raises(RuntimeError, match="SECRET_KEY is not configured"):
+            raw_session.get(TTSSettings, 1)
+    finally:
+        raw_session.close()
+
+
+# ---------------------------------------------------------------------------
 # Password peppering (AdminUser)
 # ---------------------------------------------------------------------------
 
