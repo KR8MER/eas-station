@@ -411,7 +411,8 @@ def _render_map(geom: Dict, severity: str,
                 category: Optional[str] = None,
                 sent: Optional[datetime] = None,
                 radar_source: str = 'level3',
-                radar_field: str = 'reflectivity') -> Image.Image:
+                radar_field: str = 'reflectivity',
+                show_polygon: bool = True) -> Image.Image:
     """Return a *map_w*×*map_h* RGB map image with the alert polygon overlaid.
 
     *radar_source*: 'level3' (default, unchanged behaviour -- the WMS-T
@@ -424,6 +425,13 @@ def _render_map(geom: Dict, severity: str,
     *radar_field*: 'reflectivity' (default) or 'velocity' -- only
     meaningful when radar_source='level2'; Level III has no velocity
     product.
+
+    *show_polygon*: when False, the map still centers/zooms on *geom*'s
+    bounding box (so the camera doesn't jump when the polygon later
+    appears) but omits the polygon glow/fill/outline and storm-motion
+    overlay entirely -- used for a radar loop's lead-in frames, which
+    show what the radar looked like *before* the alert existed and must
+    not imply a warning was active earlier than it actually was.
 
     *theme* drives the polygon stroke / storm-motion accent colours; if
     omitted we fall back to the severity palette (legacy behaviour).
@@ -655,52 +663,53 @@ def _render_map(geom: Dict, severity: str,
         base_rgba.alpha_composite(county_layer)
         canvas = base_rgba.convert('RGB')
 
-    # ── Polygon glow ──────────────────────────────────────────────────────
-    # A blurred wider stroke sits behind the crisp outline so the affected
-    # area "lifts" off the basemap and is unmistakable at thumbnail size.
-    glow = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
-    gd = ImageDraw.Draw(glow)
-    for ring in rings:
-        pts = _to_px(ring)
-        if len(pts) >= 2:
-            # joint='curve': without it, PIL miters each vertex, which on a
-            # polygon with sharp turns (a road corridor, a county outline)
-            # leaves a visible notch cut into the stroke at every bend --
-            # the blur below only smears that defect, it doesn't hide it.
-            gd.line(pts + [pts[0]], fill=(*alr_clr, 230), width=glow_w, joint='curve')
-    glow = glow.filter(ImageFilter.GaussianBlur(radius=glow_r))
+    if show_polygon:
+        # ── Polygon glow ──────────────────────────────────────────────────
+        # A blurred wider stroke sits behind the crisp outline so the affected
+        # area "lifts" off the basemap and is unmistakable at thumbnail size.
+        glow = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
+        gd = ImageDraw.Draw(glow)
+        for ring in rings:
+            pts = _to_px(ring)
+            if len(pts) >= 2:
+                # joint='curve': without it, PIL miters each vertex, which on a
+                # polygon with sharp turns (a road corridor, a county outline)
+                # leaves a visible notch cut into the stroke at every bend --
+                # the blur below only smears that defect, it doesn't hide it.
+                gd.line(pts + [pts[0]], fill=(*alr_clr, 230), width=glow_w, joint='curve')
+        glow = glow.filter(ImageFilter.GaussianBlur(radius=glow_r))
 
-    # Semi-transparent fill
-    overlay = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
-    ov = ImageDraw.Draw(overlay)
-    for ring in rings:
-        pts = _to_px(ring)
-        if len(pts) >= 3:
-            ov.polygon(pts, fill=(*alr_clr, 70))
+        # Semi-transparent fill
+        overlay = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
+        ov = ImageDraw.Draw(overlay)
+        for ring in rings:
+            pts = _to_px(ring)
+            if len(pts) >= 3:
+                ov.polygon(pts, fill=(*alr_clr, 70))
 
-    base_rgba = canvas.convert('RGBA')
-    base_rgba.alpha_composite(glow)
-    base_rgba.alpha_composite(overlay)
-    canvas = base_rgba.convert('RGB')
+        base_rgba = canvas.convert('RGBA')
+        base_rgba.alpha_composite(glow)
+        base_rgba.alpha_composite(overlay)
+        canvas = base_rgba.convert('RGB')
 
-    # Solid outline on top (white casing for visibility, then accent core).
-    # joint='curve' rounds each vertex instead of leaving PIL's default
-    # mitered notch -- most visible right here, the crispest stroke on the
-    # card.
-    od = ImageDraw.Draw(canvas)
-    for ring in rings:
-        pts = _to_px(ring)
-        if len(pts) >= 2:
-            closed = pts + [pts[0]]
-            od.line(closed, fill=(255, 255, 255), width=casing_w, joint='curve')
-            od.line(closed, fill=alr_clr,         width=core_w, joint='curve')
-
-    # Storm motion overlay (new cone + tapered arrow + callout)
-    if storm_motion:
-        _draw_storm_track(canvas, storm_motion, z, tx_min, ty_min,
-                          accent=alr_clr, fonts=fonts,
-                          overlay_scale=1.0 / max(render_scale, 1e-6))
+        # Solid outline on top (white casing for visibility, then accent core).
+        # joint='curve' rounds each vertex instead of leaving PIL's default
+        # mitered notch -- most visible right here, the crispest stroke on the
+        # card.
         od = ImageDraw.Draw(canvas)
+        for ring in rings:
+            pts = _to_px(ring)
+            if len(pts) >= 2:
+                closed = pts + [pts[0]]
+                od.line(closed, fill=(255, 255, 255), width=casing_w, joint='curve')
+                od.line(closed, fill=alr_clr,         width=core_w, joint='curve')
+
+        # Storm motion overlay (new cone + tapered arrow + callout)
+        if storm_motion:
+            _draw_storm_track(canvas, storm_motion, z, tx_min, ty_min,
+                              accent=alr_clr, fonts=fonts,
+                              overlay_scale=1.0 / max(render_scale, 1e-6))
+            od = ImageDraw.Draw(canvas)
 
     # ── Boundary labels ───────────────────────────────────────────────────────
     # County reference *outlines* are drawn above (under the alert polygon).

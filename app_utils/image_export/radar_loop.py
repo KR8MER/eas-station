@@ -63,6 +63,14 @@ RADAR_LOOP_CADENCE_MINUTES = 5
 #: ~3 hours rather than unbounded storage/render-time growth.
 RADAR_LOOP_MAX_FRAMES = 36
 
+#: How far before the alert's own `sent` time the loop starts -- showing
+#: the storm on approach before the warning existed gives the loop context
+#: ("here's what triggered this") instead of starting cold on frame one
+#: with the polygon already there. These lead-in frames render with
+#: show_polygon=False (see build_radar_loop): the polygon appears exactly
+#: when the alert was actually issued, never earlier.
+RADAR_LOOP_LEADIN_MINUTES = 15
+
 #: How many not-yet-cached frames one build_radar_loop() call will render.
 #: Each frame is a WMS GetMap fetch plus a basemap tile mosaic -- not
 #: expensive, but kept modest so one request can't stall a gevent worker
@@ -93,10 +101,19 @@ def _floor_to_cadence(dt: datetime) -> datetime:
     return dt.replace(minute=minute, second=0, microsecond=0)
 
 
-def _needed_timestamps(sent: datetime, end: datetime) -> List[datetime]:
-    """5-minute-cadence timestamps from *sent* through *end* (inclusive),
-    capped at RADAR_LOOP_MAX_FRAMES from the start of the window."""
-    start = _floor_to_cadence(sent)
+def _needed_timestamps(sent: datetime, end: datetime, *,
+                       leadin_minutes: int = 0) -> List[datetime]:
+    """5-minute-cadence timestamps from *sent* minus *leadin_minutes*
+    through *end* (inclusive), capped at RADAR_LOOP_MAX_FRAMES from the
+    start of the window.
+
+    ``leadin_minutes`` defaults to 0 -- this helper is shared with
+    radar_loop_hires.py's build_hires_radar_loop(), which has no concept
+    of pre-issuance lead-in frames (or the polygon-suppression that makes
+    them safe to show); only build_radar_loop() below opts in, passing
+    RADAR_LOOP_LEADIN_MINUTES explicitly.
+    """
+    start = _floor_to_cadence(sent) - timedelta(minutes=leadin_minutes)
     stop = _floor_to_cadence(end)
     out: List[datetime] = []
     t = start
@@ -117,15 +134,20 @@ def build_radar_loop(alert: Any, geom: Dict, *, max_new_frames: int = RADAR_LOOP
         max_new_frames: Cap on frames rendered in this call.
 
     Returns:
-        ``{"frames": [{"time": iso, "url": ...}, ...], "pending": int,
-        "total": int}`` on success, or ``{"frames": [], "pending": 0,
-        "total": 0, "error": ...}`` if the alert isn't eligible.
+        ``{"frames": [{"time": iso, "url": ..., "issued": bool}, ...],
+        "pending": int, "total": int}`` on success, or ``{"frames": [],
+        "pending": 0, "total": 0, "error": ...}`` if the alert isn't
+        eligible. ``issued`` is False for lead-in frames that predate the
+        alert's own `sent` time -- these render without the polygon (see
+        ``show_polygon`` below) so the loop never implies the warning was
+        active before it actually was.
     """
     if getattr(alert, 'category', None) != 'Met':
         return {'frames': [], 'pending': 0, 'total': 0, 'error': 'Radar loop is only available for weather alerts'}
     sent = getattr(alert, 'sent', None)
     if not sent:
         return {'frames': [], 'pending': 0, 'total': 0, 'error': 'Alert has no sent time'}
+    sent_floor = _floor_to_cadence(sent)
 
     now = datetime.now(timezone.utc)
     end_candidates = [c for c in (getattr(alert, 'cancelled_at', None), getattr(alert, 'expires', None)) if c]
@@ -133,7 +155,7 @@ def build_radar_loop(alert: Any, geom: Dict, *, max_new_frames: int = RADAR_LOOP
     end = end.astimezone(timezone.utc) if end.tzinfo else end.replace(tzinfo=timezone.utc)
     end = min(end, now)  # never request radar for the future
 
-    needed = _needed_timestamps(sent, end)
+    needed = _needed_timestamps(sent, end, leadin_minutes=RADAR_LOOP_LEADIN_MINUTES)
     alert_id = getattr(alert, 'id')
     frame_dir = _frame_dir(alert_id)
     frame_dir.mkdir(parents=True, exist_ok=True)
@@ -141,6 +163,7 @@ def build_radar_loop(alert: Any, geom: Dict, *, max_new_frames: int = RADAR_LOOP
     frames = []
     rendered_this_call = 0
     for ts in needed:
+        issued = ts >= sent_floor
         path = frame_dir / _frame_filename(ts)
         if not path.exists():
             if rendered_this_call >= max_new_frames:
@@ -150,6 +173,7 @@ def build_radar_loop(alert: Any, geom: Dict, *, max_new_frames: int = RADAR_LOOP
                     geom, getattr(alert, 'severity', None) or 'Moderate',
                     category='Met', sent=ts,
                     map_w=RADAR_LOOP_FRAME_W, map_h=RADAR_LOOP_FRAME_H,
+                    show_polygon=issued,
                 )
                 img.save(path)
                 rendered_this_call += 1
@@ -163,6 +187,7 @@ def build_radar_loop(alert: Any, geom: Dict, *, max_new_frames: int = RADAR_LOOP
             frames.append({
                 'time': ts.isoformat(),
                 'url': f'/static/radar_loops/{alert_id}/{_frame_filename(ts)}',
+                'issued': issued,
             })
 
     return {
