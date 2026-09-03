@@ -8,6 +8,13 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.221.1] - 2026-09-03 - Fix encrypted settings unreadable outside a Flask app context
+
+- **Bug fix**: every `EncryptedString`-backed credential (TTS's Azure OpenAI key, Icecast source/admin passwords, SMTP password, Twilio auth token, SNMP community string, Tailscale auth key, Tickstem API key, admin MFA secrets) was silently unreadable from any process without an active Flask app context -- including the standalone CAP poller, which reads settings through its own `sessionmaker()` session with no Flask app ever pushed. Decrypting the column raised `RuntimeError: Working outside of application context` deep inside SQLAlchemy's row hydration (`current_app.secret_key`), which the poller's own error handling swallowed -- so a fully configured, enabled TTS provider was treated as unconfigured, and every forwarded alert went out tone-only with no spoken narration. The same silent failure applied to any other credential read the same way outside a request.
+- Root-caused from a real production incident: alert #1057 (a Severe Thunderstorm Watch) was auto-forwarded with no voice narration despite Azure OpenAI TTS being enabled and fully configured in Settings -> TTS.
+- `app_core/crypto.py`: `_root_secret()`/`_fernet()` now fall back to the `SECRET_KEY` environment variable when there's no Flask app context, rather than exclusively depending on `current_app.secret_key`. This derives the identical key those processes would get if a Flask app *were* pushed -- systemd's `EnvironmentFile=/opt/eas-station/.env` already puts `SECRET_KEY` in every service's environment, poller included.
+- New regression tests in `tests/test_secret_encryption.py` reproduce the actual bug shape (a real `EncryptedString` column read via a raw `sessionmaker()` session with zero Flask app context, not a mock) -- the existing `test_airchain_fringe_cases.py` coverage for this code path used a `MagicMock()` session that never touched real column decryption, which is why it didn't catch this.
+
 ## [2.221.0] - 2026-09-03 - Animated GIF export for weather alerts
 
 - **New: animated GIF share card** for weather (`category='Met'`) alerts, alongside the existing static PNG/WebP export -- `/api/alerts/<id>/export-image.gif` (`ratio` query param, same four aspect ratios as the PNG export). Reachable from the alert detail page's Export Social Image menu.

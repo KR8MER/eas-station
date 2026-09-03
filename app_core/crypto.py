@@ -26,11 +26,12 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
+import os
 
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from flask import current_app
+from flask import current_app, has_app_context
 from sqlalchemy import Text
 from sqlalchemy.types import TypeDecorator
 
@@ -40,11 +41,26 @@ _ENCRYPTION_INFO = b"eas-station-column-encryption-v1"
 _PEPPER_INFO = b"eas-station-password-pepper-v1"
 _ENC_PREFIX = "enc:v1:"
 
-_fernet_cache: tuple | None = None  # (app_id, Fernet) -- see _fernet()
+# Cache key is either the id() of the current Flask app instance, or this
+# sentinel when there is none -- see _fernet()/_root_secret().
+_NO_APP_CONTEXT = object()
+
+_fernet_cache: tuple | None = None  # (cache_key, Fernet) -- see _fernet()
 
 
 def _root_secret() -> bytes:
-    key = current_app.secret_key
+    # Every process that touches an EncryptedString column isn't a Flask
+    # request handler -- the standalone CAP poller, the heartbeat worker,
+    # and other background services read these columns via a raw
+    # sessionmaker() session with no app context pushed at all. Flask
+    # itself only ever gets SECRET_KEY from the environment in this app's
+    # setup, so falling back to the same environment variable outside a
+    # request/app context derives the identical key those processes would
+    # get if they *did* have a Flask app pushed -- not a weaker fallback.
+    if has_app_context():
+        key = current_app.secret_key
+    else:
+        key = os.environ.get('SECRET_KEY')
     if not key:
         raise RuntimeError(
             "SECRET_KEY is not configured; cannot derive encryption/pepper keys."
@@ -61,10 +77,14 @@ def _fernet() -> Fernet:
     global _fernet_cache
     # Cache per Flask app instance so tests spinning up multiple apps with
     # different SECRET_KEYs in the same process don't share a stale key.
-    app_id = id(current_app._get_current_object())
-    if _fernet_cache is None or _fernet_cache[0] != app_id:
+    # Outside an app context (see _root_secret()) there's no app instance
+    # to key the cache on, so a single shared entry is used instead --
+    # correct as long as SECRET_KEY doesn't change mid-process, which it
+    # never does for a long-running service reading its own environment.
+    cache_key = id(current_app._get_current_object()) if has_app_context() else _NO_APP_CONTEXT
+    if _fernet_cache is None or _fernet_cache[0] != cache_key:
         derived = _derive_key(_ENCRYPTION_INFO)
-        _fernet_cache = (app_id, Fernet(base64.urlsafe_b64encode(derived)))
+        _fernet_cache = (cache_key, Fernet(base64.urlsafe_b64encode(derived)))
     return _fernet_cache[1]
 
 
