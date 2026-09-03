@@ -115,6 +115,27 @@ jobs:
           with app.app_context():
               db.create_all()
           "
+          # 'alembic stamp head' auto-creates alembic_version if it doesn't
+          # already exist, using alembic's own default VARCHAR(32) column --
+          # the same width app_core/migrations/versions/20240717_expand_alembic_
+          # version_column.py widens to 255 for real deployments, via a
+          # migration this shortcut intentionally never runs (see comment
+          # above). Pre-create it at the real, post-migration width so a
+          # revision id over 32 chars (routine under the
+          # YYYYMMDD_short_description convention) doesn't fail here the way
+          # 20260902_tickstem_service_heartbeats (37 chars) did.
+          python -c "
+          from app import app
+          from app_core.extensions import db
+          from sqlalchemy import text
+          with app.app_context():
+              db.session.execute(text(
+                  'CREATE TABLE IF NOT EXISTS alembic_version ('
+                  'version_num VARCHAR(255) NOT NULL, '
+                  'CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))'
+              ))
+              db.session.commit()
+          "
           python -m alembic stamp head
 
       - name: Run test suite

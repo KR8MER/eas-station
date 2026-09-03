@@ -40,7 +40,15 @@ _TIMEOUT = 15
 
 
 class TickstemAPIError(Exception):
-    """Raised when a Tickstem Monitors API call fails."""
+    """Raised when a Tickstem Monitors/Heartbeats API call fails.
+
+    Carries status_code so callers can react to specific cases -- e.g. 402
+    "quota reached for your plan" -- without parsing the message string.
+    """
+
+    def __init__(self, message: str, status_code: Optional[int] = None):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def _headers(api_key: str) -> dict:
@@ -57,7 +65,7 @@ def _raise_for_error(response: "requests.Response") -> None:
         detail = response.json().get("error", response.text)
     except ValueError:
         detail = response.text
-    raise TickstemAPIError(f"HTTP {response.status_code}: {detail}")
+    raise TickstemAPIError(f"HTTP {response.status_code}: {detail}", status_code=response.status_code)
 
 
 def create_monitor(
@@ -110,6 +118,48 @@ def delete_monitor(api_key: str, monitor_id: str) -> None:
     _raise_for_error(response)
 
 
+def create_heartbeat(
+    api_key: str,
+    name: str,
+    interval_secs: int = 300,
+    grace_secs: int = 300,
+) -> dict:
+    """Create a new Tickstem heartbeat (dead-man's-switch). Returns the
+    heartbeat dict, which includes 'id' (for management calls) and 'token'
+    (embed in a ping URL: https://api.tickstem.dev/v1/heartbeats/<token>/ping
+    -- pinging needs no auth, the token itself is the credential).
+    """
+    response = requests.post(
+        f"{_BASE_URL}/heartbeats",
+        json={"name": name, "interval_secs": interval_secs, "grace_secs": grace_secs},
+        headers=_headers(api_key),
+        timeout=_TIMEOUT,
+    )
+    _raise_for_error(response)
+    return response.json()
+
+
+def set_heartbeat_status(api_key: str, heartbeat_id: str, status: str) -> dict:
+    """Pause or resume a heartbeat. status must be 'paused' or 'active'."""
+    response = requests.patch(
+        f"{_BASE_URL}/heartbeats/{heartbeat_id}",
+        json={"status": status},
+        headers=_headers(api_key),
+        timeout=_TIMEOUT,
+    )
+    _raise_for_error(response)
+    return response.json()
+
+
+def delete_heartbeat(api_key: str, heartbeat_id: str) -> None:
+    response = requests.delete(
+        f"{_BASE_URL}/heartbeats/{heartbeat_id}",
+        headers=_headers(api_key),
+        timeout=_TIMEOUT,
+    )
+    _raise_for_error(response)
+
+
 def get_checks(api_key: str, monitor_id: str, limit: Optional[int] = 20) -> list:
     """Return recent checks, most recent first."""
     response = requests.get(
@@ -131,4 +181,7 @@ __all__ = [
     "resume_monitor",
     "delete_monitor",
     "get_checks",
+    "create_heartbeat",
+    "set_heartbeat_status",
+    "delete_heartbeat",
 ]

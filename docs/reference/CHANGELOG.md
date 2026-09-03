@@ -8,6 +8,23 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.218.1] - 2026-09-02 - Respect Tickstem's per-plan heartbeat quota when bulk-creating
+
+- Confirmed live: Tickstem's free tier caps heartbeats at 5 total, well under the 12 critical services this box has. Bulk-creating all 12 at once burned through the quota, failed on the remaining ones with HTTP 402, and would have repeated the same failed attempts on every subsequent click since a failed create doesn't get remembered as "already tried."
+- `TickstemAPIError` now carries `status_code`, so `create_all_service_heartbeats()` can stop the moment a 402 comes back instead of continuing to retry a request Tickstem has already said it won't honor for any of the remaining services.
+- The bulk-create route accepts an optional `service_names` list, scoping the attempt to a specific subset instead of always going for every unmonitored critical service.
+- `/admin/tickstem` now shows a checkbox per unmonitored service (with a "select all" convenience) instead of one blind "create everything" button, so a plan near its quota can choose which services matter most.
+- New tests in `tests/test_tickstem_service_heartbeats.py` covering the `service_names` subset and the stop-on-402 behavior.
+
+## [2.218.0] - 2026-09-02 - Per-service Tickstem heartbeats for critical EAS Station subsystems
+
+- New `tickstem_service_heartbeats` table and `TickstemServiceHeartbeat` model (`app_core/_models_tickstem.py`): one row per critical service from `app_core.config.get_eas_services()` (the 11 EAS subsystems plus the poller), each holding its own Tickstem heartbeat.
+- Why per-service instead of one combined heartbeat: Tickstem's ping carries no payload, so a missed ping on one aggregate heartbeat can only ever mean "something's wrong" in the resulting alert. A heartbeat per service, each named on Tickstem's side (e.g. "EAS Station -- eas-station-poller.service"), means a missed ping names the exact subsystem that failed.
+- `app_core/tickstem_client.py` gained `create_heartbeat()`, `set_heartbeat_status()`, and `delete_heartbeat()`, mirroring the existing Monitors API functions but against Tickstem's Heartbeats API -- fully outbound, no public URL needed (unlike the existing Monitors integration, which requires one).
+- `app_core/heartbeat_worker.py`'s background loop now also drives these: each row is pinged only when it's both due (its own `interval_secs`) and its matching systemd service is currently active, read from the same cached snapshot `get_system_health()` and the System Health page share. The loop moved from "sleep for the configured interval" to a fixed 60s tick with each signal checking its own last-ping timestamp, since multiple independently-scheduled heartbeats can no longer share one sleep duration.
+- New admin UI on `/admin/tickstem`: a "Monitor N Remaining Services" button bulk-creates heartbeats (via the already-saved Tickstem API key) for every `get_eas_services()` entry that doesn't have one yet, plus a per-service table with individual pause/resume/delete.
+- New tests in `tests/test_tickstem_service_heartbeats.py`: the due/active gating logic (the core of why this feature works), and the three new `tickstem_client` functions.
+
 ## [2.217.1] - 2026-09-02 - NetBIOS hostname fallback, and fix chronyc's own resolution clashing with it
 
 - Added a NetBIOS (NBT-NS Node Status, UDP/137) fallback in `_lookup_client_hostname()` for when reverse DNS comes up empty -- the common case for a Windows PC on a LAN whose resolver has no PTR records for it, since Windows doesn't register itself in DNS by default. Hand-rolled the query/response (RFC 1002 wildcard-name encoding, minimal Node Status response parser) rather than adding a dependency for a two-message UDP protocol.
