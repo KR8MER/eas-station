@@ -15,8 +15,44 @@ These ports need to be accessible from outside the host for normal operation:
 | **443** | TCP | HTTPS (nginx) | Web interface (primary access). Uses SSL/TLS encryption. **Auto-configured in bare-metal install.** |
 | **80** | TCP | HTTP (nginx) | Redirects to HTTPS. Also needed for Let's Encrypt certificate renewal. **Auto-configured in bare-metal install.** |
 | **22** | TCP | SSH | Remote server access for management. **Auto-configured in bare-metal install.** |
-| **8000** | TCP | Icecast | Audio streaming server for public stream access. Icecast listens on `ICECAST_PORT` (default **8000**); `ICECAST_EXTERNAL_PORT` controls the port advertised in stream URLs and should stay equal to it unless a reverse proxy exposes Icecast on a different public port. **Manual configuration required.** |
+| **8000** | TCP | Icecast | Audio streaming server for public stream access. Icecast listens on `ICECAST_PORT` (default **8000**); `ICECAST_EXTERNAL_PORT` controls the port advertised in stream URLs and should stay equal to it unless a reverse proxy exposes Icecast on a different public port. **Opened from the web UI** — Settings → Firewall — not a manual `ufw` command; see below. |
 
+## Router Port Forwarding (Home / Lab Networks)
+
+The sections above cover the **host's own firewall** (UFW, firewalld, iptables) and cloud
+provider security groups. If the server instead sits behind a home or lab router doing NAT —
+the common case for a bare-metal install on a residential connection — that router has its
+own, separate gate: it drops all unsolicited inbound traffic by default, and the host firewall
+being open does nothing until the router is told to forward the port to this machine's LAN IP.
+Both layers must allow a port before it is reachable from the internet.
+
+**Before forwarding anything**, give the host a static LAN IP or a DHCP reservation in the
+router — a forwarding rule that points at a DHCP-leased address breaks the next time the lease
+renews to a different address, and open the matching *host*-firewall rule first from
+**Settings → Firewall** — the baseline (22/80/443), LAN NTP server, and Icecast port rules are
+all managed from that one page rather than a manual `ufw` command. A router forward only
+reaches this host at all once the host's own firewall lets the traffic through.
+
+| Port | Protocol | Forward when... | Notes |
+|------|----------|------------------|-------|
+| **443** | TCP | You want the web UI reachable from outside the LAN. | Required for any remote (non-VPN) access at all. |
+| **80** | TCP | You use a real domain name with automatic Let's Encrypt renewal. | The ACME HTTP-01 challenge is inbound on port 80 from Let's Encrypt's servers. Not needed if you access the UI by IP with a self-signed/manual cert, or renew certs another way. |
+| **8000** | TCP | You want Icecast audio streams reachable outside the LAN. | Optional — only forward this if remote listeners need the streams directly. |
+
+**Do not forward anything else.** In particular, never forward:
+- **22 (SSH)** — unless you specifically intend to administer the box from outside the LAN, and even then prefer a VPN (see [Tailscale Setup](../guides/TAILSCALE_SETUP.md)) or an SSH bastion over a bare forward, and disable password auth (key-only) first.
+- **5000, 5002, 5101–5106** — internal service ports, several trusting a shared-secret header (`X-Hardware-Auth`) rather than real authentication; see the internal-ports table above.
+- **5432 (PostgreSQL) / 6379 (Redis)** — no authentication hardening intended for internet exposure.
+
+**Steps (router UI varies by vendor — look for "Port Forwarding," "NAT," or "Virtual Server")**:
+1. Assign the EAS Station™ host a static LAN IP or DHCP reservation.
+2. Create a forwarding rule for each port above you actually need: external port → the host's LAN IP → same internal port, TCP.
+3. If you don't own a domain, skip the port 80 rule and manage certificates manually (see [Setup Instructions](../guides/SETUP_INSTRUCTIONS.md)) or access the UI by IP.
+4. Verify from **outside** your LAN — a phone on cellular data, not Wi-Fi — since ports can appear open from inside the LAN (via NAT hairpinning) even when the router hasn't forwarded them at all.
+
+If you only need remote *administrative* access (not public streams or public web access), a
+VPN — see [Tailscale Setup](../guides/TAILSCALE_SETUP.md) — avoids exposing any port to the
+internet at all and is the safer default for a lab deployment.
 
 These ports are used internally between services and should **not** be exposed to the internet:
 
@@ -107,8 +143,13 @@ With these firewall rules in place, you can access your EAS Station™ from any 
 
 #### Add Additional Ports
 
+**Icecast**: on a standard bare-metal install, open this from **Settings → Firewall** in the web UI
+instead of running `ufw` by hand — it also lets you scope the rule to specific subnets and keeps
+it in sync if the configured Icecast port ever changes. The manual command below is for
+non-standard deployments only:
+
 ```bash
-# Allow Icecast streaming (for public audio streams)
+# Allow Icecast streaming (for public audio streams) -- manual/non-standard deployments only
 sudo ufw allow 8000/tcp
 
 # Verify rules
@@ -246,6 +287,12 @@ This error indicates nginx cannot connect to the Flask backend (port 5000). Comm
    ```bash
    curl http://localhost:8000/status-json.xsl
    ```
+
+4. **Check the host firewall** — the most common cause on a fresh install: Icecast can be
+   running perfectly and still be unreachable from other devices because the host firewall
+   never had port 8000 opened. Go to **Settings → Firewall** and confirm the Icecast card shows
+   at least one subnet under "Allowed subnets"; add one (your LAN's CIDR, e.g.
+   `192.168.1.0/24`) and click Apply if it's empty.
 
 ## Related Documentation
 

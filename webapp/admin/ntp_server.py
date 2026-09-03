@@ -42,7 +42,6 @@ pgweb's 8081, etc.).
 """
 
 import concurrent.futures
-import ipaddress
 import logging
 import re
 import shutil
@@ -56,6 +55,8 @@ from flask import Blueprint, jsonify, render_template, request
 
 from app_core.auth.decorators import require_auth
 from app_core.auth.roles import require_permission
+from app_core.network_info import detect_local_subnets as _detect_local_subnets
+from app_core.network_info import validate_cidr as _validate_cidr
 
 logger = logging.getLogger(__name__)
 
@@ -115,20 +116,6 @@ def _run(cmd: list[str], timeout: int = 15) -> tuple[bool, str]:
         return False, str(exc)
 
 
-def _validate_cidr(value: str) -> str:
-    """Normalize and validate one subnet. Raises ValueError on anything
-    that isn't a real IPv4/IPv6 network or host address.
-    """
-    value = (value or "").strip()
-    if not value:
-        raise ValueError("empty subnet")
-    try:
-        network = ipaddress.ip_network(value, strict=False)
-    except ValueError as exc:
-        raise ValueError(f"'{value}' is not a valid IP address or CIDR range") from exc
-    return str(network)
-
-
 def _chronyd_installed() -> bool:
     return shutil.which("chronyd") is not None
 
@@ -160,45 +147,6 @@ def _firewall_subnets() -> list[str]:
     for port, source, comment in _UFW_RULE_RE.findall(output):
         if port == _NTP_PORT and comment.strip() == _UFW_TAG:
             subnets.append(source)
-    return subnets
-
-
-def _detect_local_subnets() -> list[str]:
-    """Best-effort suggestions for the admin: the actual subnet(s) this
-    box's own non-loopback interfaces sit on. Purely informational --
-    never applied automatically, since a cloud box's "local" interface
-    subnet is usually a provider-internal range, not the operator's LAN.
-    """
-    try:
-        result = subprocess.run(
-            ["ip", "-json", "addr", "show"],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode != 0:
-            return []
-        import json
-        interfaces = json.loads(result.stdout or "[]")
-    except Exception:
-        return []
-
-    subnets: list[str] = []
-    for iface in interfaces:
-        if "LOOPBACK" in (iface.get("flags") or []):
-            continue
-        for addr in iface.get("addr_info") or []:
-            if addr.get("family") != "inet":
-                continue
-            local = addr.get("local")
-            prefixlen = addr.get("prefixlen")
-            if not local or prefixlen is None:
-                continue
-            try:
-                network = ipaddress.ip_interface(f"{local}/{prefixlen}").network
-            except ValueError:
-                continue
-            candidate = str(network)
-            if candidate not in subnets:
-                subnets.append(candidate)
     return subnets
 
 

@@ -209,8 +209,9 @@ sudo journalctl -u icecast2 -f
 
 ### Port 8000 not accessible from outside
 
-- Confirm UFW allows port 8000: `sudo ufw status`
-- If behind a router, ensure port 8000 is forwarded to the EAS Station™ host.
+- Confirm the host firewall allows port 8000 from **Settings → Firewall** — the Icecast card
+  there shows which subnets are currently allowed and lets you add one with no SSH required.
+- If behind a router, ensure port 8000 is forwarded to the EAS Station™ host — see [Router Port Forwarding](../troubleshooting/FIREWALL_REQUIREMENTS.md#router-port-forwarding-home--lab-networks) for which ports to forward and which to leave closed. Router forwarding is a separate step from the host-firewall rule above — both are required for WAN access.
 
 ### Mount point shows as "404 Not Found"
 

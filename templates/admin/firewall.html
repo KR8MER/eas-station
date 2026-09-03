@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}Firewall — EAS Station™{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set header_icon = 'fas fa-shield-halved' %}
+{% set header_title = 'Firewall' %}
+{% set header_subtitle = 'Every host-firewall (UFW) rule this app manages, in one place' %}
+{% include 'components/page_header.html' %}
+
+<div class="container-fluid">
+
+    <div class="alert alert-info mb-3">
+        <i class="fas fa-circle-info me-1"></i>
+        This page is the single place to open or close host-firewall ports for EAS Station™
+        features. If you also need these ports reachable from outside your network, see
+        <a href="https://github.com/KR8MER/eas-station/blob/main/docs/troubleshooting/FIREWALL_REQUIREMENTS.md#router-port-forwarding-home--lab-networks" target="_blank" rel="noopener">Router Port Forwarding</a> —
+        opening a port here only makes it reachable on this LAN; your router's own NAT still
+        has to forward it separately for WAN access.
+    </div>
+
+    <!-- ── Baseline ────────────────────────────────────────────────────── -->
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h2 class="mb-0 h5"><i class="fas fa-lock"></i> Host Firewall Baseline</h2>
+            <span id="baselineBadge" class="badge bg-{{ 'success' if checkup.ufw.installed and checkup.ufw.active and checkup.ufw.default_deny_incoming and not checkup.ufw.missing_baseline_ports else 'danger' }}">
+                {{ 'OK' if checkup.ufw.installed and checkup.ufw.active and checkup.ufw.default_deny_incoming and not checkup.ufw.missing_baseline_ports else 'Needs Attention' }}
+            </span>
+        </div>
+        <div class="card-body">
+            <p class="mb-2" id="baselineDetail">
+                UFW {{ 'is active, default-deny-incoming, with the baseline ports (22/80/443) allowed.' if checkup.ufw.installed and checkup.ufw.active and checkup.ufw.default_deny_incoming and not checkup.ufw.missing_baseline_ports else 'is missing part of its baseline configuration — SSH/HTTP/HTTPS or the default-deny policy.' }}
+            </p>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="refreshBaselineBtn">
+                <i class="fas fa-rotate-right"></i> Refresh
+            </button>
+            <button type="button" class="btn btn-warning btn-sm" id="fixBaselineBtn">
+                <i class="fas fa-wrench"></i> Apply Baseline Fix
+            </button>
+            <div id="baselineOutput" class="alert d-none small mt-2 mb-0"></div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- ── LAN NTP Server ─────────────────────────────────────────── -->
+        <div class="col-lg-6">
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h2 class="mb-0 h5"><i class="fas fa-clock"></i> LAN NTP Server (UDP/123)</h2>
+                    <span id="ntpEnabledBadge" class="badge bg-{{ 'success' if ntp.enabled else 'secondary' }}">
+                        {{ 'Serving LAN' if ntp.enabled else 'Not Serving' }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    {% if not ntp.installed %}
+                    <div class="alert alert-danger small mb-3">chrony is not installed on this host.</div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label for="ntpSubnets" class="form-label">Allowed subnets</label>
+                        <textarea class="form-control font-monospace" id="ntpSubnets" rows="3"
+                                  placeholder="192.168.1.0/24&#10;100.64.0.0/10">{{ ntp.configured_subnets|join('\n') }}</textarea>
+                        <div class="form-text">
+                            One CIDR range (or single IP) per line. Never <code>0.0.0.0/0</code> — an
+                            open NTP responder reachable from the whole internet is a known
+                            amplification-DoS vector. Clearing this list disables serving and removes
+                            every rule this feature added.
+                        </div>
+                    </div>
+
+                    {% if ntp.detected_local_subnets %}
+                    <div class="mb-3 small">
+                        <span class="text-muted">Detected on this host (not applied automatically —
+                            on a cloud VPS this is usually the provider's range, not your LAN):</span>
+                        {% for subnet in ntp.detected_local_subnets %}
+                        <button type="button" class="btn btn-outline-secondary btn-sm ms-1 mt-1 add-subnet" data-target="ntpSubnets" data-subnet="{{ subnet }}">
+                            <i class="fas fa-plus"></i> {{ subnet }}
+                        </button>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <div id="ntpOutput" class="alert d-none font-monospace small mb-3" style="max-height:150px; overflow-y:auto;"></div>
+
+                    <button type="button" class="btn btn-primary" id="applyNtpBtn" {% if not ntp.installed %}disabled{% endif %}>
+                        <i class="fas fa-check"></i> Apply
+                    </button>
+                    <a href="{{ url_for('ntp_server.ntp_server_page') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-users"></i> View Clients
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Icecast Streaming ──────────────────────────────────────── -->
+        <div class="col-lg-6">
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h2 class="mb-0 h5"><i class="fas fa-broadcast-tower"></i> Icecast Streaming (TCP/{{ icecast.port }})</h2>
+                    <span id="icecastReachableBadge" class="badge bg-{{ 'success' if icecast.reachable else 'secondary' }}">
+                        {{ 'Reachable' if icecast.reachable else 'Not Reachable' }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    {% if not icecast.enabled %}
+                    <div class="alert alert-secondary small mb-3">
+                        Icecast auto-streaming is disabled in
+                        <a href="{{ url_for('icecast.icecast_settings_page') }}">Icecast settings</a> —
+                        opening this port won't do anything until it's enabled there.
+                    </div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label for="icecastSubnets" class="form-label">Allowed subnets</label>
+                        <textarea class="form-control font-monospace" id="icecastSubnets" rows="3"
+                                  placeholder="192.168.1.0/24&#10;0.0.0.0/0">{{ icecast.firewall_subnets|join('\n') }}</textarea>
+                        <div class="form-text">
+                            One CIDR range (or single IP) per line. Use <code>0.0.0.0/0</code> only if
+                            you intend the stream to be public — see
+                            <a href="https://github.com/KR8MER/eas-station/blob/main/docs/troubleshooting/FIREWALL_REQUIREMENTS.md#router-port-forwarding-home--lab-networks" target="_blank" rel="noopener">Router Port Forwarding</a>
+                            for what your router also needs. Clearing this list closes the port and
+                            removes every rule this feature added.
+                        </div>
+                    </div>
+
+                    {% if icecast.detected_local_subnets %}
+                    <div class="mb-3 small">
+                        <span class="text-muted">Detected on this host (not applied automatically):</span>
+                        {% for subnet in icecast.detected_local_subnets %}
+                        <button type="button" class="btn btn-outline-secondary btn-sm ms-1 mt-1 add-subnet" data-target="icecastSubnets" data-subnet="{{ subnet }}">
+                            <i class="fas fa-plus"></i> {{ subnet }}
+                        </button>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <div id="icecastOutput" class="alert d-none font-monospace small mb-3" style="max-height:150px; overflow-y:auto;"></div>
+
+                    <button type="button" class="btn btn-primary" id="applyIcecastBtn">
+                        <i class="fas fa-check"></i> Apply
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+    function setBtn(btn, loading, label) {
+        const orig = btn.dataset.orig || btn.innerHTML;
+        if (!btn.dataset.orig) btn.dataset.orig = orig;
+        btn.disabled = loading;
+        btn.innerHTML = loading ? '<i class="fas fa-spinner fa-spin"></i> ' + label : orig;
+    }
+
+    function showOutput(elId, cls, msg) {
+        const el = document.getElementById(elId);
+        el.className = 'alert alert-' + cls + ' small mt-2 mb-3';
+        el.textContent = msg;
+        el.classList.remove('d-none');
+    }
+
+    async function apiCall(url, method, body) {
+        const opts = { method: method || 'GET', headers: { 'X-CSRF-Token': window.CSRF_TOKEN } };
+        if (body) {
+            opts.headers['Content-Type'] = 'application/json';
+            opts.body = JSON.stringify(body);
+        }
+        const r = await fetch(url, opts);
+        return r.json();
+    }
+
+    document.querySelectorAll('.add-subnet').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const textarea = document.getElementById(this.dataset.target);
+            const subnet = this.dataset.subnet;
+            const lines = textarea.value.split('\n').map(l => l.trim()).filter(Boolean);
+            if (!lines.includes(subnet)) lines.push(subnet);
+            textarea.value = lines.join('\n');
+        });
+    });
+
+    // ── Baseline ─────────────────────────────────────────────────────
+    function applyBaselineStatus(d) {
+        const ufw = d.ufw || {};
+        const ok = ufw.installed && ufw.active && ufw.default_deny_incoming && (!ufw.missing_baseline_ports || ufw.missing_baseline_ports.length === 0);
+        const badge = document.getElementById('baselineBadge');
+        badge.textContent = ok ? 'OK' : 'Needs Attention';
+        badge.className = 'badge bg-' + (ok ? 'success' : 'danger');
+        const check = (d.checks || []).find(c => c.id === 'ufw');
+        if (check) document.getElementById('baselineDetail').textContent = check.detail;
+    }
+
+    document.getElementById('refreshBaselineBtn').addEventListener('click', async function () {
+        setBtn(this, true, 'Refreshing…');
+        try {
+            applyBaselineStatus(await apiCall('/admin/security-checkup/status'));
+        } finally {
+            setBtn(this, false);
+        }
+    });
+
+    document.getElementById('fixBaselineBtn').addEventListener('click', async function () {
+        setBtn(this, true, 'Applying…');
+        try {
+            const d = await apiCall('/admin/security-checkup/fix-ufw', 'POST');
+            if (d.success) {
+                showOutput('baselineOutput', 'success', d.message);
+                applyBaselineStatus(d);
+            } else {
+                showOutput('baselineOutput', 'danger', d.error);
+            }
+        } catch (e) {
+            showOutput('baselineOutput', 'danger', 'Request failed: ' + e);
+        } finally {
+            setBtn(this, false);
+        }
+    });
+
+    // ── NTP ──────────────────────────────────────────────────────────
+    document.getElementById('applyNtpBtn').addEventListener('click', async function () {
+        const subnets = document.getElementById('ntpSubnets').value.split('\n').map(l => l.trim()).filter(Boolean);
+        setBtn(this, true, 'Applying…');
+        try {
+            const d = await apiCall('/admin/ntp-server/configure', 'POST', { enabled: subnets.length > 0, subnets });
+            if (d.success) {
+                showOutput('ntpOutput', 'success', d.message);
+                document.getElementById('ntpEnabledBadge').textContent = d.enabled ? 'Serving LAN' : 'Not Serving';
+                document.getElementById('ntpEnabledBadge').className = 'badge bg-' + (d.enabled ? 'success' : 'secondary');
+            } else {
+                showOutput('ntpOutput', 'danger', d.error);
+            }
+        } catch (e) {
+            showOutput('ntpOutput', 'danger', 'Request failed: ' + e);
+        } finally {
+            setBtn(this, false);
+        }
+    });
+
+    // ── Icecast ──────────────────────────────────────────────────────
+    document.getElementById('applyIcecastBtn').addEventListener('click', async function () {
+        const subnets = document.getElementById('icecastSubnets').value.split('\n').map(l => l.trim()).filter(Boolean);
+        setBtn(this, true, 'Applying…');
+        try {
+            const d = await apiCall('/admin/firewall/api/icecast', 'POST', { subnets });
+            if (d.success) {
+                showOutput('icecastOutput', 'success', d.message);
+                document.getElementById('icecastReachableBadge').textContent = d.reachable ? 'Reachable' : 'Not Reachable';
+                document.getElementById('icecastReachableBadge').className = 'badge bg-' + (d.reachable ? 'success' : 'secondary');
+            } else {
+                showOutput('icecastOutput', 'danger', d.error);
+            }
+        } catch (e) {
+            showOutput('icecastOutput', 'danger', 'Request failed: ' + e);
+        } finally {
+            setBtn(this, false);
+        }
+    });
+
+});
+</script>
+{% endblock %}

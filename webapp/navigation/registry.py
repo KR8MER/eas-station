@@ -439,6 +439,13 @@ _REPORTS = NavSection(
                     description="Signed-in users and their live sessions.",
                     permissions=(LOGS_VIEW,),
                 ),
+                NavItem(
+                    label="Firewall",
+                    icon="fas fa-shield-halved",
+                    endpoint="firewall.firewall_page",
+                    description="Host firewall baseline, LAN NTP and Icecast port rules, in one place.",
+                    permissions=(SYSTEM_CONFIGURE,),
+                ),
             ),
         ),
         NavGroup(

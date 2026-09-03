@@ -205,6 +205,7 @@ def _sanitize_value(value: Any) -> Any:
 def initialize_database():
     """Initialize database connection for configuration."""
     from app_core.extensions import db
+    from app_utils.secret_key import resolve_secret_key
     from flask import Flask
 
     # Create minimal Flask app for database access
@@ -217,6 +218,20 @@ def initialize_database():
 
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+    # app_core.crypto derives the encryption/pepper key used for
+    # encrypted-at-rest settings (e.g. IcecastSettings.source_password) from
+    # current_app.secret_key. This must resolve to the SAME key app.py uses,
+    # or this process can't decrypt values another process encrypted.
+    default_key_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.secret_key')
+    secret_key, used_fallback = resolve_secret_key(default_key_file)
+    if used_fallback:
+        logger.warning(
+            'SECRET_KEY is missing or using a placeholder value. '
+            'Using a runtime key shared with the web app; set SECRET_KEY in .env to '
+            'persist it across service restarts.'
+        )
+    app.secret_key = secret_key
 
     db.init_app(app)
 

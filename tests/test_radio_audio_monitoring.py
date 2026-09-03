@@ -19,6 +19,7 @@ Repository: https://github.com/KR8MER/eas-station
 
 import logging
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -340,6 +341,12 @@ def test_audio_stream_endpoint_uses_wav_mimetype(audio_app, authenticated_user):
                 )
                 self.status = AudioSourceStatus.RUNNING
                 self.error_message = None
+                # Registered into the real controller below, whose background
+                # health-monitor thread evaluates every source on an interval.
+                # A fresh _start_time keeps it inside the monitor's grace
+                # period for the test's lifetime, so the thread never reaches
+                # for stall-detection attributes this double doesn't have.
+                self._start_time = time.time()
 
             def start(self):  # pragma: no cover - not used in this test
                 self.status = AudioSourceStatus.RUNNING
@@ -350,6 +357,9 @@ def test_audio_stream_endpoint_uses_wav_mimetype(audio_app, authenticated_user):
 
             def get_audio_chunk(self, timeout: float = 0.2):
                 return np.zeros(1024, dtype=np.float32)
+
+            def is_quarantined(self) -> bool:
+                return False
 
         adapter = DummyAdapter()
         controller.add_source(adapter)
