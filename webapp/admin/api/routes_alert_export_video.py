@@ -19,8 +19,11 @@ Repository: https://github.com/KR8MER/eas-station
 
 from __future__ import annotations
 
-"""Animated GIF alert export -- split out of routes_alert_export.py once
+"""Animated video alert export -- split out of routes_alert_export.py once
 adding it pushed that module over the 400-line guidance (see AGENTS.md).
+
+Replaces an earlier GIF export (see git history / video_export.py's
+docstring for why) -- same route shape, MP4 instead of GIF.
 
 Shares _run_off_worker and _SOCIAL_IMAGE_RATIOS from routes_alert_export
 rather than duplicating them.
@@ -41,9 +44,9 @@ from .display_data import _extract_alert_display_data
 from .routes_alert_export import _run_off_worker, _SOCIAL_IMAGE_RATIOS
 
 
-@api_bp.route('/alerts/<int:alert_id>/export-image.gif')
-def alert_detail_gif(alert_id):
-    """Generate an animated GIF share card for a weather alert.
+@api_bp.route('/alerts/<int:alert_id>/export-image.mp4')
+def alert_detail_video(alert_id):
+    """Generate an animated MP4 share card for a weather alert.
 
     Reuses the same full-card composition as ``export-image.png``, once
     per cached radar-loop frame -- the header/info panels/footer stay
@@ -54,21 +57,23 @@ def alert_detail_gif(alert_id):
 
     Accepts the same ``ratio`` and ``scale`` query arguments as
     ``export-image.png`` (``format`` doesn't apply -- output is always
-    GIF). ``scale`` is capped at 2 here (see gif_export.GIF_MAX_SCALE).
+    MP4/H.264). ``scale`` is capped at 2 here (see
+    video_export.VIDEO_MAX_SCALE).
 
     Returns:
-        200 with the GIF bytes as an attachment.
+        200 with the MP4 bytes as an attachment.
         400 if the alert isn't a weather (category='Met') alert, has no
-        stored geometry, or no radar frames could be rendered.
+        stored geometry, no radar frames could be rendered, or ffmpeg
+        isn't installed.
     """
     try:
-        from app_utils.image_export import generate_alert_gif
+        from app_utils.image_export import generate_alert_video
         from app_core.location import get_location_settings
 
         alert = CAPAlert.query.get_or_404(alert_id)
 
         if alert.category != 'Met':
-            flash('Animated GIF export is only available for weather alerts.', 'error')
+            flash('Animated video export is only available for weather alerts.', 'error')
             return redirect(url_for('api.alert_detail', alert_id=alert_id))
 
         geom_json = db.session.query(
@@ -100,7 +105,7 @@ def alert_detail_gif(alert_id):
         except Exception:
             location_settings = {}
 
-        # Rendering up to ~15 full cards plus the GIF encode is well
+        # Rendering up to ~15 full cards plus the ffmpeg encode is well
         # beyond what's safe on the request greenlet -- see
         # _run_off_worker's docstring. Same fresh-session-per-thread
         # pattern as export-image.png.
@@ -112,19 +117,19 @@ def alert_detail_gif(alert_id):
         def _render():
             render_session = Session()
             try:
-                return generate_alert_gif(
+                return generate_alert_video(
                     alert, coverage_data, ipaws_data, location_settings, geom,
                     aspect_ratio=ratio, db_session=render_session, scale=scale,
                 )
             finally:
                 render_session.close()
 
-        gif_bytes = _run_off_worker(_render)
+        video_bytes = _run_off_worker(_render)
 
-        response = Response(gif_bytes, mimetype='image/gif')
+        response = Response(video_bytes, mimetype='video/mp4')
         safe_event = (alert.event or 'alert').replace(' ', '_').lower()
         response.headers['Content-Disposition'] = (
-            f'attachment; filename=alert_{alert_id}_{safe_event}_{ratio}.gif'
+            f'attachment; filename=alert_{alert_id}_{safe_event}_{ratio}.mp4'
         )
         response.headers['Cache-Control'] = 'no-cache'
         return response
@@ -133,6 +138,6 @@ def alert_detail_gif(alert_id):
         flash(str(exc), 'error')
         return redirect(url_for('api.alert_detail', alert_id=alert_id))
     except Exception as exc:
-        api_bp.logger.error('Error generating alert GIF: %s', exc, exc_info=True)
-        flash('Error generating animated GIF. Please try again.', 'error')
+        api_bp.logger.error('Error generating alert video: %s', exc, exc_info=True)
+        flash('Error generating animated video. Please try again.', 'error')
         return redirect(url_for('api.alert_detail', alert_id=alert_id))
