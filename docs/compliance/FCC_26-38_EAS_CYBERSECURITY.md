@@ -100,16 +100,30 @@ acting on it the moment a release lands.
 
 ### (3) Firewall / network segmentation
 
-`install.sh` configures UFW with a default-deny-incoming policy, opening
-only the ports the station actually needs (22, 80, 443, and optionally 8000
-for direct Icecast access) — Postgres (5432) stays closed to the network by
-default. `docs/security/SECURITY.md`'s fail2ban integration adds host-firewall
-enforcement on top of the application-level ban list. Tailscale integration
-(`webapp/admin/tailscale.py`, `templates/admin/tailscale.html`) offers a
-further option: administer the station over a private mesh network instead
-of exposing admin ports to the public Internet at all — a direct instance of
-"a network firewall or comparable network segmentation practice that limits
-remote management access to authorized devices and authorized users."
+✅ **In-app, one place**: `install.sh` configures UFW with a default-deny-incoming
+policy and the station's fixed baseline (22, 80, 443) during initial setup.
+Every port beyond that baseline — the LAN NTP server (UDP/123) and Icecast
+streaming (TCP, configured port) — is opened, scoped to specific subnets, and
+closed again entirely from **Settings → Firewall** (`webapp/admin/firewall.py`,
+`/admin/firewall`), with no SSH access required. This is the platform's direct
+implementation of "a network firewall ... that limits remote management access
+to authorized devices and authorized users": every rule an operator adds is
+CIDR-scoped (never a bare "open to the world" toggle short of the operator
+explicitly typing `0.0.0.0/0`), tagged so the UI can only ever modify rules it
+created itself, and requires the `system.configure` permission to change.
+
+That page also re-checks the UFW baseline itself and offers a one-click fix
+(`Apply Baseline Fix`) for a host that has drifted from install.sh's
+provisioning — e.g. a deployment provisioned before UFW auto-configuration
+existed, or one where the firewall was later disabled. `docs/security/SECURITY.md`'s
+fail2ban integration adds host-firewall enforcement of the ban list on top of
+this. Tailscale integration (`webapp/admin/tailscale.py`,
+`templates/admin/tailscale.html`) offers a further option: administer the
+station over a private mesh network instead of exposing admin ports to the
+public Internet at all.
+
+Postgres (5432) and Redis (6379) are never exposed through this page or
+`install.sh` — there is no rule type for them, by design.
 
 ## Operator checklist
 
@@ -117,7 +131,11 @@ Software support doesn't complete compliance by itself. To actually meet
 § 11.35(d):
 
 - [ ] Confirm UFW (or an equivalent firewall) is active and default-deny —
-      `sudo ufw status verbose`.
+      check **Settings → Firewall** in the web UI (or `sudo ufw status verbose`
+      directly), and click "Apply Baseline Fix" there if it reports drift.
+- [ ] Review every rule listed on **Settings → Firewall** (LAN NTP, Icecast)
+      and confirm each is scoped to a real subnet you control, never
+      `0.0.0.0/0`, unless you specifically intend that stream to be public.
 - [ ] If any admin port is intentionally exposed to the public Internet,
       consider migrating remote management to Tailscale instead.
 - [ ] Rotate any admin password last set before 2026-09-02 to a genuinely

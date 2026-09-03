@@ -157,7 +157,7 @@ class TestDetectLocalSubnets:
             '{"ifname": "eth0", "flags": ["BROADCAST", "UP"], '
             '"addr_info": [{"family": "inet", "local": "192.168.1.42", "prefixlen": 24}]}]'
         )
-        with patch("webapp.admin.ntp_server.subprocess.run", return_value=_proc(0, ip_json)):
+        with patch("app_core.network_info.subprocess.run", return_value=_proc(0, ip_json)):
             assert _detect_local_subnets() == ["192.168.1.0/24"]
 
     def test_ignores_ipv6_and_dedupes(self):
@@ -168,11 +168,11 @@ class TestDetectLocalSubnets:
             '{"family": "inet", "local": "10.0.0.6", "prefixlen": 24}'
             ']}]'
         )
-        with patch("webapp.admin.ntp_server.subprocess.run", return_value=_proc(0, ip_json)):
+        with patch("app_core.network_info.subprocess.run", return_value=_proc(0, ip_json)):
             assert _detect_local_subnets() == ["10.0.0.0/24"]
 
     def test_command_failure_returns_empty_list_not_raise(self):
-        with patch("webapp.admin.ntp_server.subprocess.run", side_effect=OSError("no ip binary")):
+        with patch("app_core.network_info.subprocess.run", side_effect=OSError("no ip binary")):
             assert _detect_local_subnets() == []
 
 

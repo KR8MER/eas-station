@@ -229,38 +229,6 @@ from app_core.logging_context import install_alert_filter as _install_alert_filt
 _install_alert_filter()
 
 
-def _load_or_generate_secret_key(key_file: str) -> str:
-    """Load the Flask secret key from *key_file*, or generate and persist a new one.
-
-    This ensures every Gunicorn worker process (which imports this module
-    independently without ``--preload``) uses the **same** secret key, preventing
-    session cookies signed by one worker from being rejected by another worker.
-
-    The key file is written with mode 0o600 (owner-read only) and is excluded
-    from version control via ``.gitignore``.
-    """
-    try:
-        if os.path.isfile(key_file):
-            with open(key_file, 'r') as _f:
-                _key = _f.read().strip()
-            if len(_key) >= 32:
-                return _key
-    except Exception as _read_err:
-        logger.debug("Could not read secret key file %s: %s", key_file, _read_err)
-
-    # Generate a new key and try to persist it atomically.
-    _key = secrets.token_hex(32)
-    try:
-        _tmp = key_file + '.tmp'
-        with open(_tmp, 'w') as _f:
-            _f.write(_key)
-        os.chmod(_tmp, 0o600)
-        os.replace(_tmp, key_file)
-        logger.info("Persisted runtime secret key to %s", key_file)
-    except Exception as _write_err:
-        logger.debug("Could not persist secret key to %s: %s", key_file, _write_err)
-    return _key
-
 # Add file handler to write logs to /var/log/eas-station/eas_station.log
 # (matches LOG_DIR created by install.sh for the eas-station service user)
 _log_dir = os.environ.get('EAS_LOG_DIR', '/var/log/eas-station')
@@ -584,21 +552,12 @@ _PUBLIC_PAGE_PREFIXES = (
 app.config['CSRF_SESSION_KEY'] = CSRF_SESSION_KEY
 
 # Require SECRET_KEY to be explicitly set (fail fast if missing or using default)
-_placeholder_secrets = {
-    '',
-    'dev-key-change-in-production',
-    'replace-with-a-long-random-string',
-}
-secret_key = os.environ.get('SECRET_KEY', '')
-if secret_key in _placeholder_secrets or len(secret_key) < 32:
+from app_utils.secret_key import resolve_secret_key  # noqa: E402
+
+_default_key_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.secret_key')
+secret_key, _secret_key_is_fallback = resolve_secret_key(_default_key_file)
+if _secret_key_is_fallback:
     _setup_mode_reasons.append('secret-key')
-    # Use a persistent key file so all Gunicorn workers share the same session key.
-    # Without this, each worker generates its own random key (no --preload), making
-    # sessions incompatible between workers and randomly logging users out.
-    _default_key_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.secret_key')
-    secret_key = _load_or_generate_secret_key(
-        os.environ.get('SECRET_KEY_FILE', _default_key_file)
-    )
     logger.warning(
         'SECRET_KEY is missing or using a placeholder value. '
         'Using a runtime key shared across workers; set SECRET_KEY in .env to '

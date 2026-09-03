@@ -764,6 +764,33 @@
                             </div>
                         </div>
 
+                        <!-- Firewall -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="firewallHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#firewallCollapse">
+                                    <i class="fas fa-shield-halved me-2"></i>Firewall
+                                </button>
+                            </h2>
+                            <div id="firewallCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p>The <strong>Firewall</strong> page (<strong>Reports → Security → Firewall</strong>, <code>/admin/firewall</code>) is the single place to open or close every host-firewall (UFW) port EAS Station™ manages — no SSH required. It replaced a mix of a manual <code>ufw allow 8000/tcp</code> instruction buried in a setup guide and an inline firewall widget on the NTP server settings page; both are now one page.</p>
+                                    <ul>
+                                        <li><strong>Host Firewall Baseline</strong> — reports whether UFW is active, default-deny-incoming, and has the fixed baseline (22 SSH, 80 HTTP, 443 HTTPS) allowed. <strong>Apply Baseline Fix</strong> reproduces <code>install.sh</code>'s own provisioning step on a host that has drifted from it — a deployment provisioned before UFW auto-configuration existed, or one where the firewall was later disabled or reconfigured by hand.</li>
+                                        <li><strong>LAN NTP Server (UDP/123)</strong> — list the subnet(s) (CIDR ranges or single IPs) allowed to query this host for time. Applying writes the chrony configuration <em>and</em> opens exactly those subnets at the firewall in one step; clearing the list disables serving and removes every rule this feature added. Detected local subnets are offered as one-click suggestions, never applied automatically — on a cloud host, an interface's own subnet is usually the provider's internal range, not your real LAN.</li>
+                                        <li><strong>Icecast Streaming (TCP, configured port)</strong> — the same pattern for the Icecast port configured in <strong>Icecast settings</strong>: list the subnet(s) that should be able to reach the stream, or <code>0.0.0.0/0</code> if the stream is meant to be public. Fixed the case where Icecast auto-streaming worked internally but was unreachable from any other device on the network because the port had never been opened at the host firewall.</li>
+                                    </ul>
+                                    <div class="alert alert-light mb-0">
+                                        <i class="fas fa-house-signal me-2"></i>
+                                        A rule added here only makes a port reachable on this LAN. If you also need it reachable from outside your network, your router's own NAT still has to forward the port separately — see <a href="/docs/troubleshooting/FIREWALL_REQUIREMENTS#router-port-forwarding-home--lab-networks">Router Port Forwarding</a> for which ports to forward and which to leave closed.
+                                    </div>
+                                    <div class="alert alert-light mb-0 mt-3">
+                                        <i class="fas fa-gavel me-2"></i>
+                                        This page is EAS Station™'s implementation of the network-segmentation control in <strong>FCC 26-38</strong> (47 CFR § 11.35(d)(3)) — see <a href="/docs/compliance/FCC_26-38_EAS_CYBERSECURITY#3-firewall--network-segmentation">FCC 26-38 EAS Cybersecurity Requirements</a> for the full compliance mapping and operator checklist.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Managing Boundaries and Alerts -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="boundariesHeading">

@@ -222,3 +222,15 @@ eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart chrony
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/chronyc -n clients
 eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw allow from * to any port 123 proto udp comment eas-station-ntp-server
 eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw delete allow from * to any port 123 proto udp
+
+# Icecast Streaming (Settings -> Firewall): lets an admin choose which
+# subnets can reach the Icecast port configured in Icecast settings. The
+# port itself is admin-configurable (default 8000, unlike NTP's fixed 123),
+# so the port position is also wildcarded here -- gated the same way as the
+# subnet position: only reachable through webapp.admin.firewall's
+# authenticated, system.configure-gated reconciliation, which always derives
+# the port from the current IcecastSettings row, and the `comment
+# eas-station-icecast` tag on the allow rule still scopes reconciliation to
+# rules this feature created, same as the NTP entries above.
+eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw allow from * to any port * proto tcp comment eas-station-icecast
+eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw delete allow from * to any port * proto tcp
