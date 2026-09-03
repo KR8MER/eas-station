@@ -9,7 +9,7 @@
 {% block content %}
 {% set header_icon = 'fas fa-satellite-dish' %}
 {% set header_title = 'Tickstem Uptime Monitor' %}
-{% set header_subtitle = 'Inbound uptime checks managed through the Tickstem Monitors API' %}
+{% set header_subtitle = 'Tickstem integration: inbound uptime checks and an outbound service-health heartbeat' %}
 {% include 'components/page_header.html' %}
 
 <div class="container-fluid">
@@ -114,6 +114,109 @@
                 </div>
             </div>
 
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h2 class="mb-0 h5"><i class="fas fa-heart-pulse"></i> Per-Service Heartbeats</h2>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info small">
+                        <i class="fas fa-circle-info"></i>
+                        A third direction, distinct from both sections above: this box pings <em>out</em> like the
+                        <a href="{{ url_for('heartbeat.heartbeat_settings') }}">Uptime Heartbeat</a> page, but one
+                        heartbeat per critical service (from the <a href="{{ url_for('system_health_page') }}">System
+                        Health</a> page), each pinged only while that specific service is active. No public URL
+                        needed. A missed ping names the exact service that failed, rather than only "something is
+                        wrong" the way one combined heartbeat's alert would.
+                    </div>
+
+                    {% if unmonitored_services %}
+                    <form id="createAllHeartbeatsForm" class="mb-3">
+                        <div class="alert alert-warning small py-2 mb-2">
+                            <i class="fas fa-triangle-exclamation"></i>
+                            Tickstem plans cap the number of heartbeats (the free tier allows 5 total, across
+                            everything in your account -- including the ones already created above). Pick only
+                            the services you most need alerted on if you're near that limit; creation stops
+                            cleanly the moment the quota is hit rather than failing repeatedly for the rest.
+                        </div>
+                        <div class="mb-2">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="selectAllUnmonitored">
+                                <label class="form-check-label small" for="selectAllUnmonitored">Select all {{ unmonitored_services | length }}</label>
+                            </div>
+                            {% for service_name in unmonitored_services %}
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input unmonitored-service-checkbox" value="{{ service_name }}" id="svc_{{ loop.index }}">
+                                <label class="form-check-label small font-monospace" for="svc_{{ loop.index }}">{{ service_name }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="row align-items-end">
+                            <div class="col-md-6 mb-2">
+                                <label for="new_heartbeat_interval_secs" class="form-label">Ping Interval (seconds)</label>
+                                <input type="number" class="form-control" id="new_heartbeat_interval_secs"
+                                       min="60" max="86400" value="300">
+                            </div>
+                            <div class="col-md-6 mb-2 text-md-end">
+                                <button type="submit" class="btn btn-primary" id="createAllHeartbeatsBtn" disabled>
+                                    <i class="fas fa-plus"></i> Monitor Selected Services
+                                </button>
+                            </div>
+                        </div>
+                        <div class="small mt-2" id="createAllHeartbeatsStatus"></div>
+                    </form>
+                    {% endif %}
+
+                    {% if service_heartbeats %}
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0" id="serviceHeartbeatsTable">
+                            <thead>
+                                <tr>
+                                    <th>Service</th>
+                                    <th>Status</th>
+                                    <th>Last Ping</th>
+                                    <th>Error</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in service_heartbeats %}
+                                <tr data-heartbeat-row-id="{{ row.id }}">
+                                    <td class="text-break-anywhere">{{ row.service_name }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if row.status == 'active' else ('warning' if row.status == 'paused' else 'danger') }}">
+                                            {{ (row.status or 'unknown') | capitalize }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {{ row.last_ping_at | localtime('%Y-%m-%d %H:%M:%S %Z', 'Never') }}
+                                        {% if row.last_ping_at %}({{ 'ok' if row.last_ping_success else 'failed' }}){% endif %}
+                                    </td>
+                                    <td class="text-danger small text-break-anywhere">{{ row.last_ping_error or '' }}</td>
+                                    <td class="text-end text-nowrap">
+                                        {% if row.status == 'paused' %}
+                                        <button type="button" class="btn btn-sm btn-outline-success service-heartbeat-resume" title="Resume">
+                                            <i class="fas fa-play"></i>
+                                        </button>
+                                        {% else %}
+                                        <button type="button" class="btn btn-sm btn-outline-warning service-heartbeat-pause" title="Pause">
+                                            <i class="fas fa-pause"></i>
+                                        </button>
+                                        {% endif %}
+                                        <button type="button" class="btn btn-sm btn-outline-danger service-heartbeat-delete" title="Delete">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% elif not unmonitored_services %}
+                    <p class="text-muted mb-0 small">Save a Tickstem API key above to monitor critical services individually.</p>
+                    {% endif %}
+                </div>
+            </div>
+
             {% if settings.monitor_id %}
             <div class="card mb-3">
                 <div class="card-header">
@@ -172,6 +275,41 @@
                         <li class="mb-0">
                             <strong>Last Error:</strong>
                             <div class="text-danger small text-break-anywhere">{{ settings.last_sync_error }}</div>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h2 class="mb-0 h5"><i class="fas fa-heart-pulse"></i> Service Heartbeat Status</h2>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2">
+                            <strong>Heartbeat:</strong>
+                            {% if settings.service_heartbeat_id %}
+                            <span class="badge bg-{{ 'success' if settings.service_heartbeat_status == 'active' else ('warning' if settings.service_heartbeat_status == 'paused' else 'danger') }}" id="serviceHeartbeatStatusBadge">
+                                {{ (settings.service_heartbeat_status or 'unknown') | capitalize }}
+                            </span>
+                            {% else %}
+                            <span class="badge bg-secondary" id="serviceHeartbeatStatusBadge">Not created</span>
+                            {% endif %}
+                        </li>
+                        <li class="mb-2">
+                            <strong>Last Ping:</strong>
+                            <small class="text-muted">
+                                {{ settings.last_service_heartbeat_at | localtime('%Y-%m-%d %H:%M:%S %Z', 'Never') }}
+                                {% if settings.last_service_heartbeat_at %}
+                                    ({{ 'succeeded' if settings.last_service_heartbeat_success else 'failed' }})
+                                {% endif %}
+                            </small>
+                        </li>
+                        {% if settings.last_service_heartbeat_error %}
+                        <li class="mb-0">
+                            <strong>Last Error:</strong>
+                            <div class="text-danger small text-break-anywhere">{{ settings.last_service_heartbeat_error }}</div>
                         </li>
                         {% endif %}
                     </ul>
@@ -275,6 +413,93 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const deleteBtn = document.getElementById('deleteBtn');
     if (deleteBtn) deleteBtn.addEventListener('click', () => monitorAction('delete', 'Delete this Tickstem monitor and its history?'));
+
+    const createAllHeartbeatsForm = document.getElementById('createAllHeartbeatsForm');
+    const createAllHeartbeatsStatus = document.getElementById('createAllHeartbeatsStatus');
+    const createAllHeartbeatsBtn = document.getElementById('createAllHeartbeatsBtn');
+    const selectAllUnmonitored = document.getElementById('selectAllUnmonitored');
+    const serviceCheckboxes = Array.from(document.querySelectorAll('.unmonitored-service-checkbox'));
+
+    function selectedServiceNames() {
+        return serviceCheckboxes.filter(cb => cb.checked).map(cb => cb.value);
+    }
+
+    function updateCreateAllButtonState() {
+        if (createAllHeartbeatsBtn) createAllHeartbeatsBtn.disabled = selectedServiceNames().length === 0;
+    }
+
+    serviceCheckboxes.forEach(cb => cb.addEventListener('change', updateCreateAllButtonState));
+
+    if (selectAllUnmonitored) {
+        selectAllUnmonitored.addEventListener('change', function() {
+            serviceCheckboxes.forEach(cb => { cb.checked = selectAllUnmonitored.checked; });
+            updateCreateAllButtonState();
+        });
+    }
+
+    if (createAllHeartbeatsForm) {
+        createAllHeartbeatsForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const serviceNames = selectedServiceNames();
+            if (!serviceNames.length) return;
+            if (createAllHeartbeatsBtn) createAllHeartbeatsBtn.disabled = true;
+            createAllHeartbeatsStatus.textContent = 'Creating heartbeats...';
+            try {
+                const resp = await fetch('/admin/tickstem/service-heartbeats/create-all', {
+                    method: 'POST', headers: csrfHeaders,
+                    body: JSON.stringify({
+                        service_names: serviceNames,
+                        interval_secs: document.getElementById('new_heartbeat_interval_secs').value,
+                    }),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    let msg = data.created.length
+                        ? 'Created heartbeats for: ' + data.created.join(', ')
+                        : 'No new heartbeats created';
+                    if (data.quota_reached) msg += ' -- Tickstem plan quota reached, stopped there.';
+                    showToast(msg, (data.errors.length || data.quota_reached) ? 'warning' : 'success');
+                    window.location.reload();
+                } else {
+                    let msg = data.errors.join('; ') || 'Failed to create heartbeats';
+                    if (data.quota_reached) msg = 'Tickstem plan quota reached -- ' + msg;
+                    createAllHeartbeatsStatus.innerHTML = '<span class="text-danger">' + msg + '</span>';
+                    if (createAllHeartbeatsBtn) createAllHeartbeatsBtn.disabled = false;
+                }
+            } catch (err) {
+                createAllHeartbeatsStatus.innerHTML = '<span class="text-danger">Request failed</span>';
+                if (createAllHeartbeatsBtn) createAllHeartbeatsBtn.disabled = false;
+            }
+        });
+    }
+
+    async function serviceHeartbeatRowAction(rowId, action, confirmMsg) {
+        if (confirmMsg && !confirm(confirmMsg)) return;
+        try {
+            const resp = await fetch('/admin/tickstem/service-heartbeats/' + rowId + '/' + action, {
+                method: 'POST', headers: csrfHeaders,
+            });
+            const data = await resp.json();
+            if (data.success) {
+                showToast('Done', 'success');
+                window.location.reload();
+            } else {
+                showToast(data.error || 'Action failed', 'danger');
+            }
+        } catch (err) {
+            showToast('Request failed', 'danger');
+        }
+    }
+
+    document.querySelectorAll('#serviceHeartbeatsTable tr[data-heartbeat-row-id]').forEach(function(row) {
+        const rowId = row.getAttribute('data-heartbeat-row-id');
+        const pauseBtn = row.querySelector('.service-heartbeat-pause');
+        const resumeBtn = row.querySelector('.service-heartbeat-resume');
+        const deleteBtn = row.querySelector('.service-heartbeat-delete');
+        if (pauseBtn) pauseBtn.addEventListener('click', () => serviceHeartbeatRowAction(rowId, 'pause'));
+        if (resumeBtn) resumeBtn.addEventListener('click', () => serviceHeartbeatRowAction(rowId, 'resume'));
+        if (deleteBtn) deleteBtn.addEventListener('click', () => serviceHeartbeatRowAction(rowId, 'delete', 'Delete this service heartbeat?'));
+    });
 
     const checksTable = document.getElementById('checksTable');
     if (checksTable) {
