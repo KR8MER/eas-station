@@ -791,6 +791,28 @@
                             </div>
                         </div>
 
+                        <!-- Settings Search -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="settingsSearchHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#settingsSearchCollapse">
+                                    <i class="fas fa-magnifying-glass me-2"></i>Search Settings
+                                </button>
+                            </h2>
+                            <div id="settingsSearchCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p>The search box at the top of the <strong>Settings</strong> hub (<code>/settings</code>) finds a setting by its <strong>field name or its currently-stored value</strong> — not just the label of the page it lives on. Typing a port number, hostname, or zone code shows exactly which field has it and which page to go to, with no need to remember which of the settings pages holds it.</p>
+                                    <ul>
+                                        <li>Matches both the settings page cards (by label/description) and individual fields within them, shown as a separate "matching fields" list — click a result to jump straight to that page.</li>
+                                        <li>Covers the pages backed by a simple field/value settings form (Icecast, TTS, Notifications, Hardware, Location &amp; Alert Filtering, and similar) — action or record pages like Backups, User Accounts, and Environment Variables aren't included, since there's nothing to match a stored "value" against.</li>
+                                    </ul>
+                                    <div class="alert alert-light mb-0">
+                                        <i class="fas fa-shield-alt me-2"></i>
+                                        Encrypted credentials — Icecast/SMTP/SNMP source passwords, API keys, VPN auth keys — are never included, searchable or not, regardless of what you type.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Managing Boundaries and Alerts -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="boundariesHeading">
