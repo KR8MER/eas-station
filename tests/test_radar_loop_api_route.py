@@ -209,6 +209,6 @@ def test_met_alert_with_geometry_builds_frames(client, met_alert_with_geom, logg
 
     assert resp.status_code == 200
     data = resp.get_json()
-    assert data["total"] == 11  # sent to expires, 5-min cadence, 50 min = 11 frames
+    assert data["total"] == 14  # 15-min lead-in (3 frames) + sent to expires, 5-min cadence, 50 min = 11 frames
     assert len(data["frames"]) > 0
     assert data["frames"][0]["url"].startswith(f"/static/radar_loops/{met_alert_with_geom}/")

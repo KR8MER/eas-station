@@ -73,6 +73,8 @@ def generate_alert_image(
     image_format: str = 'png',
     db_session: Any = None,
     scale: float = 1.0,
+    radar_time: Any = None,
+    radar_show_polygon: bool = True,
 ) -> bytes:
     """Generate a share-card image for *alert* in the requested aspect ratio.
 
@@ -101,6 +103,17 @@ def generate_alert_image(
             smaller on screen, which is the difference between a grainy
             and a clean card on Facebook.  The card is composed at the
             native canvas size and Lanczos-upscaled just before encode.
+        radar_time:        Optional timestamp overriding which radar frame
+            the map inset shows (default: the alert's own `sent` time).
+            Used by ``gif_export`` to re-render the same card once per
+            cached radar-loop frame, animating only the map while the
+            header/panels stay fixed.
+        radar_show_polygon: When False, the map inset centers on the
+            alert's eventual coverage area (unchanged) but omits the
+            polygon outline/fill and storm-motion overlay -- used by
+            ``gif_export`` for the lead-in frames that show what the
+            radar looked like *before* this alert existed, so a GIF
+            never implies the warning was active earlier than it was.
 
     Returns:
         Raw image bytes in the requested container.
@@ -361,12 +374,13 @@ def generate_alert_image(
                     )
             if geom_obj is not None:
                 map_img = _render_map(geom_obj, severity,
-                                      storm_motion=storm_motion,
+                                      storm_motion=storm_motion if radar_show_polygon else None,
                                       theme=theme,
                                       map_w=map_w, map_h=map_h,
                                       db_session=session,
                                       category=getattr(alert, 'category', None),
-                                      sent=getattr(alert, 'sent', None))
+                                      sent=radar_time or getattr(alert, 'sent', None),
+                                      show_polygon=radar_show_polygon)
     except Exception as exc:
         # The card is still rendered with a "Map not available" slot, but
         # leave a trace — a context/session error here is why an email or

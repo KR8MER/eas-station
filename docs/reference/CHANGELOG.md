@@ -8,6 +8,14 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.221.0] - 2026-09-03 - Animated GIF export for weather alerts
+
+- **New: animated GIF share card** for weather (`category='Met'`) alerts, alongside the existing static PNG/WebP export -- `/api/alerts/<id>/export-image.gif` (`ratio` query param, same four aspect ratios as the PNG export). Reachable from the alert detail page's Export Social Image menu.
+- The animation plays the radar in the ~15 minutes *before* the alert was issued, then reveals the warning polygon for the first time on the frame matching the alert's actual `sent` timestamp -- never earlier. A GIF can never imply a warning was active before it really was.
+- `app_utils/image_export/radar_loop.py`: added `RADAR_LOOP_LEADIN_MINUTES` (15) and a `show_polygon`/`issued` flag threaded through `build_radar_loop()` and `maps.py`'s `_render_map()`. The existing interactive Radar Loop viewer on the alert detail page picks up the same lead-in + polygon-reveal behavior automatically, since it's backed by the same function. `radar_loop_hires.py`'s Level II loop is unaffected -- the lead-in window is opt-in per caller (`_needed_timestamps(..., leadin_minutes=...)`), not baked into the shared timestamp helper.
+- New `app_utils/image_export/gif_export.py`: reuses `generate_alert_image()`'s full card composition once per radar-loop frame (only the map inset and polygon visibility change between frames), quantized against one shared colour palette so the static header/panels/footer don't flicker between frames.
+- New tests: `tests/test_image_export_gif.py`, plus updates to `tests/test_image_export_radar_loop.py` for the lead-in window.
+
 ## [2.220.0] - 2026-09-03 - Search Settings by field name and stored value
 
 - **New: search box on the Settings hub** (`/settings`) that matches a setting's field label ("Stream Bitrate") *and* its currently-stored value ("128") -- not just the label of the settings page it lives on, which is all the existing Ctrl+K command palette could do. Deliberately scoped to the Settings page's own content, not a global header search bar.
