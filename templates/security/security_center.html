@@ -135,6 +135,12 @@
             </button>
         </li>
         <li class="nav-item" role="presentation">
+            <button class="nav-link" id="edge-tab" data-bs-toggle="tab"
+                    data-bs-target="#edge-pane" type="button" role="tab">
+                <i class="fas fa-shield-halved"></i> Edge Defense
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
             <button class="nav-link" id="checkup-tab" data-bs-toggle="tab"
                     data-bs-target="#checkup-pane" type="button" role="tab">
                 <i class="fas fa-stethoscope"></i> Checkup
@@ -386,6 +392,57 @@
                         together rather than leaving a permanent entry behind.</p>
                     <div id="f2b-ssh-banned-list">
                         <p class="text-muted mb-0">No SSH bans.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ EDGE DEFENSE TAB ============ -->
+        <div class="tab-pane fade" id="edge-pane" role="tabpanel" aria-labelledby="edge-tab">
+            <div class="container">
+                <div class="admin-warning-box mb-3">
+                    <h3 class="mb-1 h5"><i class="fas fa-shield-halved"></i> Requests nginx rejected before the app ever saw them</h3>
+                    <p class="mb-0">Scanner-bait paths (<code>wp-admin</code>, <code>.env</code>, etc.), the
+                    Spamhaus/local <a href="/admin/application/#badActorsCard">bad-actor IP blocklist</a>, and
+                    per-IP rate limiting are all enforced by nginx itself -- these never reach the application, so
+                    they don't appear in Traffic or the Global Ban List above. Updated every ~2 minutes.</p>
+                </div>
+
+                <div class="admin-accent-card accent-danger mb-3">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                        <h2 class="mb-0 h4"><i class="fas fa-chart-column"></i> Last 24 Hours</h2>
+                        <button class="btn btn-sm btn-secondary" onclick="SC.loadEdgeDefense()">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                    <div id="edge-metrics" class="row g-2 text-center">
+                        <span class="text-muted small">Loading…</span>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <div class="admin-accent-card accent-danger h-100">
+                            <h2 class="mb-2 h5"><i class="fas fa-globe"></i> Top Blocked IPs (24h)</h2>
+                            <div id="edge-top-ips">
+                                <p class="text-center text-muted small">Loading…</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="admin-accent-card accent-danger h-100">
+                            <h2 class="mb-2 h5"><i class="fas fa-route"></i> Top Blocked Paths (24h)</h2>
+                            <div id="edge-top-paths">
+                                <p class="text-center text-muted small">Loading…</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="admin-accent-card accent-danger mb-4">
+                    <h2 class="mb-2 h4"><i class="fas fa-list"></i> Recent Events</h2>
+                    <div id="edge-recent-events">
+                        <p class="text-center text-muted small">Loading…</p>
                     </div>
                 </div>
             </div>

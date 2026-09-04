@@ -1319,6 +1319,21 @@ else
     echo_warning "systemd-journal group not found (systemd logs may not be accessible)"
 fi
 
+# Add service user to adm group so it can read nginx's access log (mode
+# 0640 www-data:adm) -- required by the security-perimeter-ingest timer
+# (app_core/analytics/security_blocks.py), which reads
+# eas-station-access.log to populate the Security Center "Edge Defense" tab.
+# adm is the conventional read-only log-access group on Debian; logrotate's
+# `create 0640 www-data adm` preserves this group ownership across rotation,
+# so this survives without any ongoing maintenance.
+echo_progress "Adding $SERVICE_USER to adm group for nginx log access..."
+if getent group adm >/dev/null 2>&1; then
+    usermod -a -G adm "$SERVICE_USER" 2>/dev/null || true
+    echo_success "adm group access configured"
+else
+    echo_warning "adm group not found (nginx access log may not be readable)"
+fi
+
 # Create installation directory
 echo_progress "Setting up installation directory: ${BOLD}$INSTALL_DIR${NC}"
 if [ ! -d "$INSTALL_DIR" ]; then
@@ -2481,6 +2496,10 @@ systemctl enable --now bad-actors-update.timer > /dev/null 2>&1 || \
     echo_warning "bad-actors-update.timer failed to enable"
 systemctl start bad-actors-update.service > /dev/null 2>&1 || \
     echo_warning "Initial known-bad-actor blocklist fetch failed (will retry on the daily timer)"
+# Edge Defense analytics (Security Center tab): tails the nginx access log
+# for the events the blocklist/scanner-bait/rate-limit rules above produce.
+systemctl enable --now security-perimeter-ingest.timer > /dev/null 2>&1 || \
+    echo_warning "security-perimeter-ingest.timer failed to enable"
 # Hardware subsystem units (Phase 4 split). The umbrella target Wants= these,
 # but transitively-wanted units don't get [Install] symlinks created — so
 # enable each one explicitly so they auto-start at boot independent of the

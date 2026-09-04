@@ -132,6 +132,8 @@ from ._models_displays import (
 # here so they register on the shared metadata and stay importable from
 # ``app_core.models`` like every other table.
 from app_core.analytics.web_traffic import TrafficAnalyticsSettings, WebRequestLog
+# Edge Defense (nginx-level perimeter blocks) analytics -- same reasoning.
+from app_core.analytics.security_blocks import SecurityPerimeterEvent, SecurityPerimeterIngestState
 
 # Wire the alert-correlation-ID auto-populate hook onto log-shaped tables.
 # Every INSERT to one of these tables made while a logging_context alert
