@@ -98,6 +98,7 @@ from ._models_settings import (
     HardwareSettings,
     IcecastSettings,
     LocationSettings,
+    MapTileSettings,
     NotificationSettings,
     TTSPronunciationRule,
     TTSSettings,

@@ -65,7 +65,7 @@ licenses at the time of writing; consult each project for authoritative terms.
 | **geoip2** / **maxminddb** | Country-level visitor geolocation (Traffic Analytics) | Apache-2.0 / MIT |
 | **Py-ART** (`arm_pyart`) | NEXRAD Level II radar decode + geographic PPI rendering for the weather-alert radar overlay (`app_utils/image_export/radar_level2.py`) | BSD-3-Clause |
 | **boto3** | Anonymous read access to NOAA's public Level II archive on AWS Open Data | Apache-2.0 |
-| **Cartopy** | Web Mercator projection for the radar overlay, matching the OSM basemap tiles it composites onto | BSD-3-Clause |
+| **Cartopy** | Web Mercator projection for the radar overlay, matching the basemap tiles (OpenStreetMap or CARTO) it composites onto | BSD-3-Clause |
 | **cmweather** | Registers the `NWSRef`/`NWSVel` reflectivity/velocity colormaps (the standard NWS scales) used to color the radar overlay | MIT |
 | **Matplotlib** | Rendering backend (headless Agg) for the radar overlay's geographic PPI plot | Matplotlib License (BSD-style) |
 
@@ -172,6 +172,8 @@ licenses at the time of writing; consult each project for authoritative terms.
 | **Iowa Environmental Mesonet** ([mesonet.agron.iastate.edu](https://mesonet.agron.iastate.edu/ogc/)) | NEXRAD Level III base reflectivity (WMS-T mosaic), the radar overlay's fallback when Level II isn't available | Public data, Iowa State University |
 | **NOAA Level II Archive on AWS Open Data** ([registry.opendata.aws/noaa-nexrad](https://registry.opendata.aws/noaa-nexrad/)) | Raw per-site NEXRAD volume scans for the radar overlay's primary (finer-detail) source | U.S. Government public data |
 | **NWS Radar Stations API** ([api.weather.gov/radar/stations](https://www.weather.gov/documentation/services-web-api)) | WSR-88D site coordinates, for picking the nearest radar to an alert | U.S. Government public data |
+| **OpenStreetMap** ([tile.openstreetmap.org](https://tile.openstreetmap.org/)) | Basemap raster tiles for the alert share-card map inset (default provider, no key needed) | © OpenStreetMap contributors, [ODbL](https://www.openstreetmap.org/copyright) |
+| **CARTO Basemaps** ([basemaps.cartocdn.com](https://carto.com/basemaps/apikey)) | Dark Matter basemap tiles for the share-card map inset (opt-in via Settings → Map Tiles, requires a free API key) | Free tier up to 5M tile requests/month; attribution required — see [carto.com/basemaps/apikey](https://carto.com/basemaps/apikey) |
 | **MaxMind GeoLite2** (operator-supplied) | Visitor geolocation in Traffic Analytics | CC BY-SA 4.0 (operator obtains DB) |
 | **NRSC-4-B / SAME, NWS VTEC, RBDS standards** | Protocol implementation references | Published industry standards |
 | **multimon-ng** | Decoding-parity cross-check (not bundled) | GPL-2.0 |

@@ -8,6 +8,31 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.224.0] - 2026-09-04 - Optional CARTO Dark Matter basemap for the share card
+
+- **New**: Settings -> Map Tiles (`/admin/map-tiles`) lets an operator switch the alert share-card
+  map inset from plain OpenStreetMap raster tiles (the zero-config default) to CARTO's Dark
+  Matter style. OSM tiles are darkened/desaturated in post (`tone_basemap()`) since they're
+  authored light and label-dense; CARTO's Dark Matter tiles are dark and minimal from the start,
+  so the result reads noticeably cleaner. Requires a free CARTO API key
+  ([carto.com/basemaps/apikey](https://carto.com/basemaps/apikey), 5M tile requests/month, no
+  approval queue) -- with no key configured, or if a tile fetch ever fails, rendering falls back
+  to OpenStreetMap automatically, so an unconfigured or bad key can never break the map.
+- New `MapTileSettings` model (`carto_api_key` encrypted at rest like every other stored
+  credential in this project) and `app_core/map_tile_settings.py` accessor, following the same
+  dual-path (Flask context / raw `db_session`) pattern this session's earlier fix
+  (`app_core/crypto.py`'s `SECRET_KEY` environment-variable fallback) made safe for the standalone
+  CAP poller to use too.
+- `app_utils/image_export/tiles.py`: tile cache keys (both the in-memory LRU and the on-disk
+  cache) now carry the provider, so switching providers can never serve a tile that was cached
+  under the other one for the same coordinate. `map_style.py` gained a `TONE_PRESET_DARK_NATIVE`
+  preset (near-identity color ops) for pre-darkened sources, alongside the existing OSM-tuned
+  defaults. The card's tile attribution is now computed once and reused for both the drawn text
+  and the county-label keep-out box, instead of a hand-maintained pixel-width literal.
+- New tests: `tests/test_map_tile_settings.py` (including a regression test reproducing the exact
+  "no Flask app context" bug shape from the earlier `app_core/crypto.py` fix), plus new coverage
+  in `tests/test_image_export_themes.py` and `tests/test_image_export_map_style.py`.
+
 ## [2.222.0] - 2026-09-03 - Replace animated GIF alert export with MP4 video
 
 - **Changed**: the animated share-card export for weather alerts (`/api/alerts/<id>/export-image.mp4`, reachable from the alert detail page's Export Social Image menu) is now an MP4 (H.264/yuv420p) instead of a GIF. Facebook and most other social platforms transcode an uploaded GIF into a silent looping MP4 on ingest anyway, so encoding straight to MP4 skips that lossy round-trip and sidesteps GIF's 256-colour palette entirely, which was producing visible banding/dithering on real radar reflectivity and multi-megabyte files for a ~10-frame loop.

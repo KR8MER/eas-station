@@ -140,6 +140,13 @@ SETTINGS_SECTION = NavSection(
                     permissions=(SYSTEM_VIEW_CONFIG,),
                 ),
                 NavItem(
+                    label="Map Tiles",
+                    icon="fas fa-map",
+                    href="/admin/map-tiles",
+                    description="Basemap provider for the alert share-card map inset (OpenStreetMap or CARTO Dark Matter).",
+                    permissions=(SYSTEM_CONFIGURE,),
+                ),
+                NavItem(
                     label="Mail Server",
                     icon="fas fa-envelope-open-text",
                     href="/admin/mail-server/",

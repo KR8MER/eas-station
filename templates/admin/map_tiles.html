@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}Map Tiles - Admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set header_icon = 'fas fa-map' %}
+{% set header_title = 'Map Tiles' %}
+{% set header_subtitle = 'Basemap provider for the alert share-card map inset' %}
+{% include 'components/page_header.html' %}
+
+<div class="admin-container" style="max-width: 900px">
+    <form id="mapTilesSettingsForm">
+        <div class="admin-form-section">
+            <h2 class="h4">Basemap Provider</h2>
+            <p class="text-muted small">
+                Controls the map background behind the polygon on exported alert share cards
+                (PNG/WebP/MP4 export, from an alert's <strong>Export Social Image</strong> menu).
+                Nothing else in the app -- the in-app Leaflet maps are unaffected.
+            </p>
+
+            <div class="mb-3">
+                <label for="provider" class="form-label">Provider</label>
+                <select class="form-control" id="provider" name="provider">
+                    <option value="osm" {% if settings.provider == 'osm' %}selected{% endif %}>
+                        OpenStreetMap (default, no key needed)
+                    </option>
+                    <option value="carto_dark" {% if settings.provider == 'carto_dark' %}selected{% endif %}>
+                        CARTO Dark Matter (recommended -- sharper, requires a free API key)
+                    </option>
+                </select>
+                <div class="form-text">
+                    OpenStreetMap tiles are darkened after the fact and can look busy/muddy at
+                    small map sizes. CARTO's Dark Matter style is authored dark and minimal from
+                    the start, so it reads far more cleanly on the share card. If CARTO is
+                    selected but no key is saved (or a tile fetch fails), rendering falls back to
+                    OpenStreetMap automatically -- an unconfigured or bad key never breaks the map.
+                </div>
+            </div>
+        </div>
+
+        <div class="admin-form-section" id="carto-section" style="display: none;">
+            <h2 class="h4">CARTO Dark Matter Settings</h2>
+            <div class="alert alert-info mb-3">
+                <i class="fas fa-circle-info"></i> <strong>Free API key required</strong><br>
+                CARTO's basemaps are free up to a generous fair-use limit (5 million tile
+                requests/month) with no approval queue -- request one at
+                <a href="https://carto.com/basemaps/apikey" target="_blank" rel="noopener">
+                    carto.com/basemaps/apikey</a>. Both OpenStreetMap and CARTO must be credited,
+                which the exported card does automatically.
+            </div>
+
+            <div class="mb-3">
+                <label for="carto_api_key" class="form-label">CARTO API Key</label>
+                <input type="password" class="form-control" id="carto_api_key" name="carto_api_key"
+                       value="" autocomplete="new-password"
+                       placeholder="{% if settings.carto_api_key_set %}•••••••••••••••••••• (leave blank to keep the current key){% else %}Paste your CARTO API key{% endif %}">
+                <div class="form-text">
+                    Stored encrypted in the database, never displayed once saved. Leave blank
+                    when saving other settings to keep the current key.
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i> Save Settings
+            </button>
+            <button type="button" class="btn btn-success" id="testProviderBtn">
+                <i class="fas fa-plug"></i> Test Connection
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="window.location.reload()">
+                <i class="fas fa-sync-alt"></i> Reset
+            </button>
+        </div>
+
+        <div class="alert mt-3" id="testResultAlert" style="display: none;"></div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateProviderSections() {
+    const provider = document.getElementById('provider').value;
+    document.getElementById('carto-section').style.display =
+        provider === 'carto_dark' ? '' : 'none';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    updateProviderSections();
+    document.getElementById('provider').addEventListener('change', updateProviderSections);
+});
+
+document.getElementById('mapTilesSettingsForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData.entries());
+
+    try {
+        const response = await fetch('/admin/api/map-tiles/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            showToast(result.message || 'Settings updated successfully', 'success');
+        } else {
+            showToast(result.error || 'Failed to update settings', 'error');
+        }
+    } catch (error) {
+        showToast('Error updating settings: ' + error.message, 'error');
+    }
+});
+
+document.getElementById('testProviderBtn').addEventListener('click', async function() {
+    const btn = this;
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Testing...';
+
+    const alertDiv = document.getElementById('testResultAlert');
+    alertDiv.style.display = 'none';
+
+    try {
+        const response = await fetch('/admin/api/map-tiles/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const result = await response.json();
+
+        alertDiv.className = 'alert mt-3 ' + (result.success ? 'alert-success' : 'alert-warning');
+        alertDiv.textContent = result.success ? result.message : result.error;
+        alertDiv.style.display = '';
+    } catch (error) {
+        alertDiv.className = 'alert mt-3 alert-danger';
+        alertDiv.textContent = 'Test failed: ' + error.message;
+        alertDiv.style.display = '';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    }
+});
+</script>
+{% endblock %}

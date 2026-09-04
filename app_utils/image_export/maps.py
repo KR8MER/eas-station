@@ -53,7 +53,7 @@ from .tiles import (
     _detail_zoom, _fetch_tile, _geojson_bbox, _lat_to_ty, _lon_to_tx,
 )
 from .map_style import (
-    apply_vignette, place_labels, tone_basemap,
+    apply_vignette, place_labels, tone_basemap, TONE_PRESET_DARK_NATIVE,
 )
 from .map_data import (  # noqa: F401  (re-exported for compatibility)
     _alert_same_codes, _fetch_county_outlines, _fetch_same_union_geom,
@@ -493,17 +493,44 @@ def _render_map(geom: Dict, severity: str,
     canvas_h = (ty_max - ty_min + 1) * TILE_SIZE
     canvas = Image.new('RGB', (canvas_w, canvas_h), (200, 200, 200))
 
+    # Settings -> Map Tiles: 'osm' (zero-config default) or 'carto_dark'
+    # (needs a free API key -- falls back to 'osm' when unset, see
+    # get_map_tile_settings()'s docstring for why this never raises).
+    # Imported lazily (like the CAPAlert import in render.py) so this
+    # package's tests, which load it via importlib to skip app_core's
+    # heavier dependencies (SQLAlchemy, psycopg2, ...), stay isolated.
+    from app_core.map_tile_settings import get_map_tile_settings
+    tile_provider, tile_api_key = get_map_tile_settings(db_session)
+
+    # Attribution text/position computed here (not down at the actual draw
+    # call, near the end of this function) because the county-label
+    # collision avoidance needs its keep-out box *before* the draw call
+    # runs -- computing the real string once and reusing its measured
+    # width for both means the keep-out box can never drift out of sync
+    # with a hand-maintained pixel literal the way it used to.
+    attr = ('© OpenStreetMap contributors, © CARTO' if tile_provider == 'carto_dark'
+            else '© OpenStreetMap contributors')
+    attr_fnt = fonts['tiny']
+    attr_aw, attr_ah = _tw(attr_fnt, attr), _th(attr_fnt, attr)
+    attr_ax, attr_ay = map_w - attr_aw - 5, map_h - attr_ah - 5
+
     for ty in range(ty_min, ty_max + 1):
         for tx in range(tx_min, tx_max + 1):
-            tile = _fetch_tile(tx, ty, z)
+            tile = _fetch_tile(tx, ty, z, provider=tile_provider, api_key=tile_api_key)
             if tile:
                 canvas.paste(tile, ((tx - tx_min) * TILE_SIZE, (ty - ty_min) * TILE_SIZE))
 
     # ── Tone the basemap ──────────────────────────────────────────────────
     # Done before any overlay is drawn so only the tiles are knocked back:
     # the polygon, storm cone and labels keep their full intensity and are
-    # the only saturated things on the map.
-    canvas = tone_basemap(canvas)
+    # the only saturated things on the map. CARTO's Dark Matter tiles are
+    # already dark and minimal -- tone_basemap()'s OSM-tuned defaults would
+    # over-darken them, so a dark-native source gets the light-touch preset
+    # instead (identity color ops, keeping only the card-color tint blend).
+    if tile_provider == 'carto_dark':
+        canvas = tone_basemap(canvas, **TONE_PRESET_DARK_NATIVE)
+    else:
+        canvas = tone_basemap(canvas)
 
     # ── Radar reflectivity overlay (weather alerts only) ──────────────────
     # Composited above the toned basemap but below the hazard polygon and
@@ -776,8 +803,8 @@ def _render_map(geom: Dict, severity: str,
     # map's own chrome.
     if county_labels:
         keep_out = [
-            (0, map_h - 44, 190, map_h),               # scale bar (lower-left)
-            (map_w - 210, map_h - 26, map_w, map_h),   # attribution (lower-right)
+            (0, map_h - 44, 190, map_h),                 # scale bar (lower-left)
+            (attr_ax - 2, attr_ay - 1, map_w, map_h),    # attribution (lower-right)
         ]
         if radar_legend_box is not None:
             keep_out.append(radar_legend_box)          # radar legend (upper-right)
@@ -791,12 +818,11 @@ def _render_map(geom: Dict, severity: str,
         place_labels(cropped, fonts, anchors, max_labels=7, avoid=keep_out)
         cd = ImageDraw.Draw(cropped)
 
-    # ── OSM attribution (required by tile usage policy) ───────────────────────
-    attr     = '\u00a9 OpenStreetMap contributors'
-    attr_fnt = fonts['tiny']
-    aw, ah   = _tw(attr_fnt, attr), _th(attr_fnt, attr)
-    ax, ay   = map_w - aw - 5, map_h - ah - 5
-    cd.rectangle((ax - 2, ay - 1, map_w - 3, map_h - 3), fill=(0, 0, 0))
-    cd.text((ax, ay), attr, font=attr_fnt, fill=(200, 200, 200))
+    # ── Tile attribution (required by tile usage policy) ──────────────────────
+    # attr/attr_fnt/attr_ax/attr_ay were computed earlier (see the provider
+    # resolution above) so the county-label keep-out box can never drift
+    # out of sync with what's actually drawn here.
+    cd.rectangle((attr_ax - 2, attr_ay - 1, map_w - 3, map_h - 3), fill=(0, 0, 0))
+    cd.text((attr_ax, attr_ay), attr, font=attr_fnt, fill=(200, 200, 200))
 
     return cropped
