@@ -65,6 +65,7 @@ class IPFilterSource(Enum):
     FLOOD = 'flood'                         # Request flooding
     API_ABUSE = 'api_abuse'                 # API abuse
     STREAM_ABUSE = 'stream_abuse'           # Stream abuse
+    HTTPBL = 'httpbl'                       # Project Honeypot http:BL reputation hit
 
 
 # Human-readable labels for ban sources (used by to_dict and the UI badges).
@@ -76,6 +77,7 @@ IP_FILTER_SOURCE_LABELS = {
     IPFilterSource.FLOOD.value: 'Flood',
     IPFilterSource.API_ABUSE.value: 'API Abuse',
     IPFilterSource.STREAM_ABUSE.value: 'Stream Abuse',
+    IPFilterSource.HTTPBL.value: 'Project Honeypot',
 }
 
 

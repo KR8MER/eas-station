@@ -1931,10 +1931,36 @@ if [ ! -f /etc/nginx/sites-available/eas-station ]; then
     
     # Enable site
     ln -sf /etc/nginx/sites-available/eas-station /etc/nginx/sites-enabled/
-    
+
     # Remove default site if it exists
     rm -f /etc/nginx/sites-enabled/default
-    
+
+    # The nginx config's `geo $bad_actor` block (known-bad-actor IP
+    # blocklist, see scripts/update_bad_actors.sh) includes this file
+    # unconditionally -- nginx refuses to start if it's missing. Real
+    # content gets populated below once services are enabled; this
+    # placeholder just lets nginx come up in the meantime.
+    if [ ! -f /etc/nginx/bad-actors-auto.conf ]; then
+        echo "# placeholder -- populated by update_bad_actors.sh on first run" \
+            > /etc/nginx/bad-actors-auto.conf
+    fi
+
+    # Master on/off switch and allowlist for the same blocklist, managed by
+    # the Admin -> Application Settings "Bad Actor Blocklist" panel
+    # (webapp/admin/bad_actors.py). Also included unconditionally, so also
+    # need a placeholder before nginx's first start. Default: enabled, empty
+    # allowlist.
+    if [ ! -f /etc/nginx/bad-actors-switch.conf ]; then
+        echo 'map $host $bad_actor_switch { default 1; }' \
+            > /etc/nginx/bad-actors-switch.conf
+    fi
+    if [ ! -f /etc/nginx/bad-actors-allowlist.conf ]; then
+        {
+            echo "# Managed by Admin -> Application Settings -> Bad Actor Blocklist."
+            echo "# IPs/CIDRs here bypass the Spamhaus/local blocklist entirely."
+        } > /etc/nginx/bad-actors-allowlist.conf
+    fi
+
     # Test nginx configuration
     nginx -t && systemctl reload nginx
     echo_success "Nginx configured"
@@ -2447,6 +2473,14 @@ echo_step "Start EAS Station Services"
 echo_progress "Enabling services for automatic startup..."
 systemctl enable eas-station.target > /dev/null 2>&1
 systemctl enable nginx > /dev/null 2>&1
+# Known-bad-actor IP blocklist (Spamhaus DROP/EDROP): enable the daily
+# refresh timer, then run it once now so a fresh install is protected
+# immediately rather than starting from the placeholder and waiting for
+# the timer's first (up to ~24h-delayed) run.
+systemctl enable --now bad-actors-update.timer > /dev/null 2>&1 || \
+    echo_warning "bad-actors-update.timer failed to enable"
+systemctl start bad-actors-update.service > /dev/null 2>&1 || \
+    echo_warning "Initial known-bad-actor blocklist fetch failed (will retry on the daily timer)"
 # Hardware subsystem units (Phase 4 split). The umbrella target Wants= these,
 # but transitively-wanted units don't get [Install] symlinks created — so
 # enable each one explicitly so they auto-start at boot independent of the

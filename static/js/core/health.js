@@ -17,6 +17,12 @@
     // WebSocket subscription handle
     let wsUnsubscribe = null;
 
+    // /api/system_status is restricted to local-network/authenticated callers
+    // (see app.py LOCAL_API_GET_PATHS). This module loads on every page, so
+    // an anonymous visitor gets 401 here forever if we keep polling. Stop
+    // (and tear down the WS fallback interval) after the first 401.
+    let statusEndpointGated = false;
+
     /**
      * Update system status banner
      */
@@ -69,9 +75,22 @@
      * Check system health status
      */
     async function checkSystemHealth() {
+        if (statusEndpointGated) {
+            return;
+        }
         try {
             const fetchFunc = window.cachedFetch || fetch;
             const response = await fetchFunc('/api/system_status');
+
+            if (response.status === 401) {
+                statusEndpointGated = true;
+                if (wsUnsubscribe) {
+                    wsUnsubscribe();
+                    wsUnsubscribe = null;
+                }
+                return;
+            }
+
             const data = await response.json();
 
             const healthDot = document.getElementById('system-health-dot');

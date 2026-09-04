@@ -1,0 +1,13 @@
+[Unit]
+Description=Refresh nginx known-bad-actor IP blocklist (Spamhaus DROP/EDROP)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/eas-station/scripts/update_bad_actors.sh
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

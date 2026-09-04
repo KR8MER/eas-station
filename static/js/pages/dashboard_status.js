@@ -7,6 +7,13 @@
 (function () {
     const REFRESH_INTERVAL_MS = 30 * 1000;
 
+    // /api/eas-monitor/status is restricted to local-network/authenticated
+    // callers (see app.py LOCAL_API_GET_PATHS). An anonymous visitor on this
+    // public page will always get 401 here — retrying every interval forever
+    // just floods the server with calls that can never succeed. Stop after
+    // the first 401 for the rest of this page's lifetime.
+    let monitorTileGated = false;
+
     function setBadge(elementId, text, variant) {
         const el = document.getElementById(elementId);
         if (!el) {
@@ -26,7 +33,9 @@
     async function fetchJson(url) {
         const response = await fetch(url);
         if (!response.ok) {
-            throw new Error(`${url} responded with status ${response.status}`);
+            const error = new Error(`${url} responded with status ${response.status}`);
+            error.status = response.status;
+            throw error;
         }
         return response.json();
     }
@@ -43,6 +52,9 @@
     }
 
     async function refreshMonitorTile() {
+        if (monitorTileGated) {
+            return;
+        }
         try {
             const data = await fetchJson('/api/eas-monitor/status');
             if (data.running) {
@@ -56,6 +68,9 @@
             console.error('Dashboard status: failed to load EAS monitor status', error);
             setBadge('dash-stat-monitor-badge', 'Unknown', 'secondary');
             setText('dash-stat-monitor-sub', 'EAS Decoder');
+            if (error.status === 401) {
+                monitorTileGated = true;
+            }
         }
     }
 

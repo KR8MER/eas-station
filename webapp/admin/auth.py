@@ -138,6 +138,19 @@ def login():
     if request.method == 'POST':
         # Check IP filter first
         is_allowed, block_reason = IPFilter.is_ip_allowed(request.remote_addr)
+
+        # Project Honeypot http:BL reputation check (opt-in, see
+        # app_core.auth.httpbl -- Application Settings). A no-op when
+        # disabled/unconfigured. Folded into is_allowed/block_reason rather
+        # than its own branch so a fresh ban here is denied immediately,
+        # using the same "blocked IP" path below instead of duplicating it.
+        if is_allowed:
+            from app_core.auth.httpbl import check_httpbl_and_ban
+            httpbl_ban = check_httpbl_and_ban(request.remote_addr)
+            if httpbl_ban:
+                is_allowed = False
+                block_reason = 'Project Honeypot http:BL'
+
         if not is_allowed:
             error = 'Access denied. Your IP address has been blocked.'
             db.session.add(SystemLog(
