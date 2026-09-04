@@ -4587,6 +4587,33 @@ html:has(.modal.show) {
 .snr-s4 { background: #84cc16; }
 .snr-s5 { background: #3fb950; }
 
+/* Metric card - shared summary-tile style (promoted from identical per-page
+   CSS on the Analytics Dashboard and API Dashboard). */
+.metric-card {
+    background: var(--surface-color);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: var(--shadow-md);
+    margin-bottom: 20px;
+    border: 1px solid var(--border-color);
+}
+
+.metric-card h3 {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+}
+
+.metric-value {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.metric-value.is-error {
+    color: var(--danger-color);
+}
+
 /* Border Utilities */
 .border { border: 1px solid var(--border-color); }
 .border-0 { border: 0; }
