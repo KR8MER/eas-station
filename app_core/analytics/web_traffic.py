@@ -205,6 +205,15 @@ class WebRequestLog(db.Model):
     status_code = db.Column(db.Integer, nullable=False, index=True)
     response_time_ms = db.Column(db.Integer, nullable=True)
     content_length = db.Column(db.Integer, nullable=True)
+    # Flask's dotted view-function endpoint name (e.g.
+    # "webapp.admin.audio_ingest.routes_alerts.api_get_source"), NOT the raw
+    # path -- the API dashboard groups by this so /api/alerts/123 and
+    # /api/alerts/456 land in one bucket instead of fragmenting per ID. Same
+    # namespace app_utils.api_reference.compute_api_reference() keys routes by,
+    # so the two can be joined directly. Nullable: rows recorded before this
+    # column existed simply have no endpoint and are excluded from the
+    # per-route breakdown.
+    endpoint = db.Column(db.String(255), nullable=True, index=True)
 
     # Who / from where
     ip_address = db.Column(db.String(64), nullable=True, index=True)

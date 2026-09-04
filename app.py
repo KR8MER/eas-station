@@ -1623,6 +1623,7 @@ def _record_traffic(response) -> None:
             'timestamp': utc_now(),
             'method': request.method,
             'path': path[:512],
+            'endpoint': request.endpoint,
             'status_code': response.status_code,
             'response_time_ms': response_time_ms,
             'content_length': content_length,

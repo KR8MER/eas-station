@@ -747,6 +747,27 @@
                             </div>
                         </div>
 
+                        <!-- API Dashboard -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="apiDashboardHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#apiDashboardCollapse">
+                                    <i class="fas fa-gauge-high me-2"></i>API Dashboard
+                                </button>
+                            </h2>
+                            <div id="apiDashboardCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>Reports → Analytics → API Dashboard</strong> (<code>/api-dashboard</code>) shows live usage for every <code>/api/*</code> route: request volume, error rate, and p50/p95 latency, broken out per route rather than lumped into one number. It's the usage companion to <strong>API Reference</strong> (<code>/api-reference</code>), which documents what each route does but not how it's actually being used.</p>
+                                    <ul>
+                                        <li><strong>Summary cards</strong> — total requests, error rate, and p50/p95 latency for the selected window.</li>
+                                        <li><strong>Volume &amp; errors over time</strong> — a line chart of request count and error count, hourly for short windows and daily for longer ones.</li>
+                                        <li><strong>Routes table</strong> — sortable by requests, error rate, or latency, grouped by the same module grouping API Reference uses, with an auth badge showing whether the route requires a permission.</li>
+                                        <li><strong>Slowest routes &amp; top errors</strong> — quick call-outs for what's worth investigating first.</li>
+                                    </ul>
+                                    <p>Built entirely from data the server already records for the Traffic Analytics dashboard, so there's no extra instrumentation to enable — just pick a time window (24 hours to 90 days).</p>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Security Center -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="securityCenterHeading">

@@ -5,24 +5,8 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 <style>
-    .metric-card {
-        background: var(--surface-color);
-        border-radius: 12px;
-        padding: 20px;
-        box-shadow: var(--shadow-md);
-        margin-bottom: 20px;
-        border: 1px solid var(--border-color);
-    }
-    .metric-card h3 {
-        font-size: 1.1rem;
-        color: var(--text-secondary);
-        margin-bottom: 10px;
-    }
-    .metric-value {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: var(--primary-color);
-    }
+    /* .metric-card / .metric-card h3 / .metric-value are shared utilities in
+       static/css/styles.css -- this page only adds its own trend styling. */
     .metric-trend {
         font-size: 0.9rem;
         margin-top: 5px;

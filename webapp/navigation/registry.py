@@ -454,6 +454,13 @@ _REPORTS = NavSection(
                     href="/api-reference",
                     description="Live reference of every /api/* route, generated from this build.",
                 ),
+                NavItem(
+                    label="API Dashboard",
+                    icon="fas fa-gauge-high",
+                    href="/api-dashboard",
+                    description="Live request volume, latency and error rates for every /api/* route.",
+                    permissions=(LOGS_VIEW,),
+                ),
             ),
         ),
         NavGroup(

@@ -8,6 +8,13 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.226.0] - 2026-09-04 - API Dashboard
+
+- **New**: Reports -> Analytics -> API Dashboard (`/api-dashboard`) shows live request volume, latency (p50/p95/p99) and error rates for every `/api/*` route, broken out per route -- the usage companion to the existing static `API Reference` page, which documents routes but not how they're actually used. The Traffic Analytics dashboard only ever showed a single rolled-up "API hits" count; this is where that traffic gets broken out.
+- Needed no new request-timing instrumentation: every request already flows through `app.py`'s existing `before_request`/`after_request` hooks into `WebRequestLog` (async, buffered -- never a synchronous DB write on the request path). The one gap was that only the raw path was recorded, which would fragment a parameterized route like `/api/alerts/<id>` into one bucket per ID ever requested; `WebRequestLog` gained a nullable `endpoint` column (Flask's dotted view-function name) captured alongside it, in the same namespace `compute_api_reference()` already keys routes by, so usage data joins directly against each route's docstring/auth metadata.
+- New `app_core/analytics/api_stats.py` (per-route counts, error rates, latency percentiles -- computed in Python rather than a database-side `percentile_cont`, since the same code needs to run on PostgreSQL in production and SQLite in tests) and `webapp/routes_api_dashboard.py`. Latency percentiles use nearest-rank over sorted per-route response times.
+- New tests in `tests/test_api_stats.py`.
+
 ## [2.225.3] - 2026-09-04 - Push CARTO Dark Matter map detail further
 
 - **Changed**: the previous fix (2.225.1) made CARTO roads/labels survive the resize pipeline, but only just -- follow-up review against a live render wanted more headroom. `TONE_PRESET_DARK_NATIVE`'s brightness lift raised from 2.1 to 3.0 and contrast from 1.25 to 1.4, confirmed against the same live alert render: place labels (city names, township names) and road structure are now clearly legible throughout the map inset, not just in isolated spots, while the map still reads as a dark-mode basemap rather than washing toward OSM's brightness.

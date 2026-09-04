@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+
+{% block title %}API Dashboard - EAS Station™{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* .metric-card / .metric-card h3 / .metric-value / .metric-value.is-error
+       are shared utilities in static/css/styles.css. */
+    .chart-container {
+        position: relative;
+        height: 280px;
+        margin-top: 15px;
+    }
+    .api-table-card {
+        background: var(--surface-color);
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: var(--shadow-md);
+        border: 1px solid var(--border-color);
+        margin-bottom: 20px;
+    }
+    .api-table-card h3 {
+        font-size: 1.1rem;
+        color: var(--text-secondary);
+        margin-bottom: 15px;
+    }
+    .api-route-path {
+        font-family: var(--bs-font-monospace, monospace);
+        font-size: 0.85rem;
+    }
+    .api-auth-badge {
+        font-size: 0.7rem;
+        padding: 2px 6px;
+    }
+    #apiRouteTable th {
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+    }
+    #apiRouteTable th .fa-sort {
+        opacity: 0.35;
+        margin-left: 4px;
+    }
+    /* .empty-state-plain (borderless variant) is a shared utility in
+       static/css/styles.css. */
+</style>
+{% endblock %}
+
+{% block content %}
+{% set header_icon = 'fas fa-gauge-high' %}
+{% set header_title = 'API Dashboard' %}
+{% set header_subtitle = 'Live request volume, latency and error rates for every /api/* route' %}
+{% set header_actions %}
+    <select id="daysSelect" class="form-select form-select-sm d-inline-block w-auto me-2">
+        <option value="1">Last 24 hours</option>
+        <option value="7" selected>Last 7 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="90">Last 90 days</option>
+    </select>
+    <a href="/api-reference" class="btn btn-outline-light">
+        <i class="fas fa-plug me-1"></i>API Reference
+    </a>
+{% endset %}
+{% include 'components/page_header.html' %}
+
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-6 col-md-3">
+            <div class="metric-card">
+                <h3>Total Requests</h3>
+                <div class="metric-value" id="metricTotal">--</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="metric-card">
+                <h3>Error Rate</h3>
+                <div class="metric-value" id="metricErrorRate">--</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="metric-card">
+                <h3>p50 Latency</h3>
+                <div class="metric-value" id="metricP50">--</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="metric-card">
+                <h3>p95 Latency</h3>
+                <div class="metric-value" id="metricP95">--</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="api-table-card">
+                <h3>Request Volume &amp; Errors</h3>
+                <div class="chart-container">
+                    <canvas id="apiVolumeChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="api-table-card">
+                <h3>Routes</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle" id="apiRouteTable">
+                        <thead>
+                            <tr>
+                                <th data-sort="path">Route <i class="fas fa-sort"></i></th>
+                                <th data-sort="group">Group <i class="fas fa-sort"></i></th>
+                                <th data-sort="hits">Requests <i class="fas fa-sort"></i></th>
+                                <th data-sort="error_rate_pct">Error Rate <i class="fas fa-sort"></i></th>
+                                <th data-sort="p50_ms">p50 <i class="fas fa-sort"></i></th>
+                                <th data-sort="p95_ms">p95 <i class="fas fa-sort"></i></th>
+                                <th>Auth</th>
+                            </tr>
+                        </thead>
+                        <tbody id="apiRouteTableBody">
+                            <tr><td colspan="7" class="empty-state-plain">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="api-table-card">
+                <h3>Slowest Routes</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <tbody id="apiSlowestBody">
+                            <tr><td class="empty-state-plain">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="api-table-card">
+                <h3>Top Errors</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <tbody id="apiTopErrorsBody">
+                            <tr><td class="empty-state-plain">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Chart.js for visualizations (local to avoid CDN tracking prevention) -->
+<script src="{{ url_for('static', filename='vendor/chartjs/chart.min.js') }}"></script>
+<script>
+(function () {
+    'use strict';
+
+    const REFRESH_MS = 60000;
+    let volumeChart = null;
+    let sortState = { key: 'hits', dir: 'desc' };
+    let lastByRoute = [];
+
+    function getColorVar(varName) {
+        return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+    }
+
+    function fmtMs(ms) {
+        return ms == null ? '—' : ms + ' ms';
+    }
+
+    function renderMetrics(summary) {
+        document.getElementById('metricTotal').textContent = summary.total_requests.toLocaleString();
+        const errEl = document.getElementById('metricErrorRate');
+        errEl.textContent = summary.error_rate_pct + '%';
+        errEl.classList.toggle('is-error', summary.error_rate_pct > 5);
+        document.getElementById('metricP50').textContent = fmtMs(summary.p50_ms);
+        document.getElementById('metricP95').textContent = fmtMs(summary.p95_ms);
+    }
+
+    function renderVolumeChart(timeseries) {
+        const canvas = document.getElementById('apiVolumeChart');
+        if (!canvas || typeof Chart === 'undefined') return;
+        if (volumeChart) {
+            volumeChart.destroy();
+        }
+        volumeChart = new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: timeseries.labels,
+                datasets: [
+                    {
+                        label: 'Requests',
+                        data: timeseries.hits,
+                        borderColor: getColorVar('--primary-color'),
+                        backgroundColor: 'transparent',
+                        tension: 0.25,
+                    },
+                    {
+                        label: 'Errors',
+                        data: timeseries.errors,
+                        borderColor: getColorVar('--danger-color'),
+                        backgroundColor: 'transparent',
+                        tension: 0.25,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    y: { beginAtZero: true },
+                },
+            },
+        });
+    }
+
+    function authBadge(auth) {
+        if (!auth) {
+            return '<span class="badge bg-secondary api-auth-badge">Open</span>';
+        }
+        return '<span class="badge bg-warning text-dark api-auth-badge">Gated</span>';
+    }
+
+    function sortRoutes(rows) {
+        const { key, dir } = sortState;
+        const sorted = rows.slice().sort((a, b) => {
+            let av = a[key];
+            let bv = b[key];
+            if (av == null) av = key === 'path' || key === 'group' ? '' : -1;
+            if (bv == null) bv = key === 'path' || key === 'group' ? '' : -1;
+            if (typeof av === 'string') return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+            return dir === 'asc' ? av - bv : bv - av;
+        });
+        return sorted;
+    }
+
+    function renderRouteTable() {
+        const tbody = document.getElementById('apiRouteTableBody');
+        const rows = sortRoutes(lastByRoute);
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="empty-state-plain">No API traffic recorded in this window yet.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map((r) => `
+            <tr>
+                <td class="api-route-path">${escapeHtml(r.path || r.endpoint)}</td>
+                <td>${escapeHtml(r.group)}</td>
+                <td>${r.hits.toLocaleString()}</td>
+                <td>${r.error_rate_pct}%</td>
+                <td>${fmtMs(r.p50_ms)}</td>
+                <td>${fmtMs(r.p95_ms)}</td>
+                <td>${authBadge(r.auth)}</td>
+            </tr>
+        `).join('');
+    }
+
+    function renderSlowest(rows) {
+        const tbody = document.getElementById('apiSlowestBody');
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td class="empty-state-plain">No data yet.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map((r) => `
+            <tr>
+                <td class="api-route-path">${escapeHtml(r.endpoint)}</td>
+                <td class="text-end">${fmtMs(Math.round(r.avg_response_ms))}</td>
+            </tr>
+        `).join('');
+    }
+
+    function renderTopErrors(rows) {
+        const tbody = document.getElementById('apiTopErrorsBody');
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td class="empty-state-plain">No errors in this window.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map((r) => `
+            <tr>
+                <td class="api-route-path">${escapeHtml(r.endpoint)}</td>
+                <td><span class="badge bg-danger">${r.status_code}</span></td>
+                <td class="text-end">${r.hits.toLocaleString()}</td>
+            </tr>
+        `).join('');
+    }
+
+    function loadDashboard() {
+        const days = document.getElementById('daysSelect').value;
+        fetch(`/api/dashboard/api-stats?days=${encodeURIComponent(days)}`)
+            .then((resp) => resp.json())
+            .then((data) => {
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to load API dashboard');
+                }
+                renderMetrics(data.summary);
+                renderVolumeChart(data.timeseries);
+                lastByRoute = data.by_route || [];
+                renderRouteTable();
+                renderSlowest(data.slowest || []);
+                renderTopErrors(data.top_errors || []);
+            })
+            .catch((err) => {
+                if (window.showToast) {
+                    window.showToast('Could not load API dashboard: ' + err.message, 'error');
+                }
+            });
+    }
+
+    document.querySelectorAll('#apiRouteTable th[data-sort]').forEach((th) => {
+        th.addEventListener('click', () => {
+            const key = th.getAttribute('data-sort');
+            if (sortState.key === key) {
+                sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortState = { key, dir: 'desc' };
+            }
+            renderRouteTable();
+        });
+    });
+
+    document.getElementById('daysSelect').addEventListener('change', loadDashboard);
+
+    loadDashboard();
+    setInterval(loadDashboard, REFRESH_MS);
+})();
+</script>
+{% endblock %}
