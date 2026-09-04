@@ -65,6 +65,9 @@ def map_tiles_settings_page():
         return redirect(url_for('dashboard.admin'))
 
 
+_GENERIC_ERROR = "An internal error occurred. Check the server logs for details."
+
+
 @map_tiles_bp.route('/api/map-tiles/settings', methods=['GET'])
 @require_permission('system.configure')
 def get_settings():
@@ -78,7 +81,7 @@ def get_settings():
         return jsonify({"success": True, "settings": settings.to_dict()})
     except Exception as exc:
         logger.error(f"Failed to get map tile settings: {exc}")
-        return jsonify({"success": False, "error": str(exc)}), 500
+        return jsonify({"success": False, "error": _GENERIC_ERROR}), 500
 
 
 @map_tiles_bp.route('/api/map-tiles/settings', methods=['PUT'])
@@ -94,12 +97,19 @@ def update_settings():
         200 with {success, message, settings}.
         400 if provider isn't one of the recognized values.
     """
+    data: Dict[str, Any] = request.get_json() if request.is_json else request.form.to_dict()
+
+    # Validated (and rejected) here, before the try block below, so the
+    # 400 response never routes through an exception-message sink -- the
+    # error text is one of our own fixed strings, not derived from
+    # whatever the caller sent.
+    if 'provider' in data and data['provider'] not in _VALID_PROVIDERS:
+        return jsonify({
+            "success": False,
+            "error": f"Invalid provider. Must be one of: {', '.join(_VALID_PROVIDERS)}",
+        }), 400
+
     try:
-        data: Dict[str, Any] = request.get_json() if request.is_json else request.form.to_dict()
-
-        if 'provider' in data and data['provider'] not in _VALID_PROVIDERS:
-            raise BadRequest(f"Invalid provider. Must be one of: {', '.join(_VALID_PROVIDERS)}")
-
         settings = update_map_tile_settings(data)
 
         logger.info("Map tile settings updated successfully")
@@ -122,14 +132,10 @@ def update_settings():
             "settings": settings.to_dict(),
         })
 
-    except BadRequest as exc:
-        logger.warning(f"Bad request updating map tile settings: {exc}")
-        return jsonify({"success": False, "error": str(exc)}), 400
-
     except Exception as exc:
         logger.error(f"Failed to update map tile settings: {exc}")
         db.session.rollback()
-        return jsonify({"success": False, "error": str(exc)}), 500
+        return jsonify({"success": False, "error": _GENERIC_ERROR}), 500
 
 
 @map_tiles_bp.route('/api/map-tiles/test', methods=['POST'])
@@ -167,7 +173,7 @@ def test_provider():
 
     except Exception as exc:
         logger.error(f"Map tile provider test failed: {exc}")
-        return jsonify({"success": False, "error": str(exc)}), 500
+        return jsonify({"success": False, "error": _GENERIC_ERROR}), 500
 
 
 def register_map_tile_routes(app, logger):

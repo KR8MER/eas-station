@@ -22,6 +22,7 @@ import io
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 
@@ -733,8 +734,11 @@ def test_fetch_tile_falls_back_to_osm_when_carto_requested_without_key(monkeypat
     image_export._fetch_tile(1, 2, 3, provider='carto_dark', api_key=None)
 
     assert len(requested_urls) == 1
-    assert 'tile.openstreetmap.org' in requested_urls[0]
-    assert 'cartocdn' not in requested_urls[0]
+    # Exact host match (not a substring check) -- a naive `in` test here
+    # would itself be the "incomplete URL substring sanitization" pattern
+    # CodeQL flags in real validation code, even though this is only a
+    # test assertion.
+    assert urlparse(requested_urls[0]).hostname == 'tile.openstreetmap.org'
 
 
 def test_fetch_tile_uses_carto_url_when_key_present(monkeypatch):
