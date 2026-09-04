@@ -61,6 +61,7 @@ from app_core.models import (
     HeartbeatSettings,
     IcecastSettings,
     LocationSettings,
+    MapTileSettings,
     NotificationSettings,
     PollerSettings,
     TailscaleSettings,
@@ -104,6 +105,7 @@ SETTINGS_MODELS_BY_URL: dict[str, tuple[type, ...]] = {
     "/admin/notifications/": (NotificationSettings,),
     "/admin/icecast": (IcecastSettings,),
     "/admin/tts": (TTSSettings,),
+    "/admin/map-tiles": (MapTileSettings,),
     "/admin/tailscale": (TailscaleSettings,),
     "/admin/certbot": (CertbotSettings,),
 }

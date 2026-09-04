@@ -179,6 +179,38 @@ def test_tone_basemap_darkening_survives_the_contrast_step():
     assert darker < mean, "brightness has no effect at this contrast setting"
 
 
+def _dark_native_tile(size=(120, 120)):
+    """Stand-in for a CARTO Dark Matter tile: already dark and desaturated,
+    unlike _pastel_tile()'s stand-in for a raw OSM tile."""
+    return Image.new('RGB', size, (35, 38, 44))
+
+
+def test_tone_preset_dark_native_does_not_over_darken_an_already_dark_tile():
+    """tone_basemap()'s *default* params are tuned for a light OSM source
+    (see test_tone_basemap_darkens_and_desaturates above) -- applying them
+    to a tile that's already dark would over-darken it further. The
+    dark-native preset should leave brightness essentially unchanged."""
+    src = _dark_native_tile()
+    src_mean = sum(ImageStat.Stat(src).mean) / 3
+
+    default_out = image_export.tone_basemap(src)
+    preset_out = image_export.tone_basemap(src, **image_export.TONE_PRESET_DARK_NATIVE)
+
+    default_mean = sum(ImageStat.Stat(default_out).mean) / 3
+    preset_mean = sum(ImageStat.Stat(preset_out).mean) / 3
+
+    # Both darken somewhat (the preset's tint_strength=0.30 blend toward a
+    # dark slate still moves brightness a little even at identity color
+    # ops) -- the point is the *default* params darken a tile that was
+    # never pale to begin with much further than the preset does.
+    assert default_mean < src_mean
+    assert abs(preset_mean - src_mean) < abs(default_mean - src_mean), (
+        f"dark-native preset ({preset_mean:.0f}) should land closer to the "
+        f"source brightness ({src_mean:.0f}) than the OSM-tuned defaults "
+        f"({default_mean:.0f})"
+    )
+
+
 def test_vignette_darkens_edges_but_not_the_centre():
     flat = Image.new('RGB', (200, 200), (160, 160, 160))
     out = image_export.apply_vignette(flat)
@@ -253,7 +285,7 @@ def test_render_map_frames_the_polygon_across_the_slot(monkeypatch):
     helper alone.  Tiles are stubbed to the offline path, so the only
     near-white pixels are the polygon's casing stroke.
     """
-    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
+    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z, **kw: None)
     monkeypatch.setattr(maps_mod, "_fetch_county_outlines",
                         lambda *a, **k: [])
 

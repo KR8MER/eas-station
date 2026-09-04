@@ -47,6 +47,7 @@ from .icecast import register_icecast_routes
 from .certbot import register_certbot_routes
 from .tts import register_tts_routes
 from .tts_pronunciation import register_pronunciation_routes
+from .map_tiles import register_map_tile_routes
 from .local_authorities import register_local_authority_routes
 from .tailscale import register_tailscale_routes
 from .poller import poller_bp
@@ -93,6 +94,7 @@ def register(app, logger):
     register_icecast_routes(app, logger)  # Icecast streaming configuration
     register_certbot_routes(app, logger)  # Certbot/SSL certificate management
     register_tts_routes(app, logger)  # Text-to-Speech configuration
+    register_map_tile_routes(app, logger)  # Alert share-card basemap tile provider
     register_pronunciation_routes(app, logger)  # TTS pronunciation dictionary
     app.register_blueprint(poller_bp)  # Poller settings management
     logger.info("Poller settings routes registered")

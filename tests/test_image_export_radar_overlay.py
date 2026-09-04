@@ -171,7 +171,7 @@ _TEST_GEOM = {
 
 
 def test_render_map_fetches_radar_for_met_category(monkeypatch):
-    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
+    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z, **kw: None)
     monkeypatch.setattr(maps_mod, "_fetch_county_outlines", lambda *a, **k: [])
     calls = []
     monkeypatch.setattr(
@@ -193,7 +193,7 @@ def test_render_map_never_calls_level2(monkeypatch):
     Level II decode, which used a different resolution and color ramp and
     made the share card/loop look like a different storm than the live
     toggle for the same alert."""
-    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
+    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z, **kw: None)
     monkeypatch.setattr(maps_mod, "_fetch_county_outlines", lambda *a, **k: [])
 
     level2_calls = []
@@ -219,7 +219,7 @@ def test_render_map_never_calls_level2(monkeypatch):
 
 @pytest.mark.parametrize("category", [None, "Transport", "Safety", "Geo", "Other"])
 def test_render_map_skips_radar_for_non_met_categories(monkeypatch, category):
-    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
+    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z, **kw: None)
     monkeypatch.setattr(maps_mod, "_fetch_county_outlines", lambda *a, **k: [])
     calls = []
     monkeypatch.setattr(
@@ -235,7 +235,7 @@ def test_render_map_skips_radar_for_non_met_categories(monkeypatch, category):
 def test_render_map_survives_radar_fetch_failure(monkeypatch):
     """A missing radar layer must never break the share card -- it already
     renders fine without one (WMS error, no coverage, etc.)."""
-    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
+    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z, **kw: None)
     monkeypatch.setattr(maps_mod, "_fetch_county_outlines", lambda *a, **k: [])
     monkeypatch.setattr(maps_mod, "_fetch_radar_overlay", lambda *a, **k: None)
 

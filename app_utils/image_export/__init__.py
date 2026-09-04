@@ -134,7 +134,7 @@ from .weather_fx import (  # noqa: F401
 )
 
 from .map_style import (  # noqa: F401
-    apply_vignette, place_labels, tone_basemap,
+    apply_vignette, place_labels, tone_basemap, TONE_PRESET_DARK_NATIVE,
 )
 
 from .tiles import (  # noqa: F401

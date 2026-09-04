@@ -19,10 +19,19 @@ Repository: https://github.com/KR8MER/eas-station
 
 from __future__ import annotations
 
-"""OpenStreetMap tile projection, fetching and two-level caching.
+"""Basemap tile projection, fetching and two-level caching.
 
 Slippy-map projection maths, GeoJSON bbox/centroid/zoom selection, a bounded
 in-memory LRU and a disk-backed second level that survives worker restarts.
+
+Two raster tile providers are supported: plain OpenStreetMap (the
+zero-config default) and CARTO's Dark Matter style (requires a free API
+key configured via Settings -> Map Tiles -- see app_core.map_tile_settings)
+-- see maps.py's _render_map() for where the provider/key is resolved.
+Both are standard 256px XYZ tile pyramids, so the projection math and zoom
+selection below are provider-agnostic; only _fetch_tile()'s URL and the
+cache keys (which now carry the provider so switching providers can never
+serve a stale tile cached under the other one) know the difference.
 """
 
 import io
@@ -132,22 +141,27 @@ The renderer used to pick the integer zoom at which the bbox fit 1:1
     return best
 
 
-# ─── OSM tile fetch + cache ─────────────────────────────────────────────────
-# OpenStreetMap's tile-usage policy asks consumers to cache tiles aggressively;
-# every re-render of the same alert used to refetch up to 30 tiles.  This
-# bounded LRU keeps the most recently fetched tiles in memory so subsequent
-# renders within the same worker process answer instantly and stop hammering
-# tile.openstreetmap.org.  Tiles are immutable for our purposes (zoom level
-# pins the source pyramid), so caching is safe — only Pillow's underlying
-# bytes are kept; ``Image.copy()`` on read returns a fresh handle that
-# downstream code can crop/paste into without mutating the cached copy.
+# ─── Tile fetch + cache ─────────────────────────────────────────────────────
+# OpenStreetMap's tile-usage policy asks consumers to cache tiles aggressively
+# (CARTO's is no less strict); every re-render of the same alert used to
+# refetch up to 30 tiles.  This bounded LRU keeps the most recently fetched
+# tiles in memory so subsequent renders within the same worker process answer
+# instantly and stop hammering the tile host.  Tiles are immutable for our
+# purposes (zoom level pins the source pyramid), so caching is safe — only
+# Pillow's underlying bytes are kept; ``Image.copy()`` on read returns a
+# fresh handle that downstream code can crop/paste into without mutating the
+# cached copy.
+#
+# The cache key carries the provider (not just z/tx/ty) so switching
+# providers in Settings -> Map Tiles can never serve a tile that was cached
+# under the *other* provider for the same tile coordinate.
 
 _TILE_CACHE_MAX = 256
-_TILE_CACHE: "OrderedDict[Tuple[int, int, int], bytes]" = OrderedDict()
+_TILE_CACHE: "OrderedDict[Tuple[str, int, int, int], bytes]" = OrderedDict()
 _TILE_CACHE_LOCK = Lock()
 
 
-def _tile_cache_get(key: Tuple[int, int, int]) -> Optional[bytes]:
+def _tile_cache_get(key: Tuple[str, int, int, int]) -> Optional[bytes]:
     with _TILE_CACHE_LOCK:
         if key in _TILE_CACHE:
             _TILE_CACHE.move_to_end(key)
@@ -155,7 +169,7 @@ def _tile_cache_get(key: Tuple[int, int, int]) -> Optional[bytes]:
     return None
 
 
-def _tile_cache_put(key: Tuple[int, int, int], data: bytes) -> None:
+def _tile_cache_put(key: Tuple[str, int, int, int], data: bytes) -> None:
     with _TILE_CACHE_LOCK:
         _TILE_CACHE[key] = data
         _TILE_CACHE.move_to_end(key)
@@ -204,16 +218,16 @@ def _tile_disk_cache_dir() -> Optional[str]:
     return path
 
 
-def _tile_disk_path(key: Tuple[int, int, int]) -> Optional[str]:
+def _tile_disk_path(key: Tuple[str, int, int, int]) -> Optional[str]:
     """Filesystem path for a tile, or None when disk caching is disabled."""
     base = _tile_disk_cache_dir()
     if base is None:
         return None
-    z, tx, ty = key
-    return os.path.join(base, f'{z}_{tx}_{ty}.png')
+    provider, z, tx, ty = key
+    return os.path.join(base, f'{provider}_{z}_{tx}_{ty}.png')
 
 
-def _tile_disk_get(key: Tuple[int, int, int]) -> Optional[bytes]:
+def _tile_disk_get(key: Tuple[str, int, int, int]) -> Optional[bytes]:
     path = _tile_disk_path(key)
     if path is None or not os.path.isfile(path):
         return None
@@ -224,7 +238,7 @@ def _tile_disk_get(key: Tuple[int, int, int]) -> Optional[bytes]:
         return None
 
 
-def _tile_disk_put(key: Tuple[int, int, int], data: bytes) -> None:
+def _tile_disk_put(key: Tuple[str, int, int, int], data: bytes) -> None:
     path = _tile_disk_path(key)
     if path is None:
         return
@@ -244,8 +258,21 @@ def _tile_disk_put(key: Tuple[int, int, int], data: bytes) -> None:
             pass
 
 
-def _fetch_tile(tx: int, ty: int, z: int) -> Optional[Image.Image]:
-    key = (z, tx, ty)
+def _fetch_tile(tx: int, ty: int, z: int, *,
+                provider: str = 'osm', api_key: Optional[str] = None,
+                ) -> Optional[Image.Image]:
+    """Fetch (or return the cached copy of) one 256px raster tile.
+
+    Args:
+        provider: 'osm' (default) or 'carto_dark'. Unrecognized values,
+            or 'carto_dark' with no api_key, fall back to 'osm' -- a
+            misconfigured provider must never break map rendering.
+        api_key: CARTO API key, required for 'carto_dark'. Ignored for
+            'osm'.
+    """
+    if provider != 'carto_dark' or not api_key:
+        provider = 'osm'
+    key = (provider, z, tx, ty)
 
     # L1: in-process LRU.
     cached = _tile_cache_get(key)
@@ -274,8 +301,11 @@ def _fetch_tile(tx: int, ty: int, z: int) -> Optional[Image.Image]:
             except OSError:
                 pass
 
-    # L3: live OSM fetch.
-    url = f'https://tile.openstreetmap.org/{z}/{tx}/{ty}.png'
+    # L3: live fetch.
+    if provider == 'carto_dark':
+        url = f'https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{tx}/{ty}.png?key={api_key}'
+    else:
+        url = f'https://tile.openstreetmap.org/{z}/{tx}/{ty}.png'
     try:
         r = _http.get(
             url, timeout=4,

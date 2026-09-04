@@ -22,6 +22,7 @@ import io
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 
@@ -612,7 +613,7 @@ def test_tile_cache_returns_image_on_hit(monkeypatch):
     Image.new("RGB", (256, 256), (10, 20, 30)).save(buf, format="PNG")
     payload = buf.getvalue()
     image_export._tile_cache_clear()
-    image_export._tile_cache_put((5, 7, 11), payload)
+    image_export._tile_cache_put(("osm", 5, 7, 11), payload)
 
     calls = []
 
@@ -639,7 +640,7 @@ def test_tile_disk_cache_round_trips(monkeypatch, tmp_path):
     buf = io.BytesIO()
     Image.new("RGB", (256, 256), (60, 90, 120)).save(buf, format="PNG")
     payload = buf.getvalue()
-    image_export._tile_disk_put((9, 13, 21), payload)
+    image_export._tile_disk_put(("osm", 9, 13, 21), payload)
 
     # Network access would surface immediately as a test failure.
     monkeypatch.setattr(tiles_mod, "_http",
@@ -653,7 +654,7 @@ def test_tile_disk_cache_round_trips(monkeypatch, tmp_path):
     assert tile.size == (256, 256)
     # And after a hit, the L1 should be warm so a second fetch is
     # in-process only — verify by clearing the disk file and re-fetching.
-    disk_path = image_export._tile_disk_path((9, 13, 21))
+    disk_path = image_export._tile_disk_path(("osm", 9, 13, 21))
     assert disk_path and os.path.exists(disk_path)
     os.unlink(disk_path)
     tile2 = image_export._fetch_tile(13, 21, 9)
@@ -683,10 +684,81 @@ def test_tile_disk_cache_writes_after_http_fetch(monkeypatch, tmp_path):
     tile = image_export._fetch_tile(7, 11, 6)
     assert tile is not None
     # File should now exist in the disk cache.
-    path = image_export._tile_disk_path((6, 7, 11))
+    path = image_export._tile_disk_path(("osm", 6, 7, 11))
     assert path and os.path.isfile(path)
     with open(path, 'rb') as f:
         assert f.read() == payload
+
+
+def test_tile_cache_keys_are_namespaced_by_provider(monkeypatch, tmp_path):
+    """Two providers must never collide on the same (z, tx, ty) -- otherwise
+    switching Settings -> Map Tiles from OSM to CARTO (or back) could
+    silently keep serving whichever provider's tile got cached first."""
+    image_export._tile_cache_clear()
+    monkeypatch.setenv("EAS_TILE_CACHE_DIR", str(tmp_path))
+
+    osm_buf, carto_buf = io.BytesIO(), io.BytesIO()
+    Image.new("RGB", (256, 256), (10, 20, 30)).save(osm_buf, format="PNG")
+    Image.new("RGB", (256, 256), (200, 60, 60)).save(carto_buf, format="PNG")
+    osm_payload, carto_payload = osm_buf.getvalue(), carto_buf.getvalue()
+
+    image_export._tile_cache_put(("osm", 5, 7, 11), osm_payload)
+    image_export._tile_cache_put(("carto_dark", 5, 7, 11), carto_payload)
+    assert image_export._tile_cache_get(("osm", 5, 7, 11)) == osm_payload
+    assert image_export._tile_cache_get(("carto_dark", 5, 7, 11)) == carto_payload
+
+    image_export._tile_disk_put(("osm", 5, 7, 11), osm_payload)
+    image_export._tile_disk_put(("carto_dark", 5, 7, 11), carto_payload)
+    osm_path = image_export._tile_disk_path(("osm", 5, 7, 11))
+    carto_path = image_export._tile_disk_path(("carto_dark", 5, 7, 11))
+    assert osm_path != carto_path
+    assert image_export._tile_disk_get(("osm", 5, 7, 11)) == osm_payload
+    assert image_export._tile_disk_get(("carto_dark", 5, 7, 11)) == carto_payload
+
+
+def test_fetch_tile_falls_back_to_osm_when_carto_requested_without_key(monkeypatch):
+    """A misconfigured provider (carto_dark selected, no key saved) must
+    never break map rendering -- it silently renders as OSM instead."""
+    image_export._tile_cache_clear()
+    requested_urls = []
+
+    class _StubResp:
+        status_code = 200
+        content = b"\x89PNG\r\n\x1a\n" + b"\x00" * 8  # not decodable, fine -- we only check the URL
+
+    def _capture(url, **kwargs):
+        requested_urls.append(url)
+        return _StubResp()
+
+    monkeypatch.setattr(tiles_mod, "_http", type("X", (), {"get": staticmethod(_capture)})())
+    image_export._fetch_tile(1, 2, 3, provider='carto_dark', api_key=None)
+
+    assert len(requested_urls) == 1
+    # Exact host match (not a substring check) -- a naive `in` test here
+    # would itself be the "incomplete URL substring sanitization" pattern
+    # CodeQL flags in real validation code, even though this is only a
+    # test assertion.
+    assert urlparse(requested_urls[0]).hostname == 'tile.openstreetmap.org'
+
+
+def test_fetch_tile_uses_carto_url_when_key_present(monkeypatch):
+    image_export._tile_cache_clear()
+    requested_urls = []
+
+    class _StubResp:
+        status_code = 200
+        content = b"\x00" * 8
+
+    def _capture(url, **kwargs):
+        requested_urls.append(url)
+        return _StubResp()
+
+    monkeypatch.setattr(tiles_mod, "_http", type("X", (), {"get": staticmethod(_capture)})())
+    image_export._fetch_tile(1, 2, 3, provider='carto_dark', api_key='test-key-123')
+
+    assert len(requested_urls) == 1
+    assert 'basemaps.cartocdn.com/rastertiles/dark_all/3/1/2.png' in requested_urls[0]
+    assert 'key=test-key-123' in requested_urls[0]
 
 
 def test_tile_disk_cache_disabled_when_env_empty(monkeypatch):
@@ -923,7 +995,7 @@ def test_render_map_draws_counties_and_scale_bar(monkeypatch):
     """``_render_map`` overlays county outlines (when available) and a scale
     bar without network access — tiles are stubbed to the offline path."""
     # Force the offline tile path so the test never hits the network.
-    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
+    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z, **kw: None)
 
     # Stub a 3×3 grid of square "counties" around the alert polygon.
     def _fake_counties(min_lon, min_lat, max_lon, max_lat, db_session=None,
@@ -1010,7 +1082,7 @@ def test_generate_alert_image_uses_provided_db_session(monkeypatch):
     monkeypatch.setitem(sys.modules, "app_core.models", fake_models)
 
     # Force the offline tile path so the test never hits the network.
-    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
+    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z, **kw: None)
 
     geom = {
         "type": "Polygon",
@@ -1138,7 +1210,7 @@ def test_generate_alert_image_falls_back_to_same_county_union(monkeypatch):
 
     fake_models.CAPAlert = _FakeCAPAlert
     monkeypatch.setitem(sys.modules, "app_core.models", fake_models)
-    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z: None)
+    monkeypatch.setattr(maps_mod, "_fetch_tile", lambda tx, ty, z, **kw: None)
 
     session = _StubUnionSession()
 

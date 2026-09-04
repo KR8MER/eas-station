@@ -170,6 +170,7 @@ ENCRYPTED_COLUMNS = [
     ("tailscale_settings", "auth_key"),
     ("tickstem_settings", "api_key"),
     ("admin_users", "mfa_secret"),
+    ("map_tile_settings", "carto_api_key"),
 ]
 
 
