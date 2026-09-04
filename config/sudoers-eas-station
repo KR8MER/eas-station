@@ -234,3 +234,15 @@ eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw delete allow from * to any port 12
 # rules this feature created, same as the NTP entries above.
 eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw allow from * to any port * proto tcp comment eas-station-icecast
 eas-station ALL=(ALL) NOPASSWD: /usr/sbin/ufw delete allow from * to any port * proto tcp
+
+# Bad Actor Blocklist (Admin -> Application Settings): lets the web UI
+# manage the nginx-level Spamhaus/local IP blocklist added in
+# scripts/update_bad_actors.sh -- toggle it on/off, edit the allowlist, and
+# trigger an immediate Spamhaus DROP/EDROP refresh. See
+# webapp/admin/bad_actors.py. IPs/CIDRs are validated in Python before ever
+# reaching these commands. nginx -t / reload nginx are already granted above.
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/nginx/bad-actors-switch.conf
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/nginx/bad-actors-allowlist.conf
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl start bad-actors-update.service
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active bad-actors-update.service
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl show bad-actors-update.service *

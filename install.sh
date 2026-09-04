@@ -1945,6 +1945,22 @@ if [ ! -f /etc/nginx/sites-available/eas-station ]; then
             > /etc/nginx/bad-actors-auto.conf
     fi
 
+    # Master on/off switch and allowlist for the same blocklist, managed by
+    # the Admin -> Application Settings "Bad Actor Blocklist" panel
+    # (webapp/admin/bad_actors.py). Also included unconditionally, so also
+    # need a placeholder before nginx's first start. Default: enabled, empty
+    # allowlist.
+    if [ ! -f /etc/nginx/bad-actors-switch.conf ]; then
+        echo 'map $host $bad_actor_switch { default 1; }' \
+            > /etc/nginx/bad-actors-switch.conf
+    fi
+    if [ ! -f /etc/nginx/bad-actors-allowlist.conf ]; then
+        {
+            echo "# Managed by Admin -> Application Settings -> Bad Actor Blocklist."
+            echo "# IPs/CIDRs here bypass the Spamhaus/local blocklist entirely."
+        } > /etc/nginx/bad-actors-allowlist.conf
+    fi
+
     # Test nginx configuration
     nginx -t && systemctl reload nginx
     echo_success "Nginx configured"

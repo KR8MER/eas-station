@@ -205,6 +205,79 @@
                     </div>
                 </div>
 
+                <!-- Bad Actor Blocklist (own AJAX API, not part of this <form>'s submit) -->
+                <div class="card mb-3" id="badActorsCard">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h2 class="mb-0 h5"><i class="fas fa-shield-halved"></i> Bad Actor Blocklist</h2>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" role="switch" id="badActorsEnabled">
+                            <label class="form-check-label" for="badActorsEnabled">Enabled</label>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">
+                            nginx rejects requests from IPs on Spamhaus's DROP/EDROP list (hijacked and
+                            cybercrime-controlled netblocks) plus any manually added below, before they
+                            reach the application.
+                        </p>
+                        <div class="row mb-3">
+                            <div class="col-sm-6">
+                                <div class="small text-muted">Spamhaus list</div>
+                                <div><span class="badge bg-info" id="badActorsAutoCount">–</span> entries,
+                                    last updated <span id="badActorsAutoUpdated">–</span></div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="small text-muted">Local additions</div>
+                                <div><span class="badge bg-secondary" id="badActorsLocalCount">–</span> entries
+                                    (<code>config/bad-actors-local.conf</code>)</div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-outline-primary btn-sm mb-3" id="badActorsRefreshBtn">
+                            <i class="fas fa-rotate"></i> Update Spamhaus list now
+                        </button>
+
+                        <label class="form-label">Allowlist (bypasses the blocklist entirely)</label>
+                        <div class="input-group mb-2">
+                            <input type="text" class="form-control" id="badActorsAllowInput"
+                                   placeholder="IP address or CIDR, e.g. 203.0.113.5 or 203.0.113.0/24">
+                            <button type="button" class="btn btn-outline-secondary" id="badActorsAllowAddBtn">
+                                <i class="fas fa-plus"></i> Add
+                            </button>
+                        </div>
+                        <ul class="list-group" id="badActorsAllowList"></ul>
+                        <div class="form-text" id="badActorsAllowEmpty">No allowlist entries.</div>
+                    </div>
+                </div>
+
+                <!-- Project Honeypot http:BL -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h2 class="mb-0 h5"><i class="fas fa-user-secret"></i> Project Honeypot (http:BL)</h2>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">
+                            On login attempts, checks the visitor's IP against Project Honeypot's http:BL
+                            reputation service and auto-bans it if flagged as a harvester or comment spammer.
+                            Requires a free access key from
+                            <a href="https://www.projecthoneypot.org/" target="_blank" rel="noopener">projecthoneypot.org</a>.
+                        </p>
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" role="switch"
+                                   id="httpbl_enabled" name="httpbl_enabled"
+                                   {% if settings.httpbl_enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="httpbl_enabled">Enabled</label>
+                        </div>
+                        <label for="httpbl_api_key" class="form-label">Access key</label>
+                        <input type="password" class="form-control" id="httpbl_api_key" name="httpbl_api_key"
+                               placeholder="{% if settings.httpbl_api_key_set %}Configured — leave blank to keep it{% else %}Not configured{% endif %}"
+                               autocomplete="off">
+                        <div class="form-text">
+                            Write-only: the saved key is never shown here. Leave blank when saving other
+                            settings to keep the current key.
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Bootstrap Settings Notice -->
                 <div class="card mb-3 border-warning">
                     <div class="card-header bg-warning text-dark">
@@ -510,6 +583,155 @@ document.addEventListener('DOMContentLoaded', function() {
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalBtnText;
+        }
+    });
+
+    // ---- Bad Actor Blocklist (separate JSON API, webapp/admin/bad_actors.py) ----
+    const badActorsBase = '/admin/security/bad-actors';
+    const badActorsEnabled = document.getElementById('badActorsEnabled');
+    const badActorsRefreshBtn = document.getElementById('badActorsRefreshBtn');
+    const badActorsAllowInput = document.getElementById('badActorsAllowInput');
+    const badActorsAllowAddBtn = document.getElementById('badActorsAllowAddBtn');
+    const badActorsAllowList = document.getElementById('badActorsAllowList');
+    const badActorsAllowEmpty = document.getElementById('badActorsAllowEmpty');
+
+    function renderAllowlist(entries) {
+        badActorsAllowList.innerHTML = '';
+        badActorsAllowEmpty.style.display = entries.length ? 'none' : 'block';
+        entries.forEach(function(entry) {
+            const li = document.createElement('li');
+            li.className = 'list-group-item d-flex justify-content-between align-items-center';
+            const code = document.createElement('code');
+            code.textContent = entry;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-sm btn-outline-danger';
+            btn.innerHTML = '<i class="fas fa-trash"></i>';
+            btn.addEventListener('click', function() { removeAllowlistEntry(entry); });
+            li.appendChild(code);
+            li.appendChild(btn);
+            badActorsAllowList.appendChild(li);
+        });
+    }
+
+    function applyBadActorsStatus(s) {
+        badActorsEnabled.checked = !!s.enabled;
+        document.getElementById('badActorsAutoCount').textContent = s.auto_entry_count;
+        document.getElementById('badActorsAutoUpdated').textContent =
+            s.auto_last_updated ? new Date(s.auto_last_updated).toLocaleString() : 'never';
+        document.getElementById('badActorsLocalCount').textContent = s.local_entry_count;
+        renderAllowlist(s.allowlist || []);
+    }
+
+    fetch(badActorsBase + '/status', { headers: { 'Accept': 'application/json' } })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                applyBadActorsStatus(data);
+            } else {
+                showToast(data.error || 'Failed to load bad actor blocklist status', 'danger');
+            }
+        })
+        .catch(function(err) {
+            console.error('Error loading bad actor blocklist status:', err);
+            showToast('Error loading bad actor blocklist status', 'danger');
+        });
+
+    badActorsEnabled.addEventListener('change', async function() {
+        const enabled = badActorsEnabled.checked;
+        badActorsEnabled.disabled = true;
+        try {
+            const response = await fetch(badActorsBase + '/toggle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN },
+                body: JSON.stringify({ enabled: enabled })
+            });
+            const data = await response.json();
+            if (data.success) {
+                showToast(enabled ? 'Bad actor blocklist enabled' : 'Bad actor blocklist disabled', 'success');
+            } else {
+                badActorsEnabled.checked = !enabled;
+                showToast(data.error || 'Failed to change blocklist state', 'danger');
+            }
+        } catch (error) {
+            badActorsEnabled.checked = !enabled;
+            console.error('Error toggling bad actor blocklist:', error);
+            showToast('Error toggling bad actor blocklist', 'danger');
+        } finally {
+            badActorsEnabled.disabled = false;
+        }
+    });
+
+    badActorsRefreshBtn.addEventListener('click', async function() {
+        const originalHtml = badActorsRefreshBtn.innerHTML;
+        badActorsRefreshBtn.disabled = true;
+        badActorsRefreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating…';
+        try {
+            const response = await fetch(badActorsBase + '/update', {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': window.CSRF_TOKEN }
+            });
+            const data = await response.json();
+            if (data.success) {
+                showToast(data.message || 'Blocklist updated', 'success');
+                document.getElementById('badActorsAutoCount').textContent = data.auto_entry_count;
+                document.getElementById('badActorsAutoUpdated').textContent =
+                    data.auto_last_updated ? new Date(data.auto_last_updated).toLocaleString() : 'never';
+            } else {
+                showToast(data.error || 'Blocklist update failed', 'danger');
+            }
+        } catch (error) {
+            console.error('Error updating bad actor blocklist:', error);
+            showToast('Error updating bad actor blocklist', 'danger');
+        } finally {
+            badActorsRefreshBtn.disabled = false;
+            badActorsRefreshBtn.innerHTML = originalHtml;
+        }
+    });
+
+    async function removeAllowlistEntry(entry) {
+        try {
+            const response = await fetch(badActorsBase + '/allowlist', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN },
+                body: JSON.stringify({ entry: entry })
+            });
+            const data = await response.json();
+            if (data.success) {
+                renderAllowlist(data.allowlist);
+                showToast('Removed from allowlist', 'success');
+            } else {
+                showToast(data.error || 'Failed to remove entry', 'danger');
+            }
+        } catch (error) {
+            console.error('Error removing allowlist entry:', error);
+            showToast('Error removing allowlist entry', 'danger');
+        }
+    }
+
+    badActorsAllowAddBtn.addEventListener('click', async function() {
+        const entry = badActorsAllowInput.value.trim();
+        if (!entry) return;
+        badActorsAllowAddBtn.disabled = true;
+        try {
+            const response = await fetch(badActorsBase + '/allowlist', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN },
+                body: JSON.stringify({ entry: entry })
+            });
+            const data = await response.json();
+            if (data.success) {
+                renderAllowlist(data.allowlist);
+                badActorsAllowInput.value = '';
+                showToast('Added to allowlist', 'success');
+            } else {
+                showToast(data.error || 'Failed to add entry', 'danger');
+            }
+        } catch (error) {
+            console.error('Error adding allowlist entry:', error);
+            showToast('Error adding allowlist entry', 'danger');
+        } finally {
+            badActorsAllowAddBtn.disabled = false;
         }
     });
 });

@@ -56,6 +56,8 @@ def _get_or_create_settings() -> ApplicationSettings:
             password_require_digits=False,
             password_require_special=False,
             password_expiration_days=0,
+            httpbl_enabled=False,
+            httpbl_api_key=None,
         )
         db.session.add(settings)
         db.session.commit()
@@ -78,6 +80,8 @@ def _fallback_application_settings():
         password_require_digits=False,
         password_require_special=False,
         password_expiration_days=0,
+        httpbl_enabled=False,
+        httpbl_api_key_set=False,
     )
 
 
@@ -190,6 +194,15 @@ def update_application_settings():
             return jsonify({'success': False, 'error': 'Invalid password expiration days value'}), 400
         settings.password_expiration_days = expiry_days
 
+        # Project Honeypot http:BL. Key field is write-only from the UI: a
+        # blank submission means "leave the existing key alone" (the form
+        # never round-trips the actual secret, see
+        # ApplicationSettings.httpbl_api_key_set), not "clear it".
+        settings.httpbl_enabled = request.form.get('httpbl_enabled') == 'on'
+        httpbl_api_key = request.form.get('httpbl_api_key', '').strip()
+        if httpbl_api_key:
+            settings.httpbl_api_key = httpbl_api_key
+
         db.session.commit()
 
         # Apply log level change immediately to the running process
@@ -224,6 +237,8 @@ def update_application_settings():
                 'password_require_digits': settings.password_require_digits,
                 'password_require_special': settings.password_require_special,
                 'password_expiration_days': settings.password_expiration_days,
+                'httpbl_enabled': settings.httpbl_enabled,
+                'httpbl_api_key_set': settings.httpbl_api_key_set,
             },
         )
 

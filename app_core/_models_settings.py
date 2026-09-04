@@ -1154,9 +1154,31 @@ class ApplicationSettings(db.Model):
     # Number of days before a password expires (0 = disabled)
 
     # ========================================================================
+    # Project Honeypot http:BL
+    # ========================================================================
+    httpbl_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    # Whether to query Project Honeypot's http:BL reputation DNSBL for
+    # login attempts (see app_core/auth/httpbl.py). Off by default: it's an
+    # opt-in feature requiring an account at projecthoneypot.org.
+
+    httpbl_api_key = db.Column(db.String(64), nullable=True)
+    # http:BL access key. Falls back to the HTTPBL_API_KEY environment
+    # variable when unset here, so a key dropped into .env before this
+    # setting existed keeps working.
+
+    # ========================================================================
     # Metadata
     # ========================================================================
     updated_at = db.Column(db.DateTime, nullable=True, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @property
+    def httpbl_api_key_set(self) -> bool:
+        """Whether an http:BL key is configured, without exposing the key itself.
+
+        Templates check this (not ``httpbl_api_key``) so the settings page
+        never has the secret in hand to accidentally render.
+        """
+        return bool(self.httpbl_api_key)
 
     def to_dict(self):
         """Convert model to dictionary."""
@@ -1173,6 +1195,11 @@ class ApplicationSettings(db.Model):
             "password_require_digits": self.password_require_digits,
             "password_require_special": self.password_require_special,
             "password_expiration_days": self.password_expiration_days,
+            "httpbl_enabled": self.httpbl_enabled,
+            # Never round-trip the actual key through the API -- just whether
+            # one is configured, so the settings page can show "configured"
+            # without ever displaying (or re-transmitting) the secret itself.
+            "httpbl_api_key_set": bool(self.httpbl_api_key),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
