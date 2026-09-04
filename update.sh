@@ -960,6 +960,21 @@ if [ -d "$INSTALL_DIR/systemd" ]; then
     systemctl enable --now eas-station-hardware.target >/dev/null 2>&1 || \
         echo_warning "eas-station-hardware.target failed to enable"
 
+    # Known-bad-actor IP blocklist (Spamhaus DROP/EDROP): enable the daily
+    # refresh timer -- enable --now is idempotent, safe on every update, same
+    # as the units above. Only trigger an immediate fetch if the list is
+    # still just the placeholder from the nginx-config step above (a
+    # deployment updating into this feature for the first time), so routine
+    # updates on a deployment that already has it configured don't force an
+    # extra Spamhaus fetch every time.
+    systemctl enable --now bad-actors-update.timer >/dev/null 2>&1 || \
+        echo_warning "bad-actors-update.timer failed to enable"
+    if grep -q "^# placeholder" /etc/nginx/bad-actors-auto.conf 2>/dev/null; then
+        echo_progress "First-time known-bad-actor blocklist fetch..."
+        systemctl start bad-actors-update.service >/dev/null 2>&1 || \
+            echo_warning "Initial known-bad-actor blocklist fetch failed (will retry on the daily timer)"
+    fi
+
     # Give the subsystems a beat to come up before we judge the target.
     sleep 2
     if systemctl is-active --quiet eas-station-hardware.target; then
@@ -1086,6 +1101,28 @@ fi
 
 # Update nginx configuration (only if changed)
 echo_step "Checking Nginx Configuration"
+
+# The nginx config's known-bad-actor blocklist (`geo $bad_actor` etc., see
+# scripts/update_bad_actors.sh) `include`s these three files unconditionally
+# -- nginx refuses to start (and `nginx -t` below refuses to pass) if any is
+# missing. A deployment updating from before this feature existed won't have
+# them yet, so create placeholders unconditionally, before the config swap,
+# the same way install.sh does for a fresh install. Real Spamhaus content
+# gets populated below once services are (re)enabled.
+if [ ! -f /etc/nginx/bad-actors-auto.conf ]; then
+    echo "# placeholder -- populated by update_bad_actors.sh on first run" \
+        > /etc/nginx/bad-actors-auto.conf
+fi
+if [ ! -f /etc/nginx/bad-actors-switch.conf ]; then
+    echo 'map $host $bad_actor_switch { default 1; }' \
+        > /etc/nginx/bad-actors-switch.conf
+fi
+if [ ! -f /etc/nginx/bad-actors-allowlist.conf ]; then
+    {
+        echo "# Managed by Admin -> Application Settings -> Bad Actor Blocklist."
+        echo "# IPs/CIDRs here bypass the Spamhaus/local blocklist entirely."
+    } > /etc/nginx/bad-actors-allowlist.conf
+fi
 
 if [ -f "$INSTALL_DIR/config/nginx-eas-station.conf" ]; then
     if [ -f /etc/nginx/sites-available/eas-station ]; then
