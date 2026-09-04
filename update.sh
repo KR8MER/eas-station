@@ -975,6 +975,12 @@ if [ -d "$INSTALL_DIR/systemd" ]; then
             echo_warning "Initial known-bad-actor blocklist fetch failed (will retry on the daily timer)"
     fi
 
+    # Edge Defense analytics (Security Center tab): tails the nginx access
+    # log for the events the blocklist/scanner-bait/rate-limit rules above
+    # produce. enable --now is idempotent, same as its neighbors above.
+    systemctl enable --now security-perimeter-ingest.timer >/dev/null 2>&1 || \
+        echo_warning "security-perimeter-ingest.timer failed to enable"
+
     # Give the subsystems a beat to come up before we judge the target.
     sleep 2
     if systemctl is-active --quiet eas-station-hardware.target; then
@@ -1078,6 +1084,19 @@ if [ -d "$INSTALL_DIR/systemd" ]; then
         echo_success "Hardware access groups configured (created $GROUPS_CREATED new groups)"
     else
         echo_success "Hardware access groups configured (all groups already existed)"
+    fi
+
+    # Add service user to adm group so it can read nginx's access log (mode
+    # 0640 www-data:adm) -- required by the security-perimeter-ingest timer,
+    # which reads eas-station-access.log to populate the Security Center
+    # "Edge Defense" tab. A deployment updating into this feature for the
+    # first time won't have this membership yet; usermod is idempotent.
+    echo_progress "Adding $SERVICE_USER to adm group for nginx log access..."
+    if getent group adm >/dev/null 2>&1; then
+        usermod -a -G adm "$SERVICE_USER" 2>/dev/null || true
+        echo_success "adm group access configured"
+    else
+        echo_warning "adm group not found (nginx access log may not be readable)"
     fi
 
     # Apply Argon ONE V5 config.txt settings if the Argon daemon is installed but the

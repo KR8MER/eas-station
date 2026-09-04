@@ -48,6 +48,7 @@
         'malicious-tab': loadAttempts,
         'bans-tab': loadIPFilters,
         'fail2ban-tab': loadFail2banStatus,
+        'edge-tab': loadEdgeDefense,
         'checkup-tab': loadCheckupStatus,
     };
     const loadedTabs = new Set();
@@ -84,6 +85,7 @@
             '#malicious': 'malicious-tab',
             '#bans': 'bans-tab',
             '#fail2ban': 'fail2ban-tab',
+            '#edge': 'edge-tab',
             '#checkup': 'checkup-tab',
         };
         const tabId = map[window.location.hash];
@@ -755,6 +757,97 @@
             .catch(error => notify('Error applying fix: ' + error, true));
     }
 
+    /* -------------------------------------------------------------- */
+    /* Edge Defense (nginx-level perimeter blocks)                     */
+    /* -------------------------------------------------------------- */
+
+    function loadEdgeDefense() {
+        fetch('/admin/security/edge-defense/summary')
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) throw new Error(data.error || 'Unknown error');
+                displayEdgeMetrics(data);
+                displayEdgeTopIps(data.top_ips_24h);
+                displayEdgeTopPaths(data.top_paths_24h);
+                displayEdgeRecentEvents(data.recent_events);
+            })
+            .catch(error => {
+                console.error('Error loading edge defense summary:', error);
+                document.getElementById('edge-metrics').innerHTML =
+                    '<span class="text-danger small">Error loading Edge Defense stats</span>';
+            });
+    }
+
+    function edgeMetricTile(label, value, badgeClass) {
+        return `
+            <div class="col-6 col-md-3">
+                <div class="p-2">
+                    <div class="h3 mb-0"><span class="admin-badge ${badgeClass}">${esc(String(value))}</span></div>
+                    <div class="small text-muted">${esc(label)}</div>
+                </div>
+            </div>`;
+    }
+
+    function displayEdgeMetrics(data) {
+        const c = data.counts_24h || {};
+        const blocklistState = data.blocklist_enabled ? 'admin-badge-success' : 'admin-badge-muted';
+        document.getElementById('edge-metrics').innerHTML =
+            edgeMetricTile('Scanner Bait Blocks', c.scanner_bait || 0, 'admin-badge-danger') +
+            edgeMetricTile('Bad Actor Blocklist Blocks', c.bad_actor_blocklist || 0, 'admin-badge-danger') +
+            edgeMetricTile('Rate Limited', c.rate_limited || 0, 'admin-badge-warning') +
+            `<div class="col-6 col-md-3">
+                <div class="p-2">
+                    <div class="h3 mb-0"><span class="admin-badge ${blocklistState}">${esc(String(data.blocklist_entry_count || 0))}</span></div>
+                    <div class="small text-muted">Blocklist Entries (${data.blocklist_enabled ? 'enabled' : 'disabled'})</div>
+                </div>
+            </div>`;
+    }
+
+    function displayEdgeTopIps(rows) {
+        const el = document.getElementById('edge-top-ips');
+        if (!rows || rows.length === 0) {
+            el.innerHTML = '<p class="text-center text-muted small mb-0">No blocked requests in the last 24 hours.</p>';
+            return;
+        }
+        el.innerHTML = '<table class="table table-sm mb-0"><tbody>' + rows.map(r => `
+            <tr>
+                <td class="admin-mono-badge">${esc(r.ip_address)}</td>
+                <td class="text-end">${esc(String(r.count))}</td>
+            </tr>`).join('') + '</tbody></table>';
+    }
+
+    function displayEdgeTopPaths(rows) {
+        const el = document.getElementById('edge-top-paths');
+        if (!rows || rows.length === 0) {
+            el.innerHTML = '<p class="text-center text-muted small mb-0">No blocked requests in the last 24 hours.</p>';
+            return;
+        }
+        el.innerHTML = '<table class="table table-sm mb-0"><tbody>' + rows.map(r => `
+            <tr>
+                <td><code>${esc(r.path)}</code></td>
+                <td class="text-end">${esc(String(r.count))}</td>
+            </tr>`).join('') + '</tbody></table>';
+    }
+
+    function displayEdgeRecentEvents(events) {
+        const el = document.getElementById('edge-recent-events');
+        if (!events || events.length === 0) {
+            el.innerHTML = '<p class="text-center text-muted small mb-0">No blocked requests recorded yet.</p>';
+            return;
+        }
+        el.innerHTML = '<div class="table-responsive"><table class="table table-sm mb-0"><thead><tr>' +
+            '<th>Time</th><th>IP</th><th>Reason</th><th>Method</th><th>Path</th></tr></thead><tbody>' +
+            events.map(e => `
+                <tr>
+                    <td data-label="Time">${esc(new Date(e.occurred_at).toLocaleString())}</td>
+                    <td data-label="IP" class="admin-mono-badge">${esc(e.ip_address)}</td>
+                    <td data-label="Reason"><span class="admin-badge admin-badge-danger">${esc(e.block_reason_label)}</span></td>
+                    <td data-label="Method">${esc(e.method || '')}</td>
+                    <td data-label="Path"><code>${esc(e.path || '')}</code></td>
+                </tr>`).join('') +
+            '</tbody></table></div>';
+    }
+
     // Export only the handlers referenced by inline onclick=.
     window.SC = {
         loadAttempts: loadAttempts,
@@ -775,5 +868,6 @@
         sshUnban: sshUnban,
         loadCheckupStatus: loadCheckupStatus,
         fixCheckupItem: fixCheckupItem,
+        loadEdgeDefense: loadEdgeDefense,
     };
 })();
