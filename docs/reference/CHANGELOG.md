@@ -8,6 +8,11 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.225.2] - 2026-09-04 - Fix Stream audio sources giving up permanently on HTTP 404
+
+- **Fixed**: a "Stream"-type audio source (`app_core/audio/sources.py`'s `StreamSourceAdapter`) treated an HTTP 404 from its URL identically to 401/403 -- a permanent, unrecoverable error that stops the restart loop for good until someone manually restarts the source. That's wrong for the common case of a Stream source relaying another Icecast source client (e.g. SDRTrunk pushing to its own mount on this server's Icecast): whichever side isn't running yet when the other one starts gets a 404 and, previously, gave up forever even after both sides came up. 404 now keeps retrying on the normal backoff, same as any other transient failure; only 401/403 (genuinely bad credentials) still stop the loop.
+- New tests in `tests/test_stream_auth.py`: `test_stderr_pump_marks_404_as_error_but_not_fatal` and `test_restart_retries_on_404_instead_of_stopping`.
+
 ## [2.225.1] - 2026-09-04 - Fix washed-out CARTO Dark Matter map detail
 
 - **Fixed**: the CARTO Dark Matter basemap (Settings -> Map Tiles) rendered with no visible roads, place labels, or landcover -- just solid black under the radar/county overlays. Root cause: CARTO's own linework sits only ~50-65 (out of 255) above its near-black background, and that low-contrast signal didn't survive the card's Lanczos tile-resize plus radar-overlay compositing, unlike OSM's much higher-contrast tiles. `TONE_PRESET_DARK_NATIVE` (`app_utils/image_export/map_style.py`) previously left brightness/contrast at identity on the theory that a dark-native source needs no darkening; it now applies a brightness lift (1.0 -> 2.1) and a mild contrast lift (1.0 -> 1.25) so the linework survives downstream resizing, confirmed against a real fetched CARTO tile and a full share-card render of a live alert.

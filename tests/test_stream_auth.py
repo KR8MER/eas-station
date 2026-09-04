@@ -129,6 +129,51 @@ def test_restart_skipped_when_auth_fatal():
     assert '403' in adapter.error_message
 
 
+def test_stderr_pump_marks_404_as_error_but_not_fatal():
+    """A 404 must surface as an ERROR status (so it's visible in the UI) but
+    NOT set _fatal_auth_error -- unlike bad credentials, a mount that
+    doesn't exist yet is a normal, recoverable condition for a Stream
+    source relaying another Icecast source client (e.g. SDRTrunk), and the
+    restart loop must keep retrying instead of giving up permanently."""
+    adapter = _make_adapter()
+
+    class _FakeStderr:
+        def __init__(self, lines):
+            self._lines = list(lines)
+
+        def readline(self):
+            return self._lines.pop(0) if self._lines else b''
+
+    class _FakeProcess:
+        def __init__(self, lines):
+            self.stderr = _FakeStderr(lines)
+
+    proc = _FakeProcess([
+        b"[http @ 0x55] HTTP error 404 Not Found\n",
+        b'',
+    ])
+    adapter._stderr_pump(proc)
+
+    assert adapter._fatal_auth_error is False
+    assert adapter.status == AudioSourceStatus.ERROR
+    assert '404' in (adapter.error_message or '')
+
+
+def test_restart_retries_on_404_instead_of_stopping():
+    adapter = _make_adapter()
+    adapter._last_http_error = '404 Not Found — stream URL does not exist (yet); will keep retrying.'
+    adapter.error_message = adapter._last_http_error
+    adapter._fatal_auth_error = False
+    adapter._last_restart = 0.0
+
+    launched = []
+    adapter._launch_ffmpeg_process = lambda: launched.append(True)
+
+    adapter._restart_ffmpeg_process('decoder exited')
+
+    assert launched == [True], "a 404 must not short-circuit the restart loop"
+
+
 def test_probe_status_mapping():
     from webapp.admin.audio_ingest import _describe_stream_status
     ok, msg = _describe_stream_status(200)

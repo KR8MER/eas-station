@@ -508,9 +508,15 @@ class StreamSourceAdapter(AudioSourceAdapter):
         # Last HTTP error captured from FFmpeg stderr (e.g. "403 Forbidden"), used to
         # surface authentication failures to the UI instead of generic messages.
         self._last_http_error: Optional[str] = None
-        # Set when the stream returns an unrecoverable auth/availability error
-        # (401/403/404). These do not fix themselves on retry, so we stop the
+        # Set when the stream returns an unrecoverable auth error (401/403).
+        # Bad credentials don't fix themselves on retry, so we stop the
         # restart loop and report ERROR instead of looping every few seconds.
+        # 404 is deliberately NOT included: a Stream source is often used to
+        # relay another Icecast source client (e.g. SDRTrunk) that mounts
+        # on its own schedule, so "the mount doesn't exist yet" is a normal,
+        # recoverable condition here, not a permanent misconfiguration --
+        # treating it as fatal created a deadlock where whichever side
+        # started first (or reconnected) permanently gave up on the other.
         self._fatal_auth_error = False
         self._resolved_stream_url: Optional[str] = None
         self._ffmpeg_process: Optional[subprocess.Popen] = None
@@ -565,7 +571,7 @@ class StreamSourceAdapter(AudioSourceAdapter):
             return ("403 Forbidden — stream requires authentication or is access "
                     "restricted (token, referrer, or geo/IP lock).")
         if code == 404:
-            return "404 Not Found — stream URL does not exist."
+            return "404 Not Found — stream URL does not exist (yet); will keep retrying."
         if code == 429:
             return "429 Too Many Requests — stream server is rate-limiting."
         if 400 <= code < 500:
@@ -652,9 +658,11 @@ class StreamSourceAdapter(AudioSourceAdapter):
             '-reconnect', '1',
             '-reconnect_streamed', '1',
             '-reconnect_on_network_error', '1',
-            # Retry only on transient server (5xx) errors. Auth/availability errors
-            # (401/403/404) are not retried so FFmpeg exits and the failure is
-            # surfaced to the UI instead of looping forever on a 403.
+            # FFmpeg itself only retries transient server (5xx) errors and exits
+            # on any 4xx -- for 401/403 that's final (see _fatal_auth_error,
+            # which stops our own restart loop too). For 404 our restart loop
+            # relaunches FFmpeg anyway on a short backoff, since a mount that
+            # doesn't exist yet is common when relaying another source client.
             '-reconnect_on_http_error', '5xx',
             '-reconnect_delay_max', '10',  # Increased from 5 for better backoff
             '-timeout', '30000000',  # 30 seconds in microseconds (FFmpeg expects microseconds: 30 × 1,000,000 = 30,000,000 µs)
@@ -902,11 +910,13 @@ class StreamSourceAdapter(AudioSourceAdapter):
                     friendly = self._describe_http_error(code)
                     self._last_http_error = friendly
                     self.error_message = friendly
-                    # Auth/availability errors won't recover on retry — mark fatal
-                    # so the restart loop stops instead of hammering the server.
-                    if code in (401, 403, 404):
+                    self.status = AudioSourceStatus.ERROR
+                    # Bad credentials won't recover on retry — mark fatal so the
+                    # restart loop stops instead of hammering the server. 404 is
+                    # excluded on purpose: see the _fatal_auth_error comment in
+                    # __init__ for why "mount doesn't exist yet" must keep retrying.
+                    if code in (401, 403):
                         self._fatal_auth_error = True
-                        self.status = AudioSourceStatus.ERROR
                     logger.warning(f"{self.config.name}: stream HTTP {code}: {friendly}")
                     continue
 
