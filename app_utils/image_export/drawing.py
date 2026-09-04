@@ -26,12 +26,12 @@ used by the map, the header, the info panels and the top-level renderer
 alike.
 """
 
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from .palette import (
-    WHITE, _CARD, _SECTION_BG,
+    WHITE, _CARD, _SECTION_BG, _TEXT_MUT, _TEXT_SEC,
 )
 from .fonts import (
     _th, _tw,
@@ -206,3 +206,40 @@ def _section_header(draw: ImageDraw.ImageDraw, fonts: Dict,
 def _card_row(draw: ImageDraw.ImageDraw, ix: int, iy: int, iw: int, h: int) -> None:
     """Fill a single card-row background."""
     draw.rectangle((ix, iy, ix + iw, iy + h - 1), fill=_CARD)
+
+
+def _draw_stat_box(draw: ImageDraw.ImageDraw, fonts: Dict,
+                   x: int, y: int, w: int, h: int, *,
+                   icon_fn: Callable[..., None], value: str, unit: str,
+                   label: str, color: Tuple[int, int, int]) -> None:
+    """Broadcast-style stat tile: small icon, a hero-sized value, its unit,
+    and a caption label -- e.g. a wind-gust or hail-size callout in the
+    narrow-column landscape layout (see panels.py's
+    _draw_hazard_stat_boxes). Unlike _draw_threats' side-by-side gauge
+    cards, this is sized for one box per row in a narrow column.
+
+    *icon_fn* is one of the small vector icon functions from icons.py
+    (``_ICON_FN['wind']``/``['hail']``/etc.) -- called as
+    ``icon_fn(draw, cx, cy, color)``.
+    """
+    cx = x + w // 2
+    draw.rounded_rectangle((x, y, x + w, y + h), radius=8,
+                           fill=_CARD, outline=color, width=1)
+
+    icon_cy = y + 20
+    icon_fn(draw, cx, icon_cy, color)
+
+    vfont = fonts['title']  # 30px bold -- hero-sized, reused rather than
+                            # adding a new font just for this
+    vw = _tw(vfont, value)
+    value_y = icon_cy + 16
+    draw.text((cx - vw // 2, value_y), value, font=vfont, fill=WHITE)
+
+    next_y = value_y + _th(vfont, value) + 2
+    if unit:
+        uw = _tw(fonts['small'], unit)
+        draw.text((cx - uw // 2, next_y), unit, font=fonts['small'], fill=_TEXT_SEC)
+        next_y += _th(fonts['small'], unit) + 4
+
+    lw = _tw(fonts['label'], label)
+    draw.text((cx - lw // 2, next_y), label, font=fonts['label'], fill=_TEXT_MUT)

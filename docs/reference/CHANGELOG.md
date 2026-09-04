@@ -8,6 +8,13 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.225.0] - 2026-09-04 - Broadcast-style landscape share card
+
+- **Changed**: the landscape (1200×630) alert share card is now a map-dominant broadcast-style graphic, modeled on RyanHallYall/WeatherWise-style warning cards -- the radar map now fills ~75% of the canvas (up from ~50%), with a narrow callout column carrying a bold "DESTRUCTIVE DAMAGE EXPECTED" / "CONSIDERABLE DAMAGE THREAT" box (for the two elevated NWS Impact-Based-Warning tiers), a TORNADO POSSIBLE pill, a hero-sized EXPIRES time, stacked WIND GUST / HAIL SIZE stat tiles, a one-line storm-motion readout, and the safety-instruction block (now titled "WHAT TO DO"). Square/portrait/story cards are unchanged for now.
+- This is a restyle, not new data: hail size, wind gust, tornado detection, and storm motion were already parsed (`webapp/admin/api/display_data.py`) and already rendered as gauge-style threat cards -- the new narrow column presents the same data as bold callouts/stat-boxes instead, since the wider gauge-card layout doesn't fit the narrower column. `render.py` switches between the two treatments based on the info panel's actual width (`layout.INFO_NARROW_MAX_W`), so a future wide-info layout keeps working unmodified.
+- New `app_utils/image_export/panels_broadcast.py` (the narrow-column drawers) and a new `_draw_stat_box` primitive in `drawing.py`; `app_utils/image_export/layout.py`'s landscape preset resized accordingly.
+- New tests in `tests/test_image_export_broadcast_panels.py`.
+
 ## [2.224.0] - 2026-09-04 - Optional CARTO Dark Matter basemap for the share card
 
 - **New**: Settings -> Map Tiles (`/admin/map-tiles`) lets an operator switch the alert share-card

@@ -349,9 +349,9 @@ def _draw_instruction(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     place", "evacuate if instructed" — so it gets a warning-yellow
     section header (visually distinct from the neutral event-coloured
     headers used for HEADLINE / DESCRIPTION) plus a thicker accent bar
-    on each row.  The header reads "ACTION" instead of "INSTRUCTIONS"
-    because "ACTION" is shorter and imperative — it tells the reader
-    *what this section is for*, not just *what's in it*.
+    on each row.  The header reads "WHAT TO DO" -- shorter and more
+    imperative than "INSTRUCTIONS", and matches the broadcast-style
+    graphics this section's narrow-column treatment is modeled on.
     """
     instr = (getattr(alert, 'instruction', '') or '').strip()
     if not instr or iy + 30 > bot:
@@ -378,7 +378,7 @@ def _draw_instruction(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     # a deeply-darkened amber preserves WCAG-style contrast against the
     # white label text.
     iy = _section_header(
-        draw, fonts, alr_clr, ix, iy, iw, 'ACTION',
+        draw, fonts, alr_clr, ix, iy, iw, 'WHAT TO DO',
         bg=_darken(_INSTR_ACCENT, 0.55),
         stripe=_INSTR_ACCENT,
     )

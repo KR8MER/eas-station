@@ -61,7 +61,9 @@ This package was split out of the former single-file
                 storm_overlay, theme, tiles
     radar_loop  maps
     panels_text drawing, fonts, nws_text, palette, text
-    panels      drawing, fonts, icons, nws_text, palette, panels_text
+    panels_broadcast  drawing, fonts, icons, palette, panels_text, text
+    panels      drawing, fonts, icons, nws_text, palette, panels_broadcast,
+                panels_text
     render      drawing, fonts, layout, logo, maps, palette, panels,
                 panels_text, text, theme, weather_fx
     video_export  palette, radar_loop, render
@@ -87,8 +89,8 @@ from .logo import (  # noqa: E402,F401
 
 from .layout import (  # noqa: F401
     BODY_H, CARD_CORNER_R, CORNER_R, FB_HEIGHT, FB_WIDTH, FOOTER_H,
-    HEADER_H, INFO_W, INFO_X, MAP_CORNER_R, MAP_H, MAP_W, TILE_SIZE,
-    _LAYOUTS, _LAYOUT_LANDSCAPE, _LAYOUT_PORTRAIT, _LAYOUT_SQUARE,
+    HEADER_H, INFO_NARROW_MAX_W, INFO_W, INFO_X, MAP_CORNER_R, MAP_H, MAP_W,
+    TILE_SIZE, _LAYOUTS, _LAYOUT_LANDSCAPE, _LAYOUT_PORTRAIT, _LAYOUT_SQUARE,
     _LAYOUT_STORY, _Layout,
 )
 
@@ -121,7 +123,7 @@ from .text import (  # noqa: F401
 )
 
 from .drawing import (  # noqa: F401
-    _card_row, _composite, _draw_pill, _round_image_corners,
+    _card_row, _composite, _draw_pill, _draw_stat_box, _round_image_corners,
     _section_header,
 )
 
@@ -173,6 +175,11 @@ from .icons import (  # noqa: F401
 from .panels_text import (  # noqa: F401
     _INSTR_ACCENT, _draw_description, _draw_instruction,
     _draw_labeled_segments, _draw_nws_headline, _wrap_text,
+)
+
+from .panels_broadcast import (  # noqa: F401
+    _damage_callout_tier, _draw_damage_callout, _draw_expires_block,
+    _draw_hazard_stat_boxes, _draw_storm_motion_line,
 )
 
 from .panels import (  # noqa: F401

@@ -26,9 +26,11 @@ threats, coverage, affected areas and the storm-motion compass.
 
 The prose sections — headline, description and action — live in the
 sibling :mod:`panels_text` module (they reason about NWS text conventions,
-so they sit next to the parser in :mod:`nws_text`) and are re-exported
-here so existing ``from .panels import _draw_description`` imports keep
-resolving.
+so they sit next to the parser in :mod:`nws_text`), and the narrow-column
+broadcast-style drawers (damage callout, EXPIRES block, stat boxes, storm
+motion one-liner) live in :mod:`panels_broadcast` — both are re-exported
+here so existing ``from .panels import _draw_description`` (etc.) imports
+keep resolving.
 """
 
 import math
@@ -50,6 +52,10 @@ from .nws_text import compact_area_desc
 from .panels_text import (  # noqa: F401  (re-exported for compatibility)
     _INSTR_ACCENT, _draw_description, _draw_instruction, _draw_labeled_segments,
     _draw_nws_headline, _wrap_text,
+)
+from .panels_broadcast import (  # noqa: F401  (re-exported for compatibility)
+    _damage_callout_tier, _draw_damage_callout, _draw_expires_block,
+    _draw_hazard_stat_boxes, _draw_storm_motion_line,
 )
 
 # ─── Threat gauge arcs ──────────────────────────────────────────────────────
