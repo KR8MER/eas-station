@@ -98,7 +98,7 @@ def tone_basemap(img: Image.Image, *,
 # ~50-65 signal into a range that survives downstream resampling, plus a
 # mild contrast lift to keep blacks from flattening back out along with it.
 TONE_PRESET_DARK_NATIVE: Dict[str, float] = dict(
-    saturation=1.0, brightness=2.1, contrast=1.25, tint_strength=0.30,
+    saturation=1.0, brightness=3.0, contrast=1.4, tint_strength=0.30,
 )
 
 

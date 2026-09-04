@@ -8,6 +8,10 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.225.3] - 2026-09-04 - Push CARTO Dark Matter map detail further
+
+- **Changed**: the previous fix (2.225.1) made CARTO roads/labels survive the resize pipeline, but only just -- follow-up review against a live render wanted more headroom. `TONE_PRESET_DARK_NATIVE`'s brightness lift raised from 2.1 to 3.0 and contrast from 1.25 to 1.4, confirmed against the same live alert render: place labels (city names, township names) and road structure are now clearly legible throughout the map inset, not just in isolated spots, while the map still reads as a dark-mode basemap rather than washing toward OSM's brightness.
+
 ## [2.225.2] - 2026-09-04 - Fix Stream audio sources giving up permanently on HTTP 404
 
 - **Fixed**: a "Stream"-type audio source (`app_core/audio/sources.py`'s `StreamSourceAdapter`) treated an HTTP 404 from its URL identically to 401/403 -- a permanent, unrecoverable error that stops the restart loop for good until someone manually restarts the source. That's wrong for the common case of a Stream source relaying another Icecast source client (e.g. SDRTrunk pushing to its own mount on this server's Icecast): whichever side isn't running yet when the other one starts gets a 404 and, previously, gave up forever even after both sides came up. 404 now keeps retrying on the normal backoff, same as any other transient failure; only 401/403 (genuinely bad credentials) still stop the loop.
