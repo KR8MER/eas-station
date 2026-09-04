@@ -8,6 +8,11 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.225.1] - 2026-09-04 - Fix washed-out CARTO Dark Matter map detail
+
+- **Fixed**: the CARTO Dark Matter basemap (Settings -> Map Tiles) rendered with no visible roads, place labels, or landcover -- just solid black under the radar/county overlays. Root cause: CARTO's own linework sits only ~50-65 (out of 255) above its near-black background, and that low-contrast signal didn't survive the card's Lanczos tile-resize plus radar-overlay compositing, unlike OSM's much higher-contrast tiles. `TONE_PRESET_DARK_NATIVE` (`app_utils/image_export/map_style.py`) previously left brightness/contrast at identity on the theory that a dark-native source needs no darkening; it now applies a brightness lift (1.0 -> 2.1) and a mild contrast lift (1.0 -> 1.25) so the linework survives downstream resizing, confirmed against a real fetched CARTO tile and a full share-card render of a live alert.
+- New regression test `test_tone_preset_dark_native_road_survives_the_map_inset_downscale` in `tests/test_image_export_map_style.py`, built from the real ~50-65 contrast measured off a live CARTO tile; the existing preset test was renamed and re-asserted to expect a brightness lift instead of "stays close to source," since identity color ops turned out to be the actual bug.
+
 ## [2.225.0] - 2026-09-04 - Broadcast-style landscape share card
 
 - **Changed**: the landscape (1200×630) alert share card is now a map-dominant broadcast-style graphic, modeled on RyanHallYall/WeatherWise-style warning cards -- the radar map now fills ~75% of the canvas (up from ~50%), with a narrow callout column carrying a bold "DESTRUCTIVE DAMAGE EXPECTED" / "CONSIDERABLE DAMAGE THREAT" box (for the two elevated NWS Impact-Based-Warning tiers), a TORNADO POSSIBLE pill, a hero-sized EXPIRES time, stacked WIND GUST / HAIL SIZE stat tiles, a one-line storm-motion readout, and the safety-instruction block (now titled "WHAT TO DO"). Square/portrait/story cards are unchanged for now.

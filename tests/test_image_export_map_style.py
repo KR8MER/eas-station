@@ -185,11 +185,34 @@ def _dark_native_tile(size=(120, 120)):
     return Image.new('RGB', size, (35, 38, 44))
 
 
-def test_tone_preset_dark_native_does_not_over_darken_an_already_dark_tile():
+def _dark_native_tile_with_thin_road(size=(512, 512), background=(8, 9, 11), road=(62, 62, 66)):
+    """A synthetic stand-in for a *real* CARTO Dark Matter tile's low
+    headroom: a near-black background with a single 1px-wide road line
+    only ~50-60 (out of 255) brighter than it -- the actual contrast a
+    live CARTO tile has (measured from a real fetched tile), unlike the
+    flat swatch _dark_native_tile() uses for the simpler brightness test
+    above."""
+    from PIL import ImageDraw
+
+    img = Image.new('RGB', size, background)
+    draw = ImageDraw.Draw(img)
+    draw.line([(0, size[1] // 2), (size[0], size[1] // 2)], fill=road, width=1)
+    return img
+
+
+def test_tone_preset_dark_native_lifts_a_low_contrast_dark_tile():
     """tone_basemap()'s *default* params are tuned for a light OSM source
     (see test_tone_basemap_darkens_and_desaturates above) -- applying them
-    to a tile that's already dark would over-darken it further. The
-    dark-native preset should leave brightness essentially unchanged."""
+    to a tile that's already dark darkens it further, which is backwards.
+
+    The dark-native preset needs to move the other way: CARTO's own
+    roads/labels sit only ~50-65 (out of 255) above its near-black
+    background, and that low-contrast signal doesn't survive the card's
+    tile resize + radar-overlay compositing -- it washes out to solid
+    black (a real regression caught from a live render). The preset's
+    brightness/contrast lift exists to pull that signal into a range
+    that does survive, so it should land clearly *brighter* than the
+    source, not merely "not darker"."""
     src = _dark_native_tile()
     src_mean = sum(ImageStat.Stat(src).mean) / 3
 
@@ -199,15 +222,50 @@ def test_tone_preset_dark_native_does_not_over_darken_an_already_dark_tile():
     default_mean = sum(ImageStat.Stat(default_out).mean) / 3
     preset_mean = sum(ImageStat.Stat(preset_out).mean) / 3
 
-    # Both darken somewhat (the preset's tint_strength=0.30 blend toward a
-    # dark slate still moves brightness a little even at identity color
-    # ops) -- the point is the *default* params darken a tile that was
-    # never pale to begin with much further than the preset does.
-    assert default_mean < src_mean
-    assert abs(preset_mean - src_mean) < abs(default_mean - src_mean), (
-        f"dark-native preset ({preset_mean:.0f}) should land closer to the "
-        f"source brightness ({src_mean:.0f}) than the OSM-tuned defaults "
-        f"({default_mean:.0f})"
+    assert default_mean < src_mean, "OSM-tuned defaults should darken a dark-native tile further"
+    assert preset_mean > src_mean, (
+        f"dark-native preset ({preset_mean:.0f}) should brighten a low-contrast "
+        f"dark-native tile ({src_mean:.0f}) so its linework survives downstream "
+        f"resizing/compositing"
+    )
+
+
+def test_tone_preset_dark_native_road_survives_the_map_inset_downscale():
+    """Regression test for a real bug: a CARTO Dark Matter share-card map
+    rendered as solid black with no visible roads/labels, because the
+    tile's thin, low-contrast linework (see _dark_native_tile_with_thin_road)
+    was washed out by the same Lanczos downscale maps.py uses to fit
+    stitched tiles to the card's exact map_rect pixel size -- OSM's much
+    higher-contrast tiles survive that resize; CARTO's did not until the
+    dark-native preset's brightness/contrast lift was added.
+
+    Downscaling first mimics maps.py's actual order of operations
+    (tone_basemap() runs on the already-stitched, already-resized canvas).
+    """
+    src = _dark_native_tile_with_thin_road()
+    downscaled = src.resize((128, 128), Image.LANCZOS)
+
+    background_mean = sum(ImageStat.Stat(Image.new('RGB', (8, 8), (8, 9, 11))).mean) / 3
+
+    default_out = image_export.tone_basemap(downscaled)
+    preset_out = image_export.tone_basemap(downscaled, **image_export.TONE_PRESET_DARK_NATIVE)
+
+    default_peak = max(ImageStat.Stat(default_out).extrema[c][1] for c in range(3))
+    preset_peak = max(ImageStat.Stat(preset_out).extrema[c][1] for c in range(3))
+
+    # The OSM-tuned defaults reproduce the bug: darkening an already-dark,
+    # already-thin line pushes its brightest surviving pixel close enough
+    # to the background that it reads as solid black.
+    assert default_peak - background_mean < 30, (
+        "sanity check: the OSM-tuned defaults should reproduce the washed-out bug "
+        "on this synthetic low-contrast tile"
+    )
+    # The dark-native preset must keep the road visibly above the background
+    # after the same downscale, or the map reads as featureless black again.
+    assert preset_peak - background_mean > 40, (
+        f"dark-native preset's brightest surviving road pixel ({preset_peak}) isn't "
+        f"far enough above the background ({background_mean:.0f}) to read as visible "
+        f"after the card's tile downscale"
     )
 
 

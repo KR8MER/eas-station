@@ -84,12 +84,21 @@ def tone_basemap(img: Image.Image, *,
 # that's already dark and desaturated (CARTO's Dark Matter style). Running
 # the same heavy darken/desaturate on an already-dark tile would over-darken
 # it and (via the mean-grey-seeking Contrast step) fight its own palette.
-# This preset keeps color ops at identity and only applies the tint blend,
-# which still earns its keep on a dark-native tile: it nudges CARTO's own
-# dark grey toward this card's specific slate so the map reads as part of
-# the card's colour world rather than a shade of dark that's merely close.
+#
+# An earlier version of this preset left brightness/contrast at identity,
+# reasoning that a dark-native source needs no darkening. That missed a
+# second problem: CARTO's own roads/labels sit only ~50-65 (out of 255)
+# above its near-black background -- a real but very low-contrast signal.
+# The card's Lanczos resize (stitched tiles -> exact map_rect pixels) and
+# the radar layer's alpha composite on top both survive fine on OSM's much
+# higher-contrast tiles, but wash CARTO's thin, low-contrast linework down
+# to imperceptible. The fix is not "add contrast" in tone_basemap()'s own
+# mean-grey-seeking sense (which fights a dark palette the same way it
+# would fight this) -- it's a brightness lift big enough to pull that
+# ~50-65 signal into a range that survives downstream resampling, plus a
+# mild contrast lift to keep blacks from flattening back out along with it.
 TONE_PRESET_DARK_NATIVE: Dict[str, float] = dict(
-    saturation=1.0, brightness=1.0, contrast=1.0, tint_strength=0.30,
+    saturation=1.0, brightness=2.1, contrast=1.25, tint_strength=0.30,
 )
 
 
