@@ -5175,6 +5175,8 @@
             updateCurrentTimeDisplay();
         }
 
+        let healthEndpointGated = false;
+
         async function refreshHealthData(showSpinner = false) {
             try {
                 if (showSpinner) {
@@ -5189,6 +5191,13 @@
                 });
 
                 if (!response.ok) {
+                    if (response.status === 401) {
+                        // /api/system_health is restricted to local-network/
+                        // authenticated callers. An anonymous visitor on this
+                        // public page will always get 401 -- stop the
+                        // automatic refresh loop so it doesn't poll forever.
+                        healthEndpointGated = true;
+                    }
                     throw new Error(`Request failed with status ${response.status}`);
                 }
 
@@ -6034,6 +6043,7 @@
 
             setInterval(() => {
                 if (typeof document !== 'undefined' && document.hidden) return;
+                if (healthEndpointGated) return;
                 refreshHealthData(false);
             }, REFRESH_INTERVAL_MS);
 
