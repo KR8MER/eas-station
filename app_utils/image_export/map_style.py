@@ -79,6 +79,20 @@ def tone_basemap(img: Image.Image, *,
     return out
 
 
+# tone_basemap()'s defaults above are tuned for OSM's light, high-saturation
+# tiles -- correct for the zero-config default provider, wrong for a source
+# that's already dark and desaturated (CARTO's Dark Matter style). Running
+# the same heavy darken/desaturate on an already-dark tile would over-darken
+# it and (via the mean-grey-seeking Contrast step) fight its own palette.
+# This preset keeps color ops at identity and only applies the tint blend,
+# which still earns its keep on a dark-native tile: it nudges CARTO's own
+# dark grey toward this card's specific slate so the map reads as part of
+# the card's colour world rather than a shade of dark that's merely close.
+TONE_PRESET_DARK_NATIVE: Dict[str, float] = dict(
+    saturation=1.0, brightness=1.0, contrast=1.0, tint_strength=0.30,
+)
+
+
 def _vignette_mask(w: int, h: int, *, inner: float = 0.52,
                    max_alpha: int = 125) -> Image.Image:
     """Build a radial falloff mask, transparent at the centre.

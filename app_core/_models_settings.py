@@ -601,6 +601,43 @@ class TTSSettings(db.Model):
         }
 
 
+class MapTileSettings(db.Model):
+    """Basemap tile provider for the alert share-card map inset.
+
+    Replaces environment variables for this configuration. All settings
+    are stored in a single row (id=1). Defaults to plain OpenStreetMap
+    raster tiles ('osm') so every install works with zero configuration;
+    switching to 'carto_dark' requires a free CARTO API key (see
+    https://carto.com/basemaps/apikey) and produces a noticeably cleaner
+    card, since CARTO's Dark Matter style is authored as dark and minimal
+    from the start rather than a light OSM tile darkened in post
+    (see app_utils/image_export/map_style.py's tone_basemap()).
+    """
+    __tablename__ = "map_tile_settings"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    provider = db.Column(db.String(50), nullable=False, default='osm')  # 'osm', 'carto_dark'
+    carto_api_key = db.Column(EncryptedString, nullable=True)
+
+    updated_at = db.Column(db.DateTime, nullable=True, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        """Convert model to dictionary.
+
+        carto_api_key is a secret and must never reach the browser in
+        plaintext -- only a masked placeholder and a has-value flag are
+        exposed. Callers that need the real key (the tile fetcher itself)
+        must read the `carto_api_key` column directly.
+        """
+        return {
+            "provider": self.provider,
+            "carto_api_key": "••••••••" if self.carto_api_key else "",
+            "carto_api_key_set": bool(self.carto_api_key),
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class TTSPronunciationRule(db.Model):
     """User-configurable pronunciation overrides for the TTS narration pipeline.
 
