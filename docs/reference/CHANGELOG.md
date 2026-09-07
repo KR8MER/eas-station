@@ -8,6 +8,11 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.2] - 2026-09-07 - Deprioritize the security-perimeter-ingest timer
+
+- **Fixed**: `security-perimeter-ingest.service` (new in 2.227.0, run every 2 minutes by `security-perimeter-ingest.timer`) boots the full Flask app via `create_app()` -- all ~260 routes, every subsystem -- just to tail the nginx log and insert a handful of rows. Measured at ~6s of near-single-core CPU per run on the bare-metal box, forever, every 2 minutes. That's the same `create_app()`-for-a-CLI-script pattern `scripts/create_example_screens.py` and `scripts/fix_admin_roles.py` use, which is harmless for an occasional by-hand admin task but becomes a recurring burst when applied to an automated timer -- one that competes with the CPU-contention-sensitive real-time SDR/demod/SAME-decode path (see 2.228.1's `Nice=-3` fix below).
+- Added `Nice=10` and `IOSchedulingClass=idle` to `security-perimeter-ingest.service` so its periodic bursts always yield to the real-time services instead of contending with them. The proper fix -- a lightweight DB-only bootstrap instead of the full route-registering app factory -- is bigger scope; tracked for follow-up.
+
 ## [2.228.1] - 2026-09-07 - Reduce dropped SDR audio chunks under CPU contention
 
 - **Fixed**: the `wbks` SDR receiver's SAME/EAS header decoder had produced zero alerts for two weeks (last success 2026-08-24) despite the receiver itself streaming samples normally and RDS still decoding -- while the two network-stream sources (`ERN-LUC`, `WNCI`) kept decoding alerts throughout, unaffected. Root cause: `services.demod`'s own exit-stats log showed real dropped audio chunks (`dropped=513`) on a box running at a sustained load average of 3.5-4.0 on 4 cores; a chunk dropped during the ~1s SAME tone burst fails that header even though average throughput looks healthy. `ERN-LUC`/`WNCI` don't share this failure mode since they receive already-decoded PCM over the network instead of running the CPU-heavy SDR front end (filter/decimate 1.024 Msps IQ down to audio).

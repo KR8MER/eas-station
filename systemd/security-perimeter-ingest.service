@@ -14,5 +14,21 @@ ExecStart=/opt/eas-station/venv/bin/python3 /opt/eas-station/scripts/ingest_secu
 PrivateTmp=yes
 NoNewPrivileges=yes
 
+# Scheduling priority - this oneshot boots the full Flask app (all routes,
+# ORM, every subsystem) via create_app() just to tail a log and insert a
+# few rows, the same pattern scripts/create_example_screens.py and
+# scripts/fix_admin_roles.py use for occasional by-hand admin tasks. Applied
+# to a job a 2-minute timer runs forever, that pattern costs ~6s of
+# near-single-core CPU every run (measured on the bare-metal box) -- a
+# recurring burst that competes with the real-time SDR/demod/SAME-decode
+# path (see eas-station-demod.service's Nice=-3 comment for the dropped-
+# audio-chunk evidence that path is CPU-contention-sensitive). A real fix
+# would give this script a lightweight DB-only bootstrap instead of the
+# full route-registering app factory; until then, deprioritize so its
+# bursts always yield to the real-time services instead of contending with
+# them for CPU.
+Nice=10
+IOSchedulingClass=idle
+
 [Install]
 WantedBy=multi-user.target
