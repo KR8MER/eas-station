@@ -114,7 +114,7 @@ zigpy>=2.1.0        # Core Zigbee protocol stack
 # device_joined/device_initialized listener callbacks, and the Device
 # ieee/nwk/model/manufacturer attributes this code reads are all unchanged.
 # Real device pairing over a live coordinator has not been hardware-tested.
-zigpy-znp>=0.11.0   # Z-Stack (CC2652P / CC1352P) radio driver
+zigpy-znp>=1.1.0   # Z-Stack (CC2652P / CC1352P) radio driver
 
 # GPS HAT support (Adafruit Ultimate GPS HAT #2324)
 pynmea2==1.19.0  # NMEA-0183 sentence parser for GPS receivers
