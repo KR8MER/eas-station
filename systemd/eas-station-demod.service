@@ -52,5 +52,16 @@ LimitNOFILE=65536
 # holds live IQ/audio buffers per receiver, so give it a bit more.
 MemoryMax=512M
 
+# Scheduling priority - this worker filters/decimates each receiver's IQ
+# stream into demodulated audio on a box that otherwise runs at sustained
+# high load (web, DB, other subsystem services all sharing 4 cores). Under
+# that contention the wbks worker was observed dropping audio chunks
+# (`dropped=513` in its own exit-stats log), which is enough to blow past
+# an in-progress SAME header decode even though average throughput looks
+# fine. A modest negative nice asks CFS to schedule this promptly without
+# real-time scheduling. Kept less aggressive than eas-station-sdr.service's
+# Nice=-5, since that service is servicing USB reads directly.
+Nice=-3
+
 [Install]
 WantedBy=multi-user.target eas-station.target
