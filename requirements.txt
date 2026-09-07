@@ -96,7 +96,7 @@ numba>=0.67.0,<0.68.0  # JIT compilation for real-time FM demodulation (RBDS per
 # numba<0.64 range.
 
 # SDR support for radio receivers
-numpy==2.3.5  # Required for SoapySDR sample processing
+numpy==2.5.2  # Required for SoapySDR sample processing
 # Note: SoapySDR Python bindings are installed via system packages (python3-soapysdr)
 # Note: numba 0.67's own requirement is numpy<2.6 (looser than earlier numba
 # releases) -- 2.3.5 satisfies it comfortably; no numpy bump is required by this pin.
