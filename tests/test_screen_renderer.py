@@ -45,6 +45,38 @@ def test_fetch_data_source_with_preview_samples(monkeypatch):
     assert renderer._data_cache["status"] == screen_renderer.PREVIEW_SAMPLE_DATA["status"]
 
 
+def test_evaluate_condition_numeric_comparison():
+    renderer = screen_renderer.ScreenRenderer()
+    condition = {"var": "alerts.count", "op": ">", "value": 0}
+    data = {"alerts": {"count": 3}}
+
+    assert renderer.evaluate_condition(condition, data) is True
+
+
+def test_evaluate_condition_non_numeric_actual_falls_back_to_string_compare():
+    """Reproduced live: eas-station-displays.service logged
+    "Error evaluating condition: '>' not supported between instances of
+    'str' and 'int'" on a continuous loop. Root cause: when the live
+    value can't parse as a number (e.g. an upstream data-source fetch
+    failure returning a placeholder string instead of real data), the
+    code fell back to the *original string* for `actual` but left
+    `expected` as whatever raw type the screen's JSON config stored --
+    often a bare int like {"value": 0} -- mixing str and int on a >/</
+    >=/<= comparison. Both sides must fall back together."""
+    renderer = screen_renderer.ScreenRenderer()
+    condition = {"var": "gpio.summary", "op": ">", "value": 0}
+    data = {"gpio": {"summary": "Unauthorized"}}
+
+    # Must not raise -- and must not silently "fail open" via the outer
+    # except either; a clean string-vs-string comparison is well-defined
+    # ("Unauthorized" > "0" lexicographically, since 'U' > '0').
+    result = renderer.evaluate_condition(condition, data)
+    assert result is True
+
+    condition_eq = {"var": "gpio.summary", "op": "==", "value": "Unauthorized"}
+    assert renderer.evaluate_condition(condition_eq, data) is True
+
+
 def test_oled_elements_compass_resolves_heading_template():
     renderer = screen_renderer.ScreenRenderer()
     template = {
