@@ -447,6 +447,11 @@ PUBLIC_API_GET_PATHS = {
     # Traffic-analytics client beacon (screen resolution) — harmless, public so
     # every visitor's resolution is captured for the awstats-style dashboard.
     '/api/traffic/client',
+    # Now-playing metadata (title/artist/album/artwork_url) for the public
+    # Icecast stream — a redacted view (no mount/server/port/bitrate) meant
+    # for external players/widgets, same spirit as a station's public
+    # "now playing" page. See webapp/routes_now_playing.py.
+    '/api/audio/now-playing',
 }
 
 # GET APIs that may be read without a session, but only by a caller on the

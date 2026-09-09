@@ -40,6 +40,7 @@ from . import (
     routes_exports,
     routes_ipaws,
     routes_logs,
+    routes_now_playing,
     routes_settings_radio,
     routes_settings_audio,
     routes_settings_hub,
@@ -99,6 +100,7 @@ def iter_route_modules() -> Iterable[RouteModule]:
     yield RouteModule("routes_settings_audio", routes_settings_audio.register)
     yield RouteModule("routes_settings_hub", routes_settings_hub.register)
     yield RouteModule("routes_eas_monitor_status", routes_eas_monitor_status.register_eas_monitor_routes)
+    yield RouteModule("routes_now_playing", routes_now_playing.register)
     yield RouteModule("routes_audio_tests", routes_audio_tests.register)
     yield RouteModule("routes_audio_archive", audio_archive.register)
     yield RouteModule("routes_exports", routes_exports.register)
