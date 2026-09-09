@@ -237,16 +237,25 @@ class RBDSWorker:
             2400.0, self._rbds_post_decim_rate, taps=75
         )
 
-        # Filter delay-line state, preserved across _process_rbds calls. FIR
-        # filters implemented with np.convolve are stateless, so every chunk
-        # produced ~(N_taps - 1) samples of transient at its start. With
-        # 101-tap filters on 205-sample chunks the transient ate half the
-        # output, which looked like noise to the RBDS bit synchroniser. Using
-        # scipy.signal.lfilter with a persisted zi delay line eliminates the
-        # seam between consecutive chunks.
-        self._rbds_bandpass_zi: Optional[np.ndarray] = None
-        self._rbds_lowpass_zi_real: Optional[np.ndarray] = None
-        self._rbds_lowpass_zi_imag: Optional[np.ndarray] = None
+        # Filter tail state, preserved across _process_rbds calls (overlap-
+        # add via oaconvolve). FIR filters implemented with a plain
+        # np.convolve per chunk are stateless, so every chunk produced
+        # ~(N_taps - 1) samples of transient at its start. With 101-tap
+        # filters on 205-sample chunks the transient ate half the output,
+        # which looked like noise to the RBDS bit synchroniser. This used
+        # to carry a scipy.signal.lfilter zi delay line instead -- correct
+        # (no transient) but, unknown at the time, no faster: lfilter with
+        # a pure-FIR filter (a=1.0, no feedback) unconditionally takes
+        # scipy's O(N*taps) direct-form np.apply_along_axis(...) ->
+        # np.convolve fallback, the exact routine this comment describes
+        # moving away from -- scipy's fast C path only activates for true
+        # IIR filters (len(a) > 1), which these never are. Found via
+        # py-spy + a ground-truth /proc CPU census on the demod service
+        # while investigating a separate SDR-capture instance of the same
+        # bug (see app_core/radio/drivers.py). oaconvolve's overlap-add
+        # tail carries state the same way zi did, with none of the cost.
+        self._rbds_bandpass_tail: Optional[np.ndarray] = None
+        self._rbds_lowpass_tail: Optional[np.ndarray] = None
         self._rbds_interference_notch_a: Optional[np.ndarray] = None
         self._rbds_interference_notch_b: Optional[np.ndarray] = None
         self._rbds_interference_notch_freq_hz: Optional[float] = None
@@ -896,17 +905,26 @@ class RBDSWorker:
 
         # Step 2: Bandpass filter to extract 57 kHz RBDS subcarrier (54-60 kHz)
         # CRITICAL: Do this BEFORE decimation that would remove the 57 kHz signal!
-        # Use lfilter with persisted state (zi) so the filter's delay line
-        # carries over from the previous chunk; np.convolve zeroes it every
-        # call, which produced (ntaps-1) samples of transient at the start of
-        # every chunk and flooded the bit-sync with garbage.
+        # Overlap-add via oaconvolve, carrying the convolution tail across
+        # calls so the filter's history survives the chunk boundary -- a
+        # plain per-chunk np.convolve zeroes it every call, which produced
+        # (ntaps-1) samples of transient at the start of every chunk and
+        # flooded the bit-sync with garbage. (This used to be lfilter+zi;
+        # see the tail-state comment in __init__ for why that was correct
+        # but not actually faster than the convolve it was replacing.)
         if self._rbds_bandpass is not None and sample_rate >= self.RBDS_MIN_SAMPLE_RATE:
             from scipy import signal as scipy_signal
-            if self._rbds_bandpass_zi is None or len(self._rbds_bandpass_zi) != len(self._rbds_bandpass) - 1:
-                self._rbds_bandpass_zi = np.zeros(len(self._rbds_bandpass) - 1, dtype=x.dtype)
-            x, self._rbds_bandpass_zi = scipy_signal.lfilter(
-                self._rbds_bandpass, [1.0], x, zi=self._rbds_bandpass_zi
-            )
+            full = scipy_signal.oaconvolve(x, self._rbds_bandpass)
+            tail = self._rbds_bandpass_tail
+            if tail is not None and tail.size:
+                if tail.size > full.size:
+                    full = np.concatenate(
+                        [full, np.zeros(tail.size - full.size, dtype=full.dtype)]
+                    )
+                full[: tail.size] += tail
+            n_in = len(x)
+            self._rbds_bandpass_tail = full[n_in:].copy()
+            x = full[:n_in]
 
         # Step 3: Frequency shift to baseband using PILOT-DERIVED carrier
         # Generate 57 kHz = pilot × 3 (third harmonic)
@@ -994,22 +1012,25 @@ class RBDSWorker:
         # Matched filter: sharp 2.4 kHz lowpass at the decimated rate (see
         # _init_rbds_state for the design rationale — this used to be a
         # 501-tap filter at the full multiplex rate and dominated worker
-        # CPU).  x is complex; lfilter keeps real delay lines per component,
-        # so filter the real and imaginary parts separately with their own
-        # persisted zi arrays.  State carries across batches, which the
-        # tail-carry decimation above makes phase-correct.
+        # CPU). Overlap-add via oaconvolve, which handles complex input
+        # natively (no real/imag split needed -- see the tail-state
+        # comment in __init__ for why the previous real/imag lfilter
+        # split here didn't actually avoid the slow path it looked like
+        # it was avoiding). State carries across batches via the
+        # convolution tail, which the tail-carry decimation above makes
+        # phase-correct.
         from scipy import signal as scipy_signal
-        lp_state_len = len(self._rbds_lowpass) - 1
-        if self._rbds_lowpass_zi_real is None or len(self._rbds_lowpass_zi_real) != lp_state_len:
-            self._rbds_lowpass_zi_real = np.zeros(lp_state_len, dtype=np.float64)
-            self._rbds_lowpass_zi_imag = np.zeros(lp_state_len, dtype=np.float64)
-        real_out, self._rbds_lowpass_zi_real = scipy_signal.lfilter(
-            self._rbds_lowpass, [1.0], x.real, zi=self._rbds_lowpass_zi_real
-        )
-        imag_out, self._rbds_lowpass_zi_imag = scipy_signal.lfilter(
-            self._rbds_lowpass, [1.0], x.imag, zi=self._rbds_lowpass_zi_imag
-        )
-        x = real_out + 1j * imag_out  # Keep as int
+        full = scipy_signal.oaconvolve(x, self._rbds_lowpass)
+        tail = self._rbds_lowpass_tail
+        if tail is not None and tail.size:
+            if tail.size > full.size:
+                full = np.concatenate(
+                    [full, np.zeros(tail.size - full.size, dtype=full.dtype)]
+                )
+            full[: tail.size] += tail
+        n_in = len(x)
+        self._rbds_lowpass_tail = full[n_in:].copy()
+        x = full[:n_in]  # Keep as int
 
         # Step 5: Resample to exactly 19 kHz (16 samples per symbol at 1187.5
         # baud).  Done once on the entire batch so the polyphase transient

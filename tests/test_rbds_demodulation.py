@@ -385,6 +385,130 @@ def test_rbds_post_mix_lowpass_rejects_stereo_sideband_artifact():
     worker.stop()
 
 
+def _oaconvolve_with_tail(x, h):
+    """Single-chunk overlap-add: what _process_rbds's hot path now does
+    for both the bandpass and post-mix lowpass (no prior tail, so this
+    degenerates to a plain full convolution truncated to len(x))."""
+    from scipy import signal as scipy_signal
+
+    full = scipy_signal.oaconvolve(x, h)
+    return full[: len(x)]
+
+
+def test_rbds_bandpass_oaconvolve_matches_lfilter_ground_truth():
+    """The overlap-add bandpass hot path must be numerically equivalent
+    to the filter's mathematical ground truth: a single lfilter call on
+    the real-valued multiplex (what this used to run before -- slow, but
+    correct). oaconvolve is just a faster way to compute the identical
+    linear convolution, not a different filter.
+
+    Reproduces the bug this fixes: scipy.signal.lfilter with a pure-FIR
+    filter (a=1.0) unconditionally takes its O(N*taps) direct-form
+    np.apply_along_axis(...) -> np.convolve fallback regardless of the
+    zi delay-line state -- scipy's fast C path only activates for a true
+    IIR filter (len(a) > 1). This one, like most filters in this file,
+    never is. Confirmed live via py-spy + a ground-truth /proc CPU
+    census on the demod service.
+    """
+    from scipy import signal as scipy_signal
+
+    sr = 250_000
+    worker = _make_worker(sample_rate=sr)
+    h = worker._rbds_bandpass
+
+    n = 5000
+    t = np.arange(n) / sr
+    x = (
+        np.cos(2.0 * np.pi * 57_000.0 * t)
+        + 0.3 * np.cos(2.0 * np.pi * 19_000.0 * t)
+    ).astype(np.float64)
+
+    fast = _oaconvolve_with_tail(x, h)
+
+    zi = scipy_signal.lfilter_zi(h, 1.0).astype(np.float64) * x[0]
+    ground_truth, _ = scipy_signal.lfilter(h, 1.0, x, zi=zi)
+
+    settle = len(h) + 4
+    np.testing.assert_allclose(
+        fast[settle:], ground_truth[settle:], rtol=1e-4, atol=1e-6
+    )
+    worker.stop()
+
+
+def test_rbds_lowpass_oaconvolve_matches_lfilter_ground_truth():
+    """Same equivalence proof as the bandpass test above, but for the
+    complex-valued post-mix 2.4 kHz lowpass -- oaconvolve handles
+    complex input natively (no real/imag split needed, unlike the old
+    two-separate-lfilter-calls approach this replaces)."""
+    from scipy import signal as scipy_signal
+
+    sr = 250_000
+    worker = _make_worker(sample_rate=sr)
+    h = worker._rbds_lowpass
+
+    n = 2000
+    t = np.arange(n) / worker._rbds_post_decim_rate
+    x = (
+        np.exp(2j * np.pi * 1187.5 * t)
+        + 0.5 * np.exp(2j * np.pi * 4000.0 * t)
+    ).astype(np.complex128)
+
+    fast = _oaconvolve_with_tail(x, h)
+
+    zi = scipy_signal.lfilter_zi(h, 1.0).astype(np.complex128) * x[0]
+    ground_truth, _ = scipy_signal.lfilter(h, 1.0, x, zi=zi)
+
+    settle = len(h) + 4
+    np.testing.assert_allclose(
+        fast[settle:], ground_truth[settle:], rtol=1e-4, atol=1e-6
+    )
+    worker.stop()
+
+
+def test_rbds_bandpass_chunked_matches_single_continuous_call():
+    """Feeding the bandpass filter's overlap-add hot path in several
+    irregular-sized chunks must produce the same output as filtering
+    the whole signal in one call -- proving the tail-carry state
+    correctly stitches real-world chunk boundaries together."""
+    from scipy import signal as scipy_signal
+
+    sr = 250_000
+    worker = _make_worker(sample_rate=sr)
+    h = worker._rbds_bandpass
+
+    n = 12000
+    t = np.arange(n) / sr
+    x = (
+        np.cos(2.0 * np.pi * 57_000.0 * t)
+        + 0.3 * np.cos(2.0 * np.pi * 19_000.0 * t)
+    ).astype(np.float64)
+
+    continuous = _oaconvolve_with_tail(x, h)
+
+    tail = None
+    chunks_out = []
+    pos = 0
+    for size in [3001, 2999, 4000, 1, 2000]:
+        chunk = x[pos: pos + size]
+        pos += size
+        if len(chunk) == 0:
+            continue
+        full = scipy_signal.oaconvolve(chunk, h)
+        if tail is not None and tail.size:
+            if tail.size > full.size:
+                full = np.concatenate([full, np.zeros(tail.size - full.size)])
+            full[: tail.size] += tail
+        cn = len(chunk)
+        tail = full[cn:].copy()
+        chunks_out.append(full[:cn])
+    chunked = np.concatenate(chunks_out)
+
+    np.testing.assert_allclose(
+        continuous[: len(chunked)], chunked, rtol=1e-5, atol=1e-8
+    )
+    worker.stop()
+
+
 def test_rbds_apply_reset_clears_measured_pilot():
     """A worker reset (e.g. retune) must clear the measured pilot frequency.
 
@@ -1207,6 +1331,48 @@ def test_fmdemodulator_anti_alias_filter_protects_post_decim_nyquist():
             f"AA filter rejection at {next_fold/1000:.1f} kHz: "
             f"{next_fold_db:.1f} dB (need < -40 dB)"
         )
+    demod.stop()
+    time.sleep(0.05)
+
+
+def test_rbds_aa_filter_oaconvolve_matches_lfilter_ground_truth():
+    """FMDemodulator's RBDS-path anti-alias filter (the overlap-add hot
+    path in demodulate()) must be numerically equivalent to the filter's
+    mathematical ground truth: a single lfilter call on the real-valued
+    multiplex.
+
+    Same bug class as RBDSWorker's bandpass/lowpass and
+    app_core/radio/drivers.py's early-decim filter: lfilter with a
+    pure-FIR filter (a=1.0, this filter's case) unconditionally takes
+    scipy's slow O(N*taps) np.apply_along_axis(...) -> np.convolve
+    fallback -- the fast C path only activates for a true IIR filter.
+    Found via a codebase-wide audit for this exact pattern after it
+    turned up twice already.
+    """
+    from scipy import signal as scipy_signal
+
+    sr = 1_000_000
+    demod = _make_demodulator(sample_rate=sr)
+    h = demod._rbds_aa_filter
+    assert h is not None
+
+    n = 4000
+    t = np.arange(n) / sr
+    x = (
+        np.cos(2.0 * np.pi * 57_000.0 * t)
+        + 0.3 * np.cos(2.0 * np.pi * 19_000.0 * t)
+    ).astype(np.float64)
+
+    full = scipy_signal.oaconvolve(x, h)
+    fast = full[:n]
+
+    zi = scipy_signal.lfilter_zi(h, 1.0).astype(np.float64) * x[0]
+    ground_truth, _ = scipy_signal.lfilter(h, 1.0, x, zi=zi)
+
+    settle = len(h) + 4
+    np.testing.assert_allclose(
+        fast[settle:], ground_truth[settle:], rtol=1e-4, atol=1e-6
+    )
     demod.stop()
     time.sleep(0.05)
 
