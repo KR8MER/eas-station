@@ -245,5 +245,48 @@ def test_precomputed_pilot_filtered_is_numerically_equivalent():
     np.testing.assert_array_equal(without_precompute, with_precompute)
 
 
+def test_precomputed_pilot_rms_is_numerically_equivalent():
+    """demodulate() also already reduces pilot_filtered to its RMS (to
+    compute stereo_pilot_strength) before ever calling _decode_stereo,
+    which used to redo the identical np.sqrt(np.mean(...)) reduction
+    internally -- same duplicate-work class as pilot_filtered above, just
+    a cheaper O(N) reduction instead of an O(N log N) FFT convolution.
+    _decode_stereo now accepts that value instead of recomputing it, and
+    must produce bit-for-bit identical output whether the caller passes it
+    in or leaves it to be computed internally."""
+    from scipy.signal import oaconvolve
+
+    demod = _make_fm_demodulator()
+    left, right = _make_test_signals()
+    multiplex = _synthesize_multiplex(left, right, pilot_phase=0.7)
+
+    without_precompute = demod._decode_stereo(multiplex)
+
+    demod2 = _make_fm_demodulator()
+    pilot_filtered = oaconvolve(multiplex, demod2._pilot_filter, mode="same")
+    precomputed_rms = float(np.sqrt(np.mean(pilot_filtered ** 2)))
+    with_precompute = demod2._decode_stereo(
+        multiplex, pilot_filtered=pilot_filtered, pilot_rms=precomputed_rms
+    )
+
+    assert without_precompute is not None and with_precompute is not None
+    np.testing.assert_array_equal(without_precompute, with_precompute)
+
+
+def test_decode_stereo_no_longer_requires_sample_indices():
+    """sample_indices is unused by _decode_stereo's body (kept only for
+    backwards-compat) -- the hot-path caller in demodulate() no longer
+    builds a full-chunk-length np.arange(..., dtype=float64) just to
+    satisfy it. Confirms the method still works when called with just
+    multiplex, matching demodulate()'s new call shape."""
+    demod = _make_fm_demodulator()
+    left, right = _make_test_signals()
+    multiplex = _synthesize_multiplex(left, right, pilot_phase=0.7)
+
+    stereo = demod._decode_stereo(multiplex)
+    assert stereo is not None
+    assert stereo.ndim == 2 and stereo.shape[1] == 2
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
