@@ -8,6 +8,10 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.3] - 2026-09-09 - Bump lxml to 6.1.3
+
+- Dependabot dependency bump (patch release, no CVE). Synced the three tech-stack badges (`README.md` x2, `templates/partials/tech_stack_badges.html`) that `tests/test_tech_stack_badges.py` checks against `requirements.txt` -- Dependabot only ever touches the pin, not the badges, so every dependency bump needs this same manual sync or the badge-drift test fails CI.
+
 ## [2.228.2] - 2026-09-07 - Deprioritize the security-perimeter-ingest timer
 
 - **Fixed**: `security-perimeter-ingest.service` (new in 2.227.0, run every 2 minutes by `security-perimeter-ingest.timer`) boots the full Flask app via `create_app()` -- all ~260 routes, every subsystem -- just to tail the nginx log and insert a handful of rows. Measured at ~6s of near-single-core CPU per run on the bare-metal box, forever, every 2 minutes. That's the same `create_app()`-for-a-CLI-script pattern `scripts/create_example_screens.py` and `scripts/fix_admin_roles.py` use, which is harmless for an occasional by-hand admin task but becomes a recurring burst when applied to an automated timer -- one that competes with the CPU-contention-sensitive real-time SDR/demod/SAME-decode path (see 2.228.1's `Nice=-3` fix below).
