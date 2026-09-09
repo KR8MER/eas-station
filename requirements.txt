@@ -54,7 +54,7 @@ PyYAML==6.0.3
 
 # JSON handling - Optimized parsers for better performance
 orjson==3.12.0  # Fast C-based JSON parser (2-3x faster than stdlib)
-ujson==5.13.0  # Alternative fast JSON parser (fallback option)
+ujson==6.0.0  # Alternative fast JSON parser (fallback option)
 
 # Datetime parsing - More robust than manual strptime
 python-dateutil==2.9.0.post0  # Flexible datetime string parsing
