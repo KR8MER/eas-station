@@ -881,6 +881,12 @@ function renderAudioSources(fullRender = true) {
                                             <span class="text-muted">Icecast URL:</span>
                                             <span class="font-monospace small text-break">${escapeHtml(source.metrics.metadata.icecast_stream_url)}</span>
                                         </div>
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted" title="Icecast's own metadata is text-only (StreamTitle) -- it can never carry an image. Give this URL to a player, embedded widget, or app so it can show title/artist/album art alongside the audio.">
+                                                Now Playing API <i class="fas fa-circle-info small"></i>:
+                                            </span>
+                                            <span class="font-monospace small text-break">${escapeHtml(new URL('/api/audio/now-playing?source=' + encodeURIComponent(source.name), window.location.origin).toString())}</span>
+                                        </div>
                                     ` : ''}
                                     ${source.metrics.metadata.icecast_server ? `
                                         <div class="d-flex justify-content-between mb-1">
