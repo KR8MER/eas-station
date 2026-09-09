@@ -82,17 +82,6 @@ def _public_stream_url(source_name: str) -> Optional[str]:
     return _get_icecast_stream_url(source_name)
 
 
-def _default_public_source() -> Optional[AudioSourceConfigDB]:
-    """First enabled, Icecast-published source -- the common single-station
-    deployment's implicit default when the caller doesn't name one."""
-    for config in AudioSourceConfigDB.query.filter_by(enabled=True).order_by(
-        AudioSourceConfigDB.priority.desc(), AudioSourceConfigDB.name.asc()
-    ):
-        if _public_stream_url(config.name):
-            return config
-    return None
-
-
 def _now_playing_payload(db_config: AudioSourceConfigDB, icecast_url: str) -> Dict[str, Any]:
     metadata = _latest_source_metadata(db_config.name) or {}
     fields = extract_now_playing_fields(metadata) or {}
@@ -107,6 +96,46 @@ def _now_playing_payload(db_config: AudioSourceConfigDB, icecast_url: str) -> Di
         'artwork_url': fields.get('artwork_url'),
         'length': fields.get('length'),
     }
+
+
+def _default_public_candidate() -> Optional[tuple]:
+    """Pick the source and payload for a request with no ``?source=``.
+
+    ``priority`` orders which *audio input* the EAS/SAME decoder should
+    prefer on failover -- it has nothing to do with which source is worth
+    showing the public as "now playing". A hardware line-in kept at high
+    priority for reliable EAS monitoring can carry no song metadata at
+    all, while a lower-priority network relay is an actual music station
+    with real title/artist/artwork -- confirmed live on a multi-source
+    deployment where the highest-priority source (an auto-configured USB
+    device with no metadata) shadowed a real relay every request.
+
+    Walks candidates in priority order and returns the first one that
+    actually *has* title or artist metadata right now; only falls back to
+    bare priority order when nothing has metadata yet (e.g. right after
+    startup, before any source has published a StreamTitle), so the
+    common single-station case is unaffected.
+    """
+    candidates = [
+        config
+        for config in AudioSourceConfigDB.query.filter_by(enabled=True).order_by(
+            AudioSourceConfigDB.priority.desc(), AudioSourceConfigDB.name.asc()
+        )
+        if _public_stream_url(config.name)
+    ]
+    if not candidates:
+        return None
+
+    fallback = None
+    for config in candidates:
+        icecast_url = _public_stream_url(config.name)
+        payload = _now_playing_payload(config, icecast_url)
+        if fallback is None:
+            fallback = (config, icecast_url, payload)
+        if payload.get('title') or payload.get('artist'):
+            return (config, icecast_url, payload)
+
+    return fallback
 
 
 def register(app: Flask, logger_instance) -> None:
@@ -126,9 +155,12 @@ def register(app: Flask, logger_instance) -> None:
 
         Query:
             source (str, optional): Which configured audio source to report
-                on, for a multi-stream deployment. Omit to use the first
-                enabled source that has a public Icecast stream -- the
-                common case for a single-station deployment.
+                on, for a multi-stream deployment. Omit to auto-pick: the
+                first enabled, Icecast-published source that currently has
+                real title/artist metadata (not just the highest EAS
+                failover *priority*, which is a different axis -- see
+                _default_public_candidate), falling back to priority order
+                if nothing has metadata yet.
 
         Returns:
             200 with {source, stream_name, icecast_url, title, artist,
@@ -143,17 +175,19 @@ def register(app: Flask, logger_instance) -> None:
                 db_config = AudioSourceConfigDB.query.filter_by(
                     name=source_name, enabled=True
                 ).first()
+                if db_config is None:
+                    return jsonify({'error': f'Stream "{source_name}" not found'}), 404
+                icecast_url = _public_stream_url(db_config.name)
+                if not icecast_url:
+                    return jsonify({'error': 'No public Icecast stream configured'}), 404
+                payload = _now_playing_payload(db_config, icecast_url)
             else:
-                db_config = _default_public_source()
+                candidate = _default_public_candidate()
+                if candidate is None:
+                    return jsonify({'error': 'No public Icecast stream configured'}), 404
+                _db_config, _icecast_url, payload = candidate
 
-            if db_config is None:
-                return jsonify({'error': 'No public Icecast stream configured'}), 404
-
-            icecast_url = _public_stream_url(db_config.name)
-            if not icecast_url:
-                return jsonify({'error': 'No public Icecast stream configured'}), 404
-
-            response = jsonify(_now_playing_payload(db_config, icecast_url))
+            response = jsonify(payload)
             # Encourage polite polling without needing server-side caching --
             # now-playing changes on the order of minutes, not seconds.
             response.headers['Cache-Control'] = 'public, max-age=5'

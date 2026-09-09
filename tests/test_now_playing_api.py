@@ -231,6 +231,65 @@ def test_falls_back_to_db_metric_when_redis_has_nothing_fresh(np_app, client, mo
     assert body["artwork_url"] == "https://x/y.jpg"
 
 
+def test_default_source_prefers_metadata_over_bare_priority(np_app, client, monkeypatch):
+    """`priority` orders EAS/SAME failover preference (source_manager.py's
+    _select_best_source, lower number wins there -- a different, unrelated
+    field on a different code path), not "which source is interesting to
+    show the public". A high-priority EAS input (e.g. a hardware line kept
+    reliable for alert monitoring) can carry no song metadata at all while
+    a lower-priority network relay is an actual music station -- confirmed
+    live on a real multi-source deployment where the highest-priority
+    source (an auto-configured USB device, priority=200) shadowed a real
+    relay (priority=100) with live title/artist/artwork every request.
+    The default pick must prefer the one that actually has metadata."""
+    with np_app.app_context():
+        _add_source("silent_high_priority", priority=200, description="High EAS priority, no metadata")
+        _add_source("music_relay", priority=100, description="Lower priority, real content")
+    _stub_redis_and_icecast(
+        monkeypatch,
+        redis_data={
+            "music_relay": {
+                "title": "Spot Block End",
+                "artist": "Jason Derulo",
+                "artwork_url": "https://image.example/cover.jpg",
+            },
+            # silent_high_priority has no metadata at all
+        },
+        icecast_urls={
+            "silent_high_priority": "http://host:8000/silent.mp3",
+            "music_relay": "http://host:8000/relay.mp3",
+        },
+    )
+
+    resp = client.get("/api/audio/now-playing")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["source"] == "music_relay"
+    assert body["title"] == "Spot Block End"
+    assert body["artist"] == "Jason Derulo"
+
+
+def test_default_source_falls_back_to_priority_when_nothing_has_metadata(np_app, client, monkeypatch):
+    """When no candidate has metadata yet (e.g. right after startup, before
+    any source has published a StreamTitle), the original priority-order
+    default still applies -- the common single-station case is unaffected."""
+    with np_app.app_context():
+        _add_source("higher_priority", priority=200)
+        _add_source("lower_priority", priority=100)
+    _stub_redis_and_icecast(
+        monkeypatch,
+        icecast_urls={
+            "higher_priority": "http://host:8000/a.mp3",
+            "lower_priority": "http://host:8000/b.mp3",
+        },
+    )
+
+    resp = client.get("/api/audio/now-playing")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["source"] == "higher_priority"
+
+
 def test_path_is_registered_as_publicly_readable():
     """Regression guard: the whole point of this endpoint is that an
     external player/widget can read it without a session. If this path

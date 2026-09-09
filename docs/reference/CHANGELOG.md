@@ -8,7 +8,15 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.228.6] - 2026-09-09 - Bump numpy to 2.5.2
+## [2.228.7] - 2026-09-09 - Fix now-playing default source picking EAS priority over actual content
+
+Verified live on a real multi-source deployment: `GET /api/audio/now-playing`
+(no `?source=`) returned an empty (all-null) payload even though two other
+configured sources were actively streaming real songs with title/artist/
+artwork metadata.
+
+### Fixed
+- `_default_public_source()` (`webapp/routes_now_playing.py`) picked the first enabled, Icecast-published source ordered by `priority` descending -- but that `priority` field is `source_manager.py`'s EAS/SAME failover preference (a hardware line kept reliable for alert monitoring can legitimately carry no song metadata at all), not a "worth showing the public" signal, and it's a *different* field from the one the actual SAME decoder (`app_core/audio/eas_monitor_v3.py`'s `UnifiedEASMonitorService`) uses -- that class ignores `priority` entirely and watches every enabled source independently. Renamed to `_default_public_candidate()`; it now walks sources in priority order but returns the first one that actually *has* title or artist metadata right now, falling back to bare priority order only when nothing has metadata yet (e.g. right after startup), so the common single-station case is unaffected. New tests in `tests/test_now_playing_api.py`.
 
 ### Changed
 - Dependabot dependency bump (minor release, no CVE). Synced the three tech-stack badges (`README.md` x2, `templates/partials/tech_stack_badges.html`) and a stale `requirements.txt` comment that referenced the old pinned version -- Dependabot only ever touches the pin itself, not the badges or comments describing it.
