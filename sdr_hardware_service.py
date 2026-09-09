@@ -1189,7 +1189,21 @@ def publish_samples_and_metrics():
                     is_running = receiver._running.is_set() if hasattr(receiver, '_running') else False
                     if not is_running:
                         continue
-                    
+
+                    # Batch this iteration's IQ publish, spectrum setex, and
+                    # ring-buffer hset+expire into one Redis round trip
+                    # instead of up to four separate ones. None of these
+                    # calls' return values are used, so queuing them on a
+                    # non-transactional pipeline and executing once is a
+                    # pure round-trip reduction with no behavior change.
+                    # Confirmed live via py-spy + a ground-truth per-thread
+                    # /proc CPU census that the SDR-Publisher thread's redis
+                    # client protocol overhead (command send + reply read +
+                    # parse, repeated per call) was a substantial fraction
+                    # of its real (non-idle) CPU time.
+                    pipe = redis_client.pipeline(transaction=False)
+                    pipe_has_commands = False
+
                     # Get samples from receiver
                     if hasattr(receiver, 'get_samples'):
                         # Size the read by *duration*, not a fixed sample
@@ -1245,11 +1259,12 @@ def publish_samples_and_metrics():
                                 'samples': encoded,
                             }
                             
-                            redis_client.publish(
+                            pipe.publish(
                                 f"{SDR_SAMPLE_CHANNEL}:{identifier}",
                                 json.dumps(sample_data)
                             )
-                            
+                            pipe_has_commands = True
+
                             # Compute and publish spectrum (rate-limited)
                             # Note: Spectrum computed from decimated samples, so uses effective rate
                             last_time = last_spectrum_time.get(identifier, 0)
@@ -1267,27 +1282,37 @@ def publish_samples_and_metrics():
                                         ),
                                         timestamp=current_time,
                                     )
-                                    redis_client.setex(
+                                    pipe.setex(
                                         f"{SDR_SPECTRUM_KEY_PREFIX}{identifier}",
                                         5,  # 5 second TTL
                                         json.dumps(spectrum_payload)
                                     )
+                                    pipe_has_commands = True
                                 last_spectrum_time[identifier] = current_time
-                    
+
                     # Get and publish ring buffer stats if available
                     if hasattr(receiver, 'get_ring_buffer_stats'):
                         ring_stats = receiver.get_ring_buffer_stats()
                         if ring_stats:
-                            redis_client.hset(
+                            pipe.hset(
                                 f"sdr:ring_buffer:{identifier}",
                                 mapping={k: json.dumps(v) if isinstance(v, (dict, list)) else str(v)
                                         for k, v in ring_stats.items()}
                             )
-                            redis_client.expire(f"sdr:ring_buffer:{identifier}", 10)
+                            pipe.expire(f"sdr:ring_buffer:{identifier}", 10)
+                            pipe_has_commands = True
                         else:
                             ring_stats = None
                     else:
                         ring_stats = None
+
+                    # Flush this iteration's batched commands (publish,
+                    # spectrum setex, ring-buffer hset+expire) in one round
+                    # trip. Errors here are handled by the same outer
+                    # except-per-receiver block below, same as an
+                    # unpipelined call would have been.
+                    if pipe_has_commands:
+                        pipe.execute()
 
                     # SDR Diagnostics historical trend sample -- own 10s
                     # wall-clock throttle, independent of the spectrum/
