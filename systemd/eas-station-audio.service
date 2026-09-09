@@ -56,5 +56,13 @@ ReadWritePaths=/opt/eas-station /var/log/eas-station
 LimitNOFILE=65536
 MemoryMax=512M
 
+# Scheduling priority - hosts the SAME/EAS header decoder for every audio
+# source (SDR and network streams alike), plus Icecast relay and archival
+# ffmpeg children. On a box running at sustained high load, this path
+# starving for CPU means a missed SAME header, not just a late log line.
+# Matches eas-station-demod.service's Nice=-3 -- see that unit for the
+# dropped-audio-chunk evidence behind this.
+Nice=-3
+
 [Install]
 WantedBy=multi-user.target eas-station.target

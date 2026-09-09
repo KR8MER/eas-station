@@ -755,7 +755,7 @@ class RBDSWorker:
                     groups_decoded += 1
                     with self._data_lock:
                         self._latest_data = rbds_data
-                    logger.info(
+                    logger.debug(
                         "RBDS decoded: PS='%s' PI=%s (samples=%d, groups=%d)",
                         rbds_data.ps_name,
                         rbds_data.pi_code,
@@ -888,7 +888,7 @@ class RBDSWorker:
             pilot_filtered_rms = np.sqrt(np.mean(pilot_filtered_sig ** 2))
             pilot_hz = self._measured_pilot_freq if self._measured_pilot_freq is not None else 19000.0
             expected_phase = 2.0 * np.pi * pilot_hz * n / self._sample_rate
-            logger.info(
+            logger.debug(
                 "RBDS Pilot (locked at %.3f Hz): multiplex_rms=%.3f, "
                 "filtered_rms=%.3f, samples=%d, expected_phase=%.2f rad",
                 pilot_hz, pilot_rms, pilot_filtered_rms, n, expected_phase,
@@ -2032,7 +2032,7 @@ class RBDSWorker:
                                     with self._stats_lock:
                                         self._stats.groups_decoded += 1
 
-                                    logger.info("RBDS group: PI=0x%04X type=%s", program_identification, group_type)
+                                    logger.debug("RBDS group: PI=0x%04X type=%s", program_identification, group_type)
                     
                     # Reset for next block.  next_block_bit_counter is 1 when
                     # slip recovery already consumed one bit of the next block
@@ -2085,7 +2085,7 @@ class RBDSWorker:
                                 self._stats.sync_lost_count += 1
                                 self._stats.sync_acquired_unix = None
                         else:
-                            logger.info("RBDS sync OK (%d bad blocks on %d total)", self._rbds_wrong_blocks_counter, self._rbds_blocks_counter)
+                            logger.debug("RBDS sync OK (%d bad blocks on %d total)", self._rbds_wrong_blocks_counter, self._rbds_blocks_counter)
                         self._rbds_blocks_counter = 0
                         self._rbds_wrong_blocks_counter = 0
 
