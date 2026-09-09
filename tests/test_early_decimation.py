@@ -65,16 +65,64 @@ def _make_receiver():
 
 def _filter_and_decimate(receiver, signal):
     """Run a single chunk through the FIR + stride-N downsample, the
-    way the driver's hot path does it (zi carried across calls)."""
+    way the driver's hot path does it (real/imag split, zi carried
+    across calls -- see the comment at drivers.py's early-decim call
+    site for why: a single complex-input lfilter call silently falls
+    off scipy's fast C path onto an O(N*taps) numpy.convolve fallback)."""
     from scipy import signal as scipy_signal
 
     h = receiver._early_decim_aa_filter
     decim = receiver._early_decim_factor
     # Seed zi as the hot path does on the first chunk.
+    zi = scipy_signal.lfilter_zi(h, 1.0).astype(np.float64)
+    zi_real = zi * signal[0].real
+    zi_imag = zi * signal[0].imag
+    real_out, _ = scipy_signal.lfilter(h, 1.0, signal.real, zi=zi_real)
+    imag_out, _ = scipy_signal.lfilter(h, 1.0, signal.imag, zi=zi_imag)
+    filtered = real_out + 1j * imag_out
+    n = (len(filtered) // decim) * decim
+    return filtered[:n:decim].astype(np.complex64)
+
+
+def _filter_and_decimate_single_complex_call(receiver, signal):
+    """Reference implementation: the *old* code path, one lfilter call
+    on the complex signal directly. Slower (see above) but a ground
+    truth to prove the real/imag split is numerically equivalent."""
+    from scipy import signal as scipy_signal
+
+    h = receiver._early_decim_aa_filter
+    decim = receiver._early_decim_factor
     zi = scipy_signal.lfilter_zi(h, 1.0).astype(np.complex64) * signal[0]
     filtered, _ = scipy_signal.lfilter(h, 1.0, signal, zi=zi)
     n = (len(filtered) // decim) * decim
     return filtered[:n:decim].astype(np.complex64)
+
+
+def test_real_imag_split_matches_single_complex_lfilter_call():
+    """The real/imag-split hot path must be numerically equivalent to
+    filtering the complex signal directly in one lfilter call -- the
+    filter coefficients are real, so the two real-valued linear systems
+    (real and imaginary parts) are independent and recombining them
+    must reproduce exactly what a single complex-valued call would
+    have produced."""
+    receiver = _make_receiver()
+    fs = SAMPLE_RATE
+    duration = 0.02
+    n = int(fs * duration)
+    t = np.arange(n) / fs
+    # A multi-tone signal (not just a single sinusoid) so the
+    # comparison isn't accidentally insensitive to a filter bug that
+    # only shows up off a single frequency.
+    signal = (
+        np.exp(2j * np.pi * 57_000.0 * t)
+        + 0.5 * np.exp(2j * np.pi * 193_000.0 * t)
+        + 0.25 * np.exp(-2j * np.pi * 30_000.0 * t)
+    ).astype(np.complex64)
+
+    split = _filter_and_decimate(receiver, signal)
+    single_call = _filter_and_decimate_single_complex_call(receiver, signal)
+
+    np.testing.assert_allclose(split, single_call, rtol=1e-5, atol=1e-6)
 
 
 def test_effective_sample_rate_matches_target():

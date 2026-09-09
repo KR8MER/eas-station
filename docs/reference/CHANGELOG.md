@@ -8,6 +8,23 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.13] - 2026-09-09 - Fix scipy.signal.lfilter silently falling off its fast path on complex IQ
+
+While profiling `sdr_hardware_service.py` directly (`ps`/`top` showed it at
+~60% CPU, higher than the demod worker itself) to look for more CPU wins
+after the RTL-SDR sample-rate investigation, a 15-second `py-spy record`
+found the single largest cost in the entire process: **38.7% of all
+samples (496/1283)** were inside `numpy.convolve`, called via
+`numpy.apply_along_axis` from inside `scipy.signal.lfilter`.
+
+### Fixed
+- `_capture_loop`'s early-decimation anti-alias filter (`app_core/radio/drivers.py`) called `scipy.signal.lfilter(self._early_decim_aa_filter, 1.0, to_decimate, zi=...)` directly on the complex64 IQ stream. `scipy.signal.lfilter`'s fast C implementation (`sigtools`' direct IIR/FIR routine) only handles real dtypes -- complex input silently falls back to a generic `numpy.apply_along_axis(...) -> numpy.convolve` path, an O(N·taps) direct-form convolution instead of the optimized routine, for every single USB read on every high-rate SDR receiver (Airspy, or any RTL-SDR run above 500 kHz). `RBDSWorker` had already discovered and worked around this exact scipy behavior (`_apply_interference_notch` and its 2.4 kHz post-mix lowpass both filter real and imaginary parts separately) but the fix was never applied to this call site. Now splits `to_decimate` into `.real`/`.imag`, filters each independently (two real-valued `lfilter` calls, each hitting the fast path) with separate `zi` delay-line state, and recombines as `real_out + 1j*imag_out` -- exact, not an approximation, since the filter coefficients are real and the two components are independent linear systems. New `test_real_imag_split_matches_single_complex_lfilter_call` in `tests/test_early_decimation.py` proves numerical equivalence (rtol=1e-5) against the old single-complex-call path on a multi-tone test signal; the existing `test_alias_image_is_rejected` and `test_rbds_passband_is_flat` tests (which exercise actual filter *behavior*, not just call shape) continue to pass unchanged.
+
+Not yet measured live: the actual CPU delta on `sdr_hardware_service.py`
+after this deploys. Given the profile showed this call at 38.7% of total
+process time, a substantial drop is expected -- will confirm with a live
+`py-spy record` comparison after deployment rather than assume.
+
 ## [2.228.12] - 2026-09-09 - Stop narrowing the analog IF filter when a WFM receiver's sample rate is set low for CPU
 
 Follow-up investigation to 2.228.10/2.228.11's CPU work: since `wbks` (the
