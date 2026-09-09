@@ -8,6 +8,11 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.6] - 2026-09-09 - Bump numpy to 2.5.2
+
+### Changed
+- Dependabot dependency bump (minor release, no CVE). Synced the three tech-stack badges (`README.md` x2, `templates/partials/tech_stack_badges.html`) and a stale `requirements.txt` comment that referenced the old pinned version -- Dependabot only ever touches the pin itself, not the badges or comments describing it.
+
 ## [2.228.5] - 2026-09-09 - Restore Keep a Changelog category headers on every entry since Aug 27
 
 The `/version` page's category badges ("Added (N)", "Fixed (N)", ...) come
