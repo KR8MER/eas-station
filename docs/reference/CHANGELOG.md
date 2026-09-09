@@ -8,6 +8,36 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.15] - 2026-09-09 - Batch the SDR publisher's per-chunk Redis calls into one round trip
+
+Continuing the CPU hunt after 2.228.14: this time built a proper ground-truth
+measurement first, rather than trusting `py-spy record`'s wall-clock sampling
+directly (a `time.sleep()` or blocked syscall shows up in a wall-clock
+profile proportional to how long it took, not how much CPU it used --
+exactly the pitfall that produced the wrong diagnosis in 2.228.13). Reading
+utime+stime straight from `/proc/<pid>/task/<tid>/stat` over a fixed window
+gives real, unambiguous per-thread CPU consumption.
+
+That census confirmed `sdr_hardware_service.py`'s two hot threads
+(`RTLSDRReceiver-wbks` capture and `SDR-Publisher`) both do carry genuine
+CPU load (not just I/O wait) -- combined ~42.4% of a core. Re-filtering the
+existing `py-spy` profile to just the publisher thread's frames, and
+excluding its `time.sleep()` idle leaf this time, showed Redis client
+protocol overhead (command send + reply read + parse, repeated per call)
+at ~42% of that thread's real busy time -- more than `zlib.compress` alone.
+
+### Fixed
+- `publish_samples_and_metrics()` (`sdr_hardware_service.py`) issued up to four separate synchronous Redis round trips per chunk -- `publish()` (IQ samples, every chunk), `setex()` (spectrum, rate-limited to every 100ms), and `hset()` + `expire()` (ring-buffer stats, *every* chunk, unlike the other two which are throttled). Each round trip pays the full redis-py call chain (`execute_command` -> `_execute_command` -> `call_with_retry` -> `_send_command_parse_response` -> `parse_response` -> `read_response` -> `read_from_socket`) even though none of these calls' return values were ever used. Now queues whichever of these are due each iteration onto one non-transactional `redis_client.pipeline(transaction=False)` and executes once. No behavior change -- same commands, same order, same effects, just one network round trip instead of up to four.
+
+Live-verified before opening this PR, same discipline as 2.228.14: deployed
+directly to `/opt`, confirmed `wbks` still decoding correctly (stereo pilot
+locked, RBDS synced, real PS name/RadioText), confirmed the ring-buffer-stats
+and spectrum Redis keys still populate (proving the pipelined commands still
+execute), and re-ran the ground-truth per-thread `/proc` census: total CPU
+on `sdr_hardware_service.py` dropped from 42.4% to 38.9% of a core. Smaller
+than 2.228.14's win (this only removes redundant round-trip overhead, not a
+slow-path compute bug), but real and measured the same rigorous way.
+
 ## [2.228.14] - 2026-09-09 - Correction: the real 2.228.13 fix is oaconvolve, not a real/imag lfilter split
 
 2.228.13's diagnosis was wrong, caught by re-profiling live rather than
