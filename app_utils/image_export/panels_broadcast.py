@@ -45,7 +45,7 @@ from PIL import ImageDraw
 from .palette import (
     WHITE, _SEVERITY, _TEXT, _TEXT_MUT, _TEXT_SEC, _THREAT_CLR, _darken,
 )
-from .fonts import _th, _tw
+from .fonts import _th, _title_font_for, _tw
 from .drawing import _draw_stat_box
 from .icons import _ICON_FN
 from .text import _format_countdown, _short_local_dt
@@ -141,7 +141,18 @@ def _draw_expires_block(draw: ImageDraw.ImageDraw, fonts: Dict,
         return iy
 
     lfont = fonts['label']
+    # Shrink-to-fit: an absolute stamp like "Sep 9 · 8:48 AM EDT" easily
+    # runs wider than the narrow column at the full 30px title size (342px
+    # measured vs. a 284px column), and this column sits close enough to
+    # the canvas's right edge that overflow gets hard-clipped by the image
+    # boundary instead of just looking cramped -- same shrink-loop pattern
+    # render.py uses for the header's event-name title.
     vfont = fonts['title']
+    size = 30
+    while size > 16 and _tw(vfont, time_str) > iw:
+        size -= 2
+        vfont = _title_font_for(size)
+
     box_h = _th(lfont, label) + 4 + _th(vfont, time_str) + 10
     if iy + box_h > bot:
         return iy

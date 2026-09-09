@@ -425,9 +425,12 @@ def generate_alert_image(
         # doesn't fit here, so a compact stack leads with the highest-
         # signal items instead -- damage tier, tornado tag, EXPIRES,
         # hazard stat boxes, a one-line motion readout, then WHAT TO DO.
+        iy_start = iy
         iy = _draw_damage_callout(draw, fonts, ix, iy, iw, bot, ipaws_data)
+        damage_shown = iy > iy_start
 
         tornado = ((ipaws_data or {}).get('threat_data') or {}).get('tornado')
+        tornado_shown = False
         if tornado and tornado.get('level', 'none') != 'none':
             pill_text = f"TORNADO {tornado.get('display', 'POSSIBLE').upper()}"
             pill_font = fonts['label']
@@ -436,10 +439,29 @@ def generate_alert_image(
                 _draw_pill(draw, pill_font, pill_text, _SEVERITY['severe'],
                           ix, iy, text_color=WHITE)
                 iy += pill_h + 8
+                tornado_shown = True
 
         iy = _draw_expires_block(draw, fonts, ix, iy, iw, bot, alert)
+
+        iy_before_hazard = iy
         iy = _draw_hazard_stat_boxes(draw, fonts, ix, iy, iw, bot, ipaws_data)
         iy = _draw_storm_motion_line(draw, fonts, ix, iy, iw, bot, ipaws_data)
+        hazard_shown = iy > iy_before_hazard
+
+        # This compact stack is tuned for severe-thunderstorm/tornado
+        # products (damage tier, tornado tag, wind/hail stats, storm
+        # motion) -- for any other CAP event (911/telephone outages,
+        # civil emergency messages, winter/flood advisories with no
+        # convective threat data, ...) every one of those is a no-op, and
+        # without a fallback the card would carry nothing but a bare
+        # EXPIRES time. Fall back to the same generic headline/description
+        # text the wide-column layout always shows.
+        if not (damage_shown or tornado_shown or hazard_shown):
+            iy = _draw_nws_headline(draw, fonts, alr_clr, ix, iy, iw, bot,
+                                    alert, ipaws_data)
+            iy = _draw_description(draw, fonts, alr_clr, ix, iy, iw, bot,
+                                   alert, timing_shown=True)
+
         iy = _draw_instruction(draw, fonts, alr_clr, ix, iy, iw, bot, alert)
     else:
         # Priority order for a share card: storm threats (when dangerous), the

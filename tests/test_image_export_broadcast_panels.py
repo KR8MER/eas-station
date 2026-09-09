@@ -158,6 +158,36 @@ def test_expires_block_draws_when_expires_set():
     assert _region_has_nonbg_pixel(img, (0, 0, 284, new_iy))
 
 
+def test_expires_block_shrinks_long_timestamp_to_fit_column():
+    """A long absolute stamp ("Sep 9 . 8:48 AM EDT") measures wider than the
+    narrow column at the full 30px title size -- and that column sits only
+    a handful of pixels from the canvas's right edge, so any overflow gets
+    hard-clipped by the image boundary rather than just looking cramped.
+    The drawn value must never be wider than the column it's given."""
+    from datetime import datetime, timedelta, timezone
+
+    iw = 284
+    img, draw = _canvas(w=iw + 66)  # extra margin to catch overflow past iw
+    fonts = image_export._load_fonts()
+    alert = _FakeAlert()
+    # _short_local_dt only includes the date when expires falls on a
+    # different calendar day than sent -- that's what makes the string
+    # long enough to reproduce the overflow ("Sep 9 . 8:48 AM EDT" vs.
+    # same-day's bare "8:48 AM EDT").
+    alert.sent = datetime.now(timezone.utc) - timedelta(days=1)
+    alert.expires = alert.sent + timedelta(days=1, hours=2, minutes=29)
+
+    time_str = image_export._short_local_dt(alert.expires, ref=alert.sent)
+    # Sanity check this fixture actually reproduces the overflow the fix
+    # addresses: at the original fixed 30px size it must not fit.
+    assert image_export._tw(fonts["title"], time_str) > iw
+
+    image_export._draw_expires_block(draw, fonts, 0, 0, iw, 400, alert)
+
+    # No non-background pixel painted past the column's own width.
+    assert not _region_has_nonbg_pixel(img, (iw, 0, iw + 66, 400))
+
+
 def test_expires_block_noop_without_expires():
     img, draw = _canvas()
     fonts = image_export._load_fonts()
@@ -297,5 +327,40 @@ def test_generate_alert_image_landscape_without_threats_still_renders():
         aspect_ratio="landscape",
     )
     assert png.startswith(b"\x89PNG")
+
+
+def test_narrow_column_falls_back_to_headline_when_no_weather_content():
+    """A non-severe-weather CAP event (e.g. a 911/telephone outage notice)
+    carries no damage tier, tornado tag, or wind/hail stats -- every
+    weather-specific narrow-column drawer no-ops. Without a fallback the
+    card would show nothing but a bare EXPIRES time and an otherwise empty
+    column; it must instead fall back to the same generic HEADLINE /
+    DESCRIPTION text the wide-column layout always shows."""
+    from datetime import datetime, timedelta, timezone
+
+    alert = _FakeAlert()
+    alert.event = "911 Landline Issue"
+    alert.sent = datetime.now(timezone.utc)
+    alert.expires = alert.sent + timedelta(hours=2, minutes=29)
+    alert.headline = "911 emergency telephone service is down in Test County"
+    alert.description = (
+        "The 911 emergency landline system serving Test County is out of "
+        "service. Residents needing emergency assistance should use a "
+        "mobile phone to dial 911."
+    )
+    alert.instruction = ""
+
+    png = image_export.generate_alert_image(
+        alert, {}, {}, {"county_name": "Test County, OH"},
+        aspect_ratio="landscape",
+    )
+    img = Image.open(io.BytesIO(png)).convert("RGB")
+
+    ix, iy, iw, ih = image_export._LAYOUT_LANDSCAPE.info_rect
+    bg = image_export._BG
+    # EXPIRES alone only fills a small strip near the top of the column;
+    # the fallback headline/description must paint well below it too.
+    lower_two_thirds = img.crop((ix, iy + ih // 3, ix + iw, iy + ih))
+    assert any(px != bg for px in lower_two_thirds.getdata())
     img = Image.open(io.BytesIO(png))
     assert img.size == (1200, 630)
