@@ -65,6 +65,19 @@ logger = logging.getLogger(__name__)
 #: is ~2s of buffering.
 _QUEUE_MAXSIZE = 64
 
+#: How often to write the demod:status:<id> key -- must stay at or below
+#: RedisSDRSourceAdapter._STATUS_CACHE_TTL_S (redis_sdr_adapter.py, 0.25s)
+#: so a reader is never handed something staler than its own cache would
+#: have tolerated. Chunks arrive every ~32ms (~31/s); py-spy profiling on
+#: a live, CPU-contended box found this per-chunk pickle+base64+SETEX call
+#: alone accounting for over a third of the worker's total CPU time --
+#: the reader already caches for 250ms because "_update_metrics() runs
+#: far more often than the status meaningfully changes" (see that class's
+#: docstring), so most of those ~31 writes/s were being overwritten before
+#: ever being read even once. The actual audio publish() right below this
+#: is untouched -- that is the real signal data and must stay per-chunk.
+_STATUS_PUBLISH_INTERVAL_S = 0.2
+
 
 class DemodWorker:
     """Owns one demodulator instance and its dedicated worker thread.
@@ -94,6 +107,7 @@ class DemodWorker:
         self._chunks_dropped = 0
         self._chunks_processed = 0
         self._last_processed_at: float = 0.0
+        self._last_status_publish_at: float = 0.0
 
         self._stop_event = threading.Event()
         self._thread = threading.Thread(
@@ -283,7 +297,13 @@ class DemodWorker:
         except Exception as exc:
             logger.debug("demod worker %s: audio publish failed: %s", self.receiver_id, exc)
 
-        if status is not None:
+        # Throttled: see _STATUS_PUBLISH_INTERVAL_S -- the reader caches for
+        # 250ms already, so publishing on every ~32ms chunk was writing this
+        # pickle+base64+SETEX up to ~7-8x more often than any reader could
+        # ever see, for a cost py-spy measured as the single largest slice
+        # of this worker's CPU time.
+        now = time.time()
+        if status is not None and (now - self._last_status_publish_at) >= _STATUS_PUBLISH_INTERVAL_S:
             try:
                 status_key = f"{RedisChannels.DEMOD_STATUS_PREFIX}{self.receiver_id}"
                 # base64 for the same reason as the audio envelope above --
@@ -295,6 +315,7 @@ class DemodWorker:
                     RedisChannels.DEMOD_STATUS_TTL_SECONDS,
                     encoded,
                 )
+                self._last_status_publish_at = now
             except Exception as exc:
                 logger.debug("demod worker %s: status publish failed: %s", self.receiver_id, exc)
 

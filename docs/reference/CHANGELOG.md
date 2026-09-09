@@ -8,7 +8,39 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.228.7] - 2026-09-09 - Fix now-playing default source picking EAS priority over actual content
+## [2.228.8] - 2026-09-09 - Throttle demod's per-chunk status publish; the Aug 26 GIL fix never actually fixed the underlying cost
+
+Investigated a reported missed Required Monthly Test on the `wbks` SDR
+receiver. `eas-station-audio.service`'s "Icecast buffer running low for
+mount /sdr-wbks.mp3" warning -- the exact symptom commit `26b4eb9f`
+(2026-08-26, "Split demod into its own process") was written to eliminate
+-- turned out to still be firing roughly every 30 seconds, continuously,
+unbroken from that commit's own era through today; a later Nice priority
+bump (2.228.1, PR #2579) didn't touch it either. Confirmed live via
+`py-spy record` on the actual running `eas-station-demod.service` process
+under real contention (system load 4.5-5.6 on 4 cores) rather than
+reasoning from code: of the worker thread's genuinely on-CPU time (a third
+of all samples were idle waits in the subscriber/queue threads and
+correctly excluded), publishing the per-chunk `demod:status:<id>` Redis
+key -- `pickle.dumps()` + base64 + `SETEX`, once per ~32ms IQ chunk
+(~31/s) -- was the single largest individual line, ahead of the actual FM
+stereo/RBDS DSP math.
+
+### Fixed
+- `RedisSDRSourceAdapter._get_remote_status()` (`app_core/audio/redis_sdr_adapter.py`) already caches this key for 250ms because, per its own docstring, "`_update_metrics()` runs far more often than the status meaningfully changes" -- but `DemodWorker._publish()` (`services/demod/worker.py`) was still writing a fresh one on every single chunk, roughly 7-8x more often than any reader could ever consume. Added `_STATUS_PUBLISH_INTERVAL_S = 0.2`s throttle on the status write only; the audio `publish()` call right next to it -- the actual signal data -- is untouched and still fires every chunk. New tests in `tests/test_demod_service.py` covering both the throttling and that it resumes after the window elapses.
+
+Not fixed here, flagged for dedicated follow-up rather than a rushed
+change to the live SAME-decode signal path: `_decode_stereo`'s three
+`oaconvolve` FFT-convolution calls (`app_core/radio/demod/fm.py`), each
+against a 1025-tap filter (algorithmically the right choice at that
+length, not a bug), were the single largest *category* of on-CPU time
+once grouped -- and they run at the SDR's full raw IQ rate (e.g.
+1.024 MHz for `wbks`) rather than a decimated rate, per an explicit
+`CRITICAL FIX` comment documenting a prior filter/sample-rate mismatch
+bug. Reordering that decimation could recover a large further reduction
+but touches the correctness of the live EAS decode path directly; it
+needs its own careful, validated pass, not something bolted onto this
+session's fix.
 
 Verified live on a real multi-source deployment: `GET /api/audio/now-playing`
 (no `?source=`) returned an empty (all-null) payload even though two other

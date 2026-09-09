@@ -170,6 +170,76 @@ class TestDemodWorker(unittest.TestCase):
         status_key = self.redis_client.setex.call_args[0][0]
         self.assertEqual(status_key, "demod:status:test-rx")
 
+    def test_status_publish_is_throttled_across_rapid_chunks(self):
+        """py-spy profiling on a live, CPU-contended box found the per-chunk
+        pickle+base64+SETEX status write alone accounting for over a third
+        of the demod worker's CPU time -- while the reader
+        (RedisSDRSourceAdapter._get_remote_status) caches for 250ms because
+        status changes far slower than the ~32ms chunk cadence. Feeding
+        several chunks within one throttle window must publish audio for
+        every chunk but the status key far fewer times, not once per
+        chunk."""
+        from services.demod import worker as worker_module
+
+        worker = self._make_worker()
+        sample_rate = 250000
+        num_samples = int(sample_rate * 0.02)
+        t = np.arange(num_samples) / sample_rate
+        iq = np.exp(2j * np.pi * 1000 * t).astype(np.complex64)
+        message = _encode_iq_message(iq, sample_rate, 93900000)
+
+        chunk_count = 8
+        for _ in range(chunk_count):
+            worker.submit_message(message)
+
+        import time
+        deadline = time.monotonic() + 5.0
+        while worker.get_stats()["chunks_processed"] < chunk_count and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+        self.assertEqual(worker.get_stats()["chunks_processed"], chunk_count)
+        self.assertEqual(worker.get_stats()["chunks_dropped"], 0)
+
+        # Every chunk still publishes audio -- that's the real signal data
+        # and must never be throttled.
+        self.assertEqual(self.redis_client.publish.call_count, chunk_count)
+        # But the status key, all published within one
+        # _STATUS_PUBLISH_INTERVAL_S window, should have been written far
+        # fewer times than there were chunks -- not once per chunk.
+        self.assertLess(self.redis_client.setex.call_count, chunk_count)
+        self.assertGreaterEqual(self.redis_client.setex.call_count, 1)
+
+    def test_status_publish_resumes_after_throttle_window(self):
+        """After the throttle interval elapses, a new status write goes
+        through again -- this isn't a one-shot latch, just a rate limit."""
+        from services.demod import worker as worker_module
+
+        worker = self._make_worker()
+        sample_rate = 250000
+        num_samples = int(sample_rate * 0.02)
+        t = np.arange(num_samples) / sample_rate
+        iq = np.exp(2j * np.pi * 1000 * t).astype(np.complex64)
+        message = _encode_iq_message(iq, sample_rate, 93900000)
+
+        worker.submit_message(message)
+        import time
+        deadline = time.monotonic() + 3.0
+        while worker.get_stats()["chunks_processed"] < 1 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        first_count = self.redis_client.setex.call_count
+        self.assertEqual(first_count, 1)
+
+        # Force the throttle window to have elapsed, as if real wall-clock
+        # time had passed, rather than sleeping the test for it.
+        worker._last_status_publish_at -= (worker_module._STATUS_PUBLISH_INTERVAL_S + 0.1)
+
+        worker.submit_message(message)
+        deadline = time.monotonic() + 3.0
+        while worker.get_stats()["chunks_processed"] < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+        self.assertEqual(self.redis_client.setex.call_count, first_count + 1)
+
     def test_drops_on_backpressure_without_blocking(self):
         """submit_message() must never block the caller -- verify it
         returns immediately and increments a drop counter once the bounded
