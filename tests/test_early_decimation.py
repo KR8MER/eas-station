@@ -65,64 +65,124 @@ def _make_receiver():
 
 def _filter_and_decimate(receiver, signal):
     """Run a single chunk through the FIR + stride-N downsample, the
-    way the driver's hot path does it (real/imag split, zi carried
-    across calls -- see the comment at drivers.py's early-decim call
-    site for why: a single complex-input lfilter call silently falls
-    off scipy's fast C path onto an O(N*taps) numpy.convolve fallback)."""
+    way the driver's hot path does it: overlap-add via oaconvolve with
+    the convolution tail carried across calls, then a stride-phase-
+    tracked downsample (see the comment at drivers.py's early-decim
+    call site for why oaconvolve replaces lfilter -- a pure-FIR
+    lfilter call, real or complex input, always takes scipy's slow
+    O(N*taps) numpy.convolve fallback since the fast C path only
+    activates for true IIR filters)."""
     from scipy import signal as scipy_signal
 
     h = receiver._early_decim_aa_filter
     decim = receiver._early_decim_factor
-    # Seed zi as the hot path does on the first chunk.
-    zi = scipy_signal.lfilter_zi(h, 1.0).astype(np.float64)
-    zi_real = zi * signal[0].real
-    zi_imag = zi * signal[0].imag
-    real_out, _ = scipy_signal.lfilter(h, 1.0, signal.real, zi=zi_real)
-    imag_out, _ = scipy_signal.lfilter(h, 1.0, signal.imag, zi=zi_imag)
-    filtered = real_out + 1j * imag_out
-    n = (len(filtered) // decim) * decim
-    return filtered[:n:decim].astype(np.complex64)
+
+    full = scipy_signal.oaconvolve(signal, h)
+    n = len(signal)
+    filtered = full[:n]
+    decimated = filtered[::decim]
+    return decimated.astype(np.complex64)
 
 
-def _filter_and_decimate_single_complex_call(receiver, signal):
-    """Reference implementation: the *old* code path, one lfilter call
-    on the complex signal directly. Slower (see above) but a ground
-    truth to prove the real/imag split is numerically equivalent."""
+def _filter_and_decimate_chunked(receiver, signal, chunk_sizes):
+    """Same as _filter_and_decimate, but fed in successive chunks the
+    way real USB reads arrive -- exercises the tail-carry and
+    stride-phase state across call boundaries."""
+    from scipy import signal as scipy_signal
+
+    h = receiver._early_decim_aa_filter
+    decim = receiver._early_decim_factor
+    tail = None
+    phase = 0
+    out_chunks = []
+
+    pos = 0
+    for size in chunk_sizes:
+        chunk = signal[pos: pos + size]
+        pos += size
+        if len(chunk) == 0:
+            continue
+        full = scipy_signal.oaconvolve(chunk, h)
+        if tail is not None and tail.size:
+            if tail.size > full.size:
+                full = np.concatenate([full, np.zeros(tail.size - full.size, dtype=full.dtype)])
+            full[: tail.size] += tail
+        n = len(chunk)
+        tail = full[n:].copy()
+        filtered = full[:n]
+        out_chunks.append(filtered[phase::decim].astype(np.complex64))
+        phase = (phase - n) % decim
+
+    return np.concatenate(out_chunks)
+
+
+def _filter_and_decimate_single_complex_lfilter_call(receiver, signal):
+    """Ground truth: the filter's mathematical definition, applied as
+    one lfilter call directly on the complex signal (correct but slow
+    -- see the comment at drivers.py's early-decim call site). Used
+    only to prove the fast oaconvolve-based hot path is numerically
+    equivalent, not as a code path anything actually runs."""
     from scipy import signal as scipy_signal
 
     h = receiver._early_decim_aa_filter
     decim = receiver._early_decim_factor
     zi = scipy_signal.lfilter_zi(h, 1.0).astype(np.complex64) * signal[0]
     filtered, _ = scipy_signal.lfilter(h, 1.0, signal, zi=zi)
-    n = (len(filtered) // decim) * decim
-    return filtered[:n:decim].astype(np.complex64)
+    return filtered[::decim].astype(np.complex64)
 
 
-def test_real_imag_split_matches_single_complex_lfilter_call():
-    """The real/imag-split hot path must be numerically equivalent to
-    filtering the complex signal directly in one lfilter call -- the
-    filter coefficients are real, so the two real-valued linear systems
-    (real and imaginary parts) are independent and recombining them
-    must reproduce exactly what a single complex-valued call would
-    have produced."""
-    receiver = _make_receiver()
-    fs = SAMPLE_RATE
-    duration = 0.02
+def _test_signal(fs, duration):
     n = int(fs * duration)
     t = np.arange(n) / fs
-    # A multi-tone signal (not just a single sinusoid) so the
-    # comparison isn't accidentally insensitive to a filter bug that
-    # only shows up off a single frequency.
-    signal = (
+    return (
         np.exp(2j * np.pi * 57_000.0 * t)
         + 0.5 * np.exp(2j * np.pi * 193_000.0 * t)
         + 0.25 * np.exp(-2j * np.pi * 30_000.0 * t)
     ).astype(np.complex64)
 
-    split = _filter_and_decimate(receiver, signal)
-    single_call = _filter_and_decimate_single_complex_call(receiver, signal)
 
-    np.testing.assert_allclose(split, single_call, rtol=1e-5, atol=1e-6)
+def test_oaconvolve_hot_path_matches_single_complex_lfilter_call():
+    """The oaconvolve-based hot path must be numerically equivalent to
+    filtering the complex signal directly with a single lfilter call
+    (the filter's mathematical ground truth) -- oaconvolve is just a
+    faster way to compute the same linear convolution, not a different
+    filter. lfilter's transient at the very start (its zi seed vs.
+    oaconvolve's implicit zero-history) means the first few samples
+    legitimately differ, so this trims a settle region before
+    comparing, same as the alias-rejection/passband tests below."""
+    receiver = _make_receiver()
+    signal = _test_signal(SAMPLE_RATE, duration=0.02)
+
+    fast = _filter_and_decimate(receiver, signal)
+    ground_truth = _filter_and_decimate_single_complex_lfilter_call(receiver, signal)
+
+    settle = len(receiver._early_decim_aa_filter) // receiver._early_decim_factor + 4
+    np.testing.assert_allclose(
+        fast[settle:], ground_truth[settle:], rtol=1e-4, atol=1e-5
+    )
+
+
+def test_chunked_hot_path_matches_single_continuous_call():
+    """Feeding the signal through in several irregular-sized chunks
+    (simulating real USB reads whose length isn't a multiple of the
+    decimation factor) must produce the same output as filtering the
+    whole signal in one call -- proving the tail-carry and stride-phase
+    state correctly stitches chunk boundaries together seamlessly."""
+    receiver = _make_receiver()
+    signal = _test_signal(SAMPLE_RATE, duration=0.03)
+
+    continuous = _filter_and_decimate(receiver, signal)
+    chunked = _filter_and_decimate_chunked(
+        receiver, signal, chunk_sizes=[4001, 3999, 5000, 1, 8000, 10000]
+    )
+
+    # Different FFT sizes per chunk vs. one FFT over the whole signal are
+    # mathematically the same convolution but not bit-identical (floating
+    # point isn't associative across different-sized transforms) -- so
+    # this is a tight numerical tolerance, not exact equality.
+    np.testing.assert_allclose(
+        continuous[: len(chunked)], chunked, rtol=1e-5, atol=1e-6
+    )
 
 
 def test_effective_sample_rate_matches_target():

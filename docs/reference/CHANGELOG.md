@@ -8,7 +8,25 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.14] - 2026-09-09 - Correction: the real 2.228.13 fix is oaconvolve, not a real/imag lfilter split
+
+2.228.13's diagnosis was wrong, caught by re-profiling live rather than
+trusting the theory. After deploying 2.228.13 to `/opt` and restarting
+`eas-station-sdr.service`, a fresh `py-spy record` showed `numpy.convolve`
+*still* dominant (29.7% of samples, barely down from 38.7%) -- `top` even
+showed the process running *hotter* (68.7% vs. the original ~60%).
+
+### Fixed
+- Reading scipy's actual `lfilter` source (`_signaltools.py`) showed the real condition: the fast C path (`_sigtools._linear_filter`) only activates when `len(a) > 1` -- a true IIR filter. This anti-alias filter is pure FIR (`a=1.0`), so **any** `lfilter` call on it -- real or complex input, split or not -- unconditionally takes the slow `np.apply_along_axis(...) -> np.convolve` fallback. The real/imag split in 2.228.13 ran two calls through the identical slow path instead of one, which is why CPU didn't meaningfully improve. `app_core/radio/drivers.py`'s `_capture_loop` now replaces `lfilter` entirely with overlap-add via `scipy.signal.oaconvolve` (FFT-based, handles complex input natively, no split needed) -- the same technique `FMDemodulator._mono_audio_lowpass` already uses successfully. Benchmarked directly: `oaconvolve` on 1M complex64 samples with a 257-tap filter took ~46 ms vs. `lfilter`'s >150 ms for just the real half alone. Confirmed live this time: a follow-up `py-spy record` after deploying shows `numpy.convolve` gone entirely from the profile (the only remaining FFT-related cost is legitimate `oaconvolve` work at ~8.4% combined), and `sdr_hardware_service`'s live CPU dropped from ~60% to ~36%. Also fixes a latent double-counting bug present in the *original* pre-2.228.13 code (predates both attempts): it carried filter state (`zi`) across calls but also re-fed leftover unfiltered samples through that same state on the next call, filtering the boundary samples twice; the overlap-add tail-carry has no such issue since every input sample is consumed and filtered exactly once. New tests in `tests/test_early_decimation.py`: `test_oaconvolve_hot_path_matches_single_complex_lfilter_call` (numerical equivalence against the filter's mathematical ground truth) and `test_chunked_hot_path_matches_single_continuous_call` (proves the tail-carry/phase state stitches irregular real-world USB-read chunk boundaries seamlessly).
+
+Process note for next time: verified live on `/opt` (file copied directly,
+service restarted, re-profiled) *before* opening this PR, rather than
+merging on passing unit tests alone and finding out after -- which is
+exactly what caught 2.228.13's wrong diagnosis in the first place.
+
 ## [2.228.13] - 2026-09-09 - Fix scipy.signal.lfilter silently falling off its fast path on complex IQ
+
+**Correction (2.228.14): the fix below did not work.** Live re-profiling after deployment showed `numpy.convolve` still dominant and CPU higher than before. The real/imag split assumption was wrong -- see 2.228.14 for the actual root cause and fix. Left here for the historical record of what shipped and why the diagnosis seemed right at the time.
 
 While profiling `sdr_hardware_service.py` directly (`ps`/`top` showed it at
 ~60% CPU, higher than the demod worker itself) to look for more CPU wins
