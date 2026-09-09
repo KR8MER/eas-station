@@ -23,6 +23,7 @@ import time
 import types
 
 import numpy as np
+import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -280,8 +281,12 @@ class _GainRecordingDevice:
     def setGain(self, direction, channel, value):  # noqa: N802
         self.calls.append(("setGain", float(value)))
 
-    def setBandwidth(self, *args, **kwargs):  # noqa: N802
-        pass
+    def setBandwidth(self, direction, channel, bandwidth_hz):  # noqa: N802
+        self.calls.append(("setBandwidth", float(bandwidth_hz)))
+
+    def getBandwidth(self, *args, **kwargs):  # noqa: N802
+        calls = [v for n, v in self.calls if n == "setBandwidth"]
+        return calls[-1] if calls else 0.0
 
     def listAntennas(self, *args, **kwargs):  # noqa: N802
         return []
@@ -405,6 +410,122 @@ def test_no_external_lna_keeps_agc_path(monkeypatch):
         # AGC enabled (True) and no manual setGain call.
         assert gain_mode_calls[-1] is True, gain_mode_calls
         assert not any(n == "setGain" for n, *_ in device.calls), device.calls
+    finally:
+        receiver.stop()
+        monkeypatch.delitem(sys.modules, "SoapySDR", raising=False)
+
+
+def test_wfm_stereo_floors_analog_bandwidth_below_multiplex_minimum(monkeypatch):
+    """A WFM receiver with stereo enabled at a low sample rate (set for CPU
+    efficiency -- see app_core/radio/decimation.py's EARLY_DECIM_TARGET_RATE)
+    must still open the analog IF filter wide enough for the full multiplex.
+
+    Reproduces the live regression: setBandwidth() used to be called with
+    the raw sample_rate directly, so a 250 kHz sample rate also narrowed the
+    *analog* filter to 250 kHz -- confirmed live on wbks (RTL-SDR) to
+    roughly triple the RBDS sync-loss rate versus capturing wide and
+    decimating in software, since a narrow analog filter attenuates the
+    pilot/L-R/RBDS subcarriers before they're even digitized.
+    """
+    devices: list = []
+    _install_recording_soapysdr_stub(monkeypatch, devices)
+
+    config = ReceiverConfig(
+        identifier="wfm-low-rate",
+        driver="rtlsdr",
+        frequency_hz=93_900_000,
+        sample_rate=250_000,  # Below WFM_MULTIPLEX_MIN_BANDWIDTH_HZ
+        gain=None,
+        modulation_type="WFM",
+        stereo_enabled=True,
+        enable_rbds=True,
+        auto_start=True,
+    )
+
+    receiver = RTLSDRReceiver(config)
+    receiver.start()
+    try:
+        assert devices
+        device = devices[0]
+        assert _wait_for_calls(
+            device, lambda c: any(name == "setBandwidth" for name, *_ in c)
+        ), f"no setBandwidth call recorded: {device.calls}"
+
+        bandwidth_calls = [v for n, v in device.calls if n == "setBandwidth"]
+        assert bandwidth_calls[-1] == pytest.approx(
+            _SoapySDRReceiver.WFM_MULTIPLEX_MIN_BANDWIDTH_HZ
+        ), bandwidth_calls
+    finally:
+        receiver.stop()
+        monkeypatch.delitem(sys.modules, "SoapySDR", raising=False)
+
+
+def test_narrowband_sample_rate_above_floor_is_unaffected(monkeypatch):
+    """When the configured sample rate is already above the WFM multiplex
+    floor, the analog bandwidth request must still just track sample_rate
+    (no artificial widening for receivers that don't need it)."""
+    devices: list = []
+    _install_recording_soapysdr_stub(monkeypatch, devices)
+
+    config = ReceiverConfig(
+        identifier="wfm-high-rate",
+        driver="rtlsdr",
+        frequency_hz=93_900_000,
+        sample_rate=2_400_000,
+        gain=None,
+        modulation_type="WFM",
+        stereo_enabled=True,
+        enable_rbds=True,
+        auto_start=True,
+    )
+
+    receiver = RTLSDRReceiver(config)
+    receiver.start()
+    try:
+        assert devices
+        device = devices[0]
+        assert _wait_for_calls(
+            device, lambda c: any(name == "setBandwidth" for name, *_ in c)
+        ), f"no setBandwidth call recorded: {device.calls}"
+
+        bandwidth_calls = [v for n, v in device.calls if n == "setBandwidth"]
+        assert bandwidth_calls[-1] == pytest.approx(2_400_000), bandwidth_calls
+    finally:
+        receiver.stop()
+        monkeypatch.delitem(sys.modules, "SoapySDR", raising=False)
+
+
+def test_non_wfm_low_sample_rate_bandwidth_not_floored(monkeypatch):
+    """A narrowband (e.g. NOAA weather radio NFM) receiver at a genuinely
+    low sample rate must NOT get the WFM multiplex floor -- widening the
+    analog filter there only lets in more adjacent-channel noise for no
+    benefit, since there's no stereo pilot or RBDS subcarrier to protect."""
+    devices: list = []
+    _install_recording_soapysdr_stub(monkeypatch, devices)
+
+    config = ReceiverConfig(
+        identifier="noaa-nfm",
+        driver="rtlsdr",
+        frequency_hz=162_550_000,
+        sample_rate=250_000,
+        gain=None,
+        modulation_type="NFM",
+        stereo_enabled=False,
+        enable_rbds=False,
+        auto_start=True,
+    )
+
+    receiver = RTLSDRReceiver(config)
+    receiver.start()
+    try:
+        assert devices
+        device = devices[0]
+        assert _wait_for_calls(
+            device, lambda c: any(name == "setBandwidth" for name, *_ in c)
+        ), f"no setBandwidth call recorded: {device.calls}"
+
+        bandwidth_calls = [v for n, v in device.calls if n == "setBandwidth"]
+        assert bandwidth_calls[-1] == pytest.approx(250_000), bandwidth_calls
     finally:
         receiver.stop()
         monkeypatch.delitem(sys.modules, "SoapySDR", raising=False)

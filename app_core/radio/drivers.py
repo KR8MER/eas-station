@@ -140,6 +140,24 @@ class _SoapySDRReceiver(ReceiverInterface):
     """Common functionality for receivers implemented via SoapySDR."""
 
     driver_hint: str = ""
+
+    # Minimum analog IF filter bandwidth (Hz) for WFM reception with stereo
+    # or RBDS enabled, regardless of how low the *sample* rate has been set
+    # for CPU efficiency. Carson's rule puts full-deviation broadcast FM's
+    # occupied bandwidth (±75 kHz deviation + 57 kHz RBDS subcarrier) at
+    # ~264 kHz; 300 kHz leaves a small margin. Confirmed live: dropping
+    # wbks (RTL-SDR) to a 250 kHz *sample* rate, back when this file tied
+    # setBandwidth() directly to sample_rate, roughly tripled the RBDS
+    # sync-loss rate (0.022/s -> 0.083/s over matched clean windows) versus
+    # capturing at 1.024 MHz and decimating in software -- narrowing the
+    # analog filter to match a low sample rate attenuates the pilot/L-R/
+    # RBDS subcarriers before they're even digitized, which no amount of
+    # downstream software decimation can recover. Software-side decimation
+    # (app_core.radio.decimation) still targets low sample rates for CPU;
+    # this constant only keeps the *analog* filter wide enough to pass the
+    # full multiplex regardless of what sample rate ends up configured.
+    WFM_MULTIPLEX_MIN_BANDWIDTH_HZ = 300_000
+
     _SOAPY_ERROR_DESCRIPTIONS = {
         -1: "Timeout waiting for samples (SOAPY_SDR_TIMEOUT)",
         -2: "Stream reported a driver error (SOAPY_SDR_STREAM_ERROR)",
@@ -1238,9 +1256,22 @@ class _SoapySDRReceiver(ReceiverInterface):
                         ", ".join(bias_keys),
                     )
 
-            # Set bandwidth to match sample rate if supported (helps with anti-aliasing)
+            # Set bandwidth to match sample rate if supported (helps with anti-aliasing).
+            # For WFM with stereo/RBDS enabled, floor it at
+            # WFM_MULTIPLEX_MIN_BANDWIDTH_HZ regardless of a low configured
+            # sample rate -- see that constant's docstring for why a narrow
+            # analog filter degrades subcarrier reception in a way software
+            # decimation afterward cannot fix.
+            requested_bandwidth_hz = self.config.sample_rate
+            if (
+                self.config.modulation_type in ("FM", "WFM")
+                and (self.config.stereo_enabled or self.config.enable_rbds)
+            ):
+                requested_bandwidth_hz = max(
+                    requested_bandwidth_hz, self.WFM_MULTIPLEX_MIN_BANDWIDTH_HZ
+                )
             try:
-                device.setBandwidth(SoapySDR.SOAPY_SDR_RX, channel, self.config.sample_rate)
+                device.setBandwidth(SoapySDR.SOAPY_SDR_RX, channel, requested_bandwidth_hz)
                 # Read back the bandwidth the hardware actually accepted —
                 # some tuners (e.g. R820T2) round to the nearest discrete
                 # step, so the accepted value can differ from what we asked.

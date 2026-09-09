@@ -8,6 +8,31 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.12] - 2026-09-09 - Stop narrowing the analog IF filter when a WFM receiver's sample rate is set low for CPU
+
+Follow-up investigation to 2.228.10/2.228.11's CPU work: since `wbks` (the
+live, actively-receiving `wbks` RTL-SDR) already decimates from its
+1.024 MHz configured rate down to 256 kHz in software before the FM demod
+pipeline ever sees the signal (`app_core/radio/decimation.py`'s
+`EARLY_DECIM_TARGET_RATE`), the obvious next question was: why not just
+configure the RTL-SDR to natively capture at ~250 kHz and skip the
+early-decimation FIR entirely? RTL-SDR hardware supports this directly (its
+low band is 225,001-300,000 Hz) and 250 kHz already clears every downstream
+FM-stereo/RBDS threshold in `fm.py`.
+
+Tested live on `wbks`: it made things measurably worse. Over matched clean
+windows, the RBDS sync-loss rate roughly tripled (0.022/s at 1.024 MHz vs.
+0.083/s at 250 kHz).
+
+### Fixed
+- Root cause: `_SoapySDRReceiver`'s device-open path (`app_core/radio/drivers.py`) called `device.setBandwidth(SoapySDR.SOAPY_SDR_RX, channel, self.config.sample_rate)` -- tying the tuner's *analog* IF filter bandwidth directly to the configured *digital* sample rate. At 1.024 MHz the analog filter stays wide open (far more than the ~120 kHz the FM multiplex needs), so all real filtering happens cleanly in software afterward. At 250 kHz that same line also narrows the analog RF filter down to ~250 kHz -- right in the neighborhood of the multiplex itself -- attenuating the pilot/L-R/RBDS subcarriers *before they're even digitized*, which no amount of downstream software decimation can recover. Added `_SoapySDRReceiver.WFM_MULTIPLEX_MIN_BANDWIDTH_HZ = 300_000` (Carson's rule: full-deviation broadcast FM's occupied bandwidth is ~264 kHz) and floor the analog bandwidth request at that value whenever `modulation_type` is FM/WFM and stereo or RBDS is enabled -- narrowband receivers (e.g. NOAA NFM, no stereo/RBDS) are left untouched, since widening their analog filter would only admit more adjacent-channel noise for no benefit. New tests in `tests/test_radio_drivers.py`: `test_wfm_stereo_floors_analog_bandwidth_below_multiplex_minimum`, `test_narrowband_sample_rate_above_floor_is_unaffected`, `test_non_wfm_low_sample_rate_bandwidth_not_floored`.
+
+Not yet re-tested: whether this fix actually closes the gap and makes
+250 kHz native capture on RTL-SDR safe for real CPU savings. `wbks` is
+currently reverted to 1.024 MHz (confirmed stable) pending a fresh live A/B
+test of this fix before recommending the lower rate to anyone, in the UI
+or otherwise.
+
 ## [2.228.11] - 2026-09-09 - Total-audit pass: two more redundant-computation fixes in the FM stereo path
 
 Follow-up to 2.228.10 after being asked not to stop at a single finding: a
