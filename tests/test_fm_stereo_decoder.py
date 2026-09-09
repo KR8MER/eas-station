@@ -213,5 +213,37 @@ def test_stereo_decode_chunk_phase_independence():
         assert sep > 30, f"{label} separation only {sep:.1f} dB (chunk-boundary regression)"
 
 
+def test_precomputed_pilot_filtered_is_numerically_equivalent():
+    """demodulate() already computes the 19 kHz-bandpass-filtered multiplex
+    once (to decide stereo_pilot_locked) *before* ever calling
+    _decode_stereo, which used to redo the identical oaconvolve call
+    internally -- confirmed via py-spy on a live, CPU-contended box as a
+    third of this method's total FFT-convolution cost for zero benefit.
+    _decode_stereo now accepts that value instead of recomputing it.
+    This must produce bit-for-bit identical output whether the caller
+    passes it in or leaves it to be computed internally -- same
+    deterministic oaconvolve call on the same inputs either way."""
+    from scipy.signal import oaconvolve
+
+    demod = _make_fm_demodulator()
+    left, right = _make_test_signals()
+    multiplex = _synthesize_multiplex(left, right, pilot_phase=0.7)
+    indices = np.arange(len(multiplex), dtype=np.float64)
+
+    without_precompute = demod._decode_stereo(multiplex, indices)
+
+    # Fresh demodulator instance: _lpr_filter/_pilot_filter/_dsb_filter are
+    # deterministic functions of (cutoff, sample_rate, taps) alone, so a
+    # second instance's filters are identical -- this only guards against
+    # the call under test accidentally depending on _decode_stereo's own
+    # internal state from the previous call.
+    demod2 = _make_fm_demodulator()
+    precomputed_pilot = oaconvolve(multiplex, demod2._pilot_filter, mode="same")
+    with_precompute = demod2._decode_stereo(multiplex, indices, precomputed_pilot)
+
+    assert without_precompute is not None and with_precompute is not None
+    np.testing.assert_array_equal(without_precompute, with_precompute)
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

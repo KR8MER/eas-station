@@ -8,7 +8,24 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.228.9] - 2026-09-09 - Fix eas-station-displays burning CPU on a continuous 401/crash loop
+## [2.228.10] - 2026-09-09 - Stop recomputing the FM stereo pilot filter twice per chunk
+
+Continuing the `wbks` CPU investigation (2.228.8/2.228.9): py-spy profiling
+found `_decode_stereo`'s three `oaconvolve` FFT convolutions were the
+single largest *category* of the demod worker's on-CPU time once idle
+waits were excluded from the accounting.
+
+### Fixed
+- `FMDemodulator.demodulate()` (`app_core/radio/demod/fm.py`) already computes the 19 kHz-bandpass-filtered multiplex once, to decide `stereo_pilot_locked`, *before* it ever calls `_decode_stereo` -- which then recomputed the identical `oaconvolve(multiplex, self._pilot_filter, mode="same")` call internally, same input, same filter, same result, a full third of its own FFT-convolution cost for zero benefit. `_decode_stereo` now accepts the already-computed value as an optional parameter and only recomputes it when a caller doesn't supply one (every direct-call test in `tests/test_fm_stereo_decoder.py` still exercises the original internal-compute path unchanged). New `test_precomputed_pilot_filtered_is_numerically_equivalent` proves the two paths produce bit-for-bit identical output. Full audio/demod/RBDS/FM/stereo/SDR test surface (467 tests) run clean.
+
+Not fixed here: `_decode_stereo`'s remaining two `oaconvolve` calls (LPR
+lowpass, DSB lowpass for L-R) and the polyphase resampler's `einsum` gather
+step still run at the SDR's full raw IQ rate. Real further reduction needs
+decimating before this stage, which the RBDS worker's own early-decimation
+path already validates is spectrally safe (RBDS needs up to 57 kHz, higher
+than stereo's 38 kHz) -- but wiring the stereo/pilot path through the same
+decimated signal is a larger, separate change deserving its own dedicated
+pass, not bolted onto this one.
 
 Investigated why `eas-station-displays.service` was consuming 18%+ CPU at
 idle. Its log was spamming two distinct errors on every render cycle,
