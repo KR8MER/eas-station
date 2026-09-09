@@ -8,7 +8,20 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.228.4] - 2026-09-09 - Backfill two changelog entries missed at merge time
+## [2.228.5] - 2026-09-09 - Restore Keep a Changelog category headers on every entry since Aug 27
+
+The `/version` page's category badges ("Added (N)", "Fixed (N)", ...) come
+from `app_utils/changelog_parser.py`, which only recognizes real
+`### Added`/`### Fixed`/`### Changed` H3 subheadings -- v2.193.8
+(2026-08-26) was the last entry to use them. Every entry from v2.193.9
+(2026-08-27) onward switched to flat prose with inline bold labels
+(`- **Fixed**: ...` as plain text, not a heading), so the parser found
+zero categorized sections for all ~90 of them and no badge ever rendered.
+Nobody course-corrected until now.
+
+### Fixed
+- Restructured all 89 affected entries (v2.193.9 through v2.228.4) into proper `### Added`/`### Changed`/`### Fixed`/`### Removed`/`### Deprecated`/`### Security` sections. 67 already had top-level bullets with inline labels (`**New**:`, `**Fixed**:`, `**Changed**:`, ...) that map deterministically to a category, grouped mechanically without rewording; unlabeled continuation bullets inherit the category of the immediately preceding labeled bullet in the same entry, matching how they were actually written (elaboration on the same change). The other 22 entries were pure prose with no bullets at all and were hand-restructured into itemized form. Verified via `app_utils.changelog_parser.parse_changelog()` directly: 571 entries parse cleanly, and only the pre-2026-08-26 entries this pass deliberately left alone still show zero categorized items.
+- Going forward, new entries use `### Added`/`### Fixed`/`### Changed` from the start instead of drifting back to flat prose.
 
 Two commits landed on `main` with no VERSION bump and no CHANGELOG entry at
 all, discovered by scanning history for two different commits that both
@@ -18,26 +31,31 @@ Both fixes have been live since their original commit date; this entry only
 catches the documentation up, same precedent as 2.227.0's own
 "(missed at merge time)" bump.
 
+### Changed
 - **Fixed** (originally 2026-09-03, commit `287251ec`): the live weather-alert video export route (`/api/alerts/<id>/export-image.mp4`) failed every time with "child watchers are only available on the default loop". `ffmpeg`'s `subprocess.run()` was running inside `_run_off_worker`'s `gevent.get_hub().threadpool.spawn()`, but gevent's cooperative subprocess handling needs a child watcher registered on the *default* event loop, which only exists on the process's original hub -- not the separate per-thread hub a threadpool worker gets. Split `video_export.py` into `render_alert_video_frames()` (CPU/network-bound Pillow work, safe on the threadpool) and `encode_frames_to_mp4()` (the ffmpeg subprocess call, which must run back on the request's own greenlet so gevent's cooperative `subprocess.run()` actually works); `routes_alert_export_video.py` now calls them separately instead of one function wrapped entirely in `_run_off_worker`.
 - **Fixed** (originally 2026-08-26, commit `7aaa9b1e`, #2471): the global broadcast overlay could get stuck open. Its local countdown reaching 0:00 never closed it -- the modal always waited for a `broadcast_state_update` push/poll to report `active:false`, and a backgrounded mobile tab can stall the WebSocket and miss that update entirely, leaving a live-looking abort button showing even after the broadcast had genuinely finished server-side. The overlay now closes when `/api/broadcast/abort` returns a 409 ("No broadcast is currently active"), and reconciles with the server on `visibilitychange` so a stale overlay self-corrects on tab focus.
 
 ## [2.228.3] - 2026-09-09 - Bump lxml to 6.1.3
 
+### Changed
 - Dependabot dependency bump (patch release, no CVE). Synced the three tech-stack badges (`README.md` x2, `templates/partials/tech_stack_badges.html`) that `tests/test_tech_stack_badges.py` checks against `requirements.txt` -- Dependabot only ever touches the pin, not the badges, so every dependency bump needs this same manual sync or the badge-drift test fails CI.
 
 ## [2.228.2] - 2026-09-07 - Deprioritize the security-perimeter-ingest timer
 
+### Fixed
 - **Fixed**: `security-perimeter-ingest.service` (new in 2.227.0, run every 2 minutes by `security-perimeter-ingest.timer`) boots the full Flask app via `create_app()` -- all ~260 routes, every subsystem -- just to tail the nginx log and insert a handful of rows. Measured at ~6s of near-single-core CPU per run on the bare-metal box, forever, every 2 minutes. That's the same `create_app()`-for-a-CLI-script pattern `scripts/create_example_screens.py` and `scripts/fix_admin_roles.py` use, which is harmless for an occasional by-hand admin task but becomes a recurring burst when applied to an automated timer -- one that competes with the CPU-contention-sensitive real-time SDR/demod/SAME-decode path (see 2.228.1's `Nice=-3` fix below).
 - Added `Nice=10` and `IOSchedulingClass=idle` to `security-perimeter-ingest.service` so its periodic bursts always yield to the real-time services instead of contending with them. The proper fix -- a lightweight DB-only bootstrap instead of the full route-registering app factory -- is bigger scope; tracked for follow-up.
 
 ## [2.228.1] - 2026-09-07 - Reduce dropped SDR audio chunks under CPU contention
 
+### Fixed
 - **Fixed**: the `wbks` SDR receiver's SAME/EAS header decoder had produced zero alerts for two weeks (last success 2026-08-24) despite the receiver itself streaming samples normally and RDS still decoding -- while the two network-stream sources (`ERN-LUC`, `WNCI`) kept decoding alerts throughout, unaffected. Root cause: `services.demod`'s own exit-stats log showed real dropped audio chunks (`dropped=513`) on a box running at a sustained load average of 3.5-4.0 on 4 cores; a chunk dropped during the ~1s SAME tone burst fails that header even though average throughput looks healthy. `ERN-LUC`/`WNCI` don't share this failure mode since they receive already-decoded PCM over the network instead of running the CPU-heavy SDR front end (filter/decimate 1.024 Msps IQ down to audio).
 - `app_core/radio/demod/rbds_worker.py`: four RDS trace log lines were left at `INFO` instead of `DEBUG` -- one of them explicitly commented "for diagnostics only" -- producing ~845 log lines/minute (98% of the demod service's total log volume) for zero operational value. Downgraded to `DEBUG`. This alone did not measurably reduce CPU or the drop rate; kept as a legitimate cleanup, not the fix.
 - `eas-station-demod.service` and `eas-station-audio.service` now run at `Nice=-3` (systemd unit change), giving the real-time IQ-to-audio and SAME-decode path scheduling priority over less time-critical services when the box is under contention -- matching the existing `Nice=-5` on `eas-station-sdr.service`, but one step lower since that service alone is servicing USB reads directly. Post-change, `sdr-wbks`'s recurring Icecast buffer-underrun warnings (previously roughly one every 30s, continuously) dropped to zero in the most recent observation window.
 
 ## [2.228.0] - 2026-09-09 - Public now-playing API (album art over Icecast, without Icecast)
 
+### Added
 - **New**: `GET /api/audio/now-playing` -- a public, unauthenticated JSON endpoint (`webapp/routes_now_playing.py`) returning `{source, stream_name, icecast_url, title, artist, album, artwork_url, length}` for the station's public Icecast stream(s). Icecast/Shoutcast's in-stream metadata (ICY `StreamTitle`) is text-only -- there's no field for an image, so album art can never travel *inside* the audio stream to an external player (VLC, a phone app, a car radio, an embedded widget on another site). This is the standard workaround every real internet radio station uses: a small public "now playing" endpoint the player/widget polls alongside the raw audio. Optional `?source=<name>` selects a stream in a multi-source deployment; omitted, it uses the first enabled source with a public Icecast mount.
 - Deliberately a redacted view -- only display-safe fields. None of the machine-describing data the internal (session/local-network-gated) `/api/audio/sources` carries -- mount/server/port, bitrate, device params, priority -- is exposed, matching the existing public/local/private API tiers documented in `app.py`'s `PUBLIC_API_GET_PATHS`/`LOCAL_API_GET_PATHS`.
 - Refactored the ICY metadata field-extraction logic (title/artist/album/artwork_url/length parsing, XML/JSON attribute stripping, URL-decoding) out of `IcecastStreamer._extract_metadata_fields` into a standalone `app_core/audio/now_playing_metadata.py` so both the audio-service process (which still pushes `StreamTitle` updates to Icecast itself) and the webapp process (this new endpoint) share one implementation instead of two independently-drifting copies. `IcecastStreamer._extract_metadata_fields` is now a thin backward-compatible wrapper.
@@ -46,20 +64,25 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.227.1] - 2026-09-09 - Fix narrow share-card info column (clipped EXPIRES time, missing content)
 
+### Fixed
 - **Fixed**: the landscape share-card's narrow info column (`app_utils/image_export/render.py`, info panel < `INFO_NARROW_MAX_W`) only drew severe-thunderstorm-specific panels -- damage-tier callout, tornado tag, wind/hail stat boxes, storm motion. For any non-severe-weather CAP event (911/telephone outage notices, civil emergency messages, advisories with no convective threat data) every one of those was a no-op, so the card showed nothing but a bare EXPIRES time with a large empty column below it. The column now falls back to the same generic HEADLINE/DESCRIPTION text the wide-column layout always shows whenever none of the weather-specific panels rendered anything.
 - **Fixed**: `_draw_expires_block` (`app_utils/image_export/panels_broadcast.py`) drew the absolute EXPIRES timestamp in a fixed 30px font with no width check against the column -- a stamp like "Sep 9 · 8:48 AM EDT" (342px) didn't fit the 284px-wide narrow column, and since that column sits only 8px from the canvas's right edge, the overflow ran past the image boundary and was hard-clipped (visible as "...8:48 AM E"). Now shrinks the value font to fit before drawing, matching the shrink-to-fit pattern already used for the header's event-name title.
 
 ## [2.227.0] - 2026-09-04 - Perimeter defense: flood control, bad-actor blocklist, http:BL, Edge Defense analytics
 
+### Added
 - **New**: nginx-level rate limiting (`/api/` 20r/s, `/login` 5r/min, both `limit_req`) and a reject-before-the-app rule for WordPress/`.env`/`.git`/PHP-shell scanner paths -- this app is pure Python/Flask, so none of those paths are ever legitimate, and they previously fell through to a full 29KB `/login` page render on every scan hit.
-- **Fixed**: `dashboard_status.js`, `health.js`, and `system_health.html` kept retrying `/api/eas-monitor/status`, `/api/system_status`, and `/api/system_health` forever on 401, even though those endpoints are intentionally restricted to local-network/authenticated callers (`app.py`'s `LOCAL_API_GET_PATHS`) -- every anonymous visitor's tab polled them indefinitely with no backoff. Each now stops retrying its gated endpoint after the first 401.
 - **New**: an updatable known-bad-actor IP blocklist sourced from Spamhaus DROP/EDROP (`scripts/update_bad_actors.sh`, refreshed daily via `bad-actors-update.timer`), merged with a hand-curated local list (`config/bad-actors-local.conf`), enforced by nginx before any proxy logic runs. Admin UI controls added on Application Settings ("Bad Actor Blocklist" panel, `webapp/admin/bad_actors.py`): enable/disable toggle, allowlist a false positive, trigger an immediate refresh -- previously only editable by hand over SSH.
 - **New**: opt-in Project Honeypot http:BL reputation check on login attempts (`app_core/auth/httpbl.py`), auto-banning IPs flagged as harvesters/comment-spammers through the existing `IPFilter` blocklist (new `IPFilterSource.HTTPBL`). Configured via Application Settings (enabled flag + access key, both DB-backed rather than only `.env`); the key is write-only in the UI/API and never round-tripped in plaintext once saved.
 - **New**: Security Center "Edge Defense" tab -- visibility into everything the protections above block before it ever reaches the app (none of it showed up in the Traffic tab, which only sees requests Flask actually handled). 24h counts by reason, top blocked IPs/paths, recent events, current blocklist size/state. Fed by a 2-minute systemd timer (`security-perimeter-ingest.timer`) tailing the nginx access log (rotation-safe checkpoint by inode+offset) into a new `security_perimeter_events` table; required adding the `eas-station` service user to the `adm` group (it couldn't read the nginx log at all before).
 - Repeatable across deployments: `install.sh` and `update.sh` both seed the new nginx control files, enable the two new timers, and (`update.sh`) re-apply the nginx config diff/SSL-preservation and grant the new group membership on an existing installation, not just a fresh one.
 
+### Fixed
+- **Fixed**: `dashboard_status.js`, `health.js`, and `system_health.html` kept retrying `/api/eas-monitor/status`, `/api/system_status`, and `/api/system_health` forever on 401, even though those endpoints are intentionally restricted to local-network/authenticated callers (`app.py`'s `LOCAL_API_GET_PATHS`) -- every anonymous visitor's tab polled them indefinitely with no backoff. Each now stops retrying its gated endpoint after the first 401.
+
 ## [2.226.0] - 2026-09-04 - API Dashboard
 
+### Added
 - **New**: Reports -> Analytics -> API Dashboard (`/api-dashboard`) shows live request volume, latency (p50/p95/p99) and error rates for every `/api/*` route, broken out per route -- the usage companion to the existing static `API Reference` page, which documents routes but not how they're actually used. The Traffic Analytics dashboard only ever showed a single rolled-up "API hits" count; this is where that traffic gets broken out.
 - Needed no new request-timing instrumentation: every request already flows through `app.py`'s existing `before_request`/`after_request` hooks into `WebRequestLog` (async, buffered -- never a synchronous DB write on the request path). The one gap was that only the raw path was recorded, which would fragment a parameterized route like `/api/alerts/<id>` into one bucket per ID ever requested; `WebRequestLog` gained a nullable `endpoint` column (Flask's dotted view-function name) captured alongside it, in the same namespace `compute_api_reference()` already keys routes by, so usage data joins directly against each route's docstring/auth metadata.
 - New `app_core/analytics/api_stats.py` (per-route counts, error rates, latency percentiles -- computed in Python rather than a database-side `percentile_cont`, since the same code needs to run on PostgreSQL in production and SQLite in tests) and `webapp/routes_api_dashboard.py`. Latency percentiles use nearest-rank over sorted per-route response times.
@@ -67,20 +90,24 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.225.3] - 2026-09-04 - Push CARTO Dark Matter map detail further
 
+### Changed
 - **Changed**: the previous fix (2.225.1) made CARTO roads/labels survive the resize pipeline, but only just -- follow-up review against a live render wanted more headroom. `TONE_PRESET_DARK_NATIVE`'s brightness lift raised from 2.1 to 3.0 and contrast from 1.25 to 1.4, confirmed against the same live alert render: place labels (city names, township names) and road structure are now clearly legible throughout the map inset, not just in isolated spots, while the map still reads as a dark-mode basemap rather than washing toward OSM's brightness.
 
 ## [2.225.2] - 2026-09-04 - Fix Stream audio sources giving up permanently on HTTP 404
 
+### Fixed
 - **Fixed**: a "Stream"-type audio source (`app_core/audio/sources.py`'s `StreamSourceAdapter`) treated an HTTP 404 from its URL identically to 401/403 -- a permanent, unrecoverable error that stops the restart loop for good until someone manually restarts the source. That's wrong for the common case of a Stream source relaying another Icecast source client (e.g. SDRTrunk pushing to its own mount on this server's Icecast): whichever side isn't running yet when the other one starts gets a 404 and, previously, gave up forever even after both sides came up. 404 now keeps retrying on the normal backoff, same as any other transient failure; only 401/403 (genuinely bad credentials) still stop the loop.
 - New tests in `tests/test_stream_auth.py`: `test_stderr_pump_marks_404_as_error_but_not_fatal` and `test_restart_retries_on_404_instead_of_stopping`.
 
 ## [2.225.1] - 2026-09-04 - Fix washed-out CARTO Dark Matter map detail
 
+### Fixed
 - **Fixed**: the CARTO Dark Matter basemap (Settings -> Map Tiles) rendered with no visible roads, place labels, or landcover -- just solid black under the radar/county overlays. Root cause: CARTO's own linework sits only ~50-65 (out of 255) above its near-black background, and that low-contrast signal didn't survive the card's Lanczos tile-resize plus radar-overlay compositing, unlike OSM's much higher-contrast tiles. `TONE_PRESET_DARK_NATIVE` (`app_utils/image_export/map_style.py`) previously left brightness/contrast at identity on the theory that a dark-native source needs no darkening; it now applies a brightness lift (1.0 -> 2.1) and a mild contrast lift (1.0 -> 1.25) so the linework survives downstream resizing, confirmed against a real fetched CARTO tile and a full share-card render of a live alert.
 - New regression test `test_tone_preset_dark_native_road_survives_the_map_inset_downscale` in `tests/test_image_export_map_style.py`, built from the real ~50-65 contrast measured off a live CARTO tile; the existing preset test was renamed and re-asserted to expect a brightness lift instead of "stays close to source," since identity color ops turned out to be the actual bug.
 
 ## [2.225.0] - 2026-09-04 - Broadcast-style landscape share card
 
+### Changed
 - **Changed**: the landscape (1200×630) alert share card is now a map-dominant broadcast-style graphic, modeled on RyanHallYall/WeatherWise-style warning cards -- the radar map now fills ~75% of the canvas (up from ~50%), with a narrow callout column carrying a bold "DESTRUCTIVE DAMAGE EXPECTED" / "CONSIDERABLE DAMAGE THREAT" box (for the two elevated NWS Impact-Based-Warning tiers), a TORNADO POSSIBLE pill, a hero-sized EXPIRES time, stacked WIND GUST / HAIL SIZE stat tiles, a one-line storm-motion readout, and the safety-instruction block (now titled "WHAT TO DO"). Square/portrait/story cards are unchanged for now.
 - This is a restyle, not new data: hail size, wind gust, tornado detection, and storm motion were already parsed (`webapp/admin/api/display_data.py`) and already rendered as gauge-style threat cards -- the new narrow column presents the same data as bold callouts/stat-boxes instead, since the wider gauge-card layout doesn't fit the narrower column. `render.py` switches between the two treatments based on the info panel's actual width (`layout.INFO_NARROW_MAX_W`), so a future wide-info layout keeps working unmodified.
 - New `app_utils/image_export/panels_broadcast.py` (the narrow-column drawers) and a new `_draw_stat_box` primitive in `drawing.py`; `app_utils/image_export/layout.py`'s landscape preset resized accordingly.
@@ -88,6 +115,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.224.0] - 2026-09-04 - Optional CARTO Dark Matter basemap for the share card
 
+### Added
 - **New**: Settings -> Map Tiles (`/admin/map-tiles`) lets an operator switch the alert share-card
   map inset from plain OpenStreetMap raster tiles (the zero-config default) to CARTO's Dark
   Matter style. OSM tiles are darkened/desaturated in post (`tone_basemap()`) since they're
@@ -113,6 +141,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.222.0] - 2026-09-03 - Replace animated GIF alert export with MP4 video
 
+### Changed
 - **Changed**: the animated share-card export for weather alerts (`/api/alerts/<id>/export-image.mp4`, reachable from the alert detail page's Export Social Image menu) is now an MP4 (H.264/yuv420p) instead of a GIF. Facebook and most other social platforms transcode an uploaded GIF into a silent looping MP4 on ingest anyway, so encoding straight to MP4 skips that lossy round-trip and sidesteps GIF's 256-colour palette entirely, which was producing visible banding/dithering on real radar reflectivity and multi-megabyte files for a ~10-frame loop.
 - Same behavior otherwise: plays the radar from ~15 minutes before the alert was issued, then reveals the warning polygon only on the frame matching the real issuance time.
 - `app_utils/image_export/gif_export.py` replaced by `video_export.py` -- reuses the same per-frame `generate_alert_image()` composition, then pipes the rendered PNG frames to ffmpeg (already a system dependency of this project) instead of Pillow's GIF encoder. `webapp/admin/api/routes_alert_export_gif.py` replaced by `routes_alert_export_video.py`.
@@ -120,6 +149,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.221.1] - 2026-09-03 - Fix encrypted settings unreadable outside a Flask app context
 
+### Fixed
 - **Bug fix**: every `EncryptedString`-backed credential (TTS's Azure OpenAI key, Icecast source/admin passwords, SMTP password, Twilio auth token, SNMP community string, Tailscale auth key, Tickstem API key, admin MFA secrets) was silently unreadable from any process without an active Flask app context -- including the standalone CAP poller, which reads settings through its own `sessionmaker()` session with no Flask app ever pushed. Decrypting the column raised `RuntimeError: Working outside of application context` deep inside SQLAlchemy's row hydration (`current_app.secret_key`), which the poller's own error handling swallowed -- so a fully configured, enabled TTS provider was treated as unconfigured, and every forwarded alert went out tone-only with no spoken narration. The same silent failure applied to any other credential read the same way outside a request.
 - Root-caused from a real production incident: alert #1057 (a Severe Thunderstorm Watch) was auto-forwarded with no voice narration despite Azure OpenAI TTS being enabled and fully configured in Settings -> TTS.
 - `app_core/crypto.py`: `_root_secret()`/`_fernet()` now fall back to the `SECRET_KEY` environment variable when there's no Flask app context, rather than exclusively depending on `current_app.secret_key`. This derives the identical key those processes would get if a Flask app *were* pushed -- systemd's `EnvironmentFile=/opt/eas-station/.env` already puts `SECRET_KEY` in every service's environment, poller included.
@@ -127,6 +157,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.221.0] - 2026-09-03 - Animated GIF export for weather alerts
 
+### Changed
 - **New: animated GIF share card** for weather (`category='Met'`) alerts, alongside the existing static PNG/WebP export -- `/api/alerts/<id>/export-image.gif` (`ratio` query param, same four aspect ratios as the PNG export). Reachable from the alert detail page's Export Social Image menu.
 - The animation plays the radar in the ~15 minutes *before* the alert was issued, then reveals the warning polygon for the first time on the frame matching the alert's actual `sent` timestamp -- never earlier. A GIF can never imply a warning was active before it really was.
 - `app_utils/image_export/radar_loop.py`: added `RADAR_LOOP_LEADIN_MINUTES` (15) and a `show_polygon`/`issued` flag threaded through `build_radar_loop()` and `maps.py`'s `_render_map()`. The existing interactive Radar Loop viewer on the alert detail page picks up the same lead-in + polygon-reveal behavior automatically, since it's backed by the same function. `radar_loop_hires.py`'s Level II loop is unaffected -- the lead-in window is opt-in per caller (`_needed_timestamps(..., leadin_minutes=...)`), not baked into the shared timestamp helper.
@@ -135,6 +166,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.220.0] - 2026-09-03 - Search Settings by field name and stored value
 
+### Changed
 - **New: search box on the Settings hub** (`/settings`) that matches a setting's field label ("Stream Bitrate") *and* its currently-stored value ("128") -- not just the label of the settings page it lives on, which is all the existing Ctrl+K command palette could do. Deliberately scoped to the Settings page's own content, not a global header search bar.
 - `app_core/settings_search.py`: builds the index by querying each mapped settings model's single row and humanizing its columns into labels (`stream_bitrate` -> "Stream Bitrate", with acronym fixups for SMTP/GPIO/API/TTS/etc.). Covers the ~14 settings pages backed by a simple single-row model (Icecast, TTS, Notifications, Hardware, Location & Alert Filtering, Poller, Heartbeat, Tickstem, Alert Gating, Tailscale, Certbot, Application Settings, EAS Encoder Settings) -- pages that are actions or record lists rather than field/value forms (Backups, RBAC, User Accounts, Environment Variables, the pgweb link) are intentionally left out.
 - **Security, verified by test and live**: every field is checked against `app_core.crypto`'s encrypted-column list and an `isinstance(EncryptedString)` check before inclusion, plus a manual blocklist for the one plaintext-but-secret-shaped column found (`heartbeat_settings.ping_url`, a bearer-token URL). A value from an encrypted column (Icecast/SMTP/SNMP/Tailscale/Tickstem credentials) can never appear in a search result, searchable or not, regardless of query.
@@ -144,6 +176,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.219.1] - 2026-09-03 - Every page now shows the navigation breadcrumb
 
+### Changed
 - **Root cause found and fixed:** `static/js/core/nav-enhance.js`'s breadcrumb/command-palette indexer only ever scanned the *rendered navbar DOM*. The Settings section (`webapp/navigation/registry_settings.py`, ~35 pages -- Icecast, NTP Server, GPIO, TTS, Backups, etc.) renders in the navbar as a single link (its items only ever appear as cards on the `/settings` hub page), so every one of those pages has been missing a breadcrumb since the feature existed, no matter how it was organized in the registry. Fixed at the root: `webapp/navigation/__init__.py`'s `inject_navigation()` now also exposes a flat, already permission-filtered `nav_settings_items` list; `templates/components/navbar.html` embeds it as JSON; `nav-enhance.js` merges it into its index. One fix, all ~35 pages, no per-page registry duplication.
 - Audited every page-rendering route in the app for breadcrumb coverage and fixed the remaining real gaps:
   - New registry entries for pages that had never been registered anywhere: Alert-Boundary Intersections, Zone Catalog (Monitor -> Alerts), GPIO Statistics/Interlocks/Pin Map (Monitor -> Station Hardware), SMS Compliance (Help -> About This System).
@@ -152,6 +185,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.219.0] - 2026-09-03 - Consolidated Firewall settings page; fix Icecast auto-streaming after credential encryption
 
+### Fixed
 - **Fixed Icecast auto-streaming silently disabled since credential encryption shipped (2.218's predecessor, #2552):** `eas_monitoring_service.py` builds its own minimal Flask app for the standalone audio/EAS process, and never set `SECRET_KEY` on it. `app_core.crypto` derives the encryption key for encrypted-at-rest settings (e.g. `IcecastSettings.source_password`) from `current_app.secret_key`, so reading Icecast settings from that process raised `SECRET_KEY is not configured` on every restart, was caught, and fell back to silently disabled -- with no loud, visible error and no periodic retry. All four Icecast streams had been down for hours before this was caught by a listener reporting they couldn't connect. Extracted the secret-key resolution app.py already had (env var, falling back to a shared persisted key file so every process agrees on the same key) into `app_utils/secret_key.py` and had `eas_monitoring_service.py` use it too.
 - Fixed a related, pre-existing gap: `tests/test_radio_audio_monitoring.py`'s `DummyAdapter` test double didn't implement `is_quarantined()` or set `_start_time`, so the real `IngestController`'s background health-monitor thread (which the test registers the double into) threw and logged an `AttributeError` on every monitor cycle for that test's duration -- harmless (caught and isolated by design) but noisy.
 - **New: Firewall settings page** (`webapp/admin/firewall.py`, `/admin/firewall`, Reports -> Security -> Firewall) -- one place for every host-firewall (UFW) rule the app manages, replacing a real gap where opening Icecast's port required a manual `sudo ufw allow 8000/tcp` nobody had documented as a required step, and an inline firewall-rule widget that had grown on the LAN NTP server's own settings page:
@@ -166,6 +200,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.218.1] - 2026-09-02 - Respect Tickstem's per-plan heartbeat quota when bulk-creating
 
+### Changed
 - Confirmed live: Tickstem's free tier caps heartbeats at 5 total, well under the 12 critical services this box has. Bulk-creating all 12 at once burned through the quota, failed on the remaining ones with HTTP 402, and would have repeated the same failed attempts on every subsequent click since a failed create doesn't get remembered as "already tried."
 - `TickstemAPIError` now carries `status_code`, so `create_all_service_heartbeats()` can stop the moment a 402 comes back instead of continuing to retry a request Tickstem has already said it won't honor for any of the remaining services.
 - The bulk-create route accepts an optional `service_names` list, scoping the attempt to a specific subset instead of always going for every unmonitored critical service.
@@ -174,6 +209,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.218.0] - 2026-09-02 - Per-service Tickstem heartbeats for critical EAS Station subsystems
 
+### Changed
 - New `tickstem_service_heartbeats` table and `TickstemServiceHeartbeat` model (`app_core/_models_tickstem.py`): one row per critical service from `app_core.config.get_eas_services()` (the 11 EAS subsystems plus the poller), each holding its own Tickstem heartbeat.
 - Why per-service instead of one combined heartbeat: Tickstem's ping carries no payload, so a missed ping on one aggregate heartbeat can only ever mean "something's wrong" in the resulting alert. A heartbeat per service, each named on Tickstem's side (e.g. "EAS Station -- eas-station-poller.service"), means a missed ping names the exact subsystem that failed.
 - `app_core/tickstem_client.py` gained `create_heartbeat()`, `set_heartbeat_status()`, and `delete_heartbeat()`, mirroring the existing Monitors API functions but against Tickstem's Heartbeats API -- fully outbound, no public URL needed (unlike the existing Monitors integration, which requires one).
@@ -183,18 +219,21 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.217.1] - 2026-09-02 - NetBIOS hostname fallback, and fix chronyc's own resolution clashing with it
 
+### Fixed
 - Added a NetBIOS (NBT-NS Node Status, UDP/137) fallback in `_lookup_client_hostname()` for when reverse DNS comes up empty -- the common case for a Windows PC on a LAN whose resolver has no PTR records for it, since Windows doesn't register itself in DNS by default. Hand-rolled the query/response (RFC 1002 wildcard-name encoding, minimal Node Status response parser) rather than adding a dependency for a two-message UDP protocol.
 - Fixed a regression the hostname feature itself exposed once reverse DNS started working on a given deployment: `chronyc clients`' own first column does its *own* reverse-DNS resolution and truncates long names to fit a fixed-width text column, so once PTR records resolve, `_client_summary()`'s parser -- which expects that column to always be a numeric IP -- started reading truncated hostnames instead. Fixed by adding `-n` (raw IPs only) to the `chronyc clients` call, and updated the scoped sudoers entry in `config/sudoers-eas-station` to match the new exact command (`/usr/bin/chronyc -n clients`).
 - Not a chrony bug or anything wrong with this feature in isolation -- it only ever showed up because this same session's earlier fix made PTR resolution actually work end-to-end for the first time, which is exactly the condition needed to expose it.
 
 ## [2.217.0] - 2026-09-02 - Show hostnames in the LAN NTP Server's Recent Clients list
 
+### Changed
 - `webapp/admin/ntp_server.py`'s `_client_summary()` now attempts a reverse-DNS (PTR) lookup for each client IP via `_reverse_dns()`, capped at 1 second so a client with no PTR record -- normal for most phones, laptops, and IoT devices on a home LAN -- can't stall the whole list. `templates/admin/ntp_server.html` adds a "Hostname" column (both the server-rendered initial table and the JS-driven Refresh path), showing `—` when no record resolves.
 - Wrapped the clients table in `.table-responsive` and added `.text-break-anywhere` to the IP/hostname cells while touching this template, per the mobile-friendly requirement in `docs/development/AGENTS.md` -- the new column made overflow at narrow viewports more likely.
 - Whether this actually shows anything depends entirely on the deployment's DNS setup: a resolver that doesn't serve PTR records for RFC1918 addresses (e.g. a public DoH/DoT forwarder, which most `resolv.conf`s on this kind of deployment end up pointing at) will show `—` for every client regardless of how well the feature works, since there's no PTR data to find. A home router that also acts as local DNS for its DHCP leases is the common case where this actually resolves something.
 
 ## [2.216.3] - 2026-09-02 - Fix the LAN NTP Server's Recent Clients list always showing empty
 
+### Fixed
 - A second, independent sandboxing bug in the same feature: `chronyc clients` (used to populate the "Recent Clients" list) connects to chronyd over a UNIX socket at `/run/chrony/chronyd.sock`, whose containing directory is `drwx------`, owned by `_chrony`. `eas-station-web.service`'s `CapabilityBoundingSet=` caps what the `sudo`-escalated root process inside its sandbox can do, and it was missing `CAP_DAC_OVERRIDE` -- so that "root" can't traverse a directory it doesn't own. chronyc silently fell back to the legacy cmdmon protocol and got `501 Not authorised`.
 - This failed on every single page load, not just before a client's first sync: `_client_summary()` in `webapp/admin/ntp_server.py` treated any `chronyc clients` failure identically to a genuinely empty list (`{"available": False, "clients": []}`), and logged nothing, so the page always read "No non-local clients have queried this host yet" regardless of real client activity.
 - Fix: added `CAP_DAC_OVERRIDE` to `CapabilityBoundingSet=` in `systemd/eas-station-web.service`. Confirmed via the same sandbox-reproduction method as 2.216.2: `chronyc clients` returns `501 Not authorised` inside a transient unit mirroring the service's exact sandbox, and returns the real client list (three hosts, in this case) once the capability is added.
@@ -202,6 +241,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.216.2] - 2026-09-02 - Fix the real cause of the LAN NTP Server's "Read-only file system" write failure
 
+### Fixed
 - Corrects the diagnosis in 2.216.1: the `sudo tee` write of `/etc/chrony/conf.d/eas-station-ntp-server.conf` was never transient. `eas-station-web.service` runs with `ProtectSystem=strict`, which bind-mounts the whole filesystem read-only inside that service's own mount namespace except for the paths listed in its `ReadWritePaths=`. `/etc/chrony` was never added to that list when the LAN NTP Server feature shipped in 2.216.0, so every write from inside the running service hits `Read-only file system` -- 100% of the time, not intermittently. The 2.216.1 write-up tested the path from an ordinary root shell, which sits outside the service's mount namespace and so is not sandboxed the same way; that made the write look "directly writable... afterward" when in fact the service itself could never write it. Confirmed by reproducing live: `sudo journalctl -u eas-station-web` showed the identical `tee: ...: Read-only file system` failure again at 16:30:01, a second and unrelated Apply click roughly 20 minutes after 2.216.1's commit claimed it had "self-resolved... no repeat since."
 - Fix: added `/etc/chrony` to `ReadWritePaths=` in `systemd/eas-station-web.service`, alongside the existing `/etc/nginx`/`/etc/letsencrypt`/`/etc/icecast2` entries this same service already needs write access to for other admin features.
 - The retry-once logic added in 2.216.1 (`_write_chrony_conf()`) is left in place -- harmless now that the underlying write actually succeeds, and cheap insurance against a genuinely transient failure in the future -- but it is no longer the fix for this bug.
@@ -209,12 +249,14 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.216.1] - 2026-09-02 - Retry the LAN NTP Server's config write once on a transient failure
 
+### Changed
 - Confirmed live: `webapp/admin/ntp_server.py`'s `sudo tee` write of the chrony conf.d fragment hit a transient `Read-only file system` error for about 15 minutes right after this feature's first deploy, then self-resolved on its own with no code change and no repeat since. The exact trigger was never confirmed — it wasn't real filesystem corruption (no matching kernel/dmesg errors, and the target path is directly writable when tested from inside the service's own mount namespace afterward) — so this isn't a root-cause fix, but a short retry costs nothing on the common (successful) case and may ride out a similarly brief blip without the admin needing to notice the error and click Apply again themselves.
 - Extracted the write into `_write_chrony_conf()`, which retries once after a 1-second pause on either a non-zero exit or a raised exception before giving up and surfacing the existing error message.
 - New tests in `tests/test_ntp_server.py`: unit-level coverage of `_write_chrony_conf()` (succeeds without retrying, recovers after one failure, gives up after exhausting the retry, recovers from a raised exception the same as a bad return code) plus one integration-level test confirming the `/configure` route as a whole succeeds when the underlying write recovers on its retry.
 
 ## [2.216.0] - 2026-09-02 - Add a LAN NTP Server admin page
 
+### Added
 - chrony is installed and running on every deployment (it's the box's own time sync, and on GPS-HAT hardware the stratum-1 source), but by default it only ever acts as a *client* -- nothing in `chrony.conf` grants any subnet permission to query it, so a request from a LAN device is silently ignored. Which subnets should be trusted is inherently a per-deployment decision (a home LAN, an office VLAN, a Tailscale range, or nothing at all) with no correct default, so this needed to be admin-configured rather than something `install.sh` could set up once.
 - New **Settings -> Network -> NTP Server** page (`webapp/admin/ntp_server.py`, `templates/admin/ntp_server.html`): list the subnet(s) allowed to query this host, enable/disable, and see recent clients with how long ago each last synced (parsed from `chronyc clients`). Deliberately stateless like `webapp.admin.mail_server` -- the chrony conf.d fragment on disk is the single source of truth, read back fresh on every status check rather than mirrored into a DB row that could drift from what's actually applied.
 - The firewall side follows the same idempotent, tag-scoped reconciliation `webapp.admin.security_checkup`'s UFW fix established: every rule this feature creates carries a fixed `eas-station-ntp-server` UFW comment, and only rules carrying that exact comment are ever added or removed through it -- an operator's own rules for other ports/services (Icecast's 8000, pgweb's 8081, etc.) are never inspected or touched. Disabling clears both the chrony config and every tagged firewall rule; nothing lingers.
@@ -223,11 +265,13 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.215.3] - 2026-09-02 - Fix two more System Health dashboard accuracy bugs
 
+### Fixed
 - **SMART health falsely reported "passed" when smartctl never actually got any data.** `_collect_smart_health`'s exit-code fallback (used whenever smartctl's JSON has no `smart_status` block) only checked bits 3-7 of smartctl's exit code for "disk problem" bits, never bits 0-2 ("command line did not parse" / "device open failed" / "SMART command failed" -- i.e. no real data was ever retrieved at all). Found on a Vultr KVM instance: its virtio-blk-backed `/dev/vda` has no ATA/NVMe protocol to the underlying disk at all (true of virtio-blk generally, not specific to this app or provider), so every smartctl device-type probe returns exit code 2 with a mostly-empty but validly-parsing JSON report -- which sailed straight through "bits 3-7 clear -> passed" and got shown as a healthy drive despite smartctl never having successfully talked to anything. Now bits 0-2 short-circuit to `overall_status: "unknown"` with a real `error` message (smartctl's own JSON `messages`, or a generic exit-code explanation) -- the dashboard's existing (already-correct) "Unknown" badge + error-alert rendering picks this up with no template changes needed. Added `tests/test_smart_health.py` (8 tests: the execution-failure paths, plus regression coverage that the bits-3-7 "passed"/"failed" inference and the NVMe `critical_warning` path are unaffected).
 - **A failed systemd unit for a service retired from the codebase was completely invisible to the System Services panel.** Found `eas-station-eas.service` (folded into `-audio`/`-demod` during the hardware subsystem split) sitting in `systemctl --failed` as a stale `not-found`/`failed` unit, killed by a stop timeout two weeks earlier -- `update.sh` never disables/removes units for services that get renamed or removed, so a box running since before such a change is left with a permanent stale failure record. `app_utils/system/services.py`'s `_collect_systemd_services` only ever checked a fixed allowlist (`EAS_SERVICES`/`POLLER_SERVICES` in `app_core/config/services.py`), so a unit that fell off that list was never checked at all, no matter how broken. Added `_collect_orphaned_failed_services`: asks systemd directly (`systemctl list-units --state=failed <prefix>-*`) for any failed unit matching the service prefix regardless of whether the allowlist still knows its name, excluding template-instantiated units (e.g. `eas-station-failure-recovery@<subsystem>.service`) which are legitimate dynamic infrastructure, not retired services. Surfaces as a normal "EAS Station" category entry in the services list plus an actionable issue (includes the `systemctl reset-failed` command to clear it). Cleared the stale record on the deployment it was found on. Added `tests/test_orphaned_services.py` (6 tests, including a `_collect_systemd_services` integration test verifying the orphan flows through to `summary`/`issues`).
 
 ## [2.215.2] - 2026-09-02 - Fix the one-click upgrade's live progress feed showing nothing useful
 
+### Fixed
 - Admin -> Operations' "System Upgrade" progress panel (`get_upgrade_progress` in `webapp/admin/maintenance/routes_operations.py`) read exclusively from `journalctl -u eas-station-update.service`, but `update.sh` redirects its own stdout/stderr to `/var/log/eas-update.log` right after its root check (`exec 1>>"$LOG_FILE" 2>&1`) -- that redirect replaces the fd 1 the systemd unit handed the script, so none of update.sh's actual output (every `echo_step`/`echo_info`/... line, including the `=== UPDATE RESULT ===` marker the endpoint looks for) ever reached the journal. All the endpoint could see was sudo/PAM session noise from the commands update.sh runs, plus the unit's own bare start/stop lines -- confirmed against a real captured run, where the journal held nothing usable while the log file had the full step-by-step output including the final result marker.
 - Added `_tail_update_log()` and made it the primary source for `get_upgrade_progress`; the journal is now only consulted for its unit-lifecycle lines (`Failed with result` / `Deactivated successfully`), kept as the fallback for a crash so early update.sh never got to write anything to its own log, per the existing `_classify_upgrade_log_line` logic. Only the most recent journal lifecycle line is used, so a stale entry from a previous run sitting in the same 500-line window can't override this run's own log-file content.
 - Also fixed the `/opt/eas-station/scripts/lib/ui.sh: line 866: /dev/tty: No such device or address` noise visible in that same captured run's log: three of `scripts/lib/ui.sh`'s TTY-write helpers (`whiptail()`'s wrapper, `ui_gauge_stop()`, and the `cleanup_on_exit()` trap) touched `/dev/tty` unconditionally instead of checking the existing `_UI_HAS_CONTROLLING_TTY` flag every other TTY write in the file already checks -- irrelevant interactively, but update.sh's one-click path runs via `systemd-run` with no controlling terminal at all, where `2>/dev/null` on the same line does **not** suppress the error (confirmed empirically: bash reports a failed redirection to the current stderr before any later redirection on the same command line takes effect, regardless of what that later redirection points to). `cleanup_on_exit()` runs on every single script exit via its `EXIT` trap, so this fired on every non-interactive run, successful or not, adding an ugly stray line to what the UI now actually surfaces.
@@ -235,11 +279,13 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.215.1] - 2026-09-02 - Fix Checkup tab misreporting an active UFW firewall as inactive
 
+### Fixed
 - The Checkup tab added in 2.215.0 (`webapp/admin/security_checkup.py`) reported "UFW is installed but not active" on a host where `sudo ufw status verbose` run interactively worked fine and UFW genuinely was active, default-deny-incoming, with the baseline ports allowed. Root cause: `eas-station-web.service`'s `CapabilityBoundingSet` grants `sudo` enough to reach uid 0, but doesn't include `CAP_NET_ADMIN`, which `iptables-nft` needs just to *read* the ruleset via netlink -- so under the actual service (not an interactive shell, which isn't capability-bounded the same way) the command failed with `Could not fetch rule set generation id: Permission denied (you must be root)`, and `_run()`'s nonzero-exit fallback silently parsed that failure as "inactive."
 - Added `CAP_NET_ADMIN` to `systemd/eas-station-web.service`'s `CapabilityBoundingSet`. Reproduced the failure and confirmed the fix with `systemd-run` transient units matching the service's exact capability set, rather than by trial-and-error on a live box -- this bug would otherwise reappear on every deployment using this unit file, not just the one it was found on.
 
 ## [2.215.0] - 2026-09-02 - Security Center "Checkup" tab: detect and fix a missing host firewall
 
+### Fixed
 - Found (on a real deployment, by hand) a host running with no firewall at all: `install.sh` only configures UFW automatically on a *fresh* install (v2.19.7+), and `update.sh` never re-runs that one-time provisioning — a deployment first installed before that version, or one where UFW was later removed, stays silently exposed through every subsequent application update. Also found that `Fail2banSettings.enabled` can be `true` in the database while the `eas-station` jail was never actually loaded — the enforcement toggle looked "on" while nothing was actually being mirrored to the host firewall.
 - Added a new **Checkup** tab to Security Center (`webapp/admin/security_checkup.py`, `/admin/security-checkup/status`, `/admin/security-checkup/fix-ufw`): detects whether UFW is installed, active, default-deny-incoming, and has the baseline 22/80/443 rules, and reuses `webapp.admin.fail2ban`'s already-accurate live jail state (it distinguishes the stored "enabled" flag from the real `actuator_jail_loaded` check) rather than duplicating that logic. A "Fix now" button reproduces `install.sh`'s own baseline UFW setup as an idempotent, web-triggered action — no SSH required — without touching any rule an operator has added beyond that baseline (Icecast, pgweb, etc.).
 - New sudoers entries (`config/sudoers-eas-station`) scoped to exactly the six commands the fix needs, following the same least-privilege pattern as every other privileged action in this file.
@@ -247,6 +293,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.214.0] - 2026-09-02 - Encrypt stored credentials at rest and pepper password hashes
 
+### Changed
 - Every stored credential in the database was plaintext: Icecast source/admin passwords, the Azure OpenAI TTS key, SMTP password, Twilio auth token, the SNMP community string, the Tailscale pre-auth key, the Tickstem API key, and per-user TOTP (MFA) secrets. Found while investigating a related browser-exposure bug (2.213.2/2.213.3) and confirming passwords are salted (they are, via werkzeug's scrypt) -- these reversible secrets weren't, because hashing doesn't apply to a credential the app has to hand back to a third-party API.
 - Added `app_core/crypto.py`: an `EncryptedString` SQLAlchemy column type (Fernet, keyed via HKDF-SHA256 derived from the app's `SECRET_KEY` -- no new required env var) that encrypts on write and decrypts on read transparently, so every existing read/write call site kept working unchanged. Legacy plaintext rows are tolerated (decrypted as-is) and get encrypted automatically on next save; a `SECRET_KEY` rotation fails closed (empty string, logged) instead of crashing.
 - Applied it to all nine columns above. Added migration `20260902_encrypt_stored_secrets` widening them from `VARCHAR` to `TEXT`, since Fernet ciphertext runs longer than the plaintext it replaces.
@@ -256,22 +303,26 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.213.4] - 2026-09-02 - Add the standard page header to the documentation viewer
 
+### Added
 - `doc_viewer.html` (the single-document reader behind `/docs/<path>` and the policy pages) rendered straight into a breadcrumb + card with no page header, unlike its sibling pages `docs_index.html`, `docs/search.html`, and `docs/rbac_visual.html`, which all use the standard `components/page_header.html` component. Added the same header, using the page's resolved title.
 
 ## [2.213.3] - 2026-09-02 - Surface real playback errors on the TTS admin test player
 
+### Changed
 - The Test TTS and Pronunciation Preview `<audio>` players had no `error` event handling at all: a genuine browser-side playback failure (bad decode, unsupported source, network error) rendered as the native control's bare "Error" label with zero diagnostic text, while the generated audio itself could be perfectly valid — confirmed by regenerating the same request server-side and validating the WAV with `ffprobe`/`ffmpeg` (clean `pcm_s16le`, 16kHz mono, decodes with no errors).
 - Added a shared `wireAudioErrorReporting()` listener on both `ttsAudioElement` and `previewAudioElement` that reads the element's `MediaError` code and shows a concrete, human-readable message in a visible alert instead of leaving the user with an unexplained "Error" label.
 - Also reset the new error panel at the start of each test run, alongside the existing audio-player visibility reset, so a stale error from a previous attempt can't linger.
 
 ## [2.213.2] - 2026-09-01 - Fix incomplete hostname checks in the CAP poller's endpoint classification
 
+### Fixed
 - CodeQL flagged `poller/cap_poller.py:2044` (`elif 'weather.gov' in endpoint.lower()`) as "Incomplete URL substring sanitization" on PR #2549: a plain substring check matches a malicious or misconfigured endpoint like `https://evil.example/weather.gov` or `https://weather.gov.evil.com`, not just the real NOAA API.
 - The same anti-pattern existed at five other call sites classifying `self.cap_endpoints` entries as NOAA/IPAWS/CUSTOM for logging and source-tagging (`poll_and_process`, `get_poller_status`, the startup endpoint log, the poll-summary log, and the zone-code-rebuild filter).
 - Added `_endpoint_host_matches(url, domain)`, which parses the URL with `urllib.parse.urlparse` and compares the actual hostname (exact match or subdomain) instead of doing a substring search, and switched all six call sites to use it.
 
 ## [2.213.1] - 2026-09-01 - Isolate per-item failures in the CAP poller's processing loops
 
+### Changed
 - The 2026-08-31 outage (fixed in 2.211.2) was caused by one unhandled data-shape variance in one alert's `<references>` field crashing the *entire* poll cycle, not just that alert — because `poll_and_process()`'s main per-alert loop had only one `try` around the whole cycle, not one per alert. That specific field bug was fixed, but the structural gap that let it take down every other alert in the batch was not.
 - An investigation this session (prompted by a broader stability review) found four loops in `poller/cap_poller.py` with the same shape — one bad item's exception propagating out of the loop and aborting everything else in that batch/cycle — while confirming every other external-data ingestion point in the codebase (audio capture, GPS parsing, GPIO events, boundary uploads) already isolates per-item failures correctly.
 - Wrapped each loop's per-item body in its own `try/except` that logs the offending item's identifier with a full traceback and moves on to the next item: `poll_and_process()`'s main per-alert loop (the one that caused the outage), `fetch_cap_alerts()`'s per-alert dedup/normalize loop, `_parse_ipaws_xml_feed()`'s per-`<alert>` XML conversion loop, and `_process_cap_references_cancellation()`'s per-reference loop (a single Cancel message can reference several prior alerts; one bad reference no longer blocks the others from being cancelled).
@@ -280,6 +331,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.213.0] - 2026-09-01 - Reorganize the setup wizard into collapsible sections
 
+### Changed
 - The setup wizard at `/setup` rendered all ~35 configuration fields as one flat, unbroken form with no section headers, no progress indication, and no visual grouping — despite the backend already modeling the config as 7 logical sections (`WIZARD_SECTIONS` in `app_utils/setup_wizard.py`). A first-time user got a wall of inputs before being told what any of it meant.
 - `templates/setup_wizard.html` now renders those sections as a Bootstrap accordion with real headers, descriptions, and per-section field counts. **Location Settings** and **EAS Broadcast** — the two every install needs — are open by default; **Core Settings**, **Audio Ingest**, **Icecast Streaming**, **Text-to-Speech**, and **Hardware Integration** start collapsed. A section auto-expands regardless of category if one of its fields fails validation, so a resubmitted error can never end up hidden behind a collapsed header.
 - Added a "Before you start" intro panel explaining what EAS Station is and what information to have ready, so the field wall isn't the first thing a new user sees.
@@ -291,6 +343,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.212.1] - 2026-09-01 - Add friendly error pages for gateway-down and oversized-upload failures
 
+### Added
 - Previously, if the Flask app (gunicorn, behind nginx on port 5000) was down or restarting — mid-deploy, crashed, or overloaded — nginx served its bare stock "502 Bad Gateway" page, which gives a visitor no information and no path forward. Same problem for an upload over the size limit: nginx's bare stock "413 Request Entity Too Large" page.
 - Added `static/errors/gateway-down.html`, a self-contained page (no external assets besides the wordmark, which nginx also serves directly) explaining the web dashboard is temporarily unavailable, auto-rechecking every 15 seconds, and — importantly — reassuring the visitor that alert monitoring, the CAP poller, audio decoding, and GPIO/transmitter control are independent background services unaffected by the web app being down. Wired into `config/nginx-eas-station.conf` via `error_page 502 503 504` pointing at an `internal`-only `location` block, so nginx serves it directly without proxying to the (unreachable) backend.
 - Added `static/errors/upload-too-large.html` for oversized uploads, listing the size limit and practical next steps (lower bitrate, split shapefile components, or ask an admin to raise the limit).
@@ -299,6 +352,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.212.0] - 2026-09-01 - Move the relay lead-in/lead-out from embedded audio silence to program-level GPIO timing
 
+### Changed
 - 2.211.3 (below) added the relay lead-in as 1 second of silence embedded directly in the generated WAV. That was the wrong layer: resend/replay (`/messages/<id>/resend`) plays back the *stored* audio bytes from the original broadcast rather than regenerating them, so a message generated before this fix deployed could never retroactively show the lead-in — confirmed live by resending a pre-fix alert and finding no lead-in, since resend by design never re-runs audio generation. More broadly, baking transmitter-stabilization silence into the audio content meant every consumer of that audio (Icecast stream listeners, FCC-compliance exports, archived recordings) got artificial dead air mixed into the actual alert, permanently and unadjustably.
 - The relay lead-in/lead-out is now purely a program-level GPIO timing concern: `BROADCAST_LEAD_IN_SECONDS` / `BROADCAST_LEAD_OUT_SECONDS` (both 1.0s, `app_utils/eas.py`) are applied as `time.sleep()` calls by every caller that drives the airchain — immediately after `set_broadcast_active()` and before real playout begins (lead-in), and immediately before `clear_broadcast_active()` after playout ends (lead-out) — in all four broadcast paths: `EASBroadcaster.handle_alert()` (automatic CAP-poller alerts and OTA-relay forwarding), the manual send route (`webapp/eas/workflow.py`), the RWT scheduler (`app_core/rwt_scheduler.py`, both the automated weekly test and the operator-triggered "Send Test RWT"), and the resend script (`scripts/resend_eas_broadcast.py`). Because resend replays whatever audio is stored, this also means resend now gets correct relay lead-in/lead-out timing for *any* stored message going forward, regardless of when that message's audio was generated.
 - `duration_seconds` passed to `set_broadcast_active()` at each call site now includes both paddings so the Redis marker's TTL and the browser countdown overlay reflect the true on-air window; `header_seconds`/`eom_seconds` (the countdown's phase boundaries) are padded by the lead-in only, since they anchor to when real audio actually starts.
@@ -306,12 +360,14 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.211.3] - 2026-09-01 - Add missing lead-in silence before the SAME header on automatic broadcasts
 
+### Added
 - `EASAudioGenerator.build_files()` — the path used for every automatic and forwarded alert (CAP poller auto-forward, OTA relay) — started the composite audio right on the first SAME header FSK bit when no pre-alert chime was configured, the default. The GPIO subprocess keys the relay off the `broadcast_active` marker, which tracks actual audio playback, so the transmitter got no lead time to come up and stabilize before the header burst — unlike the tail end, which already had a full second of trailing silence after the EOM (holding the relay a second past end-of-message), and unlike `build_manual_components()` (the manual-send/RWT path), which already had this same lead-in silence.
 - Fixed by adding the same unconditional 1-second lead-in silence `build_manual_components()` already uses, folded into the `'same'` audio segment so `header_seconds` (read by the caller that drives the countdown overlay) still measures true elapsed time from the start of the composite audio.
 - No GPIO code changes were needed — the relay already keys and releases off actual audio playback duration via the `broadcast_active` marker's edges, so extending the audio symmetrically on both ends was sufficient to extend the relay hold symmetrically too.
 
 ## [2.211.2] - 2026-09-01 - CRITICAL: fix a poller crash that stopped all alert ingestion for ~9 hours
 
+### Fixed
 - The CAP poller crashed on *every* polling cycle starting 2026-08-31 ~20:54 EDT, silently dropping every alert fetched from NOAA/IPAWS for roughly 9 hours until diagnosed and fixed live. `poller/cap_poller.py`'s `(properties.get('references') or '').strip()` assumed CAP's `<references>` field is always a string (`sender,identifier,sent` triples, space-separated, per CAP 1.2 §3.3.2.3), but api.weather.gov's JSON API represents the same field as a list of `{identifier, sender, sent, @id}` objects instead. The first "Update" message carrying that shape (a Heat Advisory) crashed `AttributeError: 'list' object has no attribute 'strip'` — and since this check runs unconditionally before the Cancel/Update type check, it took down the *entire* poll cycle, not just that one alert, for every cycle afterward.
 - Fixed at the one shared point all three affected call sites already go through: `parse_cap_reference_identifiers()` now accepts either shape (the legacy CAP-string format from IPAWS, or api.weather.gov's list-of-objects), extracting identifiers correctly from both instead of assuming a string.
 - Also added a full traceback (`exc_info=True`) to the poller's top-level exception log — the bare `str(e)` this incident originally logged took real production reproduction plus a temporary diagnostic change to pin down; a traceback would have shown the exact line immediately.
@@ -319,6 +375,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.211.1] - 2026-08-31 - Fix an 8x-slower-than-needed query on the /stats dashboard
 
+### Fixed
 - Continuation of the same load-time investigation as 2.210.3/2.210.4: profiling every section of `/stats`'s data pipeline individually found `collect_polling_trend()` alone taking 7.7 of the page's ~8.5 total seconds — every other section combined ran in well under a second.
 - Root cause was ORM overhead, not a missing index or a slow query plan: `poll_history` rows carry a `details` JSON blob and an `error_message` Text column, and the function was fetching *all* columns for every row in the last 30 days (`SELECT *`, then `.all()`) via two separate, largely-overlapping queries (7-day and 30-day windows) when only `timestamp`/`status`/`error_message`/`execution_time_ms` are ever read. `EXPLAIN ANALYZE` showed the raw filtered scan itself takes under 100ms on this table's ~41K rows — the cost was fetching and fully hydrating tens of thousands of wide ORM objects nothing needed.
 - `webapp/public/stats_sections/polling.py`'s `collect_polling_trend()` now does one query with `.with_entities(...)` selecting only the four needed columns, and derives the 7-day subset from the 30-day result set in Python instead of querying twice.
@@ -327,6 +384,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.211.0] - 2026-08-31 - Add retention for system_log, shrink the audio metrics retention window
 
+### Added
 - Found while auditing database size during the load-time investigation (2.210.3/2.210.4): `system_log` had **no retention policy at all** — confirmed by checking both `app_core/retention.py`'s field list and `alert_purge.py` (which only ever writes audit entries to it, never prunes it). It had grown to 1M+ rows / 850+ MB with nothing capping it. Added `system_log_max_age_days` (default 90 days, matching the existing `audio_alert_max_age_days` precedent for operational logs) and wired `SystemLog` into `RetentionScheduler`'s sweep.
 - `audio_metrics_max_age_days` lowered from 30 to 3 (on both the model default and the already-persisted settings row, via migration). Nothing in the codebase reads raw `audio_source_metrics` samples older than a short troubleshooting window — the "latest value" and recent-trend endpoints only ever need current data, and `app_core/analytics/aggregator.py` already rolls raw samples into the separate, much smaller, permanent `MetricSnapshot` table for long-term history. 30 days of raw per-sample data (at ~288K rows/day) was pure bloat with nothing reading it once it aged past a few hours.
 - New "System Log" field added to Settings → Application → Data Retention alongside the existing fields, following the same pattern (day-count input, help text explaining what it covers and doesn't).
@@ -334,6 +392,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.210.4] - 2026-08-31 - Fix a 20+ second query behind GET /api/audio/sources
 
+### Fixed
 - Same load-time investigation as 2.210.3: `/api/audio/sources` had a 64-second worst case in the site's own request timing data, and the server log showed real `psycopg2.errors.QueryCanceled: canceling statement due to statement timeout` failures. Root cause: `audio_source_metrics` is an append-only time-series table (~3.3 rows/sec across all sources, 1.55M rows / 2.8GB at the time of this fix) and the "get the latest reading per source" helper backing this endpoint fetched *every* matching row, sorted them all in Postgres, and kept only the first one seen per source in Python -- confirmed via `EXPLAIN ANALYZE` at 21+ seconds with a 400+MB disk-spilled sort.
 - Tried Postgres's native `DISTINCT ON` first (paired with a new composite index) since it's the idiomatic "top-1 per group" operator -- measured *no better* (17-18s) even with the index in place, because Postgres has no loose/skip-scan index strategy: `DISTINCT ON` with an `IN` list still has to walk every matching row before deduplicating. Replaced it with N separate `ORDER BY timestamp DESC LIMIT 1` queries instead, one per source (the source list is small -- one row per configured hardware input) -- each one lands directly on an index and stops at the first match. Measured at ~0.15ms per source.
 - The new composite index (`source_name, timestamp DESC`, added via `20260831_audio_metrics_latest_index`, built `CONCURRENTLY` so it didn't lock out the audio service's continuous writes while building on 1.5M+ existing rows) turned out to matter for a real edge case caught during testing: one configured source had gone quiet days before the others, so a plain per-source lookup using only the existing timestamp index had to scan backward through everything every *other* source wrote since then before finding it. With the composite index, that same lookup is 0.14ms regardless of how stale a given source's data is.
@@ -342,6 +401,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.210.3] - 2026-08-31 - Fix site-wide request stalls caused by CPU-heavy work blocking a gevent worker
 
+### Fixed
 - Root-caused via the site's own recorded request-timing data (`WebRequestLog`, not guesswork): `/api/broadcast/state` — a trivial Redis-backed status check polled from every page's status widget, called 13,880 times in the sample window — had a 230ms average but a **163-second** worst case. The query behind it is fast (`cap_alerts` has under 1,000 rows; `EXPLAIN ANALYZE` showed 6.8ms). The real cause: gevent workers only yield control during I/O, and `/alerts/<id>/export-image.png` (the social-share image renderer) does 20-30 seconds of pure CPU work — Pillow composition, tile mosaicking — synchronously inside the request handler. With only 2 gunicorn workers, one in-flight image export could stall every other concurrent request routed to that worker, including completely unrelated ones like the broadcast-state poll.
 - `--workers 2` → `4` in `systemd/eas-station-web.service` (idle CPU headroom confirmed: 4 cores, only 2 in use). `MemoryMax` raised `1500M` → `4000M` to match — the existing 2 workers were already observed using ~956M+474M combined RSS, so doubling worker count without raising the cgroup limit would have hit the exact OOM-kill failure mode that `MemoryMax` was originally raised to avoid.
 - Root-cause fix: `webapp/admin/api/routes_alert_export.py`'s new `_run_off_worker()` runs the image renderer on a real OS thread via gevent's own threadpool instead of the request greenlet, so the worker's event loop stays free to serve other requests while it renders. `generate_alert_image()` already supported running outside a Flask context via an explicit `db_session` (used by the CAP poller's notification-email images) — reused that instead of inventing a new pattern, with a dedicated `sessionmaker`-backed session per render (the request's own `db.session` isn't safe to share across threads).
@@ -350,6 +410,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.210.2] - 2026-08-31 - Remove ambient debug logging from the browser console
 
+### Removed
 - A repo-wide audit found 142 `console.log`/`console.debug`/`console.info` calls with no gating flag, firing unconditionally on normal page loads and user actions — page-init narration ("Interactive map page loaded", "Alert detail page scripts loading..."), per-request cache hit/miss chatter, and bare function-entry markers ("toggleRawData called") left over from active debugging. Removed 116 of them (16 in `static/js/*.js`, 100 across 10 templates) that were pure narration with no diagnostic value.
 - One instance was more than noise: `templates/admin/environment.html` logged the signed-in admin's username and role to the console on every load of the environment-variables settings page — a minor but real thing to not be doing on a page that manages secrets.
 - `static/js/core/cache.js`'s cache hit/miss logging had a "dev only" gate (`hostname === 'localhost'`) that was already broken for exactly this kind of self-hosted appliance, since the app is commonly accessed via `http://localhost:5000` in normal use, not just development — removed rather than tightened, since the logging itself wasn't valuable.
@@ -358,6 +419,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.210.1] - 2026-08-31 - Fix heading hierarchy accessibility warnings site-wide
 
+### Fixed
 - `static/js/accessibility-utils.js`'s `setupHeadingHierarchy()` flags any heading whose level skips more than one step deeper than the previous heading in DOM order (e.g. h2 straight to h5) — a real, longstanding gap in nearly every page, since card/widget headers throughout the app were written as bare `h5`/`h6` regardless of the page's actual section depth. Fixed every skip across the template tree (82 templates, 1 shared JS component) rather than leaving it as a known issue.
 - Two-pattern fix, chosen per heading: (1) **renumber** the tag to the correct sequential level relative to its context, adding a matching `.hN` class (`h1, .h1`/`h2, .h2`/etc. are already paired in `static/css/base.css`) so the visual size is unchanged even though the semantic level moved; (2) for headings that were really just small styled labels with no real document-outline meaning (a caption over a JSON blob, a stat tile's number label), demoted them the same way but the net effect is identical markup weight, just at a level that doesn't skip.
 - `templates/base.html`'s global footer (`Quick Access`/`Resources`/`Legal & Info`/`System Status`, previously `h6`) and its Display Units modal title were the single highest-leverage fix — both render on every page, so fixing them once cleared the same warning everywhere without touching per-page templates.
@@ -365,12 +427,14 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.210.0] - 2026-08-31 - Add boundary layer toggles to the alert detail map
 
+### Added
 - The alert detail page's Alert Coverage Map fetched all 8 boundary types (counties, fire, ems, electric, townships, villages, telephone, school) on every load but only ever showed counties — the rest were invisible dead weight with no way to see them. Added a row of toggle switches (mirroring the dashboard's existing "Map Layers" panel in `templates/index.html`) below the map so any of the 8 can be shown on demand.
 - Counties stay on by default — no change to the page's existing default appearance, just a way to opt into the others without editing the map itself.
 - Layer color swatches reuse `getBoundaryColor()`, already defined on this page and shared with the boundary popups.
 
 ## [2.209.0] - 2026-08-31 - Load incorporated city/village boundaries for the "affected municipalities" display
 
+### Changed
 - New `scripts/load_municipality_boundaries.py` loads US Census incorporated-place (city/village) boundaries from the TIGER/Line cartographic "Places" file into the existing generic `boundaries` table (type `villages`, already a recognized, colored, grouped type in `app_core/boundaries.py`'s `BOUNDARY_TYPE_CONFIG`). Once loaded, the alert detail page's existing boundary-intersection display — which already lists every boundary type an alert's polygon intersects — starts showing named cities and villages for free, with no new UI work.
 - Deliberately scoped to the station's own coverage counties via `RWTScheduleConfig.same_codes` (not `AlertFilterSettings.fips_codes`, which carries non-geographic wildcard entries) so the boundaries table isn't bloated with the ~32,000-record national dataset. Unincorporated Census Designated Places (CDPs) are filtered out — this is meant to show real municipalities, not census-only place designations.
 - The Places file has no per-record county field (a place isn't nested inside exactly one county the way a township is), so county scoping uses a real PostGIS `ST_Intersects` test against the already-loaded `us_county_boundaries` geometry rather than a FIPS-string compare.
@@ -379,6 +443,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.208.0] - 2026-08-31 - Add a High-Resolution (Level II) radar loop with a velocity overlay
 
+### Added
 - New **High-Resolution Radar Loop** card on the alert detail page, below the existing (Level III) Radar Loop card — an explicitly separate, distinctly-labeled feature, not a silent upgrade to it. `maps.py`'s `_render_map()` used to always prefer a sharper Level II render when a site was in range, but that was reverted because the exported/looped image could then disagree pixel-for-pixel with the live "Radar (at time of alert)" toggle (different resolution, different color ramp). This reintroduces Level II behind its own opt-in `radar_source='level2'` parameter, used by exactly one caller, so the toggle, share-card, and standard loop are all unaffected.
 - Adds a **Reflectivity / Velocity** selector — velocity is a Level II–only product (no Level III equivalent), useful for spotting rotation. `radar_level2.py`'s `render_frame()`/`_plot_ppi()` now take a `field` parameter; velocity uses cmweather's `NWSVel` colormap over a ±32 m/s range (the practical base-velocity Nyquist limit) with its own `VELOCITY_LEGEND`. No de-aliasing is applied — a known limitation of the raw base product.
 - Level II only reaches ~230km from a WSR-88D site, so `radar_loop_hires.py` checks coverage once per alert up front and reports a genuine coverage gap distinctly from "not a weather alert", rather than silently caching a radar-less frame that would look identical to a legitimate no-echo scan.
@@ -389,6 +454,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.207.4] - 2026-08-31 - Bump zigpy to 2.1, fixing a permit_joining rename it silently would have broken
 
+### Changed
 - `zigpy` now floats `>=2.1.0` (was `>=0.60.0`) at the maintainer's request, after closing Dependabot's version of this bump (#2524) pending verification — zigpy manages real Zigbee hardware pairing, which can't be exercised in CI.
 - Found one real, confirmed break by inspecting the installed `zigpy==2.1.0` + `zigpy-znp==1.1.0` API directly (the version pair pip's resolver actually picks for these pins): `ControllerApplication.permit_joining(duration)` was renamed to `.permit(time_s, node=None)` — the old name doesn't exist at all on 2.1.0. `services/zigbee/controller.py`'s `permit_join()`/`close_join()` (the pairing-mode open/close methods) called the old name; `close_join()`'s call is wrapped in a broad `except Exception`, so this would have failed the same silent way the pysnmp break below did.
 - Verified the rest of this codebase's zigpy-facing API surface is unaffected: `ControllerApplication.__init__`, `.add_listener`, `.startup`, `.shutdown`, the `device_joined`/`device_initialized` listener callbacks, and the `Device.ieee`/`.nwk`/`.model`/`.manufacturer` attributes this code reads are all unchanged between 0.60.0 and 2.1.0.
@@ -397,6 +463,7 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.207.3] - 2026-08-31 - Fix silently-broken SNMP compliance traps under pysnmp 7
 
+### Fixed
 - **A dependency bump already on `main` (pysnmp `>=7.1.29`, from a Dependabot PR merged earlier the same day) silently broke SNMP compliance trap sending.** pysnmp 7 restructured `hlapi` into arch-specific, asyncio-native submodules and dropped the old flat `pysnmp.hlapi` module (`CommunityData`, `SnmpEngine`, `sendNotification` as a sync-flavored generator) this code imported from. Both `HealthAlertWorker._send_snmp_traps()` (`app_core/system_health.py`) and the admin "Test SNMP" button (`webapp/admin/notifications.py`) catch that import failure broadly and just log/return a warning — so this broke with no crash and, since there was no prior test coverage for SNMP trap sending at all, no test failure either. Traps would have silently stopped sending entirely.
 - Both call sites now import from `pysnmp.hlapi.v3arch.asyncio`, call the now-async `send_notification()` via `asyncio.run()`, use `add_varbinds` (the renamed, non-deprecated method), and wrap the trap payload in an explicit `OctetString` (pysnmp 7 no longer auto-coerces a raw Python `str` varbind value). Each call's `SnmpEngine` is now explicitly closed via `close_dispatcher()` in a `finally` block — without it, every trap sent (including from the recurring background health-check interval) leaked a UDP dispatcher socket for the life of the process.
 - Verified end-to-end, not just via import checks: sent a real trap over a real UDP socket to a local listener and confirmed the payload arrives, using an isolated venv with `pysnmp==7.1.29` actually installed.
@@ -404,18 +471,21 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.207.2] - 2026-08-31 - Bump numba to 0.67, lifting the previous llvmlite-size cap
 
+### Changed
 - `numba` now floats `>=0.67.0,<0.68.0` (was `>=0.61.0,<0.64.0`). The old cap existed specifically to avoid numba 0.64+'s heavier llvmlite dependency; verified that cost is real (llvmlite 0.49.0's aarch64 wheel is ~58MB) but accepted it deliberately as a one-time download rather than staying capped indefinitely.
 - Verified end-to-end on the real target platform (aarch64) before merging: installed numba 0.67.0 into an isolated copy of the deployment venv (pulls llvmlite 0.49.0, keeps numpy at the already-pinned 2.3.5 — numba 0.67's own requirement, `numpy<2.6`, is looser than before), confirmed `app_core/radio/demod/kernels.py` JIT-compiles, and ran the full demod/RBDS test suite (93 tests) against it.
 - Updated the Numba badges (README top badge, attribution table, footer partial) to the new range.
 
 ## [2.207.1] - 2026-08-31 - Fix a startup crash from Flask-Caching 2.5.0's dropped CACHE_TYPE aliases
 
+### Fixed
 - Bumped `Flask-Caching` to 2.5.0 (a Dependabot PR for this had failed CI: `flask_caching.backends.redis` no longer exists in that release). `Cache._set_cache()` builds an import path from `CACHE_TYPE` and imports it; 2.5.0 dropped the lowercase short aliases (`redis`, `simple`, `filesystem`, `null`) that `flask_caching.backends` used to expose, keeping only the actual class names (`RedisCache`, `SimpleCache`, `FileSystemCache`, `NullCache`). Passing the old alias straight through raised an `ImportError` from `init_cache()`, which runs unconditionally during app creation — this would have crashed the whole web service on boot, not just broken caching.
 - `app_core/cache.py` now translates the lowercase alias to the class name right at the Flask-Caching boundary. Everything else — the `CACHE_TYPE` env var, the Settings → Environment dropdown, already-deployed `.env` files — keeps using the lowercase form; only the value actually handed to Flask-Caching changed.
 - Added `tests/test_app_cache_type_resolution.py` covering all four aliases plus the "already a resolvable class name" passthrough case.
 
 ## [2.207.0] - 2026-08-31 - Require Python 3.13 / Debian 13 (Trixie); drop 3.11/3.12 support
 
+### Changed
 - **Breaking for Debian 12 / Python 3.11 or 3.12 installs.** The project now requires Python 3.13 and targets Debian 13 (Trixie) / Raspberry Pi OS (Trixie-based) only. Maintaining both floors was an ongoing tax: scipy was capped below 1.18 solely because that series drops 3.11, numba's compatible-numpy range and the `audioop-lts` marker both existed to branch on the interpreter version, and CI ran the whole suite twice per PR to catch drift between them.
 - `requirements.txt`: unpinned scipy's 3.11-driven cap (now `1.18.1`) and removed `audioop-lts`'s `python_version >= "3.13"` marker (unconditional now that 3.13 is the floor).
 - `.github/workflows/tests.yml`: CI matrix is now Python 3.13 only (was `['3.11', '3.13']`); the `lint` job also moved off 3.11.
@@ -426,11 +496,13 @@ catches the documentation up, same precedent as 2.227.0's own
 
 ## [2.206.0] - 2026-08-31 - Pin the one-click upgrade to a specific release, and fix the upgrade docs
 
+### Fixed
 - The "Version to install" field on Admin → Operations' System Upgrade card is now a dropdown populated from the repository's actual release tags (via a new `GET /admin/operations/upgrade/tags` endpoint), instead of a blank text box requiring an operator to already know the exact tag spelling. "Track main (latest)" stays the default and behaves exactly as before; a "Custom branch, tag, or commit…" option keeps the free-text field available for anything not in the list.
 - Rewrote `docs/guides/one_button_upgrade.md`, which described a Docker-image-based upgrade pipeline (`kr8mer/eas-station:latest`, a nonexistent `.github/workflows/build.yml`) this project has never used — EAS Station deploys bare-metal via `install.sh`/`update.sh`. It now accurately documents the real `update.sh`-via-systemd-unit mechanism.
 
 ## [2.205.0] - 2026-08-31 - Bracket the weekly test with optional spoken announcements and a guaranteed lead-in silence
 
+### Changed
 - The automated Required Weekly Test can now play optional station courtesy announcements before the SAME header ("This station is conducting a test of the Emergency Alert System...") and after the EOM ("This concludes this test..."), synthesized via the configured TTS provider and enabled/edited from the Weekly Test Automation page (`/rwt-schedule`). They play outside the encoded SAME/EOM burst, so they never affect RWT format compliance under 47 CFR §11.61(a)(1)(ii).
 - The composite RWT audio now always opens with at least a second of true silence before the SAME header begins (previously the header started at t=0 whenever no pre-alert chime was configured), mirroring the second of silence that already follows the EOM before the air-chain returns to normal programming.
 - `EASAudioGenerator.build_manual_components()` gained `silence_before_header`, `lead_announcement_samples`, and `trail_announcement_samples` parameters; `RWTScheduleConfig` gained `pre_announcement_enabled`/`pre_announcement_text`/`post_announcement_enabled`/`post_announcement_text` (migration `20260828_rwt_test_announcements`).
@@ -442,20 +514,9 @@ was anything to upgrade *to* -- clicking Start Upgrade was the only way to
 find out, and it always restarts every service even when the box is
 already current.
 
-Added a new `GET /admin/operations/upgrade/check` route: `git fetch`s the
-target branch (defaulting to whatever branch is currently checked out,
-usually `main`) and compares local `HEAD` against `origin/<branch>`,
-reporting the current and remote `VERSION` file contents and how many
-commits behind. `git fetch` only updates this checkout's own
-remote-tracking refs -- the same thing `git status` implicitly keeps
-current -- so it never touches the working tree, which is what makes it
-safe to run automatically on page load rather than waiting for a click.
-
-The Operations page now shows "Up to date (2.204.0)" or "Update available:
-2.204.0 → 2.205.0 (7 commits behind main)" above the Start Upgrade button,
-with a "Check again" link that re-reads whatever's in the Git Branch/Tag
-field. Purely informational -- doesn't gate the button, since a specific
-tag or commit checkout isn't always comparable this way.
+### Added
+- New `GET /admin/operations/upgrade/check` route: `git fetch`s the target branch (defaulting to whatever branch is currently checked out, usually `main`) and compares local `HEAD` against `origin/<branch>`, reporting the current and remote `VERSION` file contents and how many commits behind. `git fetch` only updates this checkout's own remote-tracking refs -- the same thing `git status` implicitly keeps current -- so it never touches the working tree, which is what makes it safe to run automatically on page load rather than waiting for a click.
+- The Operations page now shows "Up to date (2.204.0)" or "Update available: 2.204.0 → 2.205.0 (7 commits behind main)" above the Start Upgrade button, with a "Check again" link that re-reads whatever's in the Git Branch/Tag field. Purely informational -- doesn't gate the button, since a specific tag or commit checkout isn't always comparable this way.
 
 ## [2.203.7] - 2026-08-31 - Stop anonymous visitors' browsers from hitting a guaranteed-401 endpoint
 
@@ -464,35 +525,13 @@ Checked the browser console on every public page (the dashboard, `/health`,
 Every one of them showed two 401s for `/admin/pending-alerts/api/list` on
 every load, plus a repeat every 5s from its WebSocket-fallback poller.
 
-`navbar_scripts.html` (included on every page via the navbar) fires this
-fetch to light the stack-light widget's blue "pending alerts" state. The
-endpoint requires login (`@require_auth`) then `eas.view`
-(`@require_permission`) on top of that; the existing `.then(r.ok ? ... :
-null)` handling already covers an authenticated-but-under-permissioned
-viewer gracefully (403 -> null, blue state just never lights), but nobody
-anticipated a completely anonymous visitor -- this dashboard has no login
-wall -- who gets a guaranteed 401 instead, every page load, every 5s poll.
-
-Gated both the initial fetch and the WebSocket fallback subscription behind
-`current_user.is_authenticated` (already available in the navbar's Jinja
-context). Anonymous visitors now skip the call entirely.
+### Fixed
+- `navbar_scripts.html` (included on every page via the navbar) fires this fetch to light the stack-light widget's blue "pending alerts" state. The endpoint requires login (`@require_auth`) then `eas.view` (`@require_permission`) on top of that; the existing `.then(r.ok ? ... : null)` handling already covers an authenticated-but-under-permissioned viewer gracefully (403 -> null, blue state just never lights), but nobody anticipated a completely anonymous visitor -- this dashboard has no login wall -- who gets a guaranteed 401 instead, every page load, every 5s poll. Gated both the initial fetch and the WebSocket fallback subscription behind `current_user.is_authenticated` (already available in the navbar's Jinja context). Anonymous visitors now skip the call entirely.
 
 ## [2.203.6] - 2026-08-30 - Fix the actual highest-specificity rule controlling dashboard toggle switches
 
-The app-wide `.form-switch` fix (2.203.5) didn't actually take effect on
-the dashboard: live-checked via the browser's own `document.styleSheets`
-(matching every CSS rule against the element in cascade order, not just
-reading computed style), the real winner was
-`.layer-options .form-check.form-switch .form-check-input` -- a
-page-local rule in `templates/index.html` with higher specificity (four
-classes) than the app-wide fix (two classes), still setting
-`background-color: var(--light-color)`. That selector covers every
-switch in the Map Layers panel: Active/Historical Alerts, the severity
-filters, the event-type filters, and every boundary-layer toggle.
-
-Switched it to the same fixed `#495057` used everywhere else tonight.
-Grepped every other template for a similarly-scoped override and found
-none.
+### Fixed
+- The app-wide `.form-switch` fix (2.203.5) didn't actually take effect on the dashboard: live-checked via the browser's own `document.styleSheets` (matching every CSS rule against the element in cascade order, not just reading computed style), the real winner was `.layer-options .form-check.form-switch .form-check-input` -- a page-local rule in `templates/index.html` with higher specificity (four classes) than the app-wide fix (two classes), still setting `background-color: var(--light-color)`. That selector covers every switch in the Map Layers panel: Active/Historical Alerts, the severity filters, the event-type filters, and every boundary-layer toggle. Switched it to the same fixed `#495057` used everywhere else tonight. Grepped every other template for a similarly-scoped override and found none.
 
 ## [2.203.5] - 2026-08-30 - Sweep the rest of the app for the var(--text-muted)-as-fill bug
 
@@ -502,6 +541,7 @@ failure mode fixed five times already tonight, and computed exact WCAG
 contrast for every hit that pairs it with text. Six more instances, all
 fixed the same way (a fixed colour instead of the variable):
 
+### Changed
 - `security_settings.html`'s `.role-badge.viewer` (bg `--text-muted`,
   text `--bg-primary`) failed in **17 of the 20 themes** -- Blue measured
   1.00:1, literally the same colour on both sides.
@@ -539,11 +579,8 @@ dozens of overlapping ones into a solid, texture-free colour wash that hid
 the map underneath -- a worse failure than the flat-colour problem it was
 fixing.
 
-`displayHistoricalAlerts()` now draws outline-only (`fill: false`,
-`opacity: 0.75`). Outline-only doesn't have the compounding failure mode a
-fill does; the dashed, severity-coloured stroke alone still distinguishes
-both alert type (colour) and historical-vs-active (dashed + reference
-pane, which sits under the hazard pane).
+### Fixed
+- `displayHistoricalAlerts()` now draws outline-only (`fill: false`, `opacity: 0.75`). Outline-only doesn't have the compounding failure mode a fill does; the dashed, severity-coloured stroke alone still distinguishes both alert type (colour) and historical-vs-active (dashed + reference pane, which sits under the hazard pane).
 
 ## [2.203.3] - 2026-08-30 - Colour historical alerts by severity instead of one flat line
 
@@ -554,13 +591,8 @@ each-other: a flood watch and a tornado warning looked identical, which
 throws away the one piece of information a reader actually wants when
 scanning a season of alerts.
 
-`displayHistoricalAlerts()` now resolves each alert's own colour via
-`EASMap.severityColor()` -- the same resolver `hazardLayer()` uses for
-active alerts -- instead of one fixed `--map-reference-line` value.
-Dashed stroke, lower opacity (0.65/0.12 vs. an active alert's full
-strength) and the reference pane (which sits under the hazard pane, so
-an active alert on the same spot always wins) still mark it as
-historical rather than happening now; only the hue was the problem.
+### Changed
+- `displayHistoricalAlerts()` now resolves each alert's own colour via `EASMap.severityColor()` -- the same resolver `hazardLayer()` uses for active alerts -- instead of one fixed `--map-reference-line` value. Dashed stroke, lower opacity (0.65/0.12 vs. an active alert's full strength) and the reference pane (which sits under the hazard pane, so an active alert on the same spot always wins) still mark it as historical rather than happening now; only the hue was the problem.
 
 ## [2.203.2] - 2026-08-30 - Fix the date-filter panel and historical-alert map lines being unreadable
 
@@ -573,6 +605,7 @@ Two more instances of the same root cause already fixed twice today
 elsewhere on this page (`var(--text-muted)` used somewhere it wasn't
 designed for):
 
+### Fixed
 - `#date-filters` paired `background: var(--light-color)` with the
   label's `color: var(--text-muted)`. That combination failed WCAG AA in
   **all 20 themes**, not just Lightning (1.24:1) -- Cosmo measured 2.45:1,
@@ -598,11 +631,8 @@ failed WCAG AA on two of them regardless of theme, since the colours are
 hardcoded RGB literals, not theme variables: the orange "40" chip measured
 2.07:1, the green "20" chip 3.42:1 (AA needs 4.5:1).
 
-No single ink works for all six -- the range runs from light green through
-saturated red and magenta. Set each chip's `color` individually to
-whichever of black/white actually clears 4.5:1 against its own background
-(computed, not eyeballed): `#123` for 5/20/30/40, white for the red "50"
-chip, black for the magenta "60+" chip.
+### Fixed
+- No single ink works for all six -- the range runs from light green through saturated red and magenta. Set each chip's `color` individually to whichever of black/white actually clears 4.5:1 against its own background (computed, not eyeballed): `#123` for 5/20/30/40, white for the red "50" chip, black for the magenta "60+" chip.
 
 ## [2.203.0] - 2026-08-30 - Filter dashboard alerts by severity and event type
 
@@ -611,14 +641,8 @@ to narrow by severity or event type, even though the historical set alone
 spans 15+ event names (Flood Warning, Severe Thunderstorm Warning, routine
 Required Weekly Test, ...) and all 5 CAP severity levels.
 
-Added a Severity checklist (fixed 5-item CAP set) and an Event Type
-checklist (populated from whatever's actually in the loaded active +
-historical data, with All/None shortcuts) to the Alert Types panel. Both
-filters apply to whichever alert layers are currently shown -- switching
-between Active and Historical, or reloading either one, never loses the
-selection, since `displayAlerts()`/`displayHistoricalAlerts()` filter from
-the same `excludedSeverities`/`excludedEventTypes` state and redraw from
-the already-cached data rather than re-fetching.
+### Added
+- A Severity checklist (fixed 5-item CAP set) and an Event Type checklist (populated from whatever's actually in the loaded active + historical data, with All/None shortcuts) to the Alert Types panel. Both filters apply to whichever alert layers are currently shown -- switching between Active and Historical, or reloading either one, never loses the selection, since `displayAlerts()`/`displayHistoricalAlerts()` filter from the same `excludedSeverities`/`excludedEventTypes` state and redraw from the already-cached data rather than re-fetching.
 
 ## [2.202.2] - 2026-08-30 - Fix unreadable map-popup badges in several themes (worst in Lightning)
 
@@ -631,37 +655,21 @@ contrast against its own white text (WCAG AA needs 4.5:1): effectively
 invisible. Cosmo, Dark, Coffee, Aurora, Charcoal and Slate had the same
 failure to varying degrees.
 
-Switched to a fixed dark gradient (`#495057` → `#343a40`, 8.2:1 / 11.5:1
-with white) that doesn't depend on the theme. Fixed the same root cause in
-two related spots that shared it more marginally (dark text on
-`var(--text-muted)`, 3.78:1 in eight themes against the 4.5:1 target):
-`.severity-unknown` and the "EXPIRED" alert-popup badge, both now `#adb5bd`
-background (8.4:1 with `#1a1a1a` text) instead of the theme variable.
+### Fixed
+- Switched to a fixed dark gradient (`#495057` → `#343a40`, 8.2:1 / 11.5:1 with white) that doesn't depend on the theme. Fixed the same root cause in two related spots that shared it more marginally (dark text on `var(--text-muted)`, 3.78:1 in eight themes against the 4.5:1 target): `.severity-unknown` and the "EXPIRED" alert-popup badge, both now `#adb5bd` background (8.4:1 with `#1a1a1a` text) instead of the theme variable.
 
 ## [2.202.1] - 2026-08-30 - Fix the dashboard's Historical Alerts toggle
 
-Checking the "Historical Alerts" layer checkbox only revealed the date
-pickers -- it never actually loaded or displayed anything. `loadHistoricalAlerts()`
-was wired to the "Apply Filter" button alone, so a user checking the box
-(the same gesture that immediately shows/hides Active Alerts) saw nothing
-happen until they noticed they also had to click Apply Filter below it.
-
-Separately, active and historical alerts shared one Leaflet layer group
-(`alertLayer`). `displayHistoricalAlerts()` never cleared it before adding
-new polygons, so re-applying the date filter with a different range piled
-new alerts on top of old ones instead of replacing them; toggling "Active
-Alerts" off/on also wiped out historical polygons as a side effect of
-`alertLayer.clearLayers()`, since both lived in the same group.
-
-Historical alerts now get their own `historicalLayer`, cleared at the top
-of every `displayHistoricalAlerts()` call, and checking the checkbox calls
-`loadHistoricalAlerts()` immediately instead of waiting for a second click.
+### Fixed
+- Checking the "Historical Alerts" layer checkbox only revealed the date pickers -- it never actually loaded or displayed anything. `loadHistoricalAlerts()` was wired to the "Apply Filter" button alone, so a user checking the box (the same gesture that immediately shows/hides Active Alerts) saw nothing happen until they noticed they also had to click Apply Filter below it. Checking the checkbox now calls `loadHistoricalAlerts()` immediately instead of waiting for a second click.
+- Separately, active and historical alerts shared one Leaflet layer group (`alertLayer`). `displayHistoricalAlerts()` never cleared it before adding new polygons, so re-applying the date filter with a different range piled new alerts on top of old ones instead of replacing them; toggling "Active Alerts" off/on also wiped out historical polygons as a side effect of `alertLayer.clearLayers()`, since both lived in the same group. Historical alerts now get their own `historicalLayer`, cleared at the top of every `displayHistoricalAlerts()` call.
 
 ## [2.202.0] - 2026-08-30 - Radar timestamp, card lift, bolded hazard numbers, and pill glow on the share card
 
 Fifth polish pass on the social-share card, all four picked by the user
 from a shortlist:
 
+### Changed
 - **Radar "as of" timestamp** (`maps.py`) — `_fetch_radar_overlay()` now
   returns `(image, scan_time)`; `_draw_radar_legend()` shows "Radar 2:08 PM"
   under the dBZ legend so the card admits the reflectivity can be a few
@@ -687,6 +695,7 @@ from a shortlist:
 
 Fourth polish pass on the social-share card:
 
+### Changed
 - **Section-header icons** (`icons.py`'s new `_SECTION_ICON_FN`, wired into
   `drawing.py`'s `_section_header()`) — a small glyph (flag / pin / lines /
   triangle / ring / needle / bolt) next to HEADLINE, AFFECTED AREAS,
@@ -708,18 +717,15 @@ Fourth polish pass on the social-share card:
 
 ## [2.200.1] - 2026-08-30 - Fix crowded threat-level/category labels on the share card
 
-The threat-level line ("Radar") and the category label ("WIND") under each
-Storm Threats gauge sat only ~11px apart against ~13-15px-tall text, so
-they nearly touched. `card_h` bumped 108 → 118 and the category label's y
-is now derived from where the level line actually measures to (`_th()` +
-a real gap) instead of a second guessed constant -- closes the same gap
-for the icon-fallback path too (wind/hail with an unparsable gust/size).
+### Fixed
+- The threat-level line ("Radar") and the category label ("WIND") under each Storm Threats gauge sat only ~11px apart against ~13-15px-tall text, so they nearly touched. `card_h` bumped 108 → 118 and the category label's y is now derived from where the level line actually measures to (`_th()` + a real gap) instead of a second guessed constant -- closes the same gap for the icon-fallback path too (wind/hail with an unparsable gust/size).
 
 ## [2.200.0] - 2026-08-30 - Add film grain, an expiration countdown badge, and threat gauges to the share card
 
 Three additive polish passes on the social-share card, picked from user
 feedback after the polygon-joint and radar-opacity fixes:
 
+### Added
 - **Header film grain** (`weather_fx.py`) — a subtle monochrome noise layer
   composited over the gradient before particles/text, so the header reads
   as a textured surface instead of a flat CSS-button gradient. Low alpha
@@ -737,25 +743,13 @@ feedback after the polygon-joint and radar-opacity fixes:
 
 ## [2.199.2] - 2026-08-30 - Fix jagged stroke joints on the share-card alert polygon and county outlines
 
-Every bend in the affected-area polygon (and the county reference outlines
-under it) showed a visible notch cut into the wide white+accent stroke --
-PIL's `ImageDraw.line()` defaults to a hard miter join with no rounding, so
-a winding shape (a road corridor, an irregular county line) looked jagged
-at each vertex, worst on the crisp casing/core outline drawn on top. Added
-`joint='curve'` to the county-outline, glow, and casing/core `line()` calls
-in `app_utils/image_export/maps.py` so every vertex rounds smoothly instead.
+### Fixed
+- Every bend in the affected-area polygon (and the county reference outlines under it) showed a visible notch cut into the wide white+accent stroke -- PIL's `ImageDraw.line()` defaults to a hard miter join with no rounding, so a winding shape (a road corridor, an irregular county line) looked jagged at each vertex, worst on the crisp casing/core outline drawn on top. Added `joint='curve'` to the county-outline, glow, and casing/core `line()` calls in `app_utils/image_export/maps.py` so every vertex rounds smoothly instead.
 
 ## [2.199.1] - 2026-08-30 - Raise radar overlay opacity so reflectivity actually reads at a glance
 
-`_RADAR_OPACITY` (`app_utils/image_export/maps.py`) and the matching
-`radarLayer()` default (`static/js/core/map_theme.js`) were both 0.45 --
-legible over the basemap, but light/moderate reflectivity read as a faint
-haze on the social-share card and the in-app radar pane alike. Raised to
-0.6, verified pixel-by-pixel on a live storm cell alongside 0.45 and a
-rejected 0.75 (which reproduced the washed-out-basemap problem a prior pass
-already hit at 0.65 and pulled back from). The two files share one constant
-by design, so both surfaces -- and the animated radar loop export, which
-reuses the same `_render_map()` call -- move together.
+### Changed
+- `_RADAR_OPACITY` (`app_utils/image_export/maps.py`) and the matching `radarLayer()` default (`static/js/core/map_theme.js`) were both 0.45 -- legible over the basemap, but light/moderate reflectivity read as a faint haze on the social-share card and the in-app radar pane alike. Raised to 0.6, verified pixel-by-pixel on a live storm cell alongside 0.45 and a rejected 0.75 (which reproduced the washed-out-basemap problem a prior pass already hit at 0.65 and pulled back from). The two files share one constant by design, so both surfaces -- and the animated radar loop export, which reuses the same `_render_map()` call -- move together.
 
 ## [2.199.0] - 2026-08-30 - Extend systemd watchdog coverage to every hardware subsystem and the web app
 
@@ -763,21 +757,11 @@ Only `eas-station-audio`, `-demod`, and `-poller` had `Type=notify` +
 `WatchdogSec=` -- `Restart=always` recovers a crashed process on every unit,
 but nothing caught a *hung-but-still-alive* one (a wedged I2C bus, a stuck
 GPIO ioctl, a deadlocked serial read) on `-displays`, `-endec-feeds`,
-`-gpio`, `-gps`, `-network`, `-sdr`, `-zigbee`, or `-web`. Each of the six
-`services/*/__main__.py` split-hardware entry points plus
-`sdr_hardware_service.py` now call `sd_notify("READY=1")` once startup
-finishes and kick a `Watchdog()` (`app_utils/system/sd_notify.py`, the same
-helper `eas_monitoring_service.py`/`cap_poller.py` already used) from their
-existing ~1 Hz main loop; the matching unit files gained
-`Type=notify`/`NotifyAccess=main`/`WatchdogSec=60`.
+`-gpio`, `-gps`, `-network`, `-sdr`, `-zigbee`, or `-web`.
 
-The web app runs under a multi-process gunicorn arbiter rather than a single
-Python loop, so it needed its own mechanism: a new `gunicorn.conf.py`
-(loaded via `--config` in `eas-station-web.service`) starts a background
-thread in the arbiter's `when_ready` hook that kicks the watchdog every 5s
-for as long as the arbiter's event loop is alive. This only covers an
-arbiter deadlock, not a single hung gevent worker -- that path is already
-gunicorn's own `--timeout 300` (kills and respawns the worker).
+### Added
+- Each of the six `services/*/__main__.py` split-hardware entry points plus `sdr_hardware_service.py` now call `sd_notify("READY=1")` once startup finishes and kick a `Watchdog()` (`app_utils/system/sd_notify.py`, the same helper `eas_monitoring_service.py`/`cap_poller.py` already used) from their existing ~1 Hz main loop; the matching unit files gained `Type=notify`/`NotifyAccess=main`/`WatchdogSec=60`.
+- The web app runs under a multi-process gunicorn arbiter rather than a single Python loop, so it needed its own mechanism: a new `gunicorn.conf.py` (loaded via `--config` in `eas-station-web.service`) starts a background thread in the arbiter's `when_ready` hook that kicks the watchdog every 5s for as long as the arbiter's event loop is alive. This only covers an arbiter deadlock, not a single hung gevent worker -- that path is already gunicorn's own `--timeout 300` (kills and respawns the worker).
 
 ## [2.198.0] - 2026-08-28 - Make the one-click upgrade button run the real update.sh, with live progress
 
@@ -805,6 +789,8 @@ Getting there surfaced two real, previously-latent bugs in
 `scripts/lib/ui.sh`, neither ever exercised before because every prior
 invocation of `install.sh`/`update.sh` had a real controlling terminal
 attached:
+
+### Changed
 - `[ -w /dev/tty ]`, used throughout as the "is a real terminal available"
   guard, only checks the special device node's own permission bits (always
   broad, `crw-rw-rw-`) -- not whether *this* session actually has a
@@ -862,74 +848,21 @@ output-only -- there is no line-in or mic on the board, so it can never be
 an ingest source. A plugged-in USB DAC (e.g. an HS100B) previously required
 a manual trip through Admin -> Audio Ingest to become a source, and Admin ->
 EAS Settings to become the local alert-playback output, even though it was
-the only sensible device available. `app.py` now runs
-`_auto_configure_usb_audio_device()` once per process start: when exactly
-one non-onboard ALSA card is present, it creates an enabled `alsa`-type
-`AudioSourceConfigDB` row (unless one already exists) and points
-`EASSettings.audio_player` at the same device (unless it has already been
-customized away from its `aplay` default). Zero or more than one external
-card is left alone as ambiguous. Documented in help.html.
+the only sensible device available.
+
+### Added
+- `app.py` now runs `_auto_configure_usb_audio_device()` once per process start: when exactly one non-onboard ALSA card is present, it creates an enabled `alsa`-type `AudioSourceConfigDB` row (unless one already exists) and points `EASSettings.audio_player` at the same device (unless it has already been customized away from its `aplay` default). Zero or more than one external card is left alone as ambiguous. Documented in help.html.
 
 ## [2.196.3] - 2026-08-28 - Fix the one-click upgrade button, remove unsupported Docker code paths, and fix Admin Operations navigation
 
-The one-click "System Upgrade" button (Admin -> Operations) ran
-`tools/inplace_upgrade.py`, which only knew how to upgrade a Docker
-Compose deployment (`docker compose pull/up/exec/restart`) -- but
-EAS Station ships exclusively as a bare-metal systemd install
-(`install.sh`), and no `docker-compose.yml` exists in the repository.
-Every click of the button failed outright with "Neither 'docker
-compose' nor 'docker-compose' is available in PATH." The script now
-performs the actual bare-metal upgrade: `git pull --ff-only`, `pip
-install --upgrade` against this venv's `requirements.txt`, `alembic
-upgrade head`, then `sudo systemctl restart eas-station.target` (the
-same sudoers-granted command the Settings -> Environment "Restart All"
-button already uses). The now-meaningless "Compose File" field was
-removed from the Operations page and its route.
+### Fixed
+- The one-click "System Upgrade" button (Admin -> Operations) ran `tools/inplace_upgrade.py`, which only knew how to upgrade a Docker Compose deployment (`docker compose pull/up/exec/restart`) -- but EAS Station ships exclusively as a bare-metal systemd install (`install.sh`), and no `docker-compose.yml` exists in the repository. Every click of the button failed outright with "Neither 'docker compose' nor 'docker-compose' is available in PATH." The script now performs the actual bare-metal upgrade: `git pull --ff-only`, `pip install --upgrade` against this venv's `requirements.txt`, `alembic upgrade head`, then `sudo systemctl restart eas-station.target` (the same sudoers-granted command the Settings -> Environment "Restart All" button already uses). The now-meaningless "Compose File" field was removed from the Operations page and its route.
+- `tools/restore_backup.py` had a live bug: any bare-metal deployment pointing at a non-`localhost` PostgreSQL host (a perfectly normal remote-database setup) was misrouted into running `docker compose exec alerts-db psql ...` against a container that was never going to exist, instead of connecting directly.
+- The Admin Operations page (`/admin/operations` -- one-click backup, database optimization, alert-boundary recalculation, and the System Upgrade button fixed above) was filed in the navigation under **Reports -> Analytics** and labeled "Operations Report," which reads as a passive report rather than the maintenance/action page it actually is -- effectively making it undiscoverable. Moved it to **Settings -> Data & Storage**, next to Backups, and relabeled it "Admin Operations." Its route was also missing the `system.configure` permission check every sibling `/admin/*` route has (the page rendered for any logged-in user, though the backup/upgrade POST endpoints were already permission-gated) -- added. The page had no help.html documentation at all; added an entry.
 
-While auditing for other Docker assumptions: `tools/create_backup.py`
-carried a Docker/Podman volume backup path that was never actually
-invoked (`backup_summary["volumes"]` was always empty) -- removed.
-`tools/restore_backup.py` had a live bug in the same vein: any
-bare-metal deployment pointing at a non-`localhost` PostgreSQL host
-(a perfectly normal remote-database setup) was misrouted into running
-`docker compose exec alerts-db psql ...` against a container that was
-never going to exist, instead of connecting directly; and its "restore
-Docker volumes" step looked for `volume-app-config.tar.gz` /
-`volume-certbot-conf.tar.gz` archives that `create_backup.py` never
-produced. Both are removed, and `tools/validate_restore.py`'s
-post-restore guidance (which told bare-metal operators to run `docker
-compose logs` / `docker compose restart`) now prints the systemd/psql
-equivalents. `tests/test_backup_restore.py::test_standby_config_exists`
-no longer requires a `docker-compose.standby.yml` that was never
-shipped -- the standby doc it guards (`examples/STANDBY_DEPLOYMENT.md`)
-is already fully rsync/systemd based. Stale Docker mentions were also
-cleaned out of `install.sh` (dead rsync excludes for files that don't
-exist) and the installation/architecture docs; `scripts/setup_postal.sh`
-is untouched since the optional Postal mail server integration
-genuinely ships its own Docker-based install upstream.
-
-Removing those dead `--no-volumes`/`--skip-volumes` flags from
-`create_backup.py`/`restore_backup.py` broke three more call sites that
-still passed them: `webapp/routes_backups.py` (the full Backups page's
-create/restore actions), `app_core/backup_scheduler.py` (the in-process
-auto-backup scheduler, which defaulted `include_volumes` to `False` --
-meaning every scheduled backup would have started failing), and the
-standalone `tools/backup_scheduler.py` cron/systemd-timer script. All
-three, plus the now-dead "Docker volumes" checkboxes in
-`templates/admin/backups.html`, are cleaned up to match.
-
-Separately: the Admin Operations page (`/admin/operations` -- one-click
-backup, database optimization, alert-boundary recalculation, and the
-System Upgrade button fixed above) was filed in the navigation under
-**Reports -> Analytics** and labeled "Operations Report," which reads as
-a passive report rather than the maintenance/action page it actually is
--- effectively making it undiscoverable. Moved it to **Settings -> Data
-& Storage**, next to Backups, and relabeled it "Admin Operations." Its
-route was also missing the `system.configure` permission check every
-sibling `/admin/*` route has (the page rendered for any logged-in user,
-though the backup/upgrade POST endpoints were already permission-gated)
--- added. The page had no help.html documentation at all; added an
-entry.
+### Removed
+- While auditing for other Docker assumptions: `tools/create_backup.py` carried a Docker/Podman volume backup path that was never actually invoked (`backup_summary["volumes"]` was always empty) -- removed. `tools/restore_backup.py`'s "restore Docker volumes" step looked for `volume-app-config.tar.gz` / `volume-certbot-conf.tar.gz` archives that `create_backup.py` never produced -- also removed, and `tools/validate_restore.py`'s post-restore guidance (which told bare-metal operators to run `docker compose logs` / `docker compose restart`) now prints the systemd/psql equivalents. `tests/test_backup_restore.py::test_standby_config_exists` no longer requires a `docker-compose.standby.yml` that was never shipped -- the standby doc it guards (`examples/STANDBY_DEPLOYMENT.md`) is already fully rsync/systemd based. Stale Docker mentions were also cleaned out of `install.sh` (dead rsync excludes for files that don't exist) and the installation/architecture docs; `scripts/setup_postal.sh` is untouched since the optional Postal mail server integration genuinely ships its own Docker-based install upstream.
+- Removing those dead `--no-volumes`/`--skip-volumes` flags from `create_backup.py`/`restore_backup.py` broke three more call sites that still passed them: `webapp/routes_backups.py` (the full Backups page's create/restore actions), `app_core/backup_scheduler.py` (the in-process auto-backup scheduler, which defaulted `include_volumes` to `False` -- meaning every scheduled backup would have started failing), and the standalone `tools/backup_scheduler.py` cron/systemd-timer script. All three, plus the now-dead "Docker volumes" checkboxes in `templates/admin/backups.html`, are cleaned up to match.
 
 ## [2.196.2] - 2026-08-28 - Fix radar mismatch between the alert page and exported cards; widen the Py-ART attribution card
 
@@ -945,23 +878,11 @@ IEM's own mosaic colors vs. `cmweather`'s 15-band `NWSRef`), which read
 as a bug even though both were technically valid radar for the same
 storm.
 
-`_render_map()` (`app_utils/image_export/maps.py`) now always uses the
-Level III WMS mosaic (`_fetch_radar_overlay`) -- the same request the
-live toggle makes -- so the live map, the Radar Loop, and every exported
-share card agree pixel-for-pixel. `radar_level2.py`'s Level II decode/plot
-path (`render_frame`) is no longer called but is left in place (its
-`REFLECTIVITY_LEGEND` still backs the on-image legend) for a future pass
-that gives the live map a matching high-resolution option instead of
-silently diverging from it. Updated stale comments/docstrings in
-`radar_loop.py` that described the old Level-II-first behavior, and the
-Attribution page's Py-ART card to note the library is retained but not
-currently in the live overlay path.
+### Fixed
+- `_render_map()` (`app_utils/image_export/maps.py`) now always uses the Level III WMS mosaic (`_fetch_radar_overlay`) -- the same request the live toggle makes -- so the live map, the Radar Loop, and every exported share card agree pixel-for-pixel. `radar_level2.py`'s Level II decode/plot path (`render_frame`) is no longer called but is left in place (its `REFLECTIVITY_LEGEND` still backs the on-image legend) for a future pass that gives the live map a matching high-resolution option instead of silently diverging from it. Updated stale comments/docstrings in `radar_loop.py` that described the old Level-II-first behavior, and the Attribution page's Py-ART card to note the library is retained but not currently in the live overlay path.
 
-Also widened the Attribution page's Py-ART/boto3/Cartopy/cmweather/
-Matplotlib card (`.stack-item-wide` in `static/css/styles.css`) to span
-two grid columns -- it credits five libraries with the longest
-description and license list on the page, and was visibly cramped at
-the same width as single-library cards.
+### Changed
+- Widened the Attribution page's Py-ART/boto3/Cartopy/cmweather/Matplotlib card (`.stack-item-wide` in `static/css/styles.css`) to span two grid columns -- it credits five libraries with the longest description and license list on the page, and was visibly cramped at the same width as single-library cards.
 
 ## [2.196.1] - 2026-08-27 - Fix Level II projection mismatch and coarse color banding
 
@@ -978,6 +899,7 @@ That swap surfaced two more real bugs, found by drawing the actual
 stored alert polygon directly onto a live radar image and checking pixel
 data rather than eyeballing screenshots:
 
+### Fixed
 - **Projection mismatch**: `plot_ppi_map` was rendering in plain
   lat/lon (`ccrs.PlateCarree`), while the basemap tiles and hazard
   polygon it composites onto are Web Mercator -- different north-south
@@ -1019,6 +941,7 @@ composite through the same `_render_map` pipeline and share one
 `REFLECTIVITY_LEGEND` color ramp, so a viewer can't tell which source
 produced a given frame from color alone.
 
+### Changed
 - **Site selection**: nearest WSR-88D site by haversine distance, from the
   live NWS radar-stations API (cached 6h), capped at nominal
   base-reflectivity range -- returns nothing for a genuine coverage gap
@@ -1043,21 +966,13 @@ produced a given frame from color alone.
 
 ## [2.195.2] - 2026-08-27 - Radar overlay screenshot for the README tour
 
-AGENTS.md's Documentation Requirements also call for a screenshot showing
-how to access a new feature, which 2.195.1 didn't add. Captured a real
-Alert Coverage Map with the radar toggle on (Tornado Warning over
-northwest Ohio, verified live against the deployed instance) and added it
-to the README's Screenshot Tour as `docs/screenshots/radar-overlay.jpg`.
+### Added
+- AGENTS.md's Documentation Requirements also call for a screenshot showing how to access a new feature, which 2.195.1 didn't add. Captured a real Alert Coverage Map with the radar toggle on (Tornado Warning over northwest Ohio, verified live against the deployed instance) and added it to the README's Screenshot Tour as `docs/screenshots/radar-overlay.jpg`.
 
 ## [2.195.1] - 2026-08-27 - Document the radar overlay feature
 
-2.195.0 shipped the radar reflectivity toggle and Radar Loop card without
-touching `templates/help.html` or `templates/about.html`, missing the
-"Documentation Updates Required" step in `docs/development/AGENTS.md`.
-Added a description of both to the Help page's "Monitoring Live Alerts"
-section, and credited Iowa Environmental Mesonet (the data source) in
-`about.html`'s acknowledgments, `attribution.html`'s Data Sources table,
-and `docs/reference/dependency_attribution.md`.
+### Added
+- 2.195.0 shipped the radar reflectivity toggle and Radar Loop card without touching `templates/help.html` or `templates/about.html`, missing the "Documentation Updates Required" step in `docs/development/AGENTS.md`. Added a description of both to the Help page's "Monitoring Live Alerts" section, and credited Iowa Environmental Mesonet (the data source) in `about.html`'s acknowledgments, `attribution.html`'s Data Sources table, and `docs/reference/dependency_attribution.md`.
 
 ## [2.195.0] - 2026-08-27 - Radar reflectivity overlay for weather alerts
 
@@ -1079,6 +994,7 @@ over a wide, intense cell, with the toned basemap and road detail
 essentially invisible underneath. Lowered to 0.45 in both places so the
 basemap stays legible.
 
+### Changed
 - `app_utils/image_export/radar_loop.py` (new) — lazy, disk-cached frame
   generation; `webapp/admin/api/routes_radar_loop.py` (new) —
   `GET /api/alerts/<id>/radar-loop`.
@@ -1099,6 +1015,7 @@ well-tested definition — see `tests/test_alert_active_expired_partition.py`)
 and never adopted its `status.notin_(("Expired", "Cancelled"))` /
 `superseded_by_id.is_(None)` exclusions:
 
+### Changed
 - `services/gpio/__main__.py::_make_active_alert_counter` — drives the
   physical USB tower light.
 - `webapp/routes_monitoring.py::api_broadcast_state` (`/api/broadcast/state`)
@@ -1141,106 +1058,30 @@ within minutes of being issued and was logged as "not specific enough" —
 the original alert then stayed "active" indefinitely with nothing to ever
 mark it otherwise.
 
-Added `poller.cap_poller.parse_cap_reference_identifiers()` plus two new
-code paths: `_process_cap_references_cancellation()` intercepts a Cancel
-carrying `<references>` *before* the relevance filter (there's nothing else
-worth saving from it) and marks the referenced alert(s) `Cancelled`.
-`_mark_cap_references_superseded()` handles the CAP Update case — an
-Update *does* carry real content and still gets saved as its own alert
-normally, but previously nothing ever linked it back to the alert it
-updates unless that alert carried NWS VTEC identity (which a state DOT's
-IPAWS feed never does); now the referenced original is marked
-`superseded_by_id`, the same mechanism the VTEC chain already uses, so a
-stale original and its Update don't both show up as separate active
-alerts. Checked the CAP `msgType` enum for other exposure: `Ack`/`Error`
-are network-handshake types public feeds don't emit in practice, so they
-weren't specifically handled. Added `tests/test_cap_references_cancellation.py`
-and `tests/test_cap_update_supersede.py`.
-
-Also fixed: `inject_eas_audio()` released the air-chain gate the instant the
-last EAS sample was queued, so listeners heard the EOM tone cut directly
-into music/talk with zero break. `POST_EAS_SILENCE_SECONDS` (1.0s) is now
-queued as trailing silence before the gate clears, matching how a real
-station hands the air chain back to regular programming. Added
-`tests/test_eas_stream_injector_trailing_silence.py`.
-
-One more layer on the 2.193.10/2.193.11 ad-metadata work: even with those
-fixes, "resolve and play" on an ad in Song History almost always still
-failed — every VAST cache URL checked more than ~20 minutes after being
-logged already 404s. iHeartRadio's ad server (Triton) discards these
-per-impression cache entries within minutes; an operator browsing history
-later and clicking "resolve" is nearly always too late, and no amount of
-client-side fixing can resolve a link the ad network has already deleted.
-Moved the VAST-fetch/parse logic out of `webapp/audio_archive/metadata.py`
-into `app_core/audio/vast_resolve.py` (a Flask-free leaf module) so
-`_handle_icy_metadata()` (`app_core/audio/sources.py`) can resolve an ad
-tag immediately, on its own dedicated metadata thread, the moment the
-StreamTitle arrives — while the tag is still fresh — and store the
-underlying creative's durable CDN URL instead of the ephemeral VAST
-wrapper. That CDN file is a stable, reused asset, not a per-impression
-token, so "resolve and play" keeps working long after the original tag
-would have expired. `webapp/audio_archive/metadata.py` now just re-exports
-`resolve_stream_url` for the existing manual "resolve" API route. Added
-regression cases to `tests/test_stream_metadata_parsing.py`.
+### Fixed
+- Added `poller.cap_poller.parse_cap_reference_identifiers()` plus two new code paths: `_process_cap_references_cancellation()` intercepts a Cancel carrying `<references>` *before* the relevance filter (there's nothing else worth saving from it) and marks the referenced alert(s) `Cancelled`. `_mark_cap_references_superseded()` handles the CAP Update case — an Update *does* carry real content and still gets saved as its own alert normally, but previously nothing ever linked it back to the alert it updates unless that alert carried NWS VTEC identity (which a state DOT's IPAWS feed never does); now the referenced original is marked `superseded_by_id`, the same mechanism the VTEC chain already uses, so a stale original and its Update don't both show up as separate active alerts. Checked the CAP `msgType` enum for other exposure: `Ack`/`Error` are network-handshake types public feeds don't emit in practice, so they weren't specifically handled. Added `tests/test_cap_references_cancellation.py` and `tests/test_cap_update_supersede.py`.
+- `inject_eas_audio()` released the air-chain gate the instant the last EAS sample was queued, so listeners heard the EOM tone cut directly into music/talk with zero break. `POST_EAS_SILENCE_SECONDS` (1.0s) is now queued as trailing silence before the gate clears, matching how a real station hands the air chain back to regular programming. Added `tests/test_eas_stream_injector_trailing_silence.py`.
+- One more layer on the 2.193.10/2.193.11 ad-metadata work: even with those fixes, "resolve and play" on an ad in Song History almost always still failed — every VAST cache URL checked more than ~20 minutes after being logged already 404s. iHeartRadio's ad server (Triton) discards these per-impression cache entries within minutes; an operator browsing history later and clicking "resolve" is nearly always too late, and no amount of client-side fixing can resolve a link the ad network has already deleted. Moved the VAST-fetch/parse logic out of `webapp/audio_archive/metadata.py` into `app_core/audio/vast_resolve.py` (a Flask-free leaf module) so `_handle_icy_metadata()` (`app_core/audio/sources.py`) can resolve an ad tag immediately, on its own dedicated metadata thread, the moment the StreamTitle arrives — while the tag is still fresh — and store the underlying creative's durable CDN URL instead of the ephemeral VAST wrapper. That CDN file is a stable, reused asset, not a per-impression token, so "resolve and play" keeps working long after the original tag would have expired. `webapp/audio_archive/metadata.py` now just re-exports `resolve_stream_url` for the existing manual "resolve" API route. Added regression cases to `tests/test_stream_metadata_parsing.py`.
 
 ## [2.193.11] - 2026-08-27 - Fix "Ad URL" title text not actually being clickable
 
-Following up on 2.193.10's VAST namespace fix: after that fix landed,
-resolving an ad still appeared to do nothing when clicked, and the
-`eas-station-web` access log showed zero requests ever reaching
-`/api/audio/archives/resolve-stream-url`. Root cause was a second,
-independent bug: the Audio Archives Song History page renders "Ad URL" as
-the row's title (styled like a link, with an ad icon, right where a song
-title normally goes -- the obvious thing to click), but it was a plain
-`<span>` with no click handler. The actual working "resolve and play"
-button was a separate, tiny icon-only button off in the row's far-right
-action column, easy to miss and not visually connected to the "Ad URL"
-text at all. The title cell's "Ad URL" is now itself the clickable
-trigger.
+### Fixed
+- Following up on 2.193.10's VAST namespace fix: after that fix landed, resolving an ad still appeared to do nothing when clicked, and the `eas-station-web` access log showed zero requests ever reaching `/api/audio/archives/resolve-stream-url`. Root cause was a second, independent bug: the Audio Archives Song History page renders "Ad URL" as the row's title (styled like a link, with an ad icon, right where a song title normally goes -- the obvious thing to click), but it was a plain `<span>` with no click handler. The actual working "resolve and play" button was a separate, tiny icon-only button off in the row's far-right action column, easy to miss and not visually connected to the "Ad URL" text at all. The title cell's "Ad URL" is now itself the clickable trigger.
 
 ## [2.193.10] - 2026-08-27 - Fix VAST ad resolution never finding a playable MediaFile
 
-Following up on 2.193.9's fix for iHeart ad metadata display: the Audio
-Archives Song History page's "resolve and play" button on an ad entry
-always reported "No playable audio found," even for VAST ad tags that
-contained a perfectly good `audio/mpeg` `MediaFile`. Root cause:
-`resolve_stream_url()` (`webapp/audio_archive/metadata.py`) searched for
-`root.iter("MediaFile")`, but real-world VAST responses (VAST 3.0+, which
-is standard — confirmed against live iHeartRadio/Triton ad-server
-responses) declare a default XML namespace on the `<VAST>` root element, so
-ElementTree parses every descendant's tag as
-`{http://www.iab.com/VAST}MediaFile` — the bare-string search silently
-matched nothing, regardless of whether the ad actually had playable audio.
-Fixed with a namespace-agnostic element search. Also now extracts `AdTitle`,
-`AdSystem`, and `Duration` from the VAST payload when present, and the
-player bar shows them instead of the generic "Ad URL" placeholder when
-available. Added `tests/test_audio_archive_vast_resolve.py`.
+### Fixed
+- Following up on 2.193.9's fix for iHeart ad metadata display: the Audio Archives Song History page's "resolve and play" button on an ad entry always reported "No playable audio found," even for VAST ad tags that contained a perfectly good `audio/mpeg` `MediaFile`. Root cause: `resolve_stream_url()` (`webapp/audio_archive/metadata.py`) searched for `root.iter("MediaFile")`, but real-world VAST responses (VAST 3.0+, which is standard — confirmed against live iHeartRadio/Triton ad-server responses) declare a default XML namespace on the `<VAST>` root element, so ElementTree parses every descendant's tag as `{http://www.iab.com/VAST}MediaFile` — the bare-string search silently matched nothing, regardless of whether the ad actually had playable audio. Fixed with a namespace-agnostic element search. Also now extracts `AdTitle`, `AdSystem`, and `Duration` from the VAST payload when present, and the player bar shows them instead of the generic "Ad URL" placeholder when available. Added `tests/test_audio_archive_vast_resolve.py`.
 
 ## [2.193.9] - 2026-08-27 - Fix OLED init file-descriptor leak and iHeart ad-break metadata display
 
 Investigated a report that `eas-station-displays` was consuming 8.9 GB RSS
 after ~4 days of uptime (every other service stayed under 1 GB over the same
-window). Root cause: `ArgonOLEDController.__init__` (`app_core/oled.py`)
-opens the I2C bus via `smbus2.SMBus` (a raw file descriptor with no
-`__del__`) *before* the `ssd1306` handshake; on a host with no OLED
-physically attached, that handshake always fails, and the just-opened
-handle was never closed on the exception path. `initialise_oled_display()`
-retries this every 5 seconds indefinitely, so over ~4 days it leaked roughly
-30,000 `/dev/i2c-1` file descriptors (confirmed via `/proc/<pid>/fd`), which
-is what actually drove the RSS growth despite the existing glibc
-malloc-arena tuning. Fixed by closing the I2C handle before re-raising.
-Added `tests/test_oled_init_fd_leak.py`.
+window).
 
-Also fixed: iHeartRadio ad breaks send `StreamTitle=adContext="<base64 VAST
-url>"`, which didn't match any of the known `text=`/`title=`/`song=`/
-`artist=` attribute patterns and wasn't recognized as a decodable base64
-blob either (it's wrapped in an attribute, not a bare blob), so the raw,
-undecoded string was stored and displayed verbatim in the Audio Archives
-Song History page. `_handle_icy_metadata` (`app_core/audio/sources.py`) now
-scans quoted attributes for a base64 value that decodes to an http(s) URL
-and resolves it into the existing `stream_url` field, which the Song
-History UI already renders as a clickable "Ad URL" badge. Added a
-regression test to `tests/test_stream_metadata_parsing.py`.
+### Fixed
+- Root cause: `ArgonOLEDController.__init__` (`app_core/oled.py`) opens the I2C bus via `smbus2.SMBus` (a raw file descriptor with no `__del__`) *before* the `ssd1306` handshake; on a host with no OLED physically attached, that handshake always fails, and the just-opened handle was never closed on the exception path. `initialise_oled_display()` retries this every 5 seconds indefinitely, so over ~4 days it leaked roughly 30,000 `/dev/i2c-1` file descriptors (confirmed via `/proc/<pid>/fd`), which is what actually drove the RSS growth despite the existing glibc malloc-arena tuning. Fixed by closing the I2C handle before re-raising. Added `tests/test_oled_init_fd_leak.py`.
+- iHeartRadio ad breaks send `StreamTitle=adContext="<base64 VAST url>"`, which didn't match any of the known `text=`/`title=`/`song=`/`artist=` attribute patterns and wasn't recognized as a decodable base64 blob either (it's wrapped in an attribute, not a bare blob), so the raw, undecoded string was stored and displayed verbatim in the Audio Archives Song History page. `_handle_icy_metadata` (`app_core/audio/sources.py`) now scans quoted attributes for a base64 value that decodes to an http(s) URL and resolves it into the existing `stream_url` field, which the Song History UI already renders as a clickable "Ad URL" badge. Added a regression test to `tests/test_stream_metadata_parsing.py`.
 
 ## [2.193.8] - 2026-08-26 - Documentation renders and links cleanly, and CI now enforces it
 
