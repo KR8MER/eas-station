@@ -437,6 +437,7 @@ class FMDemodulator:
         rbds_data: Optional[RBDSData] = None
         stereo_pilot_locked = False
         stereo_pilot_strength = 0.0
+        pilot_filtered: Optional[np.ndarray] = None
 
         # Stereo pilot detection (19 kHz tone indicates stereo broadcast)
         if self._stereo_enabled and self.config.sample_rate >= 38000:
@@ -520,7 +521,7 @@ class FMDemodulator:
             # Create sample indices for stereo decoding (carrier generation)
             stereo_sample_indices = np.arange(len(multiplex), dtype=np.float64)
             try:
-                stereo_audio = self._decode_stereo(multiplex, stereo_sample_indices)
+                stereo_audio = self._decode_stereo(multiplex, stereo_sample_indices, pilot_filtered)
                 if stereo_audio is not None:
                     logger.debug("Stereo decoded: %d samples, shape %s", len(stereo_audio), stereo_audio.shape)
             except Exception as e:
@@ -730,7 +731,12 @@ class FMDemodulator:
         filtered = oaconvolve(signal, self._lpr_filter, mode="same")
         return filtered
 
-    def _decode_stereo(self, multiplex: np.ndarray, sample_indices: np.ndarray) -> Optional[np.ndarray]:
+    def _decode_stereo(
+        self,
+        multiplex: np.ndarray,
+        sample_indices: np.ndarray,
+        pilot_filtered: Optional[np.ndarray] = None,
+    ) -> Optional[np.ndarray]:
         """Decode FM stereo from multiplex signal.
 
         Derives a phase-coherent 38 kHz carrier directly from the recovered
@@ -746,6 +752,17 @@ class FMDemodulator:
         Args:
             multiplex: FM multiplex signal (after discriminator)
             sample_indices: Sample indices (unused; kept for backwards-compat)
+            pilot_filtered: The 19 kHz-bandpass-filtered multiplex, if the
+                caller already computed it (``demodulate()`` always has --
+                it needs the same value to decide ``stereo_pilot_locked``
+                *before* even calling this method). Confirmed via py-spy on
+                a live, CPU-contended box that recomputing this identical
+                ``oaconvolve`` call here -- same ``multiplex``, same
+                ``self._pilot_filter`` -- was pure duplicate work, a third
+                of this method's three FFT convolutions for zero benefit.
+                Computed internally when omitted (e.g. every direct-call
+                test in tests/test_fm_stereo_decoder.py), so this stays a
+                pure optimization with no behavior change either way.
 
         Returns:
             Stereo audio as Nx2 array (left, right) or None if stereo cannot
@@ -757,8 +774,10 @@ class FMDemodulator:
         # Extract L+R (mono) using lowpass filter
         lpr = oaconvolve(multiplex, self._lpr_filter, mode="same")
 
-        # Recover the 19 kHz pilot tone via the pre-designed bandpass.
-        pilot_filtered = oaconvolve(multiplex, self._pilot_filter, mode="same")
+        # Recover the 19 kHz pilot tone via the pre-designed bandpass --
+        # unless the caller already has it (see the docstring above).
+        if pilot_filtered is None:
+            pilot_filtered = oaconvolve(multiplex, self._pilot_filter, mode="same")
 
         # Normalize the pilot to ~unit amplitude so the derived 38 kHz carrier
         # has a stable amplitude and the L-R recovery gain doesn't depend on
