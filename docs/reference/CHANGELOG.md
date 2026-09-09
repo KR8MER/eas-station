@@ -8,6 +8,11 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.227.1] - 2026-09-09 - Fix narrow share-card info column (clipped EXPIRES time, missing content)
+
+- **Fixed**: the landscape share-card's narrow info column (`app_utils/image_export/render.py`, info panel < `INFO_NARROW_MAX_W`) only drew severe-thunderstorm-specific panels -- damage-tier callout, tornado tag, wind/hail stat boxes, storm motion. For any non-severe-weather CAP event (911/telephone outage notices, civil emergency messages, advisories with no convective threat data) every one of those was a no-op, so the card showed nothing but a bare EXPIRES time with a large empty column below it. The column now falls back to the same generic HEADLINE/DESCRIPTION text the wide-column layout always shows whenever none of the weather-specific panels rendered anything.
+- **Fixed**: `_draw_expires_block` (`app_utils/image_export/panels_broadcast.py`) drew the absolute EXPIRES timestamp in a fixed 30px font with no width check against the column -- a stamp like "Sep 9 · 8:48 AM EDT" (342px) didn't fit the 284px-wide narrow column, and since that column sits only 8px from the canvas's right edge, the overflow ran past the image boundary and was hard-clipped (visible as "...8:48 AM E"). Now shrinks the value font to fit before drawing, matching the shrink-to-fit pattern already used for the header's event-name title.
+
 ## [2.227.0] - 2026-09-04 - Perimeter defense: flood control, bad-actor blocklist, http:BL, Edge Defense analytics
 
 - **New**: nginx-level rate limiting (`/api/` 20r/s, `/login` 5r/min, both `limit_req`) and a reject-before-the-app rule for WordPress/`.env`/`.git`/PHP-shell scanner paths -- this app is pure Python/Flask, so none of those paths are ever legitimate, and they previously fell through to a full 29KB `/login` page render on every scan hit.
