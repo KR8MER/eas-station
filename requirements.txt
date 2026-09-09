@@ -129,7 +129,7 @@ gpiozero==2.0.1.post3
 # and cannot compile on x86 (contributor laptops, CI runners). Restricting it to
 # ARM keeps `pip install -r requirements.txt` working everywhere; the LED-strip
 # code paths already degrade gracefully when the module is absent.
-rpi-ws281x>=0.0.5; platform_machine in "armv6l armv7l aarch64"  # NeoPixel/WS2812B addressable LED strip control (requires DMA/root on Pi)
+rpi-ws281x>=5.0.0; platform_machine in "armv6l armv7l aarch64"  # NeoPixel/WS2812B addressable LED strip control (requires DMA/root on Pi)
 
 # Multi-Factor Authentication (MFA) support
 pyotp==2.10.0  # TOTP (Time-based One-Time Password) generation and verification
