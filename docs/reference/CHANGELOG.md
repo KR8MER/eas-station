@@ -8,6 +8,19 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.4] - 2026-09-09 - Backfill two changelog entries missed at merge time
+
+Two commits landed on `main` with no VERSION bump and no CHANGELOG entry at
+all, discovered by scanning history for two different commits that both
+claim the same version number -- the signature of a bump that got
+clobbered when a second PR merged before the first one's version had moved.
+Both fixes have been live since their original commit date; this entry only
+catches the documentation up, same precedent as 2.227.0's own
+"(missed at merge time)" bump.
+
+- **Fixed** (originally 2026-09-03, commit `287251ec`): the live weather-alert video export route (`/api/alerts/<id>/export-image.mp4`) failed every time with "child watchers are only available on the default loop". `ffmpeg`'s `subprocess.run()` was running inside `_run_off_worker`'s `gevent.get_hub().threadpool.spawn()`, but gevent's cooperative subprocess handling needs a child watcher registered on the *default* event loop, which only exists on the process's original hub -- not the separate per-thread hub a threadpool worker gets. Split `video_export.py` into `render_alert_video_frames()` (CPU/network-bound Pillow work, safe on the threadpool) and `encode_frames_to_mp4()` (the ffmpeg subprocess call, which must run back on the request's own greenlet so gevent's cooperative `subprocess.run()` actually works); `routes_alert_export_video.py` now calls them separately instead of one function wrapped entirely in `_run_off_worker`.
+- **Fixed** (originally 2026-08-26, commit `7aaa9b1e`, #2471): the global broadcast overlay could get stuck open. Its local countdown reaching 0:00 never closed it -- the modal always waited for a `broadcast_state_update` push/poll to report `active:false`, and a backgrounded mobile tab can stall the WebSocket and miss that update entirely, leaving a live-looking abort button showing even after the broadcast had genuinely finished server-side. The overlay now closes when `/api/broadcast/abort` returns a 409 ("No broadcast is currently active"), and reconciles with the server on `visibilitychange` so a stale overlay self-corrects on tab focus.
+
 ## [2.228.3] - 2026-09-09 - Bump lxml to 6.1.3
 
 - Dependabot dependency bump (patch release, no CVE). Synced the three tech-stack badges (`README.md` x2, `templates/partials/tech_stack_badges.html`) that `tests/test_tech_stack_badges.py` checks against `requirements.txt` -- Dependabot only ever touches the pin, not the badges, so every dependency bump needs this same manual sync or the badge-drift test fails CI.
