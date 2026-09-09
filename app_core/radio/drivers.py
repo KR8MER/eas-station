@@ -257,15 +257,17 @@ class _SoapySDRReceiver(ReceiverInterface):
         self._early_decim_buffer = None  # Accumulator for partial decimation blocks
         self._effective_sample_rate = config.sample_rate  # Effective rate after decimation
         # Anti-alias FIR for the early decimator.  When SciPy is available
-        # we build a proper linear-phase lowpass at stream start; the
-        # `_zi` state is carried across reads so block boundaries don't
-        # ring up from zero.  When SciPy is unavailable we fall back to
-        # the legacy boxcar (block-average) path and emit a one-shot
-        # warning so operators know RBDS / 38 kHz stereo will see aliased
+        # we build a proper linear-phase lowpass at stream start, applied
+        # via overlap-add (oaconvolve) with the convolution tail carried
+        # across reads so block boundaries don't ring up from zero --
+        # see the call site in _capture_loop for why lfilter is not used
+        # here.  When SciPy is unavailable we fall back to the legacy
+        # boxcar (block-average) path and emit a one-shot warning so
+        # operators know RBDS / 38 kHz stereo will see aliased
         # adjacent-channel energy.
         self._early_decim_aa_filter = None
-        self._early_decim_aa_zi_real = None
-        self._early_decim_aa_zi_imag = None
+        self._early_decim_aa_tail = None
+        self._early_decim_phase = 0
         self._early_decim_boxcar_warned = False
         # Actual IF bandwidth accepted by the hardware (Hz).  Set after
         # setBandwidth is called; None if the hardware does not support it.
@@ -796,8 +798,8 @@ class _SoapySDRReceiver(ReceiverInterface):
             # filter in FMDemodulator.__init__ so the two stages stay
             # consistent: cap of 1025 bounds CPU even at Airspy's
             # 10 MHz native rate.
-            self._early_decim_aa_zi_real = None
-            self._early_decim_aa_zi_imag = None
+            self._early_decim_aa_tail = None
+            self._early_decim_phase = 0
             if _SCIPY_AVAILABLE:
                 post_decim_nyquist = self._effective_sample_rate / 2.0
                 # Pass the full broadcast-FM channel.  A fully-modulated
@@ -876,8 +878,8 @@ class _SoapySDRReceiver(ReceiverInterface):
             self._effective_sample_rate = self.config.sample_rate
             self._early_decim_buffer = None
             self._early_decim_aa_filter = None
-            self._early_decim_aa_zi_real = None
-            self._early_decim_aa_zi_imag = None
+            self._early_decim_aa_tail = None
+            self._early_decim_phase = 0
 
         # Initialize SDRRingBuffer for robust USB reading if enabled
         if self._ring_buffer_enabled and _RING_BUFFER_AVAILABLE:
@@ -1679,77 +1681,83 @@ class _SoapySDRReceiver(ReceiverInterface):
                     # 38 kHz / 57 kHz subcarriers and degrades RBDS / stereo.
                     decimated_samples = None
                     if self._early_decim_factor > 1:
-                        # Accumulate samples with any leftover from previous read
-                        to_decimate = raw_samples
-                        if self._early_decim_buffer is not None and len(self._early_decim_buffer) > 0:
-                            to_decimate = handle.numpy.concatenate([self._early_decim_buffer, raw_samples])
-
                         decim = self._early_decim_factor
 
                         if self._early_decim_aa_filter is not None and _SCIPY_AVAILABLE:
-                            # Proper anti-alias path: lfilter then stride-N downsample.
+                            # Overlap-add streaming FIR via oaconvolve
+                            # (FFT-based), carrying the convolution tail
+                            # across reads -- the same technique already
+                            # proven for the mono audio path in
+                            # FMDemodulator._mono_audio_lowpass.
                             #
-                            # lfilter on *complex* input silently falls off
-                            # scipy's fast C path (sigtools' direct IIR/FIR
-                            # routine only handles real dtypes) onto a generic
-                            # numpy.apply_along_axis(...) -> numpy.convolve
-                            # fallback -- an O(N*taps) direct-form convolution
-                            # instead of the optimized routine. Confirmed live
-                            # via py-spy record on sdr_hardware_service.py:
-                            # this one call was 38.7% of the *entire process's*
+                            # NOT lfilter: scipy.signal.lfilter with a
+                            # pure-FIR filter (a=1.0, no feedback) *always*
+                            # takes its O(N*taps) direct-form
+                            # np.apply_along_axis(...) -> np.convolve
+                            # fallback -- scipy's fast C
+                            # _sigtools._linear_filter routine only
+                            # activates when len(a) > 1 (true IIR), which
+                            # this anti-alias FIR never is. That's
+                            # independent of real vs. complex dtype: an
+                            # earlier version of this fix split the IQ
+                            # stream into separate real/imag lfilter calls
+                            # assuming complex input was the problem, but
+                            # py-spy showed both calls still landed in the
+                            # identical slow fallback. Confirmed live via
+                            # py-spy record on sdr_hardware_service.py:
+                            # this call was 38.7% of the *entire process's*
                             # CPU time (496/1283 samples) -- more than the
-                            # hardware readStream() itself. Filtering the real
-                            # and imaginary parts separately hits the fast
-                            # path for each (same technique already proven in
-                            # RBDSWorker._apply_interference_notch and its
-                            # 2.4 kHz post-mix lowpass); recombining afterward
-                            # is exact since the filter coefficients are real,
-                            # so real/imag are independent linear systems.
-                            if len(to_decimate) > 0:
-                                if self._early_decim_aa_zi_real is None:
-                                    # Seed the lfilter delay line so the very
-                                    # first chunk doesn't ring up from zero.
-                                    # Same convention used by FMDemodulator's
-                                    # secondary RBDS anti-alias stage.
-                                    zi = _scipy_signal.lfilter_zi(
-                                        self._early_decim_aa_filter, 1.0
-                                    ).astype(handle.numpy.float64)
-                                    seed = to_decimate[0]
-                                    self._early_decim_aa_zi_real = zi * seed.real
-                                    self._early_decim_aa_zi_imag = zi * seed.imag
-                                real_out, self._early_decim_aa_zi_real = _scipy_signal.lfilter(
-                                    self._early_decim_aa_filter,
-                                    1.0,
-                                    to_decimate.real,
-                                    zi=self._early_decim_aa_zi_real,
+                            # hardware readStream() itself -- before this
+                            # fix. oaconvolve handles complex input
+                            # natively (no real/imag split needed) and is
+                            # FFT-based, so a 257-tap filter over 1M
+                            # complex64 samples was measured at ~46 ms
+                            # here vs. lfilter's slow path taking >150 ms
+                            # for just the real half.
+                            if len(raw_samples) > 0:
+                                full = _scipy_signal.oaconvolve(
+                                    raw_samples, self._early_decim_aa_filter
                                 )
-                                imag_out, self._early_decim_aa_zi_imag = _scipy_signal.lfilter(
-                                    self._early_decim_aa_filter,
-                                    1.0,
-                                    to_decimate.imag,
-                                    zi=self._early_decim_aa_zi_imag,
-                                )
-                                filtered = real_out + 1j * imag_out
+                                tail = self._early_decim_aa_tail
+                                if tail is not None and tail.size:
+                                    if tail.size > full.size:
+                                        full = handle.numpy.concatenate(
+                                            [full, handle.numpy.zeros(
+                                                tail.size - full.size, dtype=full.dtype
+                                            )]
+                                        )
+                                    full[: tail.size] += tail
+                                n = len(raw_samples)
+                                self._early_decim_aa_tail = full[n:].copy()
+                                filtered = full[:n]
+
                                 # Stride-N downsample.  Aliasing has just
                                 # been suppressed by the FIR above so
-                                # [::N] is safe.  Keep the residual
-                                # samples that don't land on a stride
-                                # boundary so the next read continues
-                                # at the right phase.
-                                n_complete = (len(filtered) // decim) * decim
-                                if n_complete >= decim:
-                                    decimated_samples = filtered[:n_complete:decim].astype(
-                                        handle.numpy.complex64
-                                    )
-                                    self._early_decim_buffer = to_decimate[n_complete:].copy()
-                                else:
-                                    self._early_decim_buffer = to_decimate.copy()
-                            else:
-                                self._early_decim_buffer = to_decimate.copy()
+                                # [::N] is safe.  Carry the stride phase
+                                # across reads (instead of buffering
+                                # leftover raw samples, which would have
+                                # to be re-filtered and double-counted
+                                # against the already-advanced tail state)
+                                # so a chunk length that isn't a multiple
+                                # of `decim` doesn't drop or duplicate
+                                # samples -- same pattern as
+                                # FMDemodulator.demodulate()'s mono
+                                # decimation path.
+                                decimated_samples = filtered[
+                                    self._early_decim_phase::decim
+                                ].astype(handle.numpy.complex64)
+                                self._early_decim_phase = (
+                                    self._early_decim_phase - n
+                                ) % decim
                         else:
                             # Fallback boxcar (block-average) path.  Used
                             # only when SciPy is unavailable; warning was
                             # emitted at stream start.
+                            to_decimate = raw_samples
+                            if self._early_decim_buffer is not None and len(self._early_decim_buffer) > 0:
+                                to_decimate = handle.numpy.concatenate(
+                                    [self._early_decim_buffer, raw_samples]
+                                )
                             n_complete = (len(to_decimate) // decim) * decim
                             if n_complete >= decim:
                                 decimated_samples = to_decimate[:n_complete].reshape(-1, decim).mean(axis=1)
