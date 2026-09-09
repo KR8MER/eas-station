@@ -438,6 +438,7 @@ class FMDemodulator:
         stereo_pilot_locked = False
         stereo_pilot_strength = 0.0
         pilot_filtered: Optional[np.ndarray] = None
+        pilot_rms: Optional[float] = None
 
         # Stereo pilot detection (19 kHz tone indicates stereo broadcast)
         if self._stereo_enabled and self.config.sample_rate >= 38000:
@@ -445,7 +446,7 @@ class FMDemodulator:
             pilot_filtered = oaconvolve(multiplex, self._pilot_filter, mode="same")
 
             # Measure pilot strength (RMS of filtered signal)
-            pilot_rms = np.sqrt(np.mean(pilot_filtered ** 2))
+            pilot_rms = float(np.sqrt(np.mean(pilot_filtered ** 2)))
             stereo_pilot_strength = min(1.0, pilot_rms * 10.0)  # Scale to 0-1 range
 
             # Pilot is considered "locked" if strength exceeds threshold
@@ -518,10 +519,15 @@ class FMDemodulator:
         # The L-R difference signal is modulated at 38 kHz (double the 19 kHz pilot)
         stereo_audio = None
         if self._stereo_enabled and stereo_pilot_locked and self.config.sample_rate >= 76000:
-            # Create sample indices for stereo decoding (carrier generation)
-            stereo_sample_indices = np.arange(len(multiplex), dtype=np.float64)
+            # _decode_stereo's sample_indices param is unused by the method
+            # body (kept only for backwards-compat) -- building it here used
+            # to allocate a full-chunk-length float64 array every stereo-
+            # locked chunk for nothing.  Pass pilot_filtered/pilot_rms
+            # instead, which the method *does* use.
             try:
-                stereo_audio = self._decode_stereo(multiplex, stereo_sample_indices, pilot_filtered)
+                stereo_audio = self._decode_stereo(
+                    multiplex, pilot_filtered=pilot_filtered, pilot_rms=pilot_rms
+                )
                 if stereo_audio is not None:
                     logger.debug("Stereo decoded: %d samples, shape %s", len(stereo_audio), stereo_audio.shape)
             except Exception as e:
@@ -734,8 +740,9 @@ class FMDemodulator:
     def _decode_stereo(
         self,
         multiplex: np.ndarray,
-        sample_indices: np.ndarray,
+        sample_indices: Optional[np.ndarray] = None,
         pilot_filtered: Optional[np.ndarray] = None,
+        pilot_rms: Optional[float] = None,
     ) -> Optional[np.ndarray]:
         """Decode FM stereo from multiplex signal.
 
@@ -751,7 +758,15 @@ class FMDemodulator:
 
         Args:
             multiplex: FM multiplex signal (after discriminator)
-            sample_indices: Sample indices (unused; kept for backwards-compat)
+            sample_indices: Unused; kept as an optional param purely for
+                backwards-compat with any external caller passing it
+                positionally. ``demodulate()`` no longer builds this array
+                -- it used to allocate a full-length ``np.arange(..., dtype=
+                float64)`` every stereo-locked chunk (same size as the raw
+                IQ chunk -- tens of MB/sec worth of churn at typical SDR
+                rates) purely to satisfy this parameter, which the method
+                body never reads. Confirmed via grep across this file that
+                no code path consumes it.
             pilot_filtered: The 19 kHz-bandpass-filtered multiplex, if the
                 caller already computed it (``demodulate()`` always has --
                 it needs the same value to decide ``stereo_pilot_locked``
@@ -763,6 +778,14 @@ class FMDemodulator:
                 Computed internally when omitted (e.g. every direct-call
                 test in tests/test_fm_stereo_decoder.py), so this stays a
                 pure optimization with no behavior change either way.
+            pilot_rms: The RMS of ``pilot_filtered``, if the caller already
+                computed it. ``demodulate()`` always has -- it needs the
+                same value to compute ``stereo_pilot_strength`` before even
+                calling this method, so recomputing the identical mean+sqrt
+                reduction here was the same class of duplicate work as
+                ``pilot_filtered`` above (smaller cost -- O(N) vs the FFT
+                convolution -- but still literally the same reduction over
+                the same array). Computed internally when omitted.
 
         Returns:
             Stereo audio as Nx2 array (left, right) or None if stereo cannot
@@ -782,7 +805,8 @@ class FMDemodulator:
         # Normalize the pilot to ~unit amplitude so the derived 38 kHz carrier
         # has a stable amplitude and the L-R recovery gain doesn't depend on
         # signal strength.  RMS · √2 is the peak amplitude of a sinusoid.
-        pilot_rms = float(np.sqrt(np.mean(pilot_filtered ** 2)))
+        if pilot_rms is None:
+            pilot_rms = float(np.sqrt(np.mean(pilot_filtered ** 2)))
         pilot_peak = pilot_rms * np.sqrt(2.0)
         if pilot_peak < 1e-9:
             # Pilot vanished mid-chunk; let the caller fall back to mono.

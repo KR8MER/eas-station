@@ -8,6 +8,26 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.11] - 2026-09-09 - Total-audit pass: two more redundant-computation fixes in the FM stereo path
+
+Follow-up to 2.228.10 after being asked not to stop at a single finding: a
+full read-through of every file in `app_core/radio/demod/` (`fm.py`, `dsp.py`,
+`rbds_worker.py`, `rbds_decoder.py`, `kernels.py`, `am.py`) looking for the
+same class of bug -- work computed once, then computed again for no reason.
+Two more confirmed in `fm.py`; the RBDS worker's apparent real/imag `lfilter`
+"duplication" turned out to be a different, already-documented pattern (a
+single complex `lfilter` call and two real-valued calls do the same total
+floating-point work either way -- not a finding) and its one diagnostic
+`pilot_rms` computation is already throttled to 1-in-100 calls.
+
+### Fixed
+- `FMDemodulator._decode_stereo()` (`app_core/radio/demod/fm.py`) recomputed `pilot_rms = np.sqrt(np.mean(pilot_filtered ** 2))` even after the previous fix started passing in `pilot_filtered` itself -- `demodulate()` already computes that identical mean+sqrt reduction over the same array to derive `stereo_pilot_strength`, before ever calling `_decode_stereo`. Now accepts `pilot_rms` as an optional parameter, passed through from `demodulate()`; only recomputed when omitted. New `test_precomputed_pilot_rms_is_numerically_equivalent` in `tests/test_fm_stereo_decoder.py` proves bit-for-bit equivalence.
+- `demodulate()`'s stereo call site built `stereo_sample_indices = np.arange(len(multiplex), dtype=np.float64)` -- a full chunk-length float64 array, tens of MB/sec of allocation and fill at typical SDR rates -- on every stereo-locked chunk, purely to satisfy `_decode_stereo`'s `sample_indices` parameter, which the method body has never read (its own docstring already said "unused; kept for backwards-compat", but nothing had removed the allocation at the call site). `sample_indices` is now optional (default `None`) and the call site no longer builds it. New `test_decode_stereo_no_longer_requires_sample_indices` confirms the method works without it.
+
+Audited and found clean (no action needed): `dsp.py`'s filter-design helpers and `fast_decimate` (each called once per purpose, no duplication); `rbds_worker.py`'s two real/imag `lfilter` pairs (54-60 kHz bandpass and 2.4 kHz post-mix lowpass, both already running at the decimated rate); `am.py` (too small to have redundant work); `kernels.py` (JIT kernels, no wrapper-level duplication).
+
+Not fixed here, same as noted in 2.228.10 and still deliberately out of scope for a "redundant computation" pass: `_decode_stereo`'s remaining two `oaconvolve` calls and the polyphase resampler's `einsum` step still run at the SDR's full raw IQ rate rather than a decimated one. That is real further CPU to reclaim but is an algorithmic rate change, not a duplicate-work bug -- it needs its own dedicated, separately-validated pass.
+
 ## [2.228.10] - 2026-09-09 - Stop recomputing the FM stereo pilot filter twice per chunk
 
 Continuing the `wbks` CPU investigation (2.228.8/2.228.9): py-spy profiling
