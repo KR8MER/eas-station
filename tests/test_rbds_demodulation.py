@@ -1335,6 +1335,48 @@ def test_fmdemodulator_anti_alias_filter_protects_post_decim_nyquist():
     time.sleep(0.05)
 
 
+def test_rbds_aa_filter_oaconvolve_matches_lfilter_ground_truth():
+    """FMDemodulator's RBDS-path anti-alias filter (the overlap-add hot
+    path in demodulate()) must be numerically equivalent to the filter's
+    mathematical ground truth: a single lfilter call on the real-valued
+    multiplex.
+
+    Same bug class as RBDSWorker's bandpass/lowpass and
+    app_core/radio/drivers.py's early-decim filter: lfilter with a
+    pure-FIR filter (a=1.0, this filter's case) unconditionally takes
+    scipy's slow O(N*taps) np.apply_along_axis(...) -> np.convolve
+    fallback -- the fast C path only activates for a true IIR filter.
+    Found via a codebase-wide audit for this exact pattern after it
+    turned up twice already.
+    """
+    from scipy import signal as scipy_signal
+
+    sr = 1_000_000
+    demod = _make_demodulator(sample_rate=sr)
+    h = demod._rbds_aa_filter
+    assert h is not None
+
+    n = 4000
+    t = np.arange(n) / sr
+    x = (
+        np.cos(2.0 * np.pi * 57_000.0 * t)
+        + 0.3 * np.cos(2.0 * np.pi * 19_000.0 * t)
+    ).astype(np.float64)
+
+    full = scipy_signal.oaconvolve(x, h)
+    fast = full[:n]
+
+    zi = scipy_signal.lfilter_zi(h, 1.0).astype(np.float64) * x[0]
+    ground_truth, _ = scipy_signal.lfilter(h, 1.0, x, zi=zi)
+
+    settle = len(h) + 4
+    np.testing.assert_allclose(
+        fast[settle:], ground_truth[settle:], rtol=1e-4, atol=1e-6
+    )
+    demod.stop()
+    time.sleep(0.05)
+
+
 def test_fmdemodulator_decimates_multiplex_before_submitting():
     """submit_samples must receive multiplex at the worker's intermediate rate.
 

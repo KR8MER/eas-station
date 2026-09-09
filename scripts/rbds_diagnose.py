@@ -162,12 +162,16 @@ def _run_pipeline_to_bits(
     # ── 1. Bandpass 54-60 kHz (fixed normalization) ──────────────────────────
     rbds_filter_taps = min(101, max(31, int(sample_rate / 3000)))
     bp = _design_fir_bandpass_fixed(54000.0, 60000.0, sample_rate, taps=rbds_filter_taps)
-    bp_zi = np.zeros(len(bp) - 1, dtype=np.float32)
+    # Overlap-add tail, not an lfilter zi delay line: lfilter with a
+    # pure-FIR filter (a=[1.0], both filters below) unconditionally takes
+    # scipy's slow O(N*taps) np.convolve fallback regardless of zi --
+    # same bug as app_core/radio/drivers.py and rbds_worker.py, found via
+    # a codebase-wide audit for this exact pattern.
+    bp_tail = None
 
     # ── 2. Lowpass 7.5 kHz (original design) ─────────────────────────────────
     lp = _design_fir_lowpass_orig(7500.0, sample_rate, taps=301)
-    lp_zi_r = np.zeros(len(lp) - 1, dtype=np.float64)
-    lp_zi_i = np.zeros(len(lp) - 1, dtype=np.float64)
+    lp_tail = None
 
     # ── 3. Split into 250 ms chunks (mimics streaming) ───────────────────────
     chunk_size = sample_rate // 4       # 250 ms
@@ -279,20 +283,32 @@ def _run_pipeline_to_bits(
             break
         n = len(chunk)
 
-        # ── Bandpass ──────────────────────────────────────────────────────────
-        if len(bp_zi) != len(bp) - 1:
-            bp_zi = np.zeros(len(bp) - 1, dtype=np.float32)
-        x_bp, bp_zi = scipy_signal.lfilter(bp, [1.0], chunk, zi=bp_zi)
+        # ── Bandpass (overlap-add, tail carried across chunks) ─────────────────
+        bp_full = scipy_signal.oaconvolve(chunk, bp)
+        if bp_tail is not None and bp_tail.size:
+            if bp_tail.size > bp_full.size:
+                bp_full = np.concatenate(
+                    [bp_full, np.zeros(bp_tail.size - bp_full.size, dtype=bp_full.dtype)]
+                )
+            bp_full[: bp_tail.size] += bp_tail
+        bp_tail = bp_full[n:].copy()
+        x_bp = bp_full[:n]
 
         # ── Mix with crystal-locked 57 kHz ────────────────────────────────────
         t = (np.arange(n, dtype=np.float64) + offset) / sample_rate
         carrier = np.exp(-1j * 2.0 * np.pi * 57000.0 * t)
         x_mix = x_bp * carrier
 
-        # ── Lowpass 7.5 kHz ───────────────────────────────────────────────────
-        r_out, lp_zi_r = scipy_signal.lfilter(lp, [1.0], x_mix.real, zi=lp_zi_r)
-        i_out_sig, lp_zi_i = scipy_signal.lfilter(lp, [1.0], x_mix.imag, zi=lp_zi_i)
-        x_lp = (r_out + 1j * i_out_sig).astype(np.complex64)
+        # ── Lowpass 7.5 kHz (overlap-add, tail carried across chunks) ──────────
+        lp_full = scipy_signal.oaconvolve(x_mix, lp)
+        if lp_tail is not None and lp_tail.size:
+            if lp_tail.size > lp_full.size:
+                lp_full = np.concatenate(
+                    [lp_full, np.zeros(lp_tail.size - lp_full.size, dtype=lp_full.dtype)]
+                )
+            lp_full[: lp_tail.size] += lp_tail
+        lp_tail = lp_full[n:].copy()
+        x_lp = lp_full[:n].astype(np.complex64)
 
         offset += n
         sample_buffer = np.concatenate([sample_buffer, x_lp])

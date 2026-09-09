@@ -195,7 +195,9 @@ class FMDemodulator:
         # downsampler.  Initialised below only when RBDS is enabled.
         self._rbds_decim: int = 1
         self._rbds_aa_filter: Optional[np.ndarray] = None
-        self._rbds_aa_zi: Optional[np.ndarray] = None
+        # Overlap-add convolution tail (see the call site below for why
+        # this isn't an lfilter zi delay line).
+        self._rbds_aa_tail: Optional[np.ndarray] = None
         # Sample-offset counter at the *decimated* rate.  The worker's
         # crystal-locked 57 kHz / pilot-locked 19 kHz reference uses
         # sample_offset / self._sample_rate to compute time, so the offset
@@ -469,20 +471,28 @@ class FMDemodulator:
                 # path.
                 if self._rbds_decim > 1 and self._rbds_aa_filter is not None:
                     from scipy import signal as scipy_signal
-                    if self._rbds_aa_zi is None:
-                        # Initialize the lfilter delay line so the very
-                        # first chunk doesn't ring up from zero.  Using
-                        # the steady-state response scaled by the first
-                        # input sample matches the convention already
-                        # used in _process_rbds for the bandpass/lowpass.
-                        self._rbds_aa_zi = scipy_signal.lfilter_zi(
-                            self._rbds_aa_filter, 1.0
-                        )
-                        if multiplex.size:
-                            self._rbds_aa_zi = self._rbds_aa_zi * float(multiplex[0])
-                    filtered, self._rbds_aa_zi = scipy_signal.lfilter(
-                        self._rbds_aa_filter, 1.0, multiplex, zi=self._rbds_aa_zi
-                    )
+                    # Overlap-add via oaconvolve, carrying the convolution
+                    # tail across chunks so the filter's history survives
+                    # the boundary -- NOT lfilter: a pure-FIR lfilter call
+                    # (a=1.0, this filter's case) unconditionally takes
+                    # scipy's O(N*taps) direct-form np.convolve fallback
+                    # regardless of dtype or zi; the fast C path only
+                    # activates for a true IIR filter (len(a) > 1). Same
+                    # bug, same fix as app_core/radio/drivers.py and
+                    # RBDSWorker._process_rbds -- found via a codebase-wide
+                    # audit for this exact pattern after it turned up twice
+                    # already.
+                    full = scipy_signal.oaconvolve(multiplex, self._rbds_aa_filter)
+                    tail = self._rbds_aa_tail
+                    if tail is not None and tail.size:
+                        if tail.size > full.size:
+                            full = np.concatenate(
+                                [full, np.zeros(tail.size - full.size, dtype=full.dtype)]
+                            )
+                        full[: tail.size] += tail
+                    n_in = len(multiplex)
+                    self._rbds_aa_tail = full[n_in:].copy()
+                    filtered = full[:n_in]
                     # Decimate by integer factor.  Anti-aliasing was just
                     # done above so the [::N] is safe — same pattern PySDR
                     # uses (firwin → np.convolve → x[::10]).
