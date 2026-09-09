@@ -34,7 +34,7 @@ from flask import (
     session,
 )
 
-from app_core.auth.roles import require_permission
+from app_core.auth.roles import require_permission, require_permission_or_local_network
 from app_core.extensions import db
 from app_core.models import GPIOActivationLog
 from app_utils.gpio import (
@@ -340,9 +340,17 @@ def register(app: Flask, logger) -> None:
         return session.get("username", "anonymous")
 
     @app.route("/api/gpio/status")
-    @require_permission('gpio.view')
+    @require_permission_or_local_network('gpio.view')
     def gpio_status():
-        """Get current status of all configured GPIO pins with summary data for OLED."""
+        """Get current status of all configured GPIO pins with summary data for OLED.
+
+        Also registered in app.py's LOCAL_API_GET_PATHS: this is the
+        vfd_gpio_status default screen's data source, so
+        scripts.screen_renderer.ScreenRenderer must reach it unauthenticated
+        from localhost. require_permission_or_local_network relaxes the
+        gpio.view check for exactly that anonymous-local case; a signed-in
+        session without gpio.view is still denied.
+        """
         try:
             pins_list, _live = _gpio_pins_snapshot()
 

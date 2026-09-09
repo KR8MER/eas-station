@@ -64,6 +64,7 @@ PERMISSION_DECORATORS = {
     "require_any_permission",
     "require_all_permissions",
     "require_permission_or_setup_mode",
+    "require_permission_or_local_network",
 }
 # The app has two parallel authorization systems; either one excludes the
 # read-only demo/viewer roles from a route. ``require_auth`` alone only checks

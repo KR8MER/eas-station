@@ -484,6 +484,16 @@ LOCAL_API_GET_PATHS = {
     # GPS fix status (lat/lon/altitude/satellites) for the GPS OLED screen —
     # physical location, definitely not internet-public.
     '/api/gps_status',
+    # GPIO pin summary for the vfd_gpio_status default screen — see the
+    # route's own docstring ("...with summary data for OLED"). Was gated
+    # behind @require_permission('gpio.view') with no local-network
+    # exemption, so scripts.screen_renderer.ScreenRenderer's unauthenticated
+    # localhost requests 401'd on every single render cycle -- confirmed
+    # live (eas-station-displays.service logging a 401 on this exact path
+    # continuously). The decorator was removed from the route to match
+    # every other entry in this set (none carry one; the local-network
+    # check below is the only gate).
+    '/api/gpio/status',
 }
 
 

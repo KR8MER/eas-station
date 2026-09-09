@@ -391,6 +391,53 @@ def _permission_denied_response(permission_name: str):
     return redirect(url_for("dashboard.admin"))
 
 
+def require_permission_or_local_network(permission_name: str):
+    """Like ``require_permission``, but an anonymous caller on this box or
+    its local network skips the permission check entirely -- same
+    local-network test app.py's ``LOCAL_API_GET_PATHS`` uses to exempt
+    machine-diagnostic GETs from the login requirement, applied here at
+    the route level for an endpoint that also needs to stay
+    permission-gated for an actual logged-in session.
+
+    Written for ``/api/gpio/status`` (see ``webapp/routes/system_controls.py``):
+    it's the data source for the ``vfd_gpio_status`` default screen, so
+    ``scripts.screen_renderer.ScreenRenderer`` must reach it unauthenticated
+    from localhost -- but a signed-in operator without ``gpio.view`` should
+    still be denied, unlike a route with no decorator at all (the pattern
+    every *other* ``LOCAL_API_GET_PATHS`` entry uses, none of which needed
+    to stay permission-scoped for authenticated callers too).
+
+    The route must also be listed in ``app.py``'s ``LOCAL_API_GET_PATHS``
+    -- this decorator only relaxes the *permission* check; the app-wide
+    deny-by-default gate in ``before_request`` still rejects an anonymous
+    non-local caller before the view (and this decorator) ever runs.
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            user = get_current_user()
+            if user is None:
+                # Local import: app.py imports this module at startup, so a
+                # module-level import here would be circular. By request
+                # time app.py has finished loading.
+                from app import _is_local_network_client
+                if _is_local_network_client(request.remote_addr):
+                    return f(*args, **kwargs)
+                return _build_login_redirect()
+
+            if not has_permission(permission_name):
+                current_app.logger.warning(
+                    f"Permission denied: {permission_name} for user {session.get('user_id')}"
+                )
+                return _permission_denied_response(permission_name)
+            return f(*args, **kwargs)
+        decorated_function.eas_auth_requirement = {
+            'mode': 'single_or_local_network', 'permissions': (permission_name,),
+        }
+        return decorated_function
+    return decorator
+
+
 def require_permission(permission_name: str):
     """
     Decorator to require a specific permission for a route.

@@ -1130,12 +1130,23 @@ class ScreenRenderer:
                 # Get actual value
                 actual_str = self.substitute_variables(f"{{{var_path}}}", data)
 
-                # Try to convert to number
+                # Try to convert to number. Both sides must fall back to
+                # the same type together -- converting only `actual` back
+                # to its original string while leaving `expected` as
+                # whatever raw type the screen's JSON config stored (often
+                # a bare int, e.g. {"value": 0}) mixes str and int on a
+                # >/</>=/<= comparison and raises TypeError, which the
+                # outer except then logs and "fails open" on every single
+                # render cycle. Reproduced live: a source endpoint
+                # returning a non-numeric placeholder (e.g. after an
+                # upstream fetch failure) fed straight into a numeric
+                # condition this way.
                 try:
                     actual = float(actual_str)
                     expected = float(expected)
                 except (ValueError, TypeError):
                     actual = actual_str
+                    expected = str(expected)
 
                 # Evaluate
                 if operator == '==':

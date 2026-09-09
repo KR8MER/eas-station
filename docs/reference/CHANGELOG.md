@@ -8,7 +8,17 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.228.8] - 2026-09-09 - Throttle demod's per-chunk status publish; the Aug 26 GIL fix never actually fixed the underlying cost
+## [2.228.9] - 2026-09-09 - Fix eas-station-displays burning CPU on a continuous 401/crash loop
+
+Investigated why `eas-station-displays.service` was consuming 18%+ CPU at
+idle. Its log was spamming two distinct errors on every render cycle,
+continuously.
+
+### Fixed
+- `/api/gpio/status` — the `vfd_gpio_status` default screen's data source, per the route's own docstring ("...with summary data for OLED") — was gated behind `@require_permission('gpio.view')` with no local-network exemption, so `scripts.screen_renderer.ScreenRenderer`'s unauthenticated `localhost` requests 401'd on every single render cycle; confirmed live in the service's own logs. Added `require_permission_or_local_network()` (`app_core/auth/roles.py`, mirrors the existing `require_permission_or_setup_mode` pattern) so an anonymous local-network caller is let through -- the same case `app.py`'s `LOCAL_API_GET_PATHS` already exempts from login app-wide -- while a signed-in session without `gpio.view` is still denied. `/api/gpio/status` registered in `LOCAL_API_GET_PATHS` to match.
+- `scripts/screen_renderer.py`'s `evaluate_condition()`: when the live value fails to parse as a number (exactly what happened above -- the 401 fed a non-numeric placeholder into a numeric condition), the code fell back to the original *string* for the live value but left the condition's configured `expected` value as whatever raw type its JSON stored, typically a bare int (`{"value": 0}`) -- mixing `str` and `int` on a `>`/`<`/`>=`/`<=` comparison and raising `TypeError`, caught by the outer handler and logged on every cycle. Both sides now fall back to strings together.
+
+New tests in `tests/test_require_permission_or_local_network.py` and `tests/test_screen_renderer.py`.
 
 Investigated a reported missed Required Monthly Test on the `wbks` SDR
 receiver. `eas-station-audio.service`'s "Icecast buffer running low for
