@@ -3,7 +3,7 @@
 [![Tests](https://github.com/KR8MER/eas-station/actions/workflows/tests.yml/badge.svg)](https://github.com/KR8MER/eas-station/actions/workflows/tests.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-2.228.5-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.228.6-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -25,7 +25,7 @@
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-system-007808?style=flat-square&logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
 [![pydub](https://img.shields.io/badge/pydub-0.25.1-FF8A65?style=flat-square)](https://github.com/jiaaro/pydub)
 [![eSpeak NG](https://img.shields.io/badge/eSpeak%20NG-TTS-5C2D91?style=flat-square)](https://github.com/espeak-ng/espeak-ng)
-[![NumPy](https://img.shields.io/badge/NumPy-2.3.5-013243?style=flat-square&logo=numpy&logoColor=white)](https://numpy.org/)
+[![NumPy](https://img.shields.io/badge/NumPy-2.5.2-013243?style=flat-square&logo=numpy&logoColor=white)](https://numpy.org/)
 [![SciPy](https://img.shields.io/badge/SciPy-1.18.1-8CAAE6?style=flat-square&logo=scipy&logoColor=white)](https://scipy.org/)
 [![Numba](https://img.shields.io/badge/Numba-0.67%2B-00A3E0?style=flat-square&logo=numba&logoColor=white)](https://numba.pydata.org/)
 [![lxml](https://img.shields.io/badge/lxml-6.1.3-4A7EBB?style=flat-square)](https://lxml.de/)
@@ -532,7 +532,7 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 
 | Component | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
-| NumPy | 2.3.5 | BSD‑3‑Clause | Foundation for every IQ buffer, FM demod, FFT, and SAME bit slicer. Also drives the one‑click IQ capture (`numpy.save` to `.npy`). | https://numpy.org/ |
+| NumPy | 2.5.2 | BSD‑3‑Clause | Foundation for every IQ buffer, FM demod, FFT, and SAME bit slicer. Also drives the one‑click IQ capture (`numpy.save` to `.npy`). | https://numpy.org/ |
 | SciPy | 1.18.1 | BSD‑3‑Clause | DSP filter design (`signal.lfilter`, FIR/IIR design) for the interference notch, deemphasis, and channel filters. | https://scipy.org/ |
 | Numba | ≥ 0.67.0, < 0.68 | BSD‑2‑Clause | JIT‑compiles the inner SAME DLL and RBDS workers; ~6× faster real‑time demod on a Pi. | https://numba.pydata.org/ |
 | pydub | 0.25.1 | MIT | Decodes MP3/AAC/OGG Icecast streams for the EAS audio monitor. | https://github.com/jiaaro/pydub |
