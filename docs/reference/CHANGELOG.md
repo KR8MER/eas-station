@@ -8,6 +8,18 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.16] - 2026-09-09 - Fix the same pure-FIR lfilter slow-path bug in RBDSWorker
+
+Continuing the CPU hunt: profiling the demod service directly (ground-truth
+per-thread `/proc` census, then re-filtering the existing `py-spy` profile
+excluding known idle leaves -- same disciplined methodology as 2.228.14/15)
+found `numpy.convolve` again, this time inside `RBDSWorker._process_rbds()`.
+
+### Fixed
+- `RBDSWorker._process_rbds()`'s 54-60 kHz bandpass (`app_core/radio/demod/rbds_worker.py`, applied at the *pre-decimation* rate -- the highest-leverage stage in the RBDS pipeline) and its 2.4 kHz post-mix lowpass both called `scipy.signal.lfilter(..., [1.0], ...)` -- the same pure-FIR case that unconditionally takes scipy's slow `np.apply_along_axis(...) -> np.convolve` fallback fixed in `drivers.py` back in 2.228.14. The genuinely interesting part: the surrounding comments explain the developer had *already* diagnosed and fixed a real bug here -- switching from a plain per-chunk `np.convolve` (stateless, so every chunk boundary produced a transient that flooded the RBDS bit-sync with garbage) to `lfilter` with a persisted `zi` delay line. That fix was correct, but the developer had no way to know `lfilter`'s fast C path only activates for a true IIR filter (`len(a) > 1`) -- for a pure-FIR filter it falls back internally to the exact same `np.convolve` routine being moved away from, just wrapped behind a state-carrying API. Both filters now use overlap-add via `oaconvolve` (FFT-based, and its convolution "tail" carries state across chunks exactly like `zi` did -- same technique as 2.228.14's fix and `FMDemodulator._mono_audio_lowpass`). The lowpass filter also drops its real/imag `lfilter` split entirely -- `oaconvolve` handles complex input natively. New tests in `tests/test_rbds_demodulation.py`: `test_rbds_bandpass_oaconvolve_matches_lfilter_ground_truth`, `test_rbds_lowpass_oaconvolve_matches_lfilter_ground_truth` (numerical equivalence against a single `lfilter` call, the filters' mathematical ground truth), and `test_rbds_bandpass_chunked_matches_single_continuous_call` (proves the tail-carry state stitches irregular chunk boundaries seamlessly). The existing `test_rbds_post_mix_lowpass_rejects_stereo_sideband_artifact` (actual filter frequency response, not just call shape) continues to pass unchanged.
+
+Live-verified on `/opt` before opening the PR, same discipline as 2.228.14/15.
+
 ## [2.228.15] - 2026-09-09 - Batch the SDR publisher's per-chunk Redis calls into one round trip
 
 Continuing the CPU hunt after 2.228.14: this time built a proper ground-truth
