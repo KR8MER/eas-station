@@ -8,6 +8,13 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.19] - 2026-09-10 - Guard the remaining /dev/tty writes in scripts/lib/ui.sh's static-UI helpers
+
+`update.sh --non-interactive` runs with no controlling tty when launched via `systemd-run` (the Admin -> Operations "System Upgrade" button's path, per `bin/eas-station-run-update`). Most of `scripts/lib/ui.sh` already guards its `/dev/tty` writes behind `_UI_HAS_CONTROLLING_TTY` (~15 call sites), but `_dos_goto_row()`, `_tty()`, `_tty_raw()`, `ui_banner()`'s plain-terminal branch, `ui_progress_bar()`'s plain-terminal branch, and `ui_progress_end()` were missed. A `2>/dev/null` redirect on the `printf` only suppresses `printf`'s own runtime stderr -- it does not catch bash's own failure to *open* `/dev/tty` in the first place (ENXIO, no controlling tty), which bash reports directly to the script's current stderr before `printf` ever runs.
+
+### Fixed
+- Added the same `_UI_HAS_CONTROLLING_TTY` guard already used everywhere else in the file to the six call sites above. Verified with a real before/after run under `setsid ... </dev/null` (no controlling tty): the unfixed version throws 3 `/dev/tty: No such device or address` errors from a two-line smoke test; the fixed version is silent.
+
 ## [2.228.18] - 2026-09-10 - Apply the proven glibc malloc-arena fix to eas-station-audio.service
 
 `system_metric_samples` showed a week-long sawtooth: system memory climbing
