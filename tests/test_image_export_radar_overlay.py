@@ -50,6 +50,19 @@ maps_mod = image_export.maps
 radar_level2_mod = image_export.radar_level2
 
 
+@pytest.fixture(autouse=True)
+def _clear_radar_cache():
+    """_fetch_radar_overlay's in-memory cache is a module-level singleton --
+    without clearing it, a test earlier in this file that populates a cache
+    entry for (10, 10, 11, 11, 8, 512, 512, <now floored to 5min>) would
+    make a later test using the same bbox/canvas/when=None params silently
+    return that cached result instead of exercising its own _http.get mock.
+    """
+    maps_mod._radar_cache_clear()
+    yield
+    maps_mod._radar_cache_clear()
+
+
 # ── Tile-to-Mercator conversion ─────────────────────────────────────────────
 
 def test_full_world_tile_maps_to_full_mercator_extent():
@@ -159,6 +172,79 @@ def test_fetch_radar_overlay_returns_none_on_network_exception(monkeypatch):
     monkeypatch.setattr(maps_mod._http, "get", _raise)
     result = maps_mod._fetch_radar_overlay(10, 10, 11, 11, 8, 512, 512, None)
     assert result is None
+
+
+# ── In-memory caching ────────────────────────────────────────────────────────
+
+def test_fetch_radar_overlay_second_call_with_same_key_skips_http(monkeypatch):
+    """A burst of alerts sharing a bbox/canvas and landing in the same
+    5-minute WMS time bucket (the exact scenario during a severe-weather
+    outbreak) must issue the network fetch once, not once per alert."""
+    calls = []
+
+    def _fake_get(*a, **k):
+        calls.append(True)
+        return _fake_png_response()
+
+    monkeypatch.setattr(maps_mod._http, "get", _fake_get)
+
+    when = datetime(2026, 8, 27, 9, 37, 0, tzinfo=timezone.utc)
+    first = maps_mod._fetch_radar_overlay(10, 10, 11, 11, 8, 512, 512, when)
+    second = maps_mod._fetch_radar_overlay(10, 10, 11, 11, 8, 512, 512, when)
+
+    assert len(calls) == 1
+    assert first is not None and second is not None
+    # Cache hit still re-derives the opacity-scaled image correctly.
+    _, _, _, alpha = second[0].split()
+    assert alpha.getextrema()[1] == pytest.approx(int(255 * maps_mod._RADAR_OPACITY), abs=2)
+    assert first[1] == second[1] == maps_mod._floor_to_5min(when)
+
+
+def test_fetch_radar_overlay_different_bbox_is_a_cache_miss(monkeypatch):
+    calls = []
+    monkeypatch.setattr(maps_mod._http, "get", lambda *a, **k: calls.append(True) or _fake_png_response())
+
+    when = datetime(2026, 8, 27, 9, 37, 0, tzinfo=timezone.utc)
+    maps_mod._fetch_radar_overlay(10, 10, 11, 11, 8, 512, 512, when)
+    maps_mod._fetch_radar_overlay(20, 20, 21, 21, 8, 512, 512, when)
+
+    assert len(calls) == 2
+
+
+def test_fetch_radar_overlay_different_time_bucket_is_a_cache_miss(monkeypatch):
+    """The cache must not serve a stale scan once the WMS-T service's
+    5-minute cadence has advanced -- radar showing an outdated storm
+    position on a share card is worse than no radar at all."""
+    calls = []
+    monkeypatch.setattr(maps_mod._http, "get", lambda *a, **k: calls.append(True) or _fake_png_response())
+
+    maps_mod._fetch_radar_overlay(
+        10, 10, 11, 11, 8, 512, 512, datetime(2026, 8, 27, 9, 35, 0, tzinfo=timezone.utc)
+    )
+    maps_mod._fetch_radar_overlay(
+        10, 10, 11, 11, 8, 512, 512, datetime(2026, 8, 27, 9, 40, 0, tzinfo=timezone.utc)
+    )
+
+    assert len(calls) == 2
+
+
+def test_fetch_radar_overlay_does_not_cache_http_errors(monkeypatch):
+    """A transient WMS failure must not poison the cache for the next
+    (retryable) request in the same time bucket."""
+    calls = []
+
+    def _fake_get(*a, **k):
+        calls.append(True)
+        return _fake_png_response(status_code=500)
+
+    monkeypatch.setattr(maps_mod._http, "get", _fake_get)
+
+    when = datetime(2026, 8, 27, 9, 37, 0, tzinfo=timezone.utc)
+    first = maps_mod._fetch_radar_overlay(10, 10, 11, 11, 8, 512, 512, when)
+    second = maps_mod._fetch_radar_overlay(10, 10, 11, 11, 8, 512, 512, when)
+
+    assert first is None and second is None
+    assert len(calls) == 2
 
 
 # ── _render_map category gating ─────────────────────────────────────────────
