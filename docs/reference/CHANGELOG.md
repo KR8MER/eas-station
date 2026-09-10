@@ -8,6 +8,20 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.20] - 2026-09-10 - Database audit: missing timestamp indexes, redundant Redis fetch, three N+1 query patterns
+
+A four-way parallel audit (DB query patterns, background schedulers, Redis/connection pooling, Flask route handlers) turned up one critical, well-corroborated finding and several smaller ones.
+
+### Fixed
+- **`system_log.timestamp` had no index.** `app_core/_models_admin.py`. `SELECT * FROM system_log ORDER BY timestamp DESC LIMIT 20` cost 500ms-1s -- a parallel sequential scan across all 440k rows (810MB) plus a sort, just to fetch 20 rows. Hit every 10 seconds forever by `websocket_push.py`'s `_emit_logs_update` (inside the persistent slow-loop session), plus the `/logs` page. Verified live: `EXPLAIN (ANALYZE, BUFFERS)` went from **1023.8ms** to **0.055ms** after adding the index -- roughly 18,600x. New migration `20260910_add_timestamp_indexes`.
+- Same gap on `poll_history.timestamp` (`app_core/_models_polling.py`), same migration -- 27-36ms per hit across several `/logs`-related routes and `_emit_ipaws_status_update`, smaller table but identical root cause.
+- `app_core/websocket_push.py`: `_emit_audio_sources_update` and `_emit_audio_health_update` both run on the same 30s interval starting from the same zero offset, so they land on the same tick and each independently re-fetched the identical Redis metrics hash. Added a 1-second-TTL cache (`_read_audio_metrics_cached`) shared between them; the 4Hz fast-loop emit is untouched (wants every tick's freshest read).
+- `webapp/admin/maintenance/routes_import.py`: the manual NOAA alert import endpoint issued one `CAPAlert.query.filter_by(identifier=...).first()` per feature in the response instead of one batched `.filter(...in_(...))` lookup for the whole payload -- fine for a single alert, scales badly for a large historical backfill. Batched the existence check; preserved the original per-iteration behavior for a duplicate identifier appearing twice in one payload (must become insert-then-update, not a duplicate-key crash) by updating the lookup dict as each new row is inserted. New `tests/test_import_alert_batching.py` covers both the normal insert/update split and that regression case specifically.
+- `webapp/radio_settings/routes_diagnostics_status.py`: the SDR metrics-to-UI conversion looked up each receiver's DB id with its own query inside the per-receiver loop (polled every 15s while the Radio Diagnostics page is open). Batched into one `.filter(identifier.in_(...))` lookup before the loop.
+- `app_core/alert_purge.py`'s `_delete_orphaned_messages` (6-hourly auto-purge sweep) ran one query per candidate message id to check whether it was still referenced by a `received_eas_alerts` row. Batched into one query for the whole id list.
+
+Full test suite (3113 tests) passes.
+
 ## [2.228.19] - 2026-09-10 - Guard the remaining /dev/tty writes in scripts/lib/ui.sh's static-UI helpers
 
 `update.sh --non-interactive` runs with no controlling tty when launched via `systemd-run` (the Admin -> Operations "System Upgrade" button's path, per `bin/eas-station-run-update`). Most of `scripts/lib/ui.sh` already guards its `/dev/tty` writes behind `_UI_HAS_CONTROLLING_TTY` (~15 call sites), but `_dos_goto_row()`, `_tty()`, `_tty_raw()`, `ui_banner()`'s plain-terminal branch, `ui_progress_bar()`'s plain-terminal branch, and `ui_progress_end()` were missed. A `2>/dev/null` redirect on the `printf` only suppresses `printf`'s own runtime stderr -- it does not catch bash's own failure to *open* `/dev/tty` in the first place (ENXIO, no controlling tty), which bash reports directly to the script's current stderr before `printf` ever runs.

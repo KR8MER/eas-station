@@ -462,6 +462,33 @@ def _push_worker_slow(app: 'Flask', socketio: 'SocketIO') -> None:
     logger.info("WebSocket slow push worker stopped")
 
 
+_audio_metrics_cache: Optional[dict] = None
+_audio_metrics_cache_time: float = 0.0
+# Shorter than AUDIO_SOURCES_INTERVAL/AUDIO_HEALTH_INTERVAL (both 30.0s, and
+# both start their "last emit" timers at 0.0 so they fire on the same tick
+# every cycle) -- just long enough to dedupe the identical Redis hash read
+# _emit_audio_sources_update and _emit_audio_health_update would otherwise
+# each issue independently on every one of those ticks.
+_AUDIO_METRICS_CACHE_TTL = 1.0
+
+
+def _read_audio_metrics_cached() -> Optional[dict]:
+    """Cached wrapper around _read_audio_metrics_from_redis() for slow-loop
+    emits that read the same hash on the same cadence. Deliberately not used
+    by _emit_audio_monitoring_update (the 4 Hz fast-loop emit below), which
+    wants every tick's freshest read.
+    """
+    global _audio_metrics_cache, _audio_metrics_cache_time
+    from webapp.admin.audio_ingest import _read_audio_metrics_from_redis
+
+    now = time.time()
+    if _audio_metrics_cache is not None and (now - _audio_metrics_cache_time) < _AUDIO_METRICS_CACHE_TTL:
+        return _audio_metrics_cache
+    _audio_metrics_cache = _read_audio_metrics_from_redis()
+    _audio_metrics_cache_time = now
+    return _audio_metrics_cache
+
+
 def _emit_audio_monitoring_update(app: 'Flask', socketio: 'SocketIO', config_cache: dict) -> None:
     """Emit real-time audio monitoring metrics (VU meters, EAS monitor)."""
     from webapp.admin.audio_ingest import _read_audio_metrics_from_redis
@@ -578,13 +605,12 @@ def _emit_system_health_update(app: 'Flask', socketio: 'SocketIO') -> None:
 def _emit_audio_sources_update(app: 'Flask', socketio: 'SocketIO') -> None:
     """Emit audio source list update with runtime status from Redis."""
     from app_core.models import AudioSourceConfigDB
-    from webapp.admin.audio_ingest import _read_audio_metrics_from_redis
 
     try:
         # Build status lookup from Redis so frontend gets live status, not 'stopped' default
         redis_status_map = {}
         try:
-            redis_metrics = _read_audio_metrics_from_redis()
+            redis_metrics = _read_audio_metrics_cached()
             if redis_metrics:
                 audio_controller_data = redis_metrics.get('audio_controller', {})
                 if isinstance(audio_controller_data, str):
@@ -646,9 +672,7 @@ def _emit_audio_health_update(app: 'Flask', socketio: 'SocketIO') -> None:
     Reads from Redis to get actual audio-service health status.
     """
     try:
-        from webapp.admin.audio_ingest import _read_audio_metrics_from_redis
-
-        redis_metrics = _read_audio_metrics_from_redis()
+        redis_metrics = _read_audio_metrics_cached()
         health_data = {'overall_health_score': 0, 'sources': []}
 
         if redis_metrics:

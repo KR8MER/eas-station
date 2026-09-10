@@ -28,7 +28,7 @@ class PollHistory(db.Model):
     __tablename__ = "poll_history"
 
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime(timezone=True), default=utc_now)
+    timestamp = db.Column(db.DateTime(timezone=True), default=utc_now, index=True)
     status = db.Column(db.String(20), nullable=False)
     alerts_fetched = db.Column(db.Integer, default=0)
     alerts_new = db.Column(db.Integer, default=0)
