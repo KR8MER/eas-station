@@ -8,6 +8,19 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.18] - 2026-09-10 - Apply the proven glibc malloc-arena fix to eas-station-audio.service
+
+`system_metric_samples` showed a week-long sawtooth: system memory climbing
+steadily after every `eas-station-audio.service` restart, then resetting on
+the next one. Correlating with process RSS directly: `eas_monitoring_service.py`
+grew from ~400 MB fresh to 3.44 GB RSS over 2.8 days of uptime, while swap sat
+chronically 47-100% full the whole time.
+
+### Fixed
+- `eas_monitoring_service.py` never had `services/common/bootstrap.py`'s `init_runtime()` applied — the exact fix already proven on `eas-station-displays.service`, which cut that service's RSS from 9.68 GB to 320 MB. glibc defaults to one malloc arena per thread (up to 8x on a Pi 5), and this is the most heavily threaded eas-station process (websocket push fast+slow loops, gated-alert scheduler, per-source audio pipelines, ffmpeg feeder threads) -- 33 threads were already running within 90 seconds of a fresh restart. Added `init_runtime("audio")` as the first statement in `main()`, before any thread spawns (arena caps only bind threads created afterward), and mirrored `eas-station-displays.service`'s systemd env vars onto `eas-station-audio.service`: `MALLOC_ARENA_MAX=2`, `MALLOC_TRIM_THRESHOLD_=131072`, and `MEMDIAG_DUMP_DIR=/var/log/eas-station` (wires up the SIGUSR1/SIGUSR2 memdiag hooks too, previously entirely absent on this service, for diagnosing any residual growth without guessing).
+
+New `tests/test_eas_monitoring_service_glibc_tuning.py`: asserts `init_runtime("audio")` is imported and called, that it precedes the first thread spawn in `main()`, and that the systemd unit pins the same malloc tuning + `MEMDIAG_DUMP_DIR` as the already-fixed Phase 4 units. Confirmed the module still imports cleanly (existing tests in `tests/test_broadcast_metadata_reconcile.py`, `tests/test_dead_air_monitoring.py`, `tests/test_audio_metrics_snapshot_writer.py` already import `eas_monitoring_service` directly -- 56 tests pass).
+
 ## [2.228.17] - 2026-09-10 - Fix a long-lived idle-in-transaction connection leak in the WebSocket push service, compress rotated app logs, and close a retention-sweep coverage gap
 
 A routine database health check (`pg_stat_activity`) found several

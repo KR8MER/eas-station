@@ -56,6 +56,7 @@ from typing import Optional, Any, Dict
 from dotenv import load_dotenv
 
 from app_utils.system.sd_notify import notify as sd_notify, Watchdog
+from services.common.bootstrap import init_runtime
 
 # Configure logging early
 from app_core.logging_context import (
@@ -1457,6 +1458,16 @@ def main():
     logger.info("=" * 80)
     logger.info("EAS Station - Standalone Audio Processing Service")
     logger.info("=" * 80)
+
+    # glibc malloc-arena tuning + malloc_trim ticker + memdiag SIGUSR1/SIGUSR2
+    # hooks. Must run before any worker threads spawn (arena caps only bind
+    # threads created afterward) -- see services/common/bootstrap.py and
+    # systemd/eas-station-displays.service for the RSS evidence (9.68 GB ->
+    # 320 MB on that service) behind this. This process is the most heavily
+    # threaded of the lot (websocket push fast+slow loops, gated-alert
+    # scheduler, per-source audio pipelines, ffmpeg feeder threads), and had
+    # never had this fix applied.
+    init_runtime("audio")
 
     # Register signal handlers
     signal.signal(signal.SIGTERM, signal_handler)
