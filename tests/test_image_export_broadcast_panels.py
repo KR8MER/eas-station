@@ -329,13 +329,12 @@ def test_generate_alert_image_landscape_without_threats_still_renders():
     assert png.startswith(b"\x89PNG")
 
 
-def test_narrow_column_falls_back_to_headline_when_no_weather_content():
+def test_narrow_column_shows_headline_for_non_severe_events_too():
     """A non-severe-weather CAP event (e.g. a 911/telephone outage notice)
     carries no damage tier, tornado tag, or wind/hail stats -- every
-    weather-specific narrow-column drawer no-ops. Without a fallback the
-    card would show nothing but a bare EXPIRES time and an otherwise empty
-    column; it must instead fall back to the same generic HEADLINE /
-    DESCRIPTION text the wide-column layout always shows."""
+    weather-specific narrow-column drawer no-ops. The column must still
+    show the same generic HEADLINE / DESCRIPTION text the wide-column
+    layout always shows, not just a bare EXPIRES time."""
     from datetime import datetime, timedelta, timezone
 
     alert = _FakeAlert()
@@ -364,3 +363,114 @@ def test_narrow_column_falls_back_to_headline_when_no_weather_content():
     assert any(px != bg for px in lower_two_thirds.getdata())
     img = Image.open(io.BytesIO(png))
     assert img.size == (1200, 630)
+
+
+def test_narrow_column_shows_full_content_even_with_threat_data(monkeypatch):
+    """The actual fix: HEADLINE, AFFECTED AREAS, DESCRIPTION and COVERAGE
+    used to be entirely omitted from the narrow (landscape) column whenever
+    any threat-specific content rendered (damage tier, tornado tag, or a
+    wind/hail stat box) -- exactly the common case for severe products. All
+    layouts must carry the same information regardless of width, so these
+    must now render unconditionally, the same as the wide-column layout."""
+    calls = []
+    for name in ("_draw_nws_headline", "_draw_areas", "_draw_description", "_draw_coverage"):
+        monkeypatch.setattr(
+            image_export.render, name,
+            lambda *a, _n=name, **k: calls.append(_n) or (a[4] if len(a) > 4 else 0),
+        )
+
+    alert = _FakeAlert()
+    ipaws_data = {
+        "threat_data": {
+            "wind": {"threat": "DESTRUCTIVE", "gust": "80", "gust_unit": "MPH",
+                     "display": "Destructive!", "level": "possible"},
+        },
+    }
+
+    image_export.generate_alert_image(
+        alert, {}, ipaws_data, {"county_name": "Test County, OH"},
+        aspect_ratio="landscape",
+    )
+
+    assert "_draw_nws_headline" in calls
+    assert "_draw_areas" in calls
+    assert "_draw_description" in calls
+    assert "_draw_coverage" in calls
+
+
+def test_narrow_column_draws_instruction_before_headline(monkeypatch):
+    """Regression for a bug caught by rendering an actual sample card (not
+    caught by the test above, which only checks each drawer was called, not
+    in what order): on a content-dense product -- damage tier + EXPIRES +
+    two hazard stat boxes + a storm-motion line + a long headline -- the
+    narrow column's fixed ~482px height ran out before ever reaching
+    INSTRUCTION, so "move to an interior room" silently vanished off the
+    bottom while the less safety-critical HEADLINE text (which just repeats
+    context the event banner above already shows) survived. INSTRUCTION
+    must be drawn before HEADLINE/AREAS/DESCRIPTION so space pressure can
+    only clip the narrative sections, never the one thing on this card that
+    tells someone what to physically do."""
+    calls = []
+    for name in ("_draw_instruction", "_draw_nws_headline", "_draw_areas", "_draw_description"):
+        monkeypatch.setattr(
+            image_export.render, name,
+            lambda *a, _n=name, **k: calls.append(_n) or (a[4] if len(a) > 4 else 0),
+        )
+
+    alert = _FakeAlert()
+    ipaws_data = {
+        "threat_data": {
+            "wind": {"threat": "DESTRUCTIVE", "gust": "80", "gust_unit": "MPH",
+                     "display": "Destructive!", "level": "possible"},
+        },
+    }
+
+    image_export.generate_alert_image(
+        alert, {}, ipaws_data, {"county_name": "Test County, OH"},
+        aspect_ratio="landscape",
+    )
+
+    assert calls[0] == "_draw_instruction"
+
+
+def test_narrow_column_instruction_survives_a_content_dense_card():
+    """End-to-end version of the ordering test above: render a real card
+    with the exact dense combination that triggered the bug (damage tier,
+    wind+hail stats, storm motion, a long NWS headline) and confirm the
+    WHAT TO DO band actually paints pixels, not just that the drawer was
+    called in the right order."""
+    from datetime import datetime, timedelta, timezone
+
+    alert = _FakeAlert()
+    alert.sent = datetime.now(timezone.utc)
+    alert.expires = alert.sent + timedelta(minutes=45)
+    alert.headline = (
+        "The National Weather Service in Wilmington has issued a Severe "
+        "Thunderstorm Warning for southern Test County"
+    )
+    ipaws_data = {
+        "nws_headline": alert.headline,
+        "threat_data": {
+            "wind": {"threat": "DESTRUCTIVE", "gust": "80", "gust_unit": "MPH",
+                     "display": "Destructive!", "level": "possible"},
+            "hail": {"threat": "CONSIDERABLE", "size": "1.75",
+                     "descriptor": "Golf Ball", "display": "Considerable",
+                     "level": "possible"},
+        },
+        "storm_motion": {"compass_toward": "SE", "speed_mph": "45", "toward_deg": 135},
+    }
+
+    png = image_export.generate_alert_image(
+        alert, {}, ipaws_data, {"county_name": "Test County, OH"},
+        aspect_ratio="landscape",
+    )
+    img = Image.open(io.BytesIO(png)).convert("RGB")
+
+    # _INSTR_ACCENT (warning-yellow) is _draw_instruction's distinctive
+    # accent-bar colour (panels_text.py) -- nothing else on this card uses
+    # it, so its presence anywhere in the narrow column is an unambiguous
+    # signal the instruction band actually painted, not just that *some*
+    # non-background pixel landed there.
+    ix, iy, iw, ih = image_export._LAYOUT_LANDSCAPE.info_rect
+    column = img.crop((ix, iy, ix + iw, iy + ih))
+    assert image_export._INSTR_ACCENT in {px for px in column.getdata()}

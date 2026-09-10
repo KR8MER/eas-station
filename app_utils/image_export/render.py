@@ -420,17 +420,37 @@ def generate_alert_image(
     bot = iy_top + ih
 
     if iw < INFO_NARROW_MAX_W:
-        # Broadcast-style narrow column (see layout.py's landscape
-        # preset): the wide gauge-card / compass-rose treatment below
-        # doesn't fit here, so a compact stack leads with the highest-
-        # signal items instead -- damage tier, tornado tag, EXPIRES,
-        # hazard stat boxes, a one-line motion readout, then WHAT TO DO.
-        iy_start = iy
+        # Broadcast-style narrow column (see layout.py's landscape preset).
+        # Every layout must carry the same information -- only the visual
+        # treatment (and, out of real necessity below, the priority order)
+        # changes with width. The compact stack below (damage tier, tornado
+        # tag, EXPIRES hero, hazard stat boxes, one-line motion readout) is
+        # a narrower presentation of the exact same ipaws_data fields the
+        # wide layout's _draw_threats / _draw_compass_section draw as gauge
+        # cards / a compass rose (see panels_broadcast.py's module
+        # docstring) -- it doesn't replace headline/areas/description/
+        # instruction/coverage below, which used to be gated on "nothing
+        # threat-specific rendered" and are now unconditional.
+        #
+        # Priority order is NOT the same as the wide layout's, though: a
+        # narrow column wraps the same text into far more lines than a
+        # 1048px-wide one, so headline+areas+description can burn the
+        # entire remaining height on a content-dense product before ever
+        # reaching a later section -- confirmed by rendering an actual
+        # sample card, where INSTRUCTION (the one thing on this card that
+        # tells someone what to physically do) silently vanished off the
+        # bottom because it used to run right after the threat stack and
+        # got pushed behind the new headline/areas text instead. The event
+        # banner above already carries the event name/severity/urgency, so
+        # headline mostly repeats context the reader already has; keep
+        # INSTRUCTION right after the threat stack where it can't be
+        # crowded out, and let the narrative sections (which already have
+        # a full copy on the wide layout) be what quietly clips under
+        # space pressure -- same graceful-degradation convention every
+        # other drawer already follows.
         iy = _draw_damage_callout(draw, fonts, ix, iy, iw, bot, ipaws_data)
-        damage_shown = iy > iy_start
 
         tornado = ((ipaws_data or {}).get('threat_data') or {}).get('tornado')
-        tornado_shown = False
         if tornado and tornado.get('level', 'none') != 'none':
             pill_text = f"TORNADO {tornado.get('display', 'POSSIBLE').upper()}"
             pill_font = fonts['label']
@@ -439,38 +459,47 @@ def generate_alert_image(
                 _draw_pill(draw, pill_font, pill_text, _SEVERITY['severe'],
                           ix, iy, text_color=WHITE)
                 iy += pill_h + 8
-                tornado_shown = True
 
         iy = _draw_expires_block(draw, fonts, ix, iy, iw, bot, alert)
-
-        iy_before_hazard = iy
         iy = _draw_hazard_stat_boxes(draw, fonts, ix, iy, iw, bot, ipaws_data)
         iy = _draw_storm_motion_line(draw, fonts, ix, iy, iw, bot, ipaws_data)
-        hazard_shown = iy > iy_before_hazard
-
-        # This compact stack is tuned for severe-thunderstorm/tornado
-        # products (damage tier, tornado tag, wind/hail stats, storm
-        # motion) -- for any other CAP event (911/telephone outages,
-        # civil emergency messages, winter/flood advisories with no
-        # convective threat data, ...) every one of those is a no-op, and
-        # without a fallback the card would carry nothing but a bare
-        # EXPIRES time. Fall back to the same generic headline/description
-        # text the wide-column layout always shows.
-        if not (damage_shown or tornado_shown or hazard_shown):
-            iy = _draw_nws_headline(draw, fonts, alr_clr, ix, iy, iw, bot,
-                                    alert, ipaws_data)
-            iy = _draw_description(draw, fonts, alr_clr, ix, iy, iw, bot,
-                                   alert, timing_shown=True)
-
         iy = _draw_instruction(draw, fonts, alr_clr, ix, iy, iw, bot, alert)
+
+        iy = _draw_nws_headline(draw, fonts, alr_clr, ix, iy, iw, bot,
+                                alert, ipaws_data)
+
+        iy_before_areas = iy
+        iy = _draw_areas(draw, fonts, alr_clr, ix, iy, iw, bot, alert)
+        areas_shown = iy > iy_before_areas
+
+        # EXPIRES is already shown above (hero-styled) and in the footer,
+        # so the description's WHEN bullet would be a third repetition.
+        iy = _draw_description(draw, fonts, alr_clr, ix, iy, iw, bot, alert,
+                               areas_shown=areas_shown, timing_shown=True)
+        iy = _draw_coverage(draw, fonts, alr_clr, ix, iy, iw, bot, coverage_data, county_name)
     else:
-        # Priority order for a share card: storm threats (when dangerous), the
-        # headline, WHO is affected, WHAT is happening, WHAT to do.  Coverage /
-        # storm motion come last so they only consume space the copy doesn't
-        # need.  VTAC codes and the issuing-office block are intentionally
-        # omitted — they're operator data, not share-worthy info, and were the
-        # main reason long descriptions were being clipped.
+        # Priority order for a share card: storm threats (when dangerous),
+        # WHAT TO DO, the headline, WHO is affected, WHAT is happening.
+        # Coverage / storm motion come last so they only consume space the
+        # copy doesn't need.  VTAC codes and the issuing-office block are
+        # intentionally omitted — they're operator data, not share-worthy
+        # info, and were the main reason long descriptions were being
+        # clipped.
+        #
+        # INSTRUCTION moved ahead of headline/areas/description (was last
+        # before coverage/compass) after rendering an actual sample card
+        # exposed the same failure the narrow layout had: on a
+        # content-dense product (storm threat cards + a long NWS headline),
+        # HEADLINE + AFFECTED AREAS + DESCRIPTION filled the entire info
+        # panel before ever reaching INSTRUCTION, so "move to an interior
+        # room" silently vanished off the bottom while the less
+        # safety-critical narrative text survived. Keep INSTRUCTION right
+        # after the threat cards where space pressure can't reach it, and
+        # let the narrative sections -- which already degrade gracefully
+        # everywhere else in this file -- be what quietly clips instead.
         iy = _draw_threats(draw, fonts, alr_clr, ix, iy, iw, bot, ipaws_data)
+        iy = _draw_instruction(draw, fonts, alr_clr, ix, iy, iw, bot, alert)
+
         iy = _draw_nws_headline(draw, fonts, alr_clr, ix, iy, iw, bot, alert, ipaws_data)
 
         # Track whether the areas section actually rendered: when it did, the
@@ -486,7 +515,6 @@ def generate_alert_image(
 
         iy = _draw_description(draw, fonts, alr_clr, ix, iy, iw, bot, alert,
                                areas_shown=areas_shown, timing_shown=timing_shown)
-        iy = _draw_instruction(draw, fonts, alr_clr, ix, iy, iw, bot, alert)
         iy = _draw_coverage(draw, fonts, alr_clr, ix, iy, iw, bot, coverage_data, county_name)
         iy = _draw_compass_section(draw, fonts, alr_clr, ix, iy, iw, bot, ipaws_data)
 
