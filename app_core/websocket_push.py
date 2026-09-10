@@ -442,6 +442,20 @@ def _push_worker_slow(app: 'Flask', socketio: 'SocketIO') -> None:
                     logger.debug(f"Error emitting pending_alerts_update: {e}")
                     _recover_db_session()
 
+            # Close out whatever read transaction this iteration's emits opened
+            # on the shared session. _recover_db_session() only fires on
+            # exceptions, so a purely successful pass (the common case) never
+            # commits -- the session sits idle-in-transaction indefinitely,
+            # pinning the vacuum horizon for the whole database. This is a
+            # plain commit (not _recover_db_session()) at the 1 Hz slow-loop
+            # cadence, well under the 4 Hz threshold called out above.
+            try:
+                from app_core.extensions import db
+                db.session.commit()
+            except Exception as e:
+                logger.debug(f"Error committing slow push loop session: {e}")
+                _recover_db_session()
+
             # 1 s base tick — slow emits don't need sub-second timing
             _stop_event.wait(1.0)
 

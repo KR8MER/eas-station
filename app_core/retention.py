@@ -65,6 +65,16 @@ DEFAULT_CAPTURE_DIR = "/var/log/eas-station/captures"
 # and docs/maintenance/DISK_SPACE_CLEANUP.md both use this fixed path.
 TEMP_AUDIO_DIR = "/tmp/eas-audio"
 
+# Same env default as app.py's file-logging setup.
+DEFAULT_LOG_DIR = "/var/log/eas-station"
+
+# Memdiag snapshots (app_utils/memdiag.py) and Gunicorn startup-error dumps
+# (wsgi.py) have no retention policy of their own and accumulate forever in
+# DEFAULT_LOG_DIR. Individually tiny, but unbounded. Fixed (not user-
+# configurable via retention_settings -- these are internal diagnostics, not
+# a sized data category like the fields above).
+DIAGNOSTIC_FILE_MAX_AGE_DAYS = 30
+
 SWEEP_INTERVAL_SECONDS = 6 * 3600
 STARTUP_DELAY_SECONDS = 120
 
@@ -84,6 +94,10 @@ _MAX_AGE_DAYS = 3650
 
 def _capture_dir() -> str:
     return os.environ.get("RADIO_CAPTURE_DIR", DEFAULT_CAPTURE_DIR)
+
+
+def _log_dir() -> str:
+    return os.environ.get("EAS_LOG_DIR", DEFAULT_LOG_DIR)
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +251,7 @@ def run_sweep(settings: Dict[str, Any]) -> Dict[str, Any]:
     summary: Dict[str, Any] = {
         "iq_files_removed": 0,
         "temp_files_removed": 0,
+        "diagnostic_files_removed": 0,
         "bytes_removed": 0,
         "stream_metadata_rows_deleted": 0,
         "audio_alert_rows_deleted": 0,
@@ -258,16 +273,31 @@ def run_sweep(settings: Dict[str, Any]) -> Dict[str, Any]:
                 pass
             return None
 
-    # a. IQ captures (*.npy in RADIO_CAPTURE_DIR)
-    result = _guard(
-        "iq_captures",
-        lambda: prune_directory(
-            _capture_dir(), settings.get("iq_capture_max_age_days"), pattern="*.npy"
-        ),
-    )
-    if result:
-        summary["iq_files_removed"] = result[0]
-        summary["bytes_removed"] += result[1]
+    # a. IQ captures (*.npy in RADIO_CAPTURE_DIR, plus their *.json sidecars --
+    # previously only the .npy was matched, so the small metadata sidecar for
+    # every capture was left behind forever).
+    iq_max_age = settings.get("iq_capture_max_age_days")
+    for _pattern in ("*.npy", "*.json"):
+        result = _guard(
+            "iq_captures",
+            lambda _p=_pattern: prune_directory(_capture_dir(), iq_max_age, pattern=_p),
+        )
+        if result:
+            summary["iq_files_removed"] += result[0]
+            summary["bytes_removed"] += result[1]
+
+    # a2. Memdiag snapshots + Gunicorn startup-error dumps in DEFAULT_LOG_DIR
+    # (fixed age -- see DIAGNOSTIC_FILE_MAX_AGE_DAYS).
+    for _pattern in ("eas-memdiag-*.txt", "eas-station-*-startup-error-*.log"):
+        result = _guard(
+            "diagnostic_snapshots",
+            lambda _p=_pattern: prune_directory(
+                _log_dir(), DIAGNOSTIC_FILE_MAX_AGE_DAYS, pattern=_p
+            ),
+        )
+        if result:
+            summary["diagnostic_files_removed"] += result[0]
+            summary["bytes_removed"] += result[1]
 
     # b. Temp debug audio (/tmp/eas-audio)
     result = _guard(
@@ -338,11 +368,13 @@ def run_sweep(settings: Dict[str, Any]) -> Dict[str, Any]:
         summary["system_log_rows_deleted"] = deleted
 
     logger.info(
-        "Retention sweep complete: %d IQ file(s) + %d temp file(s) removed "
-        "(%d bytes), rows deleted: stream_metadata=%d audio_alerts=%d "
-        "audio_metrics=%d system_log=%d, audio blobs stripped=%d, errors=%d",
+        "Retention sweep complete: %d IQ file(s) + %d temp file(s) + %d "
+        "diagnostic file(s) removed (%d bytes), rows deleted: "
+        "stream_metadata=%d audio_alerts=%d audio_metrics=%d system_log=%d, "
+        "audio blobs stripped=%d, errors=%d",
         summary["iq_files_removed"],
         summary["temp_files_removed"],
+        summary["diagnostic_files_removed"],
         summary["bytes_removed"],
         summary["stream_metadata_rows_deleted"],
         summary["audio_alert_rows_deleted"],

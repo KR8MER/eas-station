@@ -8,6 +8,23 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.17] - 2026-09-10 - Fix a long-lived idle-in-transaction connection leak in the WebSocket push service, compress rotated app logs, and close a retention-sweep coverage gap
+
+A routine database health check (`pg_stat_activity`) found several
+connections stuck `idle in transaction` for hours, each frozen at a bare
+`SELECT` with no following `COMMIT`/`ROLLBACK` -- exactly the kind of open
+snapshot that pins Postgres's vacuum horizon and blocks dead-tuple cleanup
+database-wide.
+
+### Fixed
+- `app_core/websocket_push.py`'s slow push loop (`_push_worker_slow`) holds one shared SQLAlchemy session open for the life of the process (intentional, to avoid per-tick app-context overhead at high frequency -- see the `_recover_db_session()` docstring), but only rolled that session back inside each emit's `except` block. A purely successful pass -- the common case -- never committed, so every `SELECT`-only emit (e.g. `_emit_pending_alerts_update`'s `gated_alerts` query, the `count(CAPAlert.id)` in the system-health snapshot) left its read transaction open indefinitely. Added one `db.session.commit()` per 1 Hz loop iteration, after all emits run, to close out the transaction on the success path too. The 4 Hz fast loop is untouched -- it's confirmed DB-free by inspection, matching its own docstring's claim.
+
+### Changed
+- The rotated `eas_station.log` backups (`app.py`'s `RotatingFileHandler`, 10 MB × 5 backups) are now gzip-compressed on rotation via a custom `rotator`/`namer` pair, instead of sitting on disk as plain text.
+- The retention sweep (`app_core/retention.py`) now also prunes the `*.json` metadata sidecar that `sdr_hardware_service.py` writes next to every `*.npy` IQ capture -- previously only the `.npy` itself matched the prune pattern, so every capture left a small orphaned sidecar behind forever. Also added a new fixed-age (30 day, not exposed in `retention_settings` -- these are internal diagnostics, not a sized data category) sweep step for `eas-memdiag-*.txt` snapshots and `eas-station-*-startup-error-*.log` crash dumps in `EAS_LOG_DIR`, neither of which previously had any cleanup mechanism at all.
+
+Updated `tests/test_retention.py` (`test_sweep_prunes_iq_and_temp_files`, `test_one_failing_step_does_not_stop_the_rest`) for the new `diagnostic_files_removed` summary field and the additional guarded `prune_directory()` calls. Full `tests/test_retention.py` suite (20 tests) passes.
+
 ## [2.228.16] - 2026-09-09 - Audit and fix every pure-FIR lfilter slow-path instance in the codebase
 
 Continuing the CPU hunt: profiling the demod service directly (ground-truth

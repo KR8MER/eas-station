@@ -35,10 +35,12 @@ See app.config['SYSTEM_VERSION'] for current version.
 # =============================================================================
 
 import base64
+import gzip
 import hmac
 import io
 import ipaddress
 import os
+import shutil
 import sys
 import math
 import re
@@ -242,6 +244,14 @@ try:
         maxBytes=10 * 1024 * 1024,  # 10 MB
         backupCount=5,
     )
+
+    def _gzip_rotator(source: str, dest: str) -> None:
+        with open(source, 'rb') as _src, gzip.open(dest, 'wb') as _dst:
+            shutil.copyfileobj(_src, _dst)
+        os.remove(source)
+
+    _file_handler.rotator = _gzip_rotator
+    _file_handler.namer = lambda name: name + '.gz'
     _file_handler.setFormatter(logging.Formatter(
         '%(asctime)s [%(process)d] [%(levelname)s] [alert=%(alert_id)s] %(name)s: %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S',
