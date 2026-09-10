@@ -191,14 +191,22 @@ def register(app: Flask, route_logger) -> None:
                     if receivers_data:
                         available_drivers = list(set(r.get("driver") for r in receivers_data.values() if r.get("driver")))
 
+                    # Look up all receiver IDs in one query instead of one
+                    # per receiver -- this loop is polled every 15s while
+                    # the Radio Diagnostics page is open.
+                    receiver_id_by_identifier = {
+                        r.identifier: r.id
+                        for r in RadioReceiver.query.filter(
+                            RadioReceiver.identifier.in_(receivers_data.keys())
+                        ).all()
+                    } if receivers_data else {}
+
                     # Convert sdr-service metrics to expected format
                     for identifier, receiver_data in receivers_data.items():
                                 # Decode error message if present
                                 error_info = _decode_soapysdr_error(receiver_data.get("last_error")) if receiver_data.get("last_error") else None
 
-                                # Look up receiver ID from database
-                                receiver_db = RadioReceiver.query.filter_by(identifier=identifier).first()
-                                receiver_id = receiver_db.id if receiver_db else None
+                                receiver_id = receiver_id_by_identifier.get(identifier)
 
                                 loaded_receivers[identifier] = {
                                     "identifier": identifier,

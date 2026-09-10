@@ -158,18 +158,35 @@ def import_specific_alert():
     identifiers: List[str] = []
 
     try:
+        # Two passes: parse everything first (skips don't need a DB hit at
+        # all), then one batched existence check for the whole payload
+        # instead of a query per feature -- a large historical backfill can
+        # be hundreds of alerts, and this loop's per-row spatial
+        # intersection recalculation already makes each one non-trivial
+        # without adding N extra round trips just to check "does this
+        # identifier exist yet".
+        parsed_features: List[tuple] = []
         for feature in alerts_payloads:
             parsed_result = parse_noaa_cap_alert(feature)
             if not parsed_result:
                 skipped += 1
                 continue
+            parsed_features.append(parsed_result)
 
-            parsed, geometry = parsed_result
+        batch_identifiers = {parsed["identifier"] for parsed, _geometry in parsed_features}
+        existing_by_identifier = {
+            alert.identifier: alert
+            for alert in CAPAlert.query.filter(
+                CAPAlert.identifier.in_(batch_identifiers)
+            ).all()
+        } if batch_identifiers else {}
+
+        for parsed, geometry in parsed_features:
             alert_identifier = parsed["identifier"]
             if alert_identifier not in identifiers:
                 identifiers.append(alert_identifier)
 
-            existing = CAPAlert.query.filter_by(identifier=alert_identifier).first()
+            existing = existing_by_identifier.get(alert_identifier)
 
             if existing:
                 for key, value in parsed.items():
@@ -194,6 +211,11 @@ def import_specific_alert():
                 assign_alert_geometry(new_alert, geometry)
                 db.session.add(new_alert)
                 db.session.flush()
+                # A duplicate identifier later in this same batch must see
+                # this insert as "existing" (update), not attempt a second
+                # insert -- the batched existence check above only covers
+                # rows that existed before this request started.
+                existing_by_identifier[alert_identifier] = new_alert
                 try:
                     if new_alert.geom:
                         calculate_alert_intersections(new_alert)

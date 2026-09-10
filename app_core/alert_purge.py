@@ -436,14 +436,22 @@ def _delete_orphaned_messages(message_ids, EASMessage, ReceivedEASAlert) -> int:
     """
     from app_core.eas_storage import remove_eas_files
 
+    if not message_ids:
+        return 0
+
+    # One query for which of these message_ids are still referenced, instead
+    # of one query per id -- this sweep runs every 6 hours over however many
+    # orphan candidates accumulated in that window.
+    still_referenced_ids = {
+        row[0]
+        for row in db.session.query(ReceivedEASAlert.generated_message_id)
+        .filter(ReceivedEASAlert.generated_message_id.in_(message_ids))
+        .all()
+    }
+
     deleted = 0
     for mid in message_ids:
-        still_referenced = (
-            db.session.query(ReceivedEASAlert.id)
-            .filter(ReceivedEASAlert.generated_message_id == mid)
-            .first()
-        )
-        if still_referenced:
+        if mid in still_referenced_ids:
             continue
         message = db.session.get(EASMessage, mid)
         if message is None:

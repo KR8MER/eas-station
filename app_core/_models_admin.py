@@ -39,7 +39,7 @@ class SystemLog(db.Model):
     __tablename__ = "system_log"
 
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime(timezone=True), default=utc_now)
+    timestamp = db.Column(db.DateTime(timezone=True), default=utc_now, index=True)
     level = db.Column(db.String(20), nullable=False)
     message = db.Column(db.Text, nullable=False)
     module = db.Column(db.String(100))
