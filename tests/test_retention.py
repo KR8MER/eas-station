@@ -314,34 +314,49 @@ class TestDatabasePruning:
     def test_sweep_prunes_iq_and_temp_files(self, app, tmp_path, monkeypatch):
         capture_dir = tmp_path / "captures"
         temp_dir = tmp_path / "eas-audio"
+        log_dir = tmp_path / "logs"
         capture_dir.mkdir()
         temp_dir.mkdir()
+        log_dir.mkdir()
         monkeypatch.setenv("RADIO_CAPTURE_DIR", str(capture_dir))
         monkeypatch.setattr(retention, "TEMP_AUDIO_DIR", str(temp_dir))
+        monkeypatch.setenv("EAS_LOG_DIR", str(log_dir))
 
         _make_file(capture_dir / "old_iq.npy", age_days=30)
         _make_file(capture_dir / "new_iq.npy", age_days=1)
-        # Non-.npy files in the capture dir are not retention's business
+        _make_file(capture_dir / "old_iq.json", age_days=30)
+        _make_file(capture_dir / "new_iq.json", age_days=1)
+        # Non-.npy/.json files in the capture dir are not retention's business
         _make_file(capture_dir / "notes.txt", age_days=30)
         _make_file(temp_dir / "old_debug.wav", age_days=30)
         _make_file(temp_dir / "new_debug.wav", age_days=1)
+        _make_file(log_dir / "eas-memdiag-hardware-1-20260101T000000Z-memory.txt", age_days=60)
+        _make_file(log_dir / "eas-station-web-startup-error-abc123.log", age_days=60)
+        _make_file(log_dir / "eas-memdiag-hardware-2-20260101T000000Z-memory.txt", age_days=1)
 
         settings = retention.get_retention_settings().to_dict()
         summary = retention.run_sweep(settings)
 
         assert summary["errors"] == []
-        assert summary["iq_files_removed"] == 1
+        assert summary["iq_files_removed"] == 2
         assert summary["temp_files_removed"] == 1
-        assert summary["bytes_removed"] == 32
+        assert summary["diagnostic_files_removed"] == 2
+        assert summary["bytes_removed"] == 80
         assert not (capture_dir / "old_iq.npy").exists()
         assert (capture_dir / "new_iq.npy").exists()
+        assert not (capture_dir / "old_iq.json").exists()
+        assert (capture_dir / "new_iq.json").exists()
         assert (capture_dir / "notes.txt").exists()
         assert not (temp_dir / "old_debug.wav").exists()
         assert (temp_dir / "new_debug.wav").exists()
+        assert not (log_dir / "eas-memdiag-hardware-1-20260101T000000Z-memory.txt").exists()
+        assert not (log_dir / "eas-station-web-startup-error-abc123.log").exists()
+        assert (log_dir / "eas-memdiag-hardware-2-20260101T000000Z-memory.txt").exists()
 
     def test_one_failing_step_does_not_stop_the_rest(self, app, tmp_path, monkeypatch):
         monkeypatch.setenv("RADIO_CAPTURE_DIR", str(tmp_path / "captures"))
         monkeypatch.setattr(retention, "TEMP_AUDIO_DIR", str(tmp_path / "eas-audio"))
+        monkeypatch.setenv("EAS_LOG_DIR", str(tmp_path / "logs"))
 
         now = utc_now()
         _seed_rows(now)
@@ -354,8 +369,10 @@ class TestDatabasePruning:
         settings = retention.get_retention_settings().to_dict()
         summary = retention.run_sweep(settings)
 
-        # Both file steps failed but DB steps still ran.
-        assert len(summary["errors"]) == 2
+        # All file-based prune_directory() calls failed (iq *.npy, iq *.json,
+        # memdiag snapshots, startup-error dumps, temp audio) but DB steps
+        # still ran.
+        assert len(summary["errors"]) == 5
         assert summary["stream_metadata_rows_deleted"] == 1
         assert summary["audio_alert_rows_deleted"] == 1
         assert summary["audio_metrics_rows_deleted"] == 1
