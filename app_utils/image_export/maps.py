@@ -30,7 +30,9 @@ import io
 import json
 import logging
 import math
+from collections import OrderedDict
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests as _http
@@ -119,6 +121,46 @@ def _floor_to_5min(dt: datetime) -> datetime:
     return dt.replace(minute=(dt.minute // 5) * 5, second=0, microsecond=0)
 
 
+# In-memory LRU only -- unlike tiles.py's basemap cache (a fixed z/tx/ty
+# grid that never expires), a radar overlay's key includes an arbitrary
+# per-alert bbox plus a 5-minute-bucketed scan time, so the key space is
+# far higher cardinality and self-expiring (a new _floor_to_5min() bucket
+# every 5 minutes makes prior entries naturally unreferenced). A disk tier
+# would only grow unbounded for one-off bboxes that are never fetched
+# again. What this cache is actually for: deduping the *same* fetch within
+# one process during a burst of overlapping alerts -- e.g. several severe
+# warnings minutes apart during an outbreak, each rendering its notification
+# share card in the same 5-minute WMS time bucket with an overlapping bbox.
+# Entries hold the full-res PNG bytes as returned by the WMS service, sized
+# to canvas_w x canvas_h (bigger than a 256px basemap tile), so the cap is
+# kept modest to bound memory.
+_RADAR_CACHE_MAX = 32
+_RADAR_CACHE: "OrderedDict[Tuple[int, int, int, int, int, int, int, str], bytes]" = OrderedDict()
+_RADAR_CACHE_LOCK = Lock()
+
+
+def _radar_cache_get(key: Tuple[int, int, int, int, int, int, int, str]) -> Optional[bytes]:
+    with _RADAR_CACHE_LOCK:
+        if key in _RADAR_CACHE:
+            _RADAR_CACHE.move_to_end(key)
+            return _RADAR_CACHE[key]
+    return None
+
+
+def _radar_cache_put(key: Tuple[int, int, int, int, int, int, int, str], data: bytes) -> None:
+    with _RADAR_CACHE_LOCK:
+        _RADAR_CACHE[key] = data
+        _RADAR_CACHE.move_to_end(key)
+        while len(_RADAR_CACHE) > _RADAR_CACHE_MAX:
+            _RADAR_CACHE.popitem(last=False)
+
+
+def _radar_cache_clear() -> None:
+    """Drop every cached radar overlay — exposed for tests; not used by the renderer."""
+    with _RADAR_CACHE_LOCK:
+        _RADAR_CACHE.clear()
+
+
 def _fetch_radar_overlay(
     tx_min: int, ty_min: int, tx_max: int, ty_max: int, z: int,
     canvas_w: int, canvas_h: int, when: Optional[datetime],
@@ -136,6 +178,19 @@ def _fetch_radar_overlay(
     """
     x_min, y_min, x_max, y_max = _tile_bbox_to_3857(tx_min, ty_min, tx_max, ty_max, z)
     ts = _floor_to_5min(when or datetime.now(timezone.utc))
+    cache_key = (tx_min, ty_min, tx_max, ty_max, z, canvas_w, canvas_h, ts.isoformat())
+
+    cached = _radar_cache_get(cache_key)
+    if cached is not None:
+        try:
+            radar_img = Image.open(io.BytesIO(cached)).convert('RGBA')
+            red, green, blue, alpha = radar_img.split()
+            alpha = alpha.point(lambda v: int(v * _RADAR_OPACITY))
+            return Image.merge('RGBA', (red, green, blue, alpha)), ts
+        except Exception:
+            # Cached entry corrupt — evict and fall through to a live fetch.
+            with _RADAR_CACHE_LOCK:
+                _RADAR_CACHE.pop(cache_key, None)
 
     params = {
         'SERVICE': 'WMS', 'VERSION': '1.1.1', 'REQUEST': 'GetMap',
@@ -153,6 +208,7 @@ def _fetch_radar_overlay(
         if r.status_code != 200 or not r.headers.get('Content-Type', '').startswith('image/'):
             logger.debug("Radar overlay fetch returned %s (%s)", r.status_code, r.headers.get('Content-Type'))
             return None
+        _radar_cache_put(cache_key, r.content)
         radar_img = Image.open(io.BytesIO(r.content)).convert('RGBA')
         red, green, blue, alpha = radar_img.split()
         alpha = alpha.point(lambda v: int(v * _RADAR_OPACITY))

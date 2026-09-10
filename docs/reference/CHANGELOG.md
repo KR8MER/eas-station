@@ -8,6 +8,15 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.22] - 2026-09-10 - Cache the share-card radar overlay fetch
+
+An audit of `app_utils/image_export/` found `_fetch_radar_overlay()` (`maps.py`) doing an uncached synchronous WMS network fetch on every call, unlike its sibling basemap-tile fetcher in `tiles.py`, which already has a two-level (in-memory LRU + disk) cache. This isn't just an on-demand cost: `generate_alert_image()` runs on an automated path -- `app_core/notifications/alert_image.py`'s `build_alert_image()` calls it for every notification email the CAP poller and audio monitoring services send for weather alerts. During a severe-weather outbreak, several warnings issued minutes apart, often with overlapping bounding boxes, frequently land in the same 5-minute WMS time bucket -- each previously triggered its own independent network fetch of what's very possibly the identical radar tile.
+
+### Fixed
+- Added an in-memory LRU cache (`_RADAR_CACHE`, 32 entries) to `_fetch_radar_overlay()`, keyed on `(tx_min, ty_min, tx_max, ty_max, z, canvas_w, canvas_h, scan_time)`. Deliberately no disk-backed second tier like `tiles.py`'s -- unlike the fixed, immutable basemap tile grid, radar bboxes are per-alert-specific (far higher cardinality) and the key is already self-expiring (a new 5-minute time bucket naturally ages out prior entries), so a disk cache would only grow unbounded for one-off bboxes never fetched again. HTTP errors are never cached, so a transient WMS failure can't poison the cache for the next (retryable) request in the same time bucket.
+
+New tests in `tests/test_image_export_radar_overlay.py`: a second call with identical params skips the HTTP fetch entirely; different bbox or different 5-minute time bucket are both cache misses; HTTP errors aren't cached. Added an autouse fixture clearing the now-module-level cache between tests -- without it, two pre-existing tests (`..._returns_none_on_http_error`, `..._returns_none_on_network_exception`) would silently return a *previous* test's cached success instead of exercising their own mock; verified this by temporarily removing the fixture and confirming both failed exactly as expected before restoring it. Full `tests/test_image_export_*` suite (194 tests) passes.
+
 ## [2.228.21] - 2026-09-10 - Fix a numpy/numba dependency conflict that took the whole site down mid-update
 
 `update.sh` stops every eas-station service, updates the main venv, updates the SDR venv, then restarts everything. `requirements.txt`'s `numba` pin was raised to `>=0.67.0,<0.68.0` (needed for `numpy>=2.5.2` -- every `numba<0.65` release caps numpy at `<2.4`) but `requirements-sdr.txt` was never updated to match, still capped at `<0.64.0`. The main venv install succeeded; the SDR venv install then hit pip's `ResolutionImpossible` on `numpy>=2.5.2` vs. `numba<0.64.0`'s `numpy<2.4` requirement, and `update.sh` exited without ever reaching its restart step -- the site was down until this was found and fixed by hand.
