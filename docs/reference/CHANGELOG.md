@@ -8,6 +8,15 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.21] - 2026-09-10 - Fix a numpy/numba dependency conflict that took the whole site down mid-update
+
+`update.sh` stops every eas-station service, updates the main venv, updates the SDR venv, then restarts everything. `requirements.txt`'s `numba` pin was raised to `>=0.67.0,<0.68.0` (needed for `numpy>=2.5.2` -- every `numba<0.65` release caps numpy at `<2.4`) but `requirements-sdr.txt` was never updated to match, still capped at `<0.64.0`. The main venv install succeeded; the SDR venv install then hit pip's `ResolutionImpossible` on `numpy>=2.5.2` vs. `numba<0.64.0`'s `numpy<2.4` requirement, and `update.sh` exited without ever reaching its restart step -- the site was down until this was found and fixed by hand.
+
+### Fixed
+- `requirements-sdr.txt`'s `numba` pin now matches `requirements.txt`'s (`>=0.67.0,<0.68.0`). Verified with a fresh dependency resolve: resolves cleanly to `numpy-2.5.3`, `numba-0.67.0`, `llvmlite-0.49.0`.
+
+New `tests/test_requirements_sdr_numba_numpy_sync.py`: asserts the two files' `numba` pins stay identical and that `requirements-sdr.txt`'s `numpy` floor is never below `requirements.txt`'s pin. Verified it actually catches the original bug (fails against the pre-fix `<0.64.0` pin, passes against the fix).
+
 ## [2.228.20] - 2026-09-10 - Database audit: missing timestamp indexes, redundant Redis fetch, three N+1 query patterns
 
 A four-way parallel audit (DB query patterns, background schedulers, Redis/connection pooling, Flask route handlers) turned up one critical, well-corroborated finding and several smaller ones.
