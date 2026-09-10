@@ -123,15 +123,37 @@ _ui_tty_supports_color() {
 
 # Move the cursor to column 1 of the given row and clear that line, ready
 # for a fresh redraw. No-op (silently) outside a static-ready color TTY.
+#
+# The `2>/dev/null` on the printf below only suppresses printf's own
+# runtime stderr -- it does NOT catch a failure to *open* /dev/tty in the
+# first place. That open() failure (ENXIO, no controlling tty) is reported
+# by bash itself, at redirection-setup time, straight to this script's
+# current stderr ("line N: /dev/tty: No such device or address"), before
+# printf ever runs. So every /dev/tty writer here must check
+# _UI_HAS_CONTROLLING_TTY *first* and skip the redirect attempt entirely --
+# the same guard _ui_tty_supports_color() already relies on.
 _dos_goto_row() {
+    [ "$_UI_HAS_CONTROLLING_TTY" = "1" ] || return 0
     printf '\033[%d;1H\033[K' "$1" >/dev/tty 2>/dev/null || true
 }
 
 # Write a single line directly to the terminal, bypassing any log redirect.
-_tty() { printf '%s\n' "$1" >/dev/tty 2>/dev/null || printf '%s\n' "$1"; }
+_tty() {
+    if [ "$_UI_HAS_CONTROLLING_TTY" = "1" ]; then
+        printf '%s\n' "$1" >/dev/tty 2>/dev/null || printf '%s\n' "$1"
+    else
+        printf '%s\n' "$1"
+    fi
+}
 
 # Write raw bytes (no trailing newline) directly to the terminal.
-_tty_raw() { printf '%s' "$1" >/dev/tty 2>/dev/null || printf '%s' "$1"; }
+_tty_raw() {
+    if [ "$_UI_HAS_CONTROLLING_TTY" = "1" ]; then
+        printf '%s' "$1" >/dev/tty 2>/dev/null || printf '%s' "$1"
+    else
+        printf '%s' "$1"
+    fi
+}
 
 # Run a command with its output captured to the log file, showing only a
 # spinner on the fixed status row instead of live-scrolling the subprocess's
@@ -467,7 +489,7 @@ ui_banner() {
         # Park the cursor below the static area so anything unexpected that
         # prints later doesn't land on top of it.
         printf '\033[%d;1H' "$((_UI_STATUS_ROW + 2))" >/dev/tty 2>/dev/null || true
-    else
+    elif [ "$_UI_HAS_CONTROLLING_TTY" = "1" ]; then
         {
             printf '\n'
             printf '  EAS STATION\n'
@@ -692,7 +714,7 @@ ui_progress_bar() {
         _dos_goto_row "$_UI_OPERATION_ROW"
         printf ' [%s%s%s] %s%3d%%%s  %s' \
             "$_DOS_YELLOW" "$bar" "$NC" "$_DOS_YELLOW" "$pct" "$NC" "$label" >/dev/tty 2>/dev/null || true
-    else
+    elif [ "$_UI_HAS_CONTROLLING_TTY" = "1" ]; then
         printf '\r  [%s%s%s] %s%3d%%%s  %s\033[K' \
             "$_DOS_YELLOW" "$bar" "$NC" "$_DOS_YELLOW" "$pct" "$NC" "$label" >/dev/tty 2>/dev/null || true
     fi
@@ -700,6 +722,7 @@ ui_progress_bar() {
 ui_progress_end() {
     [ "$_UI_GAUGE_ACTIVE" = "1" ] && return 0
     [ "$_UI_STATIC_READY" = "1" ] && return 0
+    [ "$_UI_HAS_CONTROLLING_TTY" = "1" ] || return 0
     printf '\n' >/dev/tty 2>/dev/null || true
 }
 
