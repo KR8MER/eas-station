@@ -767,12 +767,16 @@ def admin_download_ssl_cert():
     )
 
 @environment_bp.route('/admin/environment/download-ssl-key')
-@require_permission('system.view_config')
+@require_permission('system.configure')
 def admin_download_ssl_key():
     """Download the SSL private key file (privkey.pem) for use in Portainer or other deployments.
-    
+
     WARNING: This is a SECURITY SENSITIVE operation. The private key should be kept secure
     and only downloaded when absolutely necessary for deployment purposes.
+
+    Deliberately gated on system.configure (not system.view_config, which every other
+    read-only settings page in this file uses): a "view config" / read-only-operator
+    role should not be able to exfiltrate the TLS private key.
     """
     from flask import send_file
     from datetime import datetime

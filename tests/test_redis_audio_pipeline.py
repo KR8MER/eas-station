@@ -33,19 +33,6 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-class _FakeDemodulatorStatus:
-    """Picklable stand-in for app_core.radio.demod.types.DemodulatorStatus.
-
-    A MagicMock can't cross a real pickle round-trip (which is exactly
-    what _get_remote_status() does against the bytes eas-station-demod.
-    service publishes), so these tests need a plain, module-level,
-    picklable object instead.
-    """
-
-    def __init__(self, stereo_pilot_locked: bool = False):
-        self.stereo_pilot_locked = stereo_pilot_locked
-
-
 class TestRedisSdrAdapter(unittest.TestCase):
     """Test Redis SDR source adapter."""
 
@@ -123,27 +110,29 @@ class TestRedisSdrAdapter(unittest.TestCase):
         adapter._receiver_id = 'test-receiver'
         return adapter
 
-    def test_get_remote_status_unpickles_and_caches(self):
+    def test_get_remote_status_decodes_json_and_caches(self):
         """_get_remote_status() replaces self._demodulator.get_last_status()
         now that the demodulator lives in eas-station-demod.service --
-        verify it fetches+unpickles the status key and reuses it within the
-        cache TTL instead of round-tripping Redis on every call."""
-        import pickle
+        verify it fetches+decodes the status key (JSON, not pickle -- see
+        app_core/radio/demod/types.py's demodulator_status_to/from_json_dict)
+        and reuses it within the cache TTL instead of round-tripping Redis
+        on every call."""
+        from app_core.radio.demod.types import DemodulatorStatus, demodulator_status_to_json_dict
 
         adapter = self._make_adapter()
 
-        status_obj = _FakeDemodulatorStatus(stereo_pilot_locked=True)
+        status_obj = DemodulatorStatus(stereo_pilot_locked=True)
         mock_redis = MagicMock()
-        mock_redis.get.return_value = base64.b64encode(pickle.dumps(status_obj)).decode('ascii')
+        mock_redis.get.return_value = json.dumps(demodulator_status_to_json_dict(status_obj))
         adapter._redis_client = mock_redis
 
         first = adapter._get_remote_status()
         second = adapter._get_remote_status()
 
-        # Unpickling produces a new (but equal-by-value) object -- check
+        # Decoding produces a new (but equal-by-value) object -- check
         # content, not identity, against the original.
         self.assertTrue(first.stereo_pilot_locked)
-        # The cache returns the literal object from the first unpickle.
+        # The cache returns the literal object from the first decode.
         self.assertIs(second, first)
         # Cached within _STATUS_CACHE_TTL_S -- only one Redis round-trip.
         self.assertEqual(mock_redis.get.call_count, 1)
@@ -154,14 +143,14 @@ class TestRedisSdrAdapter(unittest.TestCase):
         flap the UI to blank -- keep showing the last-known status, same
         behavior the old in-process path had while a demodulator was
         between decode cycles."""
-        import pickle
         from app_core.audio.redis_sdr_adapter import _STATUS_CACHE_TTL_S
+        from app_core.radio.demod.types import DemodulatorStatus, demodulator_status_to_json_dict
 
         adapter = self._make_adapter()
 
-        status_obj = _FakeDemodulatorStatus()
+        status_obj = DemodulatorStatus()
         mock_redis = MagicMock()
-        mock_redis.get.return_value = base64.b64encode(pickle.dumps(status_obj)).decode('ascii')
+        mock_redis.get.return_value = json.dumps(demodulator_status_to_json_dict(status_obj))
         adapter._redis_client = mock_redis
 
         first = adapter._get_remote_status()

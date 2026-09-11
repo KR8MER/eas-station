@@ -575,11 +575,17 @@
                                 </div>
                             </div>
 
+                            {# alert.description/instruction come from externally-ingested
+                               NOAA/IPAWS CAP feeds -- a spoofed or compromised feed could
+                               otherwise plant a stored-XSS payload here. `| e` escapes the
+                               raw text BEFORE the newline->HTML replacements below insert
+                               their own (deliberately safe) <p>/<br> tags, so `| safe` at
+                               the end only ever marks up text that's already been escaped. #}
                             {% if alert.description %}
                             <hr class="my-4">
                             <h4 class="text-muted mb-2 h6">Description</h4>
                             <div class="alert-description alert-content">
-                                <p class="mb-0">{{ alert.description | replace('\n\n', '</p><p class="mt-2 mb-0">') | replace('\n- ', '<br>- ') | replace('\n', ' ') | safe }}</p>
+                                <p class="mb-0">{{ alert.description | e | replace('\n\n', '</p><p class="mt-2 mb-0">') | replace('\n- ', '<br>- ') | replace('\n', ' ') | safe }}</p>
                             </div>
                             {% endif %}
 
@@ -588,7 +594,7 @@
                             <div class="alert-instruction">
                                 <h4 class="text-muted mb-2 h6"><i class="fas fa-exclamation-triangle"></i> Instructions</h4>
                                 <div class="alert-content">
-                                    <p class="mb-0">{{ alert.instruction | replace('\n\n', '</p><p class="mt-2 mb-0">') | replace('\n- ', '<br>- ') | replace('\n', ' ') | safe }}</p>
+                                    <p class="mb-0">{{ alert.instruction | e | replace('\n\n', '</p><p class="mt-2 mb-0">') | replace('\n- ', '<br>- ') | replace('\n', ' ') | safe }}</p>
                                 </div>
                             </div>
                             {% endif %}

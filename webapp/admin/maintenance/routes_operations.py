@@ -31,6 +31,7 @@ this module under the package's 400-line guidance
 this package's public surface even though it is a route handler.
 """
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -49,6 +50,19 @@ from .operations import (
     _start_background_operation,
 )
 from .paths import repo_root
+
+# Branch/tag names accepted from the request for `git fetch`/`git checkout`.
+# Must start with an alphanumeric (blocks a leading "-", which is how
+# `--upload-pack=<cmd>` style git-argument-injection payloads work), and
+# only allows the character set real git ref names use. Both call sites
+# below already require system.configure, but that only means "already
+# has broad admin access" -- it shouldn't also mean "gets a stealthier,
+# more deniable RCE primitive than the other admin actions available."
+_GIT_REF_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._/-]*$')
+
+
+def _is_valid_git_ref(ref: str) -> bool:
+    return bool(ref) and bool(_GIT_REF_PATTERN.match(ref)) and '..' not in ref
 
 # Route definitions
 
@@ -121,6 +135,8 @@ def check_for_upgrade():
         ref = get_git_metadata().get("branch") or "main"
         if ref == "unknown":
             ref = "main"
+    if not _is_valid_git_ref(ref):
+        return jsonify({"error": "Invalid ref"}), 400
 
     def _run(args: List[str], timeout: int) -> subprocess.CompletedProcess:
         return subprocess.run(
@@ -233,6 +249,8 @@ def run_one_click_upgrade():
     checkout_value = payload.get("checkout")
     if isinstance(checkout_value, str) and checkout_value.strip():
         checkout_clean = checkout_value.strip()
+        if not _is_valid_git_ref(checkout_clean):
+            return jsonify({"error": "Invalid checkout ref"}), 400
         command.extend(["--checkout", checkout_clean])
         summary_bits.append(f"checkout {checkout_clean}")
     if payload.get("skip_backup"):

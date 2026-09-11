@@ -11,7 +11,8 @@ set -euo pipefail
 
 OUT=/etc/nginx/bad-actors-auto.conf
 TMP="$(mktemp)"
-trap 'rm -f "$TMP"' EXIT
+NGINX_TEST_LOG="$(mktemp)"
+trap 'rm -f "$TMP" "$NGINX_TEST_LOG"' EXIT
 
 {
     echo "# Auto-generated $(date -u +%FT%TZ) by update_bad_actors.sh from Spamhaus DROP/EDROP."
@@ -36,10 +37,11 @@ fi
 
 install -m 644 "$TMP" "$OUT"
 
-if nginx -t 2>/tmp/bad-actors-nginx-test.log; then
+if nginx -t 2>"$NGINX_TEST_LOG"; then
     systemctl reload nginx
     echo "update_bad_actors: applied $count entries"
 else
-    echo "update_bad_actors: nginx -t failed after updating the list, see /tmp/bad-actors-nginx-test.log -- leaving nginx running on the previous config" >&2
+    echo "update_bad_actors: nginx -t failed after updating the list, see below -- leaving nginx running on the previous config" >&2
+    cat "$NGINX_TEST_LOG" >&2
     exit 1
 fi

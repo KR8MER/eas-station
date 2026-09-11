@@ -21,8 +21,10 @@ from __future__ import annotations
 
 """Dataclasses describing demodulator configuration, status and RBDS output."""
 
+import base64
+import dataclasses
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -276,4 +278,58 @@ class DemodulatorStatus:
     # demodulator.  Lets the UI distinguish "0% clicks because suppressor
     # is off" from "0% clicks because the signal is clean".
     click_suppression_enabled: bool = False
+
+
+# ── JSON round-trip for cross-process status sharing ────────────────────────
+# The demod worker process publishes DemodulatorStatus to Redis so the web
+# process's SDR adapter can read it back (see services/demod/worker.py and
+# app_core/audio/redis_sdr_adapter.py). This used to go through
+# pickle.dumps/pickle.loads, which is an arbitrary-code-execution primitive
+# the moment anything untrusted can write to that Redis key -- not exploitable
+# today (only this app's own worker writes it), but a latent risk not worth
+# keeping when the actual data is a plain dataclass tree. JSON can't
+# represent `bytes` or int-typed dict keys directly (RBDSData.tdc_data,
+# tdc_channels, slow_labelling_raw), so those are base64/str-key encoded
+# going out and decoded going back in -- everything else round-trips through
+# plain dataclasses.asdict()/the constructor unchanged.
+def demodulator_status_to_json_dict(status: 'DemodulatorStatus') -> dict:
+    """Convert a DemodulatorStatus into a plain, json.dumps-safe dict."""
+    data = dataclasses.asdict(status)
+    rbds_data = data.get('rbds_data')
+    if rbds_data is not None:
+        if rbds_data.get('tdc_data') is not None:
+            rbds_data['tdc_data'] = base64.b64encode(rbds_data['tdc_data']).decode('ascii')
+        if rbds_data.get('tdc_channels') is not None:
+            rbds_data['tdc_channels'] = {
+                str(k): base64.b64encode(v).decode('ascii')
+                for k, v in rbds_data['tdc_channels'].items()
+            }
+        if rbds_data.get('slow_labelling_raw') is not None:
+            rbds_data['slow_labelling_raw'] = {
+                str(k): v for k, v in rbds_data['slow_labelling_raw'].items()
+            }
+    return data
+
+
+def demodulator_status_from_json_dict(data: Dict[str, Any]) -> 'DemodulatorStatus':
+    """Reconstruct a DemodulatorStatus from demodulator_status_to_json_dict's output."""
+    data = dict(data)
+    rbds_data = data.get('rbds_data')
+    if rbds_data is not None:
+        rbds_data = dict(rbds_data)
+        if rbds_data.get('tdc_data') is not None:
+            rbds_data['tdc_data'] = base64.b64decode(rbds_data['tdc_data'])
+        if rbds_data.get('tdc_channels') is not None:
+            rbds_data['tdc_channels'] = {
+                int(k): base64.b64decode(v) for k, v in rbds_data['tdc_channels'].items()
+            }
+        if rbds_data.get('slow_labelling_raw') is not None:
+            rbds_data['slow_labelling_raw'] = {
+                int(k): v for k, v in rbds_data['slow_labelling_raw'].items()
+            }
+        data['rbds_data'] = RBDSData(**rbds_data)
+    rbds_decoder_stats = data.get('rbds_decoder_stats')
+    if rbds_decoder_stats is not None:
+        data['rbds_decoder_stats'] = RBDSDecoderStats(**rbds_decoder_stats)
+    return DemodulatorStatus(**data)
 

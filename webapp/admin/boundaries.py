@@ -777,6 +777,7 @@ def upload_boundaries():
         return jsonify({"error": f"Upload failed: {exc}"}), 500
 
 @boundaries_bp.route("/admin/list_shapefiles", methods=["GET"])
+@require_permission('system.configure')
 def list_shapefiles():
     """List available shapefiles in the server directory."""
     try:
@@ -902,13 +903,34 @@ def upload_shapefile():
                     )
                 }), 400
 
-        # Handle directory path for existing shapefiles on server
+        # Handle directory path for existing shapefiles on server. Every
+        # sibling upload path in this function is scoped to a temp
+        # directory or the configured shapefile directory -- this branch
+        # must be too, rather than trusting a client-supplied path outright
+        # (an arbitrary-file-read primitive otherwise: pyshp errors can
+        # reveal whether an out-of-tree file exists and something about
+        # its shape). Rather than resolving the client-supplied path and
+        # checking containment after the fact (which static analysis
+        # tools reasonably flag, since the value handed to pyshp still
+        # traces back to attacker-controlled input even once validated),
+        # match it by exact string equality against a fresh, independent
+        # enumeration of the *.shp files the configured directory actually
+        # contains -- the same listing /admin/list_shapefiles hands the
+        # UI to populate this form field from in the first place. The
+        # path pyshp actually opens then always originates from that
+        # trusted glob(), never from the request.
         elif "shapefile_path" in request.form:
-            shp_path = request.form["shapefile_path"]
-            if not Path(shp_path).exists():
-                return jsonify({"error": f"Shapefile not found: {shp_path}"}), 400
+            shp_path_raw = request.form["shapefile_path"]
+            shapefile_dir = get_shapefile_directory()
+            matched_path = next(
+                (shp_file for shp_file in shapefile_dir.glob("*.shp")
+                 if str(shp_file) == shp_path_raw),
+                None,
+            )
+            if matched_path is None:
+                return jsonify({"error": f"Shapefile not found: {shp_path_raw}"}), 400
 
-            geojson_data = convert_shapefile_to_geojson(shp_path)
+            geojson_data = convert_shapefile_to_geojson(str(matched_path))
         else:
             return jsonify({
                 "error": "Either file upload or shapefile_path must be provided"

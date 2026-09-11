@@ -4,8 +4,17 @@
 # This script fixes the --system-site-packages issue on a deployed system
 #
 # Run this script on the deployed server:
-#   curl -o /tmp/fix_website.sh https://raw.githubusercontent.com/KR8MER/eas-station/copilot/fix-broken-logs/scripts/fix_website_504.sh
-#   sudo bash /tmp/fix_website.sh
+#   TMPFILE=$(mktemp /tmp/eas-fix-website.XXXXXX)
+#   curl -fsSL -o "$TMPFILE" https://raw.githubusercontent.com/KR8MER/eas-station/copilot/fix-broken-logs/scripts/fix_website_504.sh
+#   sudo bash "$TMPFILE"
+#
+# Use mktemp, not a fixed /tmp/fix_website.sh path: a predictable filename
+# in a world-writable directory lets a local user pre-plant that exact
+# path (before this script is ever downloaded) with content of their own
+# choosing, which `sudo bash` then executes as root. mktemp's unpredictable
+# suffix plus /tmp's sticky bit (which blocks a non-owner from deleting or
+# replacing a file they don't own, even with write access to the directory)
+# closes that off.
 #
 
 set -e  # Exit on error
@@ -123,9 +132,10 @@ if [ ! -f "requirements.txt" ]; then
 fi
 
 echo "  This may take several minutes..."
-if ! sudo -u "$SERVICE_USER" "${VENV_DIR}/bin/pip" install -r requirements.txt 2>&1 | tee /tmp/pip-install.log | grep -E "Successfully|ERROR"; then
+PIP_INSTALL_LOG=$(mktemp /tmp/eas-pip-install.XXXXXX)
+if ! sudo -u "$SERVICE_USER" "${VENV_DIR}/bin/pip" install -r requirements.txt 2>&1 | tee "$PIP_INSTALL_LOG" | grep -E "Successfully|ERROR"; then
     echo "⚠ Some packages may have failed to install"
-    echo "  Check /tmp/pip-install.log for details"
+    echo "  Check $PIP_INSTALL_LOG for details"
 fi
 echo "✓ Dependencies installed"
 echo ""

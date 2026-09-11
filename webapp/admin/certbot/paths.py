@@ -116,9 +116,16 @@ def _ensure_certbot_directories():
                 timeout=5
             )
 
-        # Fix permissions on the entire certbot_data directory tree
+        # Fix permissions on the entire certbot_data directory tree.
+        # 755 (not world-WRITABLE) still gives the eas-station user
+        # read+traverse access for the .exists()/iterdir() checks and
+        # openssl/read_text() calls elsewhere in this package (install.py,
+        # staging.py) -- none of which ever read a private key's actual
+        # bytes, only its path or (for fullchain.pem, which is public PKI
+        # material by design) its content. The privkey*.pem chmod below
+        # locks down the one thing in this tree that's actually secret.
         subprocess.run(
-            ['sudo', 'chmod', '-R', '777', str(CERTBOT_BASE_DIR)],
+            ['sudo', 'chmod', '-R', '755', str(CERTBOT_BASE_DIR)],
             capture_output=True,
             timeout=10
         )
@@ -131,10 +138,30 @@ def _ensure_certbot_directories():
         #     PermissionError: [Errno 1] Operation not permitted:
         #     '.../archive/<domain>/privkeyN.pem'
         # Leaving the tree owned by root makes the copy-group step a no-op
-        # so the failure cannot recur. The chmod 777 above keeps read access
-        # for the eas-station user.
+        # so the failure cannot recur. Changing this to a non-root group
+        # (e.g. eas-station) would reintroduce exactly the failure this
+        # comment describes on the next renewal -- do not "fix" this to
+        # grant eas-station a group instead of the privkey chmod below.
         subprocess.run(
             ['sudo', 'chown', '-R', 'root:root', str(CERTBOT_BASE_DIR)],
+            capture_output=True,
+            timeout=10
+        )
+
+        # Lock the actual private key material down to root-only. This is
+        # the one piece of this tree that's genuinely secret -- fullchain/
+        # cert/chain.pem are public PKI material by design, and nothing in
+        # this codebase ever reads a privkey.pem's *content* as the
+        # eas-station user (only its path, or a stat()/.exists() check,
+        # neither of which needs read permission on the file itself -- stat
+        # only needs execute/search permission on its parent directories,
+        # which the 755 above already grants). nginx's master process reads
+        # these directly at config-load/reload time, but it does so as
+        # root (before dropping privilege to www-data for its workers), so
+        # root-only here doesn't affect it either.
+        subprocess.run(
+            ['sudo', 'find', str(CERTBOT_BASE_DIR), '-name', 'privkey*.pem',
+             '-exec', 'chmod', '600', '{}', '+'],
             capture_output=True,
             timeout=10
         )

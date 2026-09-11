@@ -21,6 +21,8 @@ from __future__ import annotations
 
 """Admin user, session, and system log models."""
 
+import hmac
+
 from ._models_base import (
     Any,
     Dict,
@@ -105,7 +107,7 @@ class AdminUser(db.Model):
                 except ValueError:
                     return False
                 hashed = hashlib.sha256(salt_bytes + password.encode("utf-8")).hexdigest()
-                if hashed == self.password_hash:
+                if hmac.compare_digest(hashed, self.password_hash):
                     # Upgrade to new password hash format in-place
                     # The session commit happens in the authentication flow,
                     # not here, to avoid race conditions with other requests

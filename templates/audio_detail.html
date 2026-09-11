@@ -300,8 +300,12 @@
                     </h2>
                 </div>
                 <div class="card-body">
+                    {# message_text is TTS narration derived from the decoded/CAP alert
+                       text, which can originate from an external feed -- escape before
+                       inserting the deliberately-safe <br> so `| safe` never re-exposes
+                       raw HTML/script from that source. #}
                     {% if summary_data.message_text %}
-                    <p class="alert-content mb-3">{{ summary_data.message_text | replace('\n', '<br>') | safe }}</p>
+                    <p class="alert-content mb-3">{{ summary_data.message_text | e | replace('\n', '<br>') | safe }}</p>
                     {% endif %}
                     <dl class="row mb-0">
                         {% if summary_data.headline %}

@@ -1410,9 +1410,15 @@ echo_step "Python Environment Setup"
 # but that doesn't help with the --system-site-packages flag (which is different).
 # If you need system packages like python3-soapysdr, install them into the venv after creation.
 echo_progress "Creating Python virtual environment..."
-if ! sudo -u "$SERVICE_USER" python3 -m venv "$VENV_DIR" 2>&1 | tee /tmp/venv-creation.log; then
+# mktemp, not a fixed /tmp/venv-creation.log path: this script runs as
+# root, and a predictable world-writable-directory filename is a classic
+# symlink race (CWE-377) -- a local user could pre-plant a symlink there
+# pointing at an arbitrary file and have `tee` (running as root) overwrite
+# it with venv-creation output.
+VENV_CREATION_LOG=$(mktemp /tmp/eas-venv-creation.XXXXXX)
+if ! sudo -u "$SERVICE_USER" python3 -m venv "$VENV_DIR" 2>&1 | tee "$VENV_CREATION_LOG"; then
     echo_error "Failed to create virtual environment"
-    echo_info "See /tmp/venv-creation.log for details"
+    echo_info "See $VENV_CREATION_LOG for details"
     exit 1
 fi
 echo_success "Virtual environment created at $VENV_DIR"
@@ -1845,13 +1851,21 @@ fi
 # calls os.chown() to mirror the previous cert's group onto the new key,
 # which fails with EPERM on hosts where AppArmor/user-namespace policy
 # blocks root from chowning to a non-root group. Keep the whole tree
-# owned by root:root so that copy_group step is a no-op; chmod 777
-# preserves read access for the eas-station user.
+# owned by root:root so that copy_group step is a no-op. 755 (not
+# world-writable 777) still gives eas-station read+traverse access for
+# the .exists()/iterdir() checks and openssl/read_text() calls in
+# webapp/admin/certbot/ -- none of which ever read a private key's actual
+# bytes, only its path or (for fullchain.pem, public PKI material by
+# design) its content. The privkey*.pem chmod below locks down the one
+# thing in this tree that's actually secret; nginx's master process
+# reads it directly at config-load/reload time, but as root (before
+# dropping to www-data for its workers), so root-only doesn't affect it.
 echo_progress "Creating certbot data directories..."
 CERTBOT_DATA_DIR="$INSTALL_DIR/certbot_data"
 mkdir -p "$CERTBOT_DATA_DIR/config" "$CERTBOT_DATA_DIR/work" "$CERTBOT_DATA_DIR/logs"
-chmod -R 777 "$CERTBOT_DATA_DIR"
+chmod -R 755 "$CERTBOT_DATA_DIR"
 chown -R root:root "$CERTBOT_DATA_DIR"
+find "$CERTBOT_DATA_DIR" -name 'privkey*.pem' -exec chmod 600 {} +
 echo_success "Certbot data directories created"
 
 # Create ACME challenge directory for certbot webroot method
@@ -1901,17 +1915,23 @@ if [ "$ARGON_ZIGBEE" = true ]; then
     # Install Argon ONE V5 daemon (fan control + USB hub power)
     if ! command -v argonone-cli &>/dev/null && ! systemctl is-active --quiet argononed 2>/dev/null; then
         echo_progress "Installing Argon ONE V5 daemon..."
+        # mktemp, not a fixed /tmp/argon1v5.sh path: this runs as root, and
+        # a predictable filename in a world-writable directory is a classic
+        # symlink race (CWE-377) -- a local user could pre-plant it with
+        # content of their own choosing before this line ever runs.
+        ARGON_INSTALLER=$(mktemp /tmp/eas-argon1v5.XXXXXX)
         set +e
-        curl -sSL https://download.argon40.com/argon1v5.sh -o /tmp/argon1v5.sh
+        curl -sSL https://download.argon40.com/argon1v5.sh -o "$ARGON_INSTALLER"
         CURL_EXIT=$?
         set -e
 
-        if [ $CURL_EXIT -eq 0 ] && [ -f /tmp/argon1v5.sh ]; then
-            bash /tmp/argon1v5.sh
-            rm -f /tmp/argon1v5.sh
+        if [ $CURL_EXIT -eq 0 ] && [ -s "$ARGON_INSTALLER" ]; then
+            bash "$ARGON_INSTALLER"
+            rm -f "$ARGON_INSTALLER"
             systemctl enable argononed.service 2>/dev/null || true
             echo_success "Argon ONE V5 daemon installed and enabled"
         else
+            rm -f "$ARGON_INSTALLER"
             echo_warning "Could not download Argon daemon — install manually after reboot:"
             echo_warning "  curl https://download.argon40.com/argon1v5.sh | bash"
         fi

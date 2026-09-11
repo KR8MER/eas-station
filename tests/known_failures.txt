@@ -62,7 +62,15 @@ tests/test_audio_ingest.py::test_api_stop_icecast_stream_success
 # tests/test_backup_restore.py (1) — Needs pg_dump/pg_restore against a real database.
 tests/test_backup_restore.py::TestBackupRestore::test_runbooks_exist
 
-# tests/test_boundary_uploads.py (8) — Needs PostGIS geometry support; SQLite cannot satisfy it.
+# tests/test_boundary_uploads.py (10) — _make_test_app() builds a bare Flask
+# app with no SECRET_KEY, so any route these tests hit that's gated by
+# @require_permission redirects an unauthenticated request through
+# _build_login_redirect()'s flash(), which raises RuntimeError (Flask's
+# session needs a secret key) before the route body ever runs -- not a
+# PostGIS/SQLite issue, despite what this comment used to say; confirmed by
+# reproducing test_rejects_missing_file's traceback directly. list_shapefiles
+# joined this list when it gained a permission decorator (it previously had
+# none, a separate finding of its own) for the same underlying reason.
 tests/test_boundary_uploads.py::TestUploadBoundariesEndpoint::test_rejects_invalid_json
 tests/test_boundary_uploads.py::TestUploadBoundariesEndpoint::test_rejects_missing_file
 tests/test_boundary_uploads.py::TestUploadBoundariesEndpoint::test_rejects_non_geojson_extension
@@ -71,6 +79,8 @@ tests/test_boundary_uploads.py::TestUploadShapefileEndpoint::test_rejects_missin
 tests/test_boundary_uploads.py::TestUploadShapefileEndpoint::test_rejects_unsupported_extension
 tests/test_boundary_uploads.py::TestUploadShapefileEndpoint::test_valid_zip_invokes_db_insertion
 tests/test_boundary_uploads.py::TestUploadShapefileEndpoint::test_zip_without_shp_returns_error
+tests/test_boundary_uploads.py::TestListShapefilesEndpoint::test_returns_empty_when_dir_missing
+tests/test_boundary_uploads.py::TestListShapefilesEndpoint::test_lists_companion_files
 
 # tests/test_cap_poller_relevance.py (2) — Needs database-backed location settings.
 tests/test_cap_poller_relevance.py::test_same_code_match_accepts_alert

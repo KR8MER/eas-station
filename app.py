@@ -732,11 +732,43 @@ except ImportError as gevent_error:
     # "ImportError: No module named 'gevent'" or similar greenlet C extension error.
     # The pre-flight check in systemd service will catch this before gunicorn starts.
 
+_configured_socketio_origins = list(app.config.get('CORS_ALLOWED_ORIGINS') or [])
 socketio = SocketIO(
     app,
-    cors_allowed_origins=list(app.config.get('CORS_ALLOWED_ORIGINS') or []) or '*',
+    # An admin-configured allow-list is honored verbatim; leave it unset
+    # (rather than forcing '*') otherwise so python-engineio falls back to
+    # its own same-origin-only default. The previous `or '*'` here meant
+    # ANY website could open a cross-origin WebSocket to this server by
+    # default and receive every broadcast (system logs, GPIO state, alert
+    # summaries) with zero credentials -- see the connect handler below for
+    # why CORS alone was never actually sufficient regardless.
+    cors_allowed_origins=_configured_socketio_origins or None,
     async_mode='gevent',
 )
+
+
+@socketio.on('connect')
+def _socketio_require_authenticated_session():
+    """Reject WebSocket connections from unauthenticated clients.
+
+    CORS (cors_allowed_origins above) is enforced by browsers, not this
+    server -- it never actually stopped a non-browser HTTP client from
+    connecting directly and receiving every broadcast event this app
+    pushes (system logs, GPIO/audio/broadcast status, alert summaries) at
+    up to 4Hz with zero credentials. This mirrors the same
+    session['user_id'] -> AdminUser lookup app.py's before_request uses
+    for every other route, so only a client holding a valid session
+    cookie for an active account can complete the handshake. Returning
+    False from a connect handler rejects the connection (flask-socketio's
+    documented mechanism).
+    """
+    user_id = session.get('user_id')
+    if not user_id:
+        return False
+    user = AdminUser.query.get(user_id)
+    if not user or not user.is_active:
+        return False
+    return True
 
 
 logger.info("Checking database connectivity at startup...")

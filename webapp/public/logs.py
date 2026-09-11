@@ -26,6 +26,7 @@ from typing import List
 
 from flask import render_template, request, Response
 
+from app_core.auth.roles import require_permission
 from app_core.config import get_all_log_services
 from app_core.eas_storage import format_local_datetime
 from app_core.extensions import db
@@ -44,6 +45,7 @@ _POLLING_DEBUG_ENABLED = os.environ.get(
 def register(app, route_logger, _load_logs_data) -> None:
     """Attach the logs routes to the Flask app."""
     @app.route("/logs")
+    @require_permission('logs.view')
     def logs():
         """Comprehensive log viewer with filtering by log type."""
         try:
@@ -164,6 +166,7 @@ def register(app, route_logger, _load_logs_data) -> None:
             )
 
     @app.route("/logs/export.csv")
+    @require_permission('logs.export')
     def logs_export_csv():
         """Export logs as CSV file."""
         try:
@@ -217,6 +220,7 @@ def register(app, route_logger, _load_logs_data) -> None:
             )
 
     @app.route("/logs/export.pdf")
+    @require_permission('logs.export')
     def logs_export_pdf():
         """Export system logs as PDF - server-side from database."""
         try:
