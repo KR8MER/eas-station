@@ -7,6 +7,15 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.2.1] - 2026-09-11 - Site reorganization Phase 3: merge Custom Screens documentation into Help, fix a dead link
+
+Completes `docs/roadmap/SITE_REORGANIZATION.md`'s original scope. `templates/screens.html`'s "Documentation" tab (template variables, data sources, LED/VFD JSON examples) was reference material for a different audience than the operational screen-management UI it shared a page with -- and it linked to `/static/docs/guides/CUSTOM_DISPLAY_SCREENS.md`, a file that has never existed in this repo. `help.html` already had a higher-level "Custom Display Screens" section with the *same* dead link.
+
+### Fixed
+- `templates/help.html`: the "Custom Display Screens" accordion section now includes the Template Variables table, Available Data Sources list, and LED/VFD JSON examples that used to live only on `/screens`' Documentation tab. The dead `CUSTOM_DISPLAY_SCREENS.md` link is removed from both places it appeared (there was never a corresponding file to fix instead).
+- `templates/screens.html`: removed the redundant "Documentation" tab/pane and its now-unused `.doc-card` CSS; added a "Documentation" button in the page header linking to `/help`.
+- `tests/test_screens_help_docs_merge.py` (2 tests): `/screens` no longer embeds the removed tab or the dead link; `/help` has the merged reference content and the dead link is gone there too.
+
 ## [3.2.0] - 2026-09-11 - Site reorganization Phase 2: System Upgrade gets its own page, duplicate boundary-recalc card removed
 
 Continues `docs/roadmap/SITE_REORGANIZATION.md`. `templates/admin/operations.html`'s "Alert Boundary Coverage" card turned out to be a pure duplicate of functionality already on the existing, already-linked `/admin/intersections` page (same two endpoints, plus that page has more tools besides) — removed rather than split. System Upgrade is on the same backend blueprint as DB Health/Backup but is a much bigger, riskier operation with its own live progress/log-streaming UI, confusing enough to deserve full-page attention.
