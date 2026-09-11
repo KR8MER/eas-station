@@ -14,8 +14,10 @@
                         <i class="fas fa-broadcast-tower fa-lg me-3 mt-1 flex-shrink-0"></i>
                         <div>
                             EAS Station™ sends SMS messages exclusively for <strong>emergency alert notifications</strong>.
-                            Messages are sent only to phone numbers explicitly configured by the system administrator
-                            in the EAS Station™ admin panel. <strong>This is not a public subscription service.</strong>
+                            A phone number only receives messages after opting in &mdash; either by confirming a texted
+                            code at <a href="{{ url_for('sms_optin_page') }}">/sms-opt-in</a>, or by being added by the
+                            system administrator with that individual's documented prior consent. See Section 2 below
+                            for both paths. <strong>This is not a marketing or promotional messaging service.</strong>
                         </div>
                     </div>
 
