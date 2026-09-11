@@ -7,6 +7,16 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.2.0] - 2026-09-11 - Site reorganization Phase 2: System Upgrade gets its own page, duplicate boundary-recalc card removed
+
+Continues `docs/roadmap/SITE_REORGANIZATION.md`. `templates/admin/operations.html`'s "Alert Boundary Coverage" card turned out to be a pure duplicate of functionality already on the existing, already-linked `/admin/intersections` page (same two endpoints, plus that page has more tools besides) — removed rather than split. System Upgrade is on the same backend blueprint as DB Health/Backup but is a much bigger, riskier operation with its own live progress/log-streaming UI, confusing enough to deserve full-page attention.
+
+### Changed
+- New page **System Upgrade** (`/admin/system-upgrade`, `maintenance.system_upgrade_page`), with a new `NavItem` under Settings → Data & Storage. `operations.html` links to it instead of embedding the upgrade wizard/progress UI.
+- `operations.html`'s "Alert Boundary Coverage" card now links to `/admin/intersections` instead of duplicating its recalculation buttons.
+- `operations.html` keeps DB Health and the quick Backup trigger. (That Backup trigger is itself a near-duplicate of `/admin/backups`' own "Create New Backup" section, via a different API — flagged in the roadmap doc as a possible future consolidation, not addressed in this phase.)
+- `tests/test_system_upgrade_page.py` (3 tests): permission gate, the new page renders the upgrade UI, the main page no longer embeds either removed panel.
+
 ## [3.1.0] - 2026-09-11 - Site reorganization Phase 1: split Bad Actor Blocklist out of Application Settings
 
 Continues the initiative from `docs/roadmap/SITE_REORGANIZATION.md`. The Bad Actor Blocklist panel is a fully independent subsystem -- own nginx geo-map config files, own systemd refresh timer, own JSON API (`webapp/admin/bad_actors.py`) -- that only shared a page with logging/storage/branding/password-policy settings for lack of a better home. None of its inputs were even part of the settings `<form>` it visually lived inside.
