@@ -8,6 +8,17 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.229.0] - 2026-09-10 - Progress bars now show elapsed/remaining time, and the alert-verification bar no longer freezes after 5 minutes
+
+### Added
+- The alert-verification audio-decode progress overlay (`templates/eas/alert_verification.html`) and the one-click System Upgrade progress bar (`templates/admin/operations.html`) both now show elapsed time and a linear-extrapolation "About Nm Ns remaining" estimate, computed the same way in both places: elapsed / (percent / 100) - elapsed.
+- `webapp/routes/alert_verification/progress.py`: `ProgressTracker` now tracks each operation's wall-clock `started_at` (recovered from the on-disk payload so a later phase's tracker doesn't reset the clock) and reports `elapsed_seconds`/`eta_seconds` alongside `percent`.
+- `webapp/admin/maintenance/routes_upgrade_progress.py`: `/admin/operations/upgrade/progress` now also reports `elapsed_seconds`/`eta_seconds`, derived from systemd's `ActiveEnterTimestampMonotonic` property paired with `/proc/uptime` -- immune to timezone/NTP wall-clock issues that a parsed `ActiveEnterTimestamp` string would have.
+
+### Fixed
+- The alert-verification progress overlay stopped polling for genuine completion after 5 minutes, freezing the bar at a fake 90% -- a real accuracy bug, since a run that legitimately took longer than 5 minutes could no longer show it had finished. Polling now keeps running indefinitely; only the status message degrades after 5 consecutive failed polls.
+- Fixed a `threading.Lock` deadlock in `ProgressTracker.update()`/`complete()`/`error()`: the new elapsed/ETA calculation could recover `started_at` via the same-named, also-locking `ProgressTracker.get()`, which deadlocks if called from inside the already-held lock. The timing calculation now always runs before the lock is acquired.
+
 ## [2.228.23] - 2026-09-10 - Share cards: same information across every aspect ratio, and instruction can no longer get crowded out
 
 The narrow (landscape, FB/X/LinkedIn) share card and the wide cards (square/portrait/story, Instagram/TikTok/Snap) used to show genuinely different information for the same alert -- the narrow layout only drew HEADLINE/DESCRIPTION as a fallback when no threat-specific content rendered, and never drew AFFECTED AREAS or COVERAGE at all. All layouts must carry the same information regardless of width.

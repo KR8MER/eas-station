@@ -48,6 +48,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from webapp.admin.maintenance.routes_operations import (
     check_for_upgrade,
     list_upgrade_tags,
@@ -156,9 +158,12 @@ class TestTailUpdateLog:
         assert result == ["line 7", "line 8", "line 9"]
 
 
-def _fake_systemctl_show(active_state="inactive", sub_state="dead"):
+def _fake_systemctl_show(active_state="inactive", sub_state="dead", active_enter_monotonic_us=None):
     result = MagicMock()
-    result.stdout = f"ActiveState={active_state}\nSubState={sub_state}\n"
+    stdout = f"ActiveState={active_state}\nSubState={sub_state}\n"
+    if active_enter_monotonic_us is not None:
+        stdout += f"ActiveEnterTimestampMonotonic={active_enter_monotonic_us}\n"
+    result.stdout = stdout
     return result
 
 
@@ -220,6 +225,64 @@ class TestUpgradeProgressEndpoint:
         assert data["unit"]["active_state"] == "active"
         assert data["result"] == "running"
         assert data["lines"][0]["step"] == {"num": 3, "total": 12, "label": "Stopping Services"}
+
+    def test_running_unit_reports_elapsed_and_eta_from_monotonic_timestamp(
+        self, app, authenticated_user, monkeypatch
+    ):
+        """ActiveEnterTimestampMonotonic (microseconds since boot) minus the
+        current /proc/uptime reading gives elapsed time without parsing
+        ActiveEnterTimestamp's locale/timezone-dependent string. Step 3/12
+        is exactly 25% -- at 30s elapsed, the linear-extrapolation ETA
+        should project a 120s total run, i.e. ~90s remaining."""
+        log_lines = ["--- Step 3/12: Stopping Services ---"]
+        # Boot was 1000.0s of monotonic time ago; the unit became active at
+        # monotonic time 970.0s (30s of elapsed run time as of "now").
+        monkeypatch.setattr(
+            "webapp.admin.maintenance.routes_upgrade_progress._monotonic_uptime_seconds",
+            lambda: 1000.0,
+        )
+        with patch(
+            "subprocess.run",
+            return_value=_fake_systemctl_show(
+                active_state="active", sub_state="running",
+                active_enter_monotonic_us=970_000_000,
+            ),
+        ), patch(
+            "webapp.admin.maintenance.routes_upgrade_progress._tail_update_log",
+            return_value=log_lines,
+        ), patch(
+            "webapp.admin.maintenance.routes_upgrade_progress.get_systemd_logs",
+            return_value={"success": True, "logs": [], "count": 0},
+        ):
+            response = self._get(app)
+
+        data = response.get_json()
+        assert data["result"] == "running"
+        assert data["elapsed_seconds"] == pytest.approx(30.0)
+        assert data["eta_seconds"] == pytest.approx(90.0, abs=0.5)
+
+    def test_elapsed_and_eta_are_none_when_monotonic_timestamp_unavailable(
+        self, app, authenticated_user
+    ):
+        """A unit --collect'd away (finished) or never started has no
+        ActiveEnterTimestampMonotonic -- elapsed/eta must degrade to None
+        rather than a bogus value, matching this endpoint's existing
+        best-effort philosophy for unit_state."""
+        with patch(
+            "subprocess.run",
+            return_value=_fake_systemctl_show(active_state="active", sub_state="running"),
+        ), patch(
+            "webapp.admin.maintenance.routes_upgrade_progress._tail_update_log",
+            return_value=["--- Step 1/12: Preflight ---"],
+        ), patch(
+            "webapp.admin.maintenance.routes_upgrade_progress.get_systemd_logs",
+            return_value={"success": True, "logs": [], "count": 0},
+        ):
+            response = self._get(app)
+
+        data = response.get_json()
+        assert data["elapsed_seconds"] is None
+        assert data["eta_seconds"] is None
 
     def test_success_marker_wins_even_after_the_collected_unit_looks_gone(self, app, authenticated_user):
         # By the time the unit shows as inactive (post --collect, which in

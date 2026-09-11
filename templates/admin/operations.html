@@ -196,11 +196,16 @@
                 <h3 class="mb-0 h6" id="upgrade-step-label">Starting…</h3>
                 <span id="upgrade-connection-badge" class="admin-badge admin-badge-muted" style="display: none;">Reconnecting…</span>
             </div>
-            <div class="progress mb-3" style="height: 1.25rem;" id="upgrade-progress-bar-wrap">
+            <div class="progress mb-2" style="height: 1.25rem;" id="upgrade-progress-bar-wrap">
                 <div class="progress-bar bg-warning progress-bar-striped progress-bar-animated"
                      id="upgrade-progress-bar" role="progressbar" style="width: 0%">
                 </div>
             </div>
+            <p class="text-muted small mb-3">
+                <span id="upgrade-elapsed">Elapsed: 0s</span>
+                <span id="upgrade-eta-sep">&nbsp;&middot;&nbsp;</span>
+                <span id="upgrade-eta"></span>
+            </p>
             <div class="admin-output-box" id="upgrade-log" style="max-height: 22rem; overflow-y: auto; font-family: monospace; font-size: 0.85rem;"></div>
             <p class="text-muted small mt-2 mb-0">
                 This runs <code>update.sh</code> exactly as it would from a terminal, as its own
@@ -220,6 +225,14 @@
 function formatTimestamp(timestamp) {
     if (!timestamp) return '—';
     return new Date(timestamp).toLocaleString();
+}
+
+// Format a duration in seconds as "1m 30s" or "45s", for elapsed/ETA display.
+function formatDuration(seconds) {
+    seconds = Math.max(0, Math.round(seconds));
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
 // Status polling interval
@@ -692,6 +705,26 @@ async function pollUpgradeProgress() {
         barEl.style.width = '100%';
         barEl.classList.remove('bg-warning');
         barEl.classList.add(data.result === 'success' ? 'bg-success' : 'bg-danger');
+    }
+
+    // Elapsed / remaining time, from the transient unit's monotonic start
+    // time (see routes_upgrade_progress.py) -- same linear-extrapolation
+    // ETA approach as the alert verification progress bar.
+    const elapsedEl = document.getElementById('upgrade-elapsed');
+    const etaSepEl = document.getElementById('upgrade-eta-sep');
+    const etaEl = document.getElementById('upgrade-eta');
+    if (elapsedEl) {
+        elapsedEl.textContent = 'Elapsed: ' + formatDuration(data.elapsed_seconds || 0);
+    }
+    if (etaEl && etaSepEl) {
+        if (running && data.eta_seconds !== null && data.eta_seconds !== undefined) {
+            etaEl.textContent = 'About ' + formatDuration(data.eta_seconds) + ' remaining';
+            etaSepEl.style.display = '';
+            etaEl.style.display = '';
+        } else {
+            etaSepEl.style.display = 'none';
+            etaEl.style.display = 'none';
+        }
     }
 
     // Log feed.

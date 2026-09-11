@@ -168,6 +168,44 @@ def test_progress_tracker_percent_is_monotonic_across_phases(tmp_path, monkeypat
         last = percent
 
 
+def test_progress_tracker_reports_elapsed_and_eta(tmp_path, monkeypatch):
+    """update()/complete()/error() must not deadlock (started_at recovery
+    reads the on-disk payload via the same-named, also-locking
+    ProgressTracker.get(), so it has to happen outside the write lock --
+    this test would hang instead of failing if that regressed) and must
+    report elapsed_seconds/eta_seconds, with started_at carried forward
+    across a fresh instance at a later phase rather than reset."""
+    monkeypatch.setattr(av_progress, "_progress_dir", str(tmp_path))
+    monkeypatch.setattr(av_progress, "_progress_lock", threading.Lock())
+
+    tracker = alert_verification.ProgressTracker("op-timing")
+    tracker.update("upload", 1, 4, "validate")
+    first = alert_verification.ProgressTracker.get("op-timing")
+    assert first["started_at"] is not None
+    assert first["elapsed_seconds"] >= 0
+    assert first["eta_seconds"] is not None  # percent is between 0 and 100
+
+    # A fresh instance (matches the real call-site pattern: a new
+    # ProgressTracker(operation_id) per pipeline stage) must inherit the
+    # same started_at, not reset the clock.
+    later_tracker = alert_verification.ProgressTracker("op-timing")
+    later_tracker.update("decode", 3, 6, "demod")
+    second = alert_verification.ProgressTracker.get("op-timing")
+    assert second["started_at"] == first["started_at"]
+    assert second["elapsed_seconds"] >= first["elapsed_seconds"]
+
+    later_tracker.complete("done")
+    done = alert_verification.ProgressTracker.get("op-timing")
+    assert done["percent"] == 100
+    assert done["eta_seconds"] is None  # nothing left to project forward
+
+    error_tracker = alert_verification.ProgressTracker("op-timing-error")
+    error_tracker.error("boom")
+    errored = alert_verification.ProgressTracker.get("op-timing-error")
+    assert errored["elapsed_seconds"] is not None
+    assert errored["eta_seconds"] is None  # percent is 0
+
+
 def test_decode_same_audio_skips_sweep_when_auto_rate_disabled(monkeypatch):
     """``auto_rate_sweep=False`` must NOT call _try_multiple_sample_rates."""
     from app_utils import eas_decode

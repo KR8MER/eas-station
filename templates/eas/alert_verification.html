@@ -14,6 +14,11 @@
             </div>
         </div>
         <p id="progress-message" class="text-center text-muted mb-0">Initializing...</p>
+        <p class="text-center text-muted small mt-2 mb-0">
+            <span id="progress-elapsed">Elapsed: 0s</span>
+            <span id="progress-eta-sep">&nbsp;&middot;&nbsp;</span>
+            <span id="progress-eta"></span>
+        </p>
         <p class="text-center text-muted small mt-3 mb-0">
             <i class="fas fa-info-circle"></i> Processing typically finishes within a minute for short clips.<br>
             <strong>Please keep this window open until decoding completes.</strong>
@@ -363,6 +368,9 @@
             const progressBar = document.getElementById('progress-bar');
             const progressMessage = document.getElementById('progress-message');
             const progressPercent = document.getElementById('progress-percent');
+            const progressElapsed = document.getElementById('progress-elapsed');
+            const progressEtaSep = document.getElementById('progress-eta-sep');
+            const progressEta = document.getElementById('progress-eta');
 
             if (form && progressOverlay) {
                 form.addEventListener('submit', function(e) {
@@ -379,11 +387,20 @@
                     formData.append('progress_id', progressId);
 
                     let pollInterval = null;
-                    let fallbackTimer = null;
                     let redirectUrl = null;
+                    // Consecutive poll failures (network blip, worker
+                    // process restarting) -- NOT a duration-based giveup.
+                    // The old version stopped polling outright after a
+                    // fixed 5 minutes and froze the bar at a fake 90%,
+                    // which was actively misleading: a slow-but-healthy
+                    // decode past that mark looked identical to a hung one,
+                    // and completion/error could never be shown once
+                    // polling stopped. Keep polling for as long as the
+                    // server keeps answering, however long that takes.
+                    let consecutiveFailures = 0;
 
                     progressOverlay.style.display = 'flex';
-                    updateProgress(0, 'Initializing...');
+                    updateProgress(0, 'Initializing...', false, 0, null);
 
                     fetch('{{ url_for("start_alert_verification_operation") }}', {
                         method: 'POST',
@@ -409,8 +426,7 @@
                         .catch(error => {
                             console.error('Error starting alert verification:', error);
                             if (pollInterval) clearInterval(pollInterval);
-                            if (fallbackTimer) clearTimeout(fallbackTimer);
-                            updateProgress(0, 'Error: ' + error.message, true);
+                            updateProgress(0, 'Error: ' + error.message, true, 0, null);
                             setTimeout(function() {
                                 progressOverlay.style.display = 'none';
                             }, 3000);
@@ -422,17 +438,19 @@
                                 .then(response => response.json())
                                 .then(data => {
                                     if (data.status === 'ok' && data.progress) {
+                                        consecutiveFailures = 0;
                                         const progress = data.progress;
-                                        updateProgress(progress.percent, progress.message);
+                                        updateProgress(
+                                            progress.percent, progress.message, false,
+                                            progress.elapsed_seconds, progress.eta_seconds
+                                        );
 
                                         if (progress.step === 'complete') {
                                             clearInterval(pollInterval);
-                                            if (fallbackTimer) clearTimeout(fallbackTimer);
                                             window.location.href = redirectUrl;
                                         } else if (progress.step === 'error') {
                                             clearInterval(pollInterval);
-                                            if (fallbackTimer) clearTimeout(fallbackTimer);
-                                            updateProgress(0, 'Error: ' + progress.message, true);
+                                            updateProgress(0, 'Error: ' + progress.message, true, 0, null);
                                             setTimeout(function() {
                                                 progressOverlay.style.display = 'none';
                                             }, 3000);
@@ -441,20 +459,33 @@
                                 })
                                 .catch(error => {
                                     console.error('Error polling progress:', error);
+                                    // A handful of blips is normal (a
+                                    // worker process restarting mid-decode,
+                                    // a momentary network hiccup) -- only
+                                    // surface it after enough in a row that
+                                    // it's clearly not transient. Polling
+                                    // itself never stops on its own; only a
+                                    // real complete/error from the server
+                                    // does that.
+                                    consecutiveFailures += 1;
+                                    if (consecutiveFailures >= 5 && progressMessage) {
+                                        progressMessage.textContent =
+                                            'Still trying to reach the server…';
+                                    }
                                 });
                         }, 1000);
-
-                        fallbackTimer = setTimeout(function() {
-                            if (progressOverlay.style.display === 'flex') {
-                                clearInterval(pollInterval);
-                                updateProgress(90, 'Processing... (This may take a while)');
-                            }
-                        }, 300000);
                     }
                 });
             }
 
-            function updateProgress(percent, message, isError = false) {
+            function formatDuration(seconds) {
+                seconds = Math.max(0, Math.round(seconds));
+                const m = Math.floor(seconds / 60);
+                const s = seconds % 60;
+                return m > 0 ? `${m}m ${s}s` : `${s}s`;
+            }
+
+            function updateProgress(percent, message, isError, elapsedSeconds, etaSeconds) {
                 if (progressBar) {
                     progressBar.style.width = percent + '%';
                     progressBar.setAttribute('aria-valuenow', percent);
@@ -465,6 +496,20 @@
                 }
                 if (progressMessage) progressMessage.textContent = message;
                 if (progressPercent) progressPercent.textContent = percent + '%';
+                if (progressElapsed) {
+                    progressElapsed.textContent = 'Elapsed: ' +
+                        formatDuration(elapsedSeconds || 0);
+                }
+                if (progressEta && progressEtaSep) {
+                    if (etaSeconds !== null && etaSeconds !== undefined) {
+                        progressEta.textContent = 'About ' + formatDuration(etaSeconds) + ' remaining';
+                        progressEtaSep.style.display = '';
+                        progressEta.style.display = '';
+                    } else {
+                        progressEtaSep.style.display = 'none';
+                        progressEta.style.display = 'none';
+                    }
+                }
             }
 
             function generateUUID() {
