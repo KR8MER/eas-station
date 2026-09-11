@@ -20,8 +20,8 @@ Repository: https://github.com/KR8MER/eas-station
 
 Bad Actor Blocklist management routes.
 
-Backs the Admin -> Application Settings "Bad Actor Blocklist" panel, which
-controls the nginx-level known-bad-actor IP blocklist added alongside
+Backs the Settings -> Bad Actor Blocklist page, which controls the
+nginx-level known-bad-actor IP blocklist added alongside
 scripts/update_bad_actors.sh: a Spamhaus DROP/EDROP feed refreshed daily by
 bad-actors-update.timer, merged with config/bad-actors-local.conf (hand-
 curated, checked into git) via nginx's `geo $bad_actor` map, gated by a
@@ -38,7 +38,7 @@ import logging
 import subprocess
 from datetime import datetime, timezone
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, render_template, request
 
 from app_core.auth.decorators import require_auth
 from app_core.auth.roles import require_permission
@@ -55,7 +55,7 @@ LOCAL_LIST_PATH = "/opt/eas-station/config/bad-actors-local.conf"
 UPDATE_SERVICE = "bad-actors-update.service"
 
 ALLOWLIST_HEADER = (
-    "# Managed by Admin -> Application Settings -> Bad Actor Blocklist.\n"
+    "# Managed by Settings -> Bad Actor Blocklist.\n"
     "# IPs/CIDRs here bypass the Spamhaus/local blocklist entirely.\n"
 )
 
@@ -173,6 +173,21 @@ def _list_meta(path: str) -> dict:
 
 
 # ── Routes ───────────────────────────────────────────────────────────────
+
+@bad_actors_bp.route("/", methods=["GET"])
+@require_auth
+@require_permission("system.configure")
+def page():
+    """Bad Actor Blocklist settings page.
+
+    Split out of Admin -> Application Settings (site reorganization
+    Phase 1, docs/roadmap/SITE_REORGANIZATION.md) -- this is a fully
+    independent subsystem (own nginx geo-map config files, own systemd
+    refresh timer, own JSON API below) that only shared a page with
+    logging/storage/branding settings for lack of a better home.
+    """
+    return render_template("admin/bad_actor_blocklist.html")
+
 
 @bad_actors_bp.route("/status", methods=["GET"])
 @require_auth

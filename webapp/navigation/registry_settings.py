@@ -372,6 +372,13 @@ SETTINGS_SECTION = NavSection(
                     description="Password policy, session limits and MFA settings.",
                     permissions=(SYSTEM_MANAGE_USERS,),
                 ),
+                NavItem(
+                    label="Bad Actor Blocklist",
+                    icon="fas fa-user-slash",
+                    href="/admin/security/bad-actors/",
+                    description="nginx-level IP blocklist (Spamhaus DROP/EDROP feed plus local additions) with an allowlist bypass.",
+                    permissions=(SYSTEM_CONFIGURE,),
+                ),
                 # Also listed under Diagnostics -> Security with the same
                 # LOGS_VIEW gate -- normally a duplicate worth pruning, but
                 # it's the *only* Settings-hub item visible to a LOGS_VIEW-
