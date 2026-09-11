@@ -179,15 +179,21 @@ def alert_management_page():
 @dashboard_bp.route('/admin/data-management', methods=['GET'])
 @require_permission('system.configure')
 def data_management_page():
-    """Render the boundary/zone-catalog data management page.
+    """Render the general boundary-polygon data management page.
 
     Distinct from /admin/county_boundaries: that page manages NOAA
     county/zone *reference* lookup data (FIPS/SAME code resolution). This
     page manages general boundary polygons of any type (electric, fire,
     school districts, custom, ...) for map overlays and alert-intersection
-    calculations, plus the separate NOAA zone .dbf catalog upload. Different
-    data, different backend endpoints -- confirmed not a duplicate before
-    extracting this from the Admin Dashboard's Data tab.
+    calculations.
+
+    This page used to also embed a "Zone Catalog" tab, believed at the time
+    of an earlier extraction (from the Admin Dashboard's Data tab) to hit
+    different backend endpoints than the dedicated /admin/zones page. On
+    inspection (site reorganization Phase 4, docs/roadmap/
+    SITE_REORGANIZATION.md) both actually called the exact same
+    /admin/zones/* routes (webapp/admin/zones.py) -- a genuine duplicate,
+    not a different feature. Removed in favor of a link to /admin/zones.
     """
     return render_template('admin/data_management.html')
 
