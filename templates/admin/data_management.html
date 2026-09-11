@@ -9,7 +9,7 @@
 {% block content %}
 {% set header_icon = 'fas fa-database' %}
 {% set header_title = 'Data Management' %}
-{% set header_subtitle = 'Manage boundaries, zones, and geographic data' %}
+{% set header_subtitle = 'Upload, browse, and manage general boundary polygons' %}
 {% include 'components/page_header.html' %}
 
 <div class="container-fluid">
@@ -21,16 +21,17 @@
             </button>
         </li>
         <li class="nav-item" role="presentation">
-            <button class="nav-link" id="zones-subtab" data-bs-toggle="pill" data-bs-target="#zone-catalog" type="button" role="tab">
-                <i class="fas fa-map-marked-alt"></i> Zone Catalog
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
             <button class="nav-link" id="manage-subtab" data-bs-toggle="pill" data-bs-target="#manage" type="button" role="tab">
                 <i class="fas fa-tasks"></i> Manage
             </button>
         </li>
     </ul>
+    <div class="alert alert-light border small d-flex align-items-center gap-2 mb-4">
+        <i class="fas fa-map-marked-alt text-muted"></i>
+        Looking for the NOAA zone catalog (public-forecast zone codes)?
+        It has its own dedicated page:
+        <a href="{{ url_for('zones_admin.zone_management') }}">Zone Catalog</a>.
+    </div>
 
     <div class="tab-content">
         <!-- Boundaries sub-tab content -->
@@ -180,128 +181,6 @@
             </div>
         </div>
         <!-- End of Boundaries sub-tab -->
-
-        <!-- Zones Catalog sub-tab -->
-        <div class="tab-pane fade" id="zone-catalog" role="tabpanel">
-            <div class="mb-4">
-                <h2 class="mb-2 h4"><i class="fas fa-map-marked-alt text-primary"></i> NOAA Zone Catalog Management</h2>
-                <p class="text-muted">Manage the NOAA National Weather Service zone catalog database</p>
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle"></i>
-                    <strong>Zone Catalog Files:</strong> Download the latest NOAA public zone shapefiles from
-                    <a href="https://www.weather.gov/gis/publiczones" target="_blank" rel="noopener noreferrer" class="alert-link">
-                        https://www.weather.gov/gis/publiczones <i class="fas fa-external-link-alt"></i>
-                    </a>
-                    <br>
-                    Look for the <strong>.dbf</strong> file (dBase format) that accompanies the shapefile downloads.
-                </div>
-            </div>
-
-            <!-- Status Cards -->
-            <div class="row mb-4">
-                <div class="col-md-3">
-                    <div class="card">
-                        <div class="card-body">
-                            <h3 class="card-subtitle mb-2 text-muted h6">Zone File Status</h3>
-                            <h2 class="card-title h3" id="zone-file-status">
-                                <i class="fas fa-spinner fa-spin"></i>
-                            </h2>
-                            <p class="card-text"><small id="zone-file-path">Loading...</small></p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card">
-                        <div class="card-body">
-                            <h3 class="card-subtitle mb-2 text-muted h6">Database Zones</h3>
-                            <h2 class="card-title h3" id="zone-db-count">--</h2>
-                            <p class="card-text"><small>Zones in database</small></p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card">
-                        <div class="card-body">
-                            <h3 class="card-subtitle mb-2 text-muted h6">Cached Zones</h3>
-                            <h2 class="card-title h3" id="zone-cache-count">--</h2>
-                            <p class="card-text"><small>Zones in memory cache</small></p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card">
-                        <div class="card-body">
-                            <h3 class="card-subtitle mb-2 text-muted h6">File Size</h3>
-                            <h2 class="card-title h3" id="zone-file-size">--</h2>
-                            <p class="card-text"><small>DBF file size</small></p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Actions -->
-            <div class="row mb-4">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header">
-                            <h3 class="mb-0 h5"><i class="fas fa-tools"></i> Zone Catalog Actions</h3>
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <h4 class="h6">Upload New Zone Catalog File</h4>
-                                    <p class="text-muted">
-                                        Upload a .dbf file containing NOAA zone data.
-                                        <a href="https://www.weather.gov/gis/publiczones" target="_blank" rel="noopener noreferrer">
-                                            Download from NWS <i class="fas fa-external-link-alt fa-sm"></i>
-                                        </a>
-                                    </p>
-                                    <form id="zone-upload-form" enctype="multipart/form-data">
-                                        <div class="mb-3">
-                                            <input type="file" class="form-control" id="zone-file-input" name="file" accept=".dbf" required>
-                                            <div class="form-text">Only .dbf (dBase) files are accepted. Download from <a href="https://www.weather.gov/gis/publiczones" target="_blank">NWS Public Zones</a></div>
-                                        </div>
-                                        <button type="submit" class="btn btn-primary">
-                                            <i class="fas fa-upload"></i> Upload and Load
-                                        </button>
-                                    </form>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <h4 class="h6">Reload Zone Catalog</h4>
-                                    <p class="text-muted">Reload zones from the current DBF file into the database</p>
-                                    <button id="zone-reload-btn" class="btn btn-success">
-                                        <i class="fas fa-sync"></i> Reload from File
-                                    </button>
-                                    <button id="zone-refresh-info-btn" class="btn btn-secondary">
-                                        <i class="fas fa-info-circle"></i> Refresh Info
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Zone Search -->
-            <div class="row">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header">
-                            <h3 class="mb-0 h5"><i class="fas fa-search"></i> Search Zones</h3>
-                        </div>
-                        <div class="card-body">
-                            <div class="mb-3">
-                                <input type="text" class="form-control" id="zone-search-input" placeholder="Search by zone code, state, or name (e.g., OHZ, Ohio, Cuyahoga)">
-                            </div>
-                            <div id="zone-search-results">
-                                <p class="text-muted">Enter search terms to find zones</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <!-- End of Zones Catalog sub-tab -->
 
         <!-- Manage Data sub-tab -->
         <div class="tab-pane fade" id="manage" role="tabpanel">
@@ -490,7 +369,6 @@
          comment in that file) -- without it these forms did a plain HTML
          submission instead of the AJAX upload flow. -->
     <script src="{{ url_for('static', filename='js/admin/alert-management.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/admin/zone-catalog.js') }}"></script>
     <script>
         async function refreshMunicipalityBoundaryStatus() {
             const el = document.getElementById('municipalityBoundaryStatus');

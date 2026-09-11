@@ -7,6 +7,17 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.2.2] - 2026-09-11 - Site reorganization Phase 4: remove duplicate Zone Catalog tab from Data Management
+
+Completes a further pass of `docs/roadmap/SITE_REORGANIZATION.md`. `data_management.html`'s "Zone Catalog" tab called the *exact same* `/admin/zones/*` endpoints (`webapp/admin/zones.py`) as the pre-existing, separately nav-registered `/admin/zones` page -- confirmed by grepping for every route string both templates' JS calls and finding exactly one backend implementation of each. An earlier extraction's docstring had claimed this was "confirmed not a duplicate" -- true then or not, it didn't hold up under inspection today.
+
+### Fixed
+- `templates/admin/data_management.html`: removed the duplicate Zone Catalog tab and its now-unused `zone-catalog.js` include; added a link to the pre-existing `/admin/zones` page instead. The Boundaries + Manage tabs (a genuinely cohesive upload-then-browse/delete workflow) are untouched.
+- `webapp/admin/dashboard.py`: corrected the `data_management_page()` docstring's stale "confirmed not a duplicate" claim.
+- `webapp/navigation/registry_settings.py`: updated the Data Management `NavItem` description to drop the zone-catalog mention.
+- Noted but not fixed (see the roadmap doc): `data_management.html`'s generic boundary uploader also offers a `county` type, which may or may not overlap with `/admin/county_boundaries`' dedicated loader -- unconfirmed, flagged for later.
+- `tests/test_data_management_zone_dedup.py` (2 tests): the tab and dead references are gone; the page links to `/admin/zones`; the remaining tabs are untouched.
+
 ## [3.2.1] - 2026-09-11 - Site reorganization Phase 3: merge Custom Screens documentation into Help, fix a dead link
 
 Completes `docs/roadmap/SITE_REORGANIZATION.md`'s original scope. `templates/screens.html`'s "Documentation" tab (template variables, data sources, LED/VFD JSON examples) was reference material for a different audience than the operational screen-management UI it shared a page with -- and it linked to `/static/docs/guides/CUSTOM_DISPLAY_SCREENS.md`, a file that has never existed in this repo. `help.html` already had a higher-level "Custom Display Screens" section with the *same* dead link.
