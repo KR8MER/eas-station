@@ -31,25 +31,9 @@ logging failure must never be mistaken for (or cause) a send failure.
 """
 
 import logging
-import re
 from typing import Optional
 
 from ._models_base import db, utc_now
-
-
-def _mask_phone(phone_number: Optional[str]) -> str:
-    """Last 4 digits only, safe for log lines -- never the full number.
-
-    Applied only to the fallback warning below, not to the DB row itself
-    (storing the full number there is this feature's whole point). Strips
-    to digits first so a malformed/attacker-supplied value can't smuggle
-    control characters or forge additional log lines (CodeQL: log
-    injection) and so a phone number -- personal data -- never appears in
-    clear text in the application log (CodeQL: clear-text logging of
-    sensitive information).
-    """
-    digits = re.sub(r"\D", "", phone_number or "")
-    return f"...{digits[-4:]}" if len(digits) >= 4 else "(unknown)"
 
 
 class SmsMessageLog(db.Model):
@@ -128,9 +112,14 @@ def record_sms_message(
         except Exception:
             pass
         (logger or logging.getLogger(__name__)).warning(
-            "Could not record SMS message log entry for %s: %s",
-            _mask_phone(phone_number), exc,
+            "Could not record %s SMS message log entry: %s", message_type, exc
         )
+        # Deliberately excludes phone_number: it's user-reachable input, and
+        # CodeQL flags any log line derived from it (clear-text logging of
+        # personal data + log injection) even through a masking helper --
+        # simplest to just never put it in the log. The DB row (when the
+        # write above succeeds) is the searchable record; this warning only
+        # needs to say *that* a write failed and *why*, not for whom.
 
 
 __all__ = ["SmsMessageLog", "record_sms_message"]
