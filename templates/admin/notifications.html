@@ -334,13 +334,21 @@
                         </div>
 
                         <div class="alert alert-info py-2 mb-3 small">
-                            <i class="fas fa-link me-1"></i>
-                            Prefer verifiable, self-serve consent (recommended for carrier/Twilio campaign
-                            review)? Share
-                            <a href="/sms-opt-in" target="_blank">{{ request.url_root.rstrip('/') }}/sms-opt-in</a>
-                            &mdash; a public page where someone enters their own number and confirms it via a
-                            texted code before they're added here automatically. Verified sign-ups appear in
-                            <strong>Consent Records</strong> below.
+                            <div class="d-flex align-items-start gap-3">
+                                <img src="{{ url_for('notifications.sms_optin_qr') }}" alt="QR code for the SMS alert sign-up page"
+                                     width="96" height="96" class="rounded border bg-white p-1 flex-shrink-0">
+                                <div>
+                                    <i class="fas fa-link me-1"></i>
+                                    Prefer verifiable, self-serve consent (recommended for carrier/Twilio campaign
+                                    review)? Share
+                                    <a href="/sms-opt-in" target="_blank">{{ request.url_root.rstrip('/') }}/sms-opt-in</a>
+                                    or the QR code &mdash; a public page where someone enters their own number and
+                                    confirms it via a texted code before they're added here automatically. The QR
+                                    code always points at this instance's own address, so it's safe to print or
+                                    reuse even if you run more than one station. Verified sign-ups appear in
+                                    <strong>Consent Records</strong> below.
+                                </div>
+                            </div>
                         </div>
 
                         <div class="d-flex gap-2 align-items-center">

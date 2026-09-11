@@ -36,8 +36,18 @@
                     <!-- ── 2. Opt-In / Consent Disclosure ────────────────────────── -->
                     <section class="mb-4">
                         <h2 class="h4 text-primary">2. Opt-In / Consent Disclosure</h2>
-                        <p>Because EAS Station™ is self-hosted software operated by a system administrator (not
-                           a public-facing subscription service), opt-in is managed at the operator level:</p>
+                        <p>EAS Station™ supports two ways a phone number is added to the recipient list:</p>
+                        <p class="fw-semibold mb-1">1. Self-serve double opt-in (preferred):</p>
+                        <ul>
+                            <li>A public page at <a href="{{ url_for('sms_optin_page') }}">/sms-opt-in</a> lets
+                                someone enter their own phone number and review the consent language below.</li>
+                            <li>They confirm by entering a one-time code texted to that number &mdash; proving
+                                they actually control it &mdash; before it's added to the live recipient list.</li>
+                            <li>Every confirmed sign-up is permanently recorded: the exact consent text shown, the
+                                submitter's IP address, and the confirmation timestamp.</li>
+                        </ul>
+                        <p class="fw-semibold mb-1">2. Administrator-added (for recipients who can't use the
+                           self-serve page themselves):</p>
                         <ul>
                             <li>The system administrator adds recipient phone numbers directly to the EAS Station™
                                 admin panel under <strong>Settings &rsaquo; Notifications</strong>.</li>
@@ -49,20 +59,18 @@
                                 sent.</li>
                         </ul>
 
-                        <!-- Consent disclosure block that Twilio reviewers inspect -->
+                        <!-- Consent disclosure block that Twilio reviewers inspect. Rendered
+                             from the same CONSENT_TEXT constant shown next to the checkbox on
+                             /sms-opt-in (webapp/public/sms_optin.py) -- one source of truth, so
+                             this page can never drift out of sync with what a visitor actually
+                             sees and agrees to. -->
                         <div class="border rounded p-3 bg-light mt-3">
-                            <p class="fw-semibold mb-2">Consent Disclosure Language (shown to recipients at opt-in):</p>
+                            <p class="fw-semibold mb-2">
+                                Consent Disclosure Language (shown to recipients on
+                                <a href="{{ url_for('sms_optin_page') }}">/sms-opt-in</a>):
+                            </p>
                             <blockquote class="blockquote mb-0 small">
-                                <p class="mb-0">
-                                    By providing your phone number you agree to receive EAS emergency alert SMS
-                                    notifications from EAS Station™. These alerts are issued by the National Weather
-                                    Service and authorized government agencies.
-                                    <strong>Message and data rates may apply. Message frequency varies.</strong>
-                                    Reply <strong>STOP</strong> to stop messages at any time.
-                                    Reply <strong>HELP</strong> for help.
-                                    See the <a href="{{ url_for('privacy_page') }}">Privacy Policy</a> and
-                                    <a href="{{ url_for('terms_page') }}">Terms of Use</a>.
-                                </p>
+                                <p class="mb-0">{{ optin_consent_text }}</p>
                             </blockquote>
                         </div>
                     </section>
