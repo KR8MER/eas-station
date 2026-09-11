@@ -7,6 +7,11 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.0.1] - 2026-09-11 - Fix stale "not a public subscription service" wording on /sms-compliance
+
+### Fixed
+- `templates/sms_compliance.html`: the top disclaimer still read "Messages are sent only to phone numbers explicitly configured by the system administrator... This is not a public subscription service" -- stale from before the self-serve `/sms-opt-in` double opt-in flow shipped (2.232.0), and directly contradicted by Section 2 further down the same page, which describes that public page and its QR code for signage. A carrier/Twilio reviewer reading the filed policy URL and then clicking through to `/sms-opt-in` would see the mismatch immediately. Reworded to describe both opt-in paths accurately.
+
 ## [3.0.0] - 2026-09-11 - Site reorganization: split SMS out of Notifications
 
 The first landing of a broader initiative to split pages that bundle multiple unrelated features into their own dedicated pages -- see `docs/roadmap/SITE_REORGANIZATION.md` for the full scope and rationale. `templates/admin/notifications.html` had grown to 1,029 lines (email + SMS + SNMP + Postfix, plus SMS's own Consent Records and Message Log audit trails); SMS is a fully separate feature from Email/SNMP and only shared the page for lack of a better home.
