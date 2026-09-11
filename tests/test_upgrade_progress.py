@@ -47,12 +47,14 @@ log. That's what these tests -- and the endpoint -- actually rely on.
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
+from urllib.parse import quote
 
 import pytest
 
 from webapp.admin.maintenance.routes_operations import (
     check_for_upgrade,
     list_upgrade_tags,
+    run_one_click_upgrade,
 )
 from webapp.admin.maintenance.routes_upgrade_progress import (
     _classify_upgrade_log_line,
@@ -506,6 +508,26 @@ class TestCheckForUpgrade:
         _body, status = self._get(app)
         assert status == 401
 
+    @pytest.mark.parametrize(
+        "bad_ref",
+        [
+            "--upload-pack=/bin/sh",  # leading-dash flag injection
+            "main..evil",  # range expression
+            "main; rm -rf /",  # embedded whitespace / shell metacharacters
+            "main`whoami`",
+            "main$(whoami)",
+        ],
+    )
+    def test_rejects_an_invalid_ref(self, app, authenticated_user, bad_ref):
+        # subprocess.run is deliberately not mocked here -- an invalid ref
+        # must be rejected before any subprocess call is made at all.
+        with patch("subprocess.run") as mock_run:
+            response, status = self._get(app, query_string=f"ref={quote(bad_ref, safe='')}")
+
+        assert status == 400
+        assert "Invalid ref" in response.get_json()["error"]
+        mock_run.assert_not_called()
+
 
 class TestListUpgradeTags:
     """The version-picker dropdown on the upgrade page is populated from
@@ -568,3 +590,61 @@ class TestListUpgradeTags:
     def test_requires_authentication(self, app):
         _body, status = self._get(app)
         assert status == 401
+
+
+class TestRunOneClickUpgrade:
+    """The actual upgrade trigger (POST). Unlike check_for_upgrade()'s ref
+    (compared against the current remote), this one's `checkout` value is
+    passed straight through to bin/eas-station-run-update's --checkout
+    flag, so the same regex-then-re-derive validation applies before it
+    ever reaches _start_background_operation()'s subprocess launch.
+    """
+
+    URL = "/admin/operations/upgrade"
+
+    def _post(self, app, json_body=None):
+        with app.test_request_context(self.URL, method="POST", json=json_body or {}):
+            return run_one_click_upgrade()
+
+    def test_requires_authentication(self, app):
+        _body, status = self._post(app)
+        assert status == 401
+
+    def test_no_checkout_starts_the_default_branch_upgrade(self, app, authenticated_user):
+        with patch(
+            "webapp.admin.maintenance.routes_operations._start_background_operation"
+        ) as mock_start:
+            response = self._post(app)
+
+        assert response.get_json()["message"] == "Upgrade started."
+        command = mock_start.call_args[0][1]
+        assert "--checkout" not in command
+
+    def test_valid_checkout_is_passed_through(self, app, authenticated_user):
+        with patch(
+            "webapp.admin.maintenance.routes_operations._start_background_operation"
+        ) as mock_start:
+            response = self._post(app, json_body={"checkout": "v2.232.0"})
+
+        assert "checkout v2.232.0" in response.get_json()["message"]
+        command = mock_start.call_args[0][1]
+        assert command[command.index("--checkout") + 1] == "v2.232.0"
+
+    @pytest.mark.parametrize(
+        "bad_ref",
+        [
+            "--upload-pack=/bin/sh",
+            "main..evil",
+            "main; rm -rf /",
+            "main`whoami`",
+        ],
+    )
+    def test_rejects_an_invalid_checkout_ref(self, app, authenticated_user, bad_ref):
+        with patch(
+            "webapp.admin.maintenance.routes_operations._start_background_operation"
+        ) as mock_start:
+            response, status = self._post(app, json_body={"checkout": bad_ref})
+
+        assert status == 400
+        assert "Invalid checkout ref" in response.get_json()["error"]
+        mock_start.assert_not_called()

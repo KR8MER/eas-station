@@ -35,7 +35,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from flask import current_app, jsonify, render_template, request
 
@@ -60,23 +60,15 @@ from .paths import repo_root
 # more deniable RCE primitive than the other admin actions available."
 _GIT_REF_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._/-]*$')
 
-
-def _validate_git_ref(ref: str) -> Optional[str]:
-    """Return the ref re-derived from a successful pattern match, or None.
-
-    Callers must use the returned value (not the original `ref`) as the
-    argument actually passed to `git`/the update script -- re-deriving the
-    value from the regex match, rather than just returning a bool and
-    reusing the caller's original string, is what lets static analysis
-    (CodeQL's py/command-line-injection) trace the value as sanitized
-    instead of flagging it as still user-controlled at the subprocess call.
-    """
-    if not ref:
-        return None
-    match = _GIT_REF_PATTERN.match(ref)
-    if not match or '..' in ref:
-        return None
-    return match.group(0)
+# Both call sites below validate a ref by matching it against
+# _GIT_REF_PATTERN and re-deriving the value from `match.group(0)` --
+# never by reusing the original request-supplied string after a separate
+# bool check. The check is inlined at each call site (not behind a shared
+# helper function) because CodeQL's py/command-line-injection sanitizer
+# recognition for Python doesn't reliably trace a value re-derived inside
+# a called function back to the caller as sanitized; keeping the
+# match-then-reassign pattern in the same function as the subprocess call
+# is what lets it verify the value actually used is a regex-derived one.
 
 # Route definitions
 
@@ -164,9 +156,12 @@ def check_for_upgrade():
         ref = get_git_metadata().get("branch") or "main"
         if ref == "unknown":
             ref = "main"
-    ref = _validate_git_ref(ref)
-    if ref is None:
+    ref_match = _GIT_REF_PATTERN.match(ref)
+    if ref_match is None or '..' in ref:
         return jsonify({"error": "Invalid ref"}), 400
+    # Re-derive from the match rather than reusing the request-supplied
+    # `ref` string itself -- see _GIT_REF_PATTERN's comment.
+    ref = ref_match.group(0)
 
     def _run(args: List[str], timeout: int) -> subprocess.CompletedProcess:
         return subprocess.run(
@@ -278,9 +273,12 @@ def run_one_click_upgrade():
     summary_bits = []
     checkout_value = payload.get("checkout")
     if isinstance(checkout_value, str) and checkout_value.strip():
-        checkout_clean = _validate_git_ref(checkout_value.strip())
-        if checkout_clean is None:
+        checkout_match = _GIT_REF_PATTERN.match(checkout_value.strip())
+        if checkout_match is None or '..' in checkout_value:
             return jsonify({"error": "Invalid checkout ref"}), 400
+        # Re-derive from the match rather than reusing the request-supplied
+        # string itself -- see _GIT_REF_PATTERN's comment.
+        checkout_clean = checkout_match.group(0)
         command.extend(["--checkout", checkout_clean])
         summary_bits.append(f"checkout {checkout_clean}")
     if payload.get("skip_backup"):

@@ -7,6 +7,12 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.2.3] - 2026-09-11 - Close out the two items flagged after Phase 4
+
+- **Investigated, not a bug**: `data_management.html`'s generic boundary uploader offers a `county` type alongside electric/fire/school/etc; checked whether it duplicates `/admin/county_boundaries`. It writes to `Boundary` (table `boundaries`, arbitrary `type` string, map-overlay/intersection use) while `/admin/county_boundaries` writes to `USCountyBoundary` (table `us_county_boundaries`, FIPS/GEOID-keyed, Census TIGER/Line data for SAME-code alert matching) -- different tables, different purpose. Documented in `docs/roadmap/SITE_REORGANIZATION.md`; no code change.
+- **Fixed**: CodeQL's `py/command-line-injection` alert on the System Upgrade ref handling (`webapp/admin/maintenance/routes_operations.py`). The regex-validate-then-re-derive pattern introduced for this in v3.2.0 didn't satisfy CodeQL when the validation lived behind a shared helper function (`_validate_git_ref`) -- its sanitizer recognition doesn't reliably trace a value re-derived inside a called function back to the caller. Inlined the same `_GIT_REF_PATTERN.match()` + `match.group(0)` re-derivation directly into both call sites (`check_for_upgrade`, `run_one_click_upgrade`); removed the now-unused helper.
+- `tests/test_upgrade_progress.py`: added regression coverage for both call sites rejecting invalid refs (leading-dash flag injection, range expressions, shell metacharacters) before any subprocess call is made, plus new coverage for `run_one_click_upgrade` generally (previously untested) -- replaces the deleted `tests/test_git_ref_validation.py`, which tested the removed helper directly.
+
 ## [3.2.2] - 2026-09-11 - Site reorganization Phase 4: remove duplicate Zone Catalog tab from Data Management
 
 Completes a further pass of `docs/roadmap/SITE_REORGANIZATION.md`. `data_management.html`'s "Zone Catalog" tab called the *exact same* `/admin/zones/*` endpoints (`webapp/admin/zones.py`) as the pre-existing, separately nav-registered `/admin/zones` page -- confirmed by grepping for every route string both templates' JS calls and finding exactly one backend implementation of each. An earlier extraction's docstring had claimed this was "confirmed not a duplicate" -- true then or not, it didn't hold up under inspection today.
