@@ -374,8 +374,24 @@ def mfa_verify():
         MFASession.clear_pending(session)
         return redirect(url_for('auth.login'))
 
+    # Rate limit code guesses here the same way /login rate-limits password
+    # guesses -- reusing the identical lockout logic via a separate
+    # ("mfa:"-prefixed) bucket per IP, so a run of bad codes doesn't also
+    # burn through the password attempt budget or vice versa. Without this,
+    # an attacker who already has valid credentials (phished, leaked,
+    # stuffed) could try TOTP/backup-code guesses against this endpoint
+    # with no limit at all -- the /login route's rate limiting stops at the
+    # password check and never covers this second factor.
+    rate_limiter = get_rate_limiter()
+    mfa_rate_key = f"mfa:{request.remote_addr}"
+
     error = None
-    if request.method == 'POST':
+    is_locked, seconds_remaining = rate_limiter.is_locked_out(mfa_rate_key)
+    if is_locked:
+        minutes_remaining = (seconds_remaining + 59) // 60
+        error = f'Too many failed verification attempts. Please try again in {minutes_remaining} minute(s).'
+        log_rate_limit_exceeded(request.remote_addr)
+    elif request.method == 'POST':
         code = (request.form.get('code') or '').strip()
 
         if not code:
@@ -383,6 +399,8 @@ def mfa_verify():
         else:
             # Verify MFA code (TOTP or backup code)
             if verify_user_mfa(user, code):
+                rate_limiter.clear_attempts(mfa_rate_key)
+
                 # MFA successful - complete login
                 MFASession.complete(session, user.id)
                 user.last_login_at = utc_now()
@@ -415,6 +433,7 @@ def mfa_verify():
                 target = next_param if _is_safe_redirect_target(next_param) else url_for('dashboard.admin')
                 return redirect(target)
             else:
+                rate_limiter.record_failed_attempt(mfa_rate_key)
                 AuditLogger.log_mfa_verify_failure(user.id, user.username)
                 error = 'Invalid verification code.'
 
