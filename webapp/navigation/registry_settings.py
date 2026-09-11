@@ -300,7 +300,14 @@ SETTINGS_SECTION = NavSection(
                     label="Admin Operations",
                     icon="fas fa-cogs",
                     href="/admin/operations",
-                    description="Database optimization, a quick backup shortcut, alert-boundary recalculation, and the one-click system upgrade.",
+                    description="Database optimization and a quick backup shortcut.",
+                    permissions=(SYSTEM_CONFIGURE,),
+                ),
+                NavItem(
+                    label="System Upgrade",
+                    icon="fas fa-arrow-up",
+                    href="/admin/system-upgrade",
+                    description="Update EAS Station to a newer release, branch, or commit, with live progress and log streaming.",
                     permissions=(SYSTEM_CONFIGURE,),
                 ),
                 NavItem(

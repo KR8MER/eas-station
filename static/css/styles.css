@@ -4303,6 +4303,13 @@ html:has(.modal.show) {
 .align-items-baseline { align-items: baseline; }
 .align-items-stretch { align-items: stretch; }
 
+/* Admin action buttons (Admin Operations, System Upgrade, etc.): a shared
+   minimum width so a row of buttons with different label lengths lines up
+   instead of each hugging its own text. Promoted here after two pages
+   defined it identically (tests/test_frontend_consistency.py catches new
+   cross-page duplicates like that). */
+.action-btn { min-width: 150px; }
+
 /* Color Utilities.
    These paint *text*, so they use the readable `--*-ink` variants rather than
    the vivid `--*-color` fills — see "SEMANTIC TEXT INK" above. The `.bg-*`

@@ -37,7 +37,7 @@ import sys
 from pathlib import Path
 from typing import List
 
-from flask import current_app, jsonify, request
+from flask import current_app, jsonify, render_template, request
 
 from app_core.auth.roles import require_permission
 from app_utils.versioning import get_current_version, get_git_metadata
@@ -65,6 +65,21 @@ def _is_valid_git_ref(ref: str) -> bool:
     return bool(ref) and bool(_GIT_REF_PATTERN.match(ref)) and '..' not in ref
 
 # Route definitions
+
+@maintenance_bp.route("/admin/system-upgrade", methods=["GET"])
+@require_permission('system.configure')
+def system_upgrade_page():
+    """System Upgrade settings page.
+
+    Split out of Admin Operations (site reorganization Phase 2,
+    docs/roadmap/SITE_REORGANIZATION.md) -- upgrading is a much bigger,
+    riskier operation (its own live progress/log-streaming UI) than the
+    routine maintenance chores (DB health, backup trigger) it used to share
+    a page with, and it's confusing enough on its own to deserve full-page
+    attention rather than being one card among four.
+    """
+    return render_template("admin/system_upgrade.html")
+
 
 @maintenance_bp.route("/admin/operations/status", methods=["GET"])
 def get_operation_status():
