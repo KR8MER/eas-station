@@ -8,6 +8,15 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.231.1] - 2026-09-11 - Rate-limit the MFA verification step, no-store the enrollment QR code
+
+A follow-up to the pgweb pentest finding: while reviewing MFA (prompted by "anything else we can improve for 2FA"), found the login-time TOTP/backup-code check had no rate limiting at all, unlike the password step right before it.
+
+### Fixed
+- `webapp/admin/auth.py`: `/mfa/verify` (the code entry screen after a correct password) had no rate limiting -- `/login`'s own lockout only covers the password step. An attacker who already had valid credentials for an MFA-enabled account (phished, leaked, stuffed) could try unlimited TOTP/backup-code guesses against this endpoint. Now reuses the same `LoginRateLimiter` class `/login` already uses (5 attempts / 15-minute lockout), under a separate `mfa:`-prefixed bucket per IP so MFA guesses and password guesses don't share or exhaust each other's attempt budget.
+- `webapp/routes_security.py`: the MFA enrollment QR code image (`/security/mfa/enroll/qr`) had no cache headers. The image encodes the TOTP secret in the `otpauth://` URI its pixels represent -- without `Cache-Control: no-store`, an intermediate proxy or the browser's disk cache could persist a copy of the secret past the enrollment session.
+- New `tests/test_mfa_verify_rate_limit.py`: pins down the lockout threshold, that a locked-out request is rejected without even checking the code, that a successful verification clears the bucket, and that the MFA bucket is separate from the password-login bucket.
+
 ## [2.231.0] - 2026-09-11 - Authenticated access gate for the pgweb database browser
 
 A pentest against a live deployment (following the security-audit pass in 2.230.0) found `pgweb` -- an optional, operator-installed third-party PostgreSQL browser with no authentication of its own -- listening on `0.0.0.0:8081`, with a firewall rule allowing the entire LAN subnet in. Anyone on that LAN got full, unauthenticated read/write SQL access to the production database, including administrator accounts; the nav registry even linked directly to the raw port with a description acknowledging the risk rather than closing it.

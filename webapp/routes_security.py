@@ -131,12 +131,19 @@ def mfa_enroll_qr():
         provisioning_uri = MFAManager.generate_provisioning_uri(user.mfa_secret, user.username)
         qr_bytes = MFAManager.generate_qr_code(provisioning_uri)
 
-        return send_file(
+        response = send_file(
             BytesIO(qr_bytes),
             mimetype='image/png',
             as_attachment=False,
             download_name='mfa_qr.png'
         )
+        # This image encodes the TOTP secret (in the otpauth:// URI the QR
+        # pixels represent) -- send_file has no cache headers of its own, so
+        # without this an intermediate proxy or the browser's disk cache
+        # could persist a copy of the secret past the enrollment session.
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        return response
 
     except Exception as e:
         current_app.logger.exception("QR code generation failed")
