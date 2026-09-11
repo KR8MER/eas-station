@@ -35,7 +35,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from flask import current_app, jsonify, render_template, request
 
@@ -61,8 +61,22 @@ from .paths import repo_root
 _GIT_REF_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._/-]*$')
 
 
-def _is_valid_git_ref(ref: str) -> bool:
-    return bool(ref) and bool(_GIT_REF_PATTERN.match(ref)) and '..' not in ref
+def _validate_git_ref(ref: str) -> Optional[str]:
+    """Return the ref re-derived from a successful pattern match, or None.
+
+    Callers must use the returned value (not the original `ref`) as the
+    argument actually passed to `git`/the update script -- re-deriving the
+    value from the regex match, rather than just returning a bool and
+    reusing the caller's original string, is what lets static analysis
+    (CodeQL's py/command-line-injection) trace the value as sanitized
+    instead of flagging it as still user-controlled at the subprocess call.
+    """
+    if not ref:
+        return None
+    match = _GIT_REF_PATTERN.match(ref)
+    if not match or '..' in ref:
+        return None
+    return match.group(0)
 
 # Route definitions
 
@@ -150,7 +164,8 @@ def check_for_upgrade():
         ref = get_git_metadata().get("branch") or "main"
         if ref == "unknown":
             ref = "main"
-    if not _is_valid_git_ref(ref):
+    ref = _validate_git_ref(ref)
+    if ref is None:
         return jsonify({"error": "Invalid ref"}), 400
 
     def _run(args: List[str], timeout: int) -> subprocess.CompletedProcess:
@@ -263,8 +278,8 @@ def run_one_click_upgrade():
     summary_bits = []
     checkout_value = payload.get("checkout")
     if isinstance(checkout_value, str) and checkout_value.strip():
-        checkout_clean = checkout_value.strip()
-        if not _is_valid_git_ref(checkout_clean):
+        checkout_clean = _validate_git_ref(checkout_value.strip())
+        if checkout_clean is None:
             return jsonify({"error": "Invalid checkout ref"}), 400
         command.extend(["--checkout", checkout_clean])
         summary_bits.append(f"checkout {checkout_clean}")
