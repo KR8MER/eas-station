@@ -27,7 +27,7 @@ package's 400-line guidance (tests/test_maintenance_package.py).
 import re
 import subprocess
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from flask import current_app, jsonify
 
@@ -113,6 +113,51 @@ def _classify_upgrade_log_line(text: str) -> dict:
     return {"text": text, "level": "plain", "step": None}
 
 
+def _monotonic_uptime_seconds() -> Optional[float]:
+    """Current CLOCK_MONOTONIC time, from /proc/uptime's first field.
+
+    Paired with systemd's ActiveEnterTimestampMonotonic (below) to compute
+    elapsed time without parsing ActiveEnterTimestamp's locale/timezone-
+    dependent string ("Thu 2026-09-10 20:34:00 EDT" -- "EDT" alone isn't
+    reliably parseable back to a UTC offset). Monotonic time is also immune
+    to NTP wall-clock adjustments mid-run, which a wall-clock diff is not.
+    """
+    try:
+        with open("/proc/uptime", "r", encoding="utf-8") as handle:
+            return float(handle.read().split()[0])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _elapsed_seconds_from_monotonic(active_enter_monotonic_us: Optional[str]) -> Optional[float]:
+    """Seconds since the transient update unit became active, or None if
+    unavailable (unit not currently active, or /proc/uptime unreadable)."""
+    if not active_enter_monotonic_us or active_enter_monotonic_us == "0":
+        return None
+    now = _monotonic_uptime_seconds()
+    if now is None:
+        return None
+    try:
+        started_at_monotonic = int(active_enter_monotonic_us) / 1_000_000
+    except ValueError:
+        return None
+    return max(0.0, now - started_at_monotonic)
+
+
+def _eta_seconds(elapsed_seconds: Optional[float], percent: Optional[float]) -> Optional[float]:
+    """Linear-extrapolation ETA from elapsed time and the latest known
+    percent -- same approach as ProgressTracker._timing_fields (alert
+    verification's progress bar), for the same reason: update.sh's steps
+    vary too much run to run (package downloads, DB migration count,
+    service restart timing) for a fixed per-step timing table to beat a
+    live projection, and it needs no calibration data to be useful.
+    """
+    if elapsed_seconds is None or percent is None or not (0 < percent < 100):
+        return None
+    projected_total = elapsed_seconds / (percent / 100.0)
+    return max(0.0, projected_total - elapsed_seconds)
+
+
 def _tail_update_log(max_lines: int = 1000) -> List[str]:
     """Read update.sh's own progress, from the log file it actually writes to.
 
@@ -147,9 +192,11 @@ def get_upgrade_progress():
     # _UPDATE_LOG_FILE (which does not get cleaned up) and, as a fallback,
     # the journal's own unit-lifecycle lines (which also survive it).
     unit_state = {"active_state": None, "sub_state": None}
+    elapsed_seconds: Optional[float] = None
     try:
         show = subprocess.run(
-            ["sudo", "systemctl", "show", _UPGRADE_UNIT, "--property=ActiveState,SubState"],
+            ["sudo", "systemctl", "show", _UPGRADE_UNIT,
+             "--property=ActiveState,SubState,ActiveEnterTimestampMonotonic"],
             capture_output=True, text=True, timeout=10,
         )
         props = dict(
@@ -159,6 +206,9 @@ def get_upgrade_progress():
             "active_state": props.get("ActiveState") or None,
             "sub_state": props.get("SubState") or None,
         }
+        elapsed_seconds = _elapsed_seconds_from_monotonic(
+            props.get("ActiveEnterTimestampMonotonic")
+        )
     except Exception as exc:
         current_app.logger.debug("Could not read %s unit state: %s", _UPGRADE_UNIT, exc)
 
@@ -198,4 +248,20 @@ def get_upgrade_progress():
     if not lines and unit_state["active_state"] not in ("active", "activating", "reloading"):
         result = "idle"
 
-    return jsonify({"unit": unit_state, "result": result, "lines": lines})
+    # Percent from the most recent "--- Step N/M: ... ---" line, same as
+    # the frontend already computes for the bar width -- reused here so
+    # eta_seconds' linear extrapolation and the visible bar agree.
+    steps = [entry["step"] for entry in lines if entry["step"]]
+    percent = (
+        min(100.0, round(steps[-1]["num"] / steps[-1]["total"] * 100, 1))
+        if steps else None
+    )
+    eta_seconds = _eta_seconds(elapsed_seconds, percent) if result == "running" else None
+
+    return jsonify({
+        "unit": unit_state,
+        "result": result,
+        "lines": lines,
+        "elapsed_seconds": round(elapsed_seconds, 1) if elapsed_seconds is not None else None,
+        "eta_seconds": round(eta_seconds, 1) if eta_seconds is not None else None,
+    })

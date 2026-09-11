@@ -100,6 +100,16 @@ class ProgressTracker:
         # _sanitize_operation_id, but the in-memory cache sidesteps the
         # question entirely).
         self._max_percent: int = 0
+        # Wall-clock start time for elapsed/ETA reporting. A new
+        # ProgressTracker(operation_id) is instantiated fresh at every call
+        # site across the pipeline (upload -> decode -> extract -> storage
+        # -> data), not held as one object for the whole operation, so this
+        # can't just be "set once in __init__" -- it's lazily recovered from
+        # the on-disk payload the first time this instance actually writes
+        # (see _ensure_started_at), which costs one extra read only on that
+        # first write per instance, not per update() call within a
+        # tight sub-progress loop.
+        self._started_at: Optional[float] = None
 
     def _write_payload(self, payload: Dict) -> None:
         """Persist a progress payload to disk atomically."""
@@ -134,6 +144,51 @@ class ProgressTracker:
         """
         return self._max_percent
 
+    def _ensure_started_at(self) -> float:
+        """Recover (or establish) this operation's wall-clock start time.
+
+        Reads the on-disk payload once per fresh ``ProgressTracker``
+        instance -- see ``__init__`` -- so a later phase's tracker inherits
+        the same ``started_at`` an earlier phase's tracker already wrote,
+        instead of every phase transition resetting the clock and making
+        "elapsed" lie.
+        """
+        if self._started_at is not None:
+            return self._started_at
+        existing = self.get(self.operation_id)
+        started_at = existing.get("started_at") if existing else None
+        self._started_at = float(started_at) if started_at else time.time()
+        return self._started_at
+
+    def _timing_fields(self, percent: int) -> Dict:
+        """Elapsed seconds so far, plus a linear-extrapolation ETA.
+
+        The ETA is deliberately simple (elapsed / (percent/100) - elapsed)
+        rather than per-phase-calibrated: this pipeline's phases vary too
+        much run to run (upload size, decode complexity, DB load) for a
+        fixed historical timing table to beat "how long has this actually
+        taken so far, projected forward" in practice, and it needs no
+        calibration data to start being reasonable. Noisy in the first few
+        percent (as any linear ETA is) and stabilizes quickly after.
+        """
+        # Deliberately called from OUTSIDE the _progress_lock critical
+        # section in update()/complete()/error() below: _ensure_started_at()
+        # calls the (also-locking) self.get() on a fresh instance's first
+        # write, and threading.Lock is not reentrant -- acquiring it twice
+        # from the same thread deadlocks forever, silently, with no
+        # exception to point at the cause.
+        started_at = self._ensure_started_at()
+        elapsed = max(0.0, time.time() - started_at)
+        eta_seconds: Optional[float] = None
+        if 0 < percent < 100:
+            projected_total = elapsed / (percent / 100.0)
+            eta_seconds = max(0.0, projected_total - elapsed)
+        return {
+            "started_at": started_at,
+            "elapsed_seconds": round(elapsed, 1),
+            "eta_seconds": round(eta_seconds, 1) if eta_seconds is not None else None,
+        }
+
     def update(self, step: str, current: int, total: int, message: str = ""):
         """Update progress for the current operation.
 
@@ -143,6 +198,8 @@ class ProgressTracker:
         rewind the bar when a faster phase takes over.
         """
         percent = self._phase_percent(step, current, total)
+        # Outside the lock -- see _timing_fields' docstring on why.
+        timing = self._timing_fields(percent)
 
         with _progress_lock:
             previous = self._read_existing_percent()
@@ -155,11 +212,13 @@ class ProgressTracker:
                 "total": total,
                 "message": message,
                 "percent": percent,
+                **timing,
             }
             self._write_payload(progress_data)
 
     def complete(self, message: str = "Complete"):
         """Mark operation as complete."""
+        timing = self._timing_fields(100)
         with _progress_lock:
             self._write_payload({
                 "step": "complete",
@@ -167,10 +226,12 @@ class ProgressTracker:
                 "total": 100,
                 "message": message,
                 "percent": 100,
+                **timing,
             })
 
     def error(self, message: str):
         """Mark operation as failed."""
+        timing = self._timing_fields(0)
         with _progress_lock:
             self._write_payload({
                 "step": "error",
@@ -178,6 +239,7 @@ class ProgressTracker:
                 "total": 100,
                 "message": message,
                 "percent": 0,
+                **timing,
             })
 
     @staticmethod
