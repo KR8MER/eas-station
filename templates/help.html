@@ -1156,10 +1156,95 @@
                                         <i class="fas fa-link me-2"></i>
                                         <strong>Access:</strong> Navigate to <strong>System &rarr; Custom Screens</strong> from the main menu or visit <code>/screens</code>
                                     </div>
-                                    <div class="alert alert-info">
-                                        <i class="fas fa-book me-2"></i>
-                                        <strong>Documentation:</strong> See <a href="/static/docs/guides/CUSTOM_DISPLAY_SCREENS.md" target="_blank">Custom Display Screens Guide</a> for template syntax, variable reference, and examples
+
+                                    <h3 class="h6 mt-4"><i class="fas fa-code me-2"></i>Template Variables</h3>
+                                    <p class="mb-2">Use these variables in your screen templates:</p>
+                                    <div class="table-responsive">
+                                    <table class="table table-striped table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Variable</th>
+                                                <th>Description</th>
+                                                <th>Example</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td><code>{status.status}</code></td>
+                                                <td>System health status</td>
+                                                <td>healthy, warning, critical</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>{status.active_alerts_count}</code></td>
+                                                <td>Number of active alerts</td>
+                                                <td>3</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>{status.system_resources.cpu_usage_percent}</code></td>
+                                                <td>CPU usage percentage</td>
+                                                <td>45.2</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>{alerts.features[0].properties.event}</code></td>
+                                                <td>Latest alert event type</td>
+                                                <td>Tornado Warning</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>{now.time}</code></td>
+                                                <td>Current time (12-hour)</td>
+                                                <td>03:45 PM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>{now.date}</code></td>
+                                                <td>Current date</td>
+                                                <td>11/06/2025</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                     </div>
+
+                                    <h3 class="h6 mt-4"><i class="fas fa-database me-2"></i>Available Data Sources</h3>
+                                    <ul>
+                                        <li><code>/api/system_status</code> - System health and resources</li>
+                                        <li><code>/api/alerts</code> - Active emergency alerts</li>
+                                        <li><code>/api/monitoring/radio</code> - Radio receiver status</li>
+                                        <li><code>/health</code> - Basic health check</li>
+                                        <li><code>/version</code> - System version info</li>
+                                    </ul>
+
+                                    <h3 class="h6 mt-4"><i class="fas fa-tv me-2"></i>LED Screen Example</h3>
+                                    <pre class="bg-dark text-light p-3 rounded"><code>{
+  "lines": [
+    "SYSTEM STATUS",
+    "Health: {status.status}",
+    "CPU: {status.system_resources.cpu_usage_percent}%",
+    "Alerts: {status.active_alerts_count}"
+  ],
+  "color": "GREEN",
+  "mode": "HOLD",
+  "speed": "SPEED_3"
+}</code></pre>
+
+                                    <h3 class="h6 mt-4"><i class="fas fa-desktop me-2"></i>VFD Screen Example (VU Meters)</h3>
+                                    <pre class="bg-dark text-light p-3 rounded"><code>{
+  "elements": [
+    {
+      "type": "text",
+      "x": 2,
+      "y": 1,
+      "text": "SYSTEM RESOURCES"
+    },
+    {
+      "type": "progress_bar",
+      "x": 10,
+      "y": 8,
+      "width": 120,
+      "height": 6,
+      "value": "{status.system_resources.cpu_usage_percent}",
+      "label": "CPU"
+    }
+  ]
+}</code></pre>
                                 </div>
                             </div>
                         </div>

@@ -154,8 +154,7 @@
 }
 
 .screen-card,
-.rotation-card,
-.doc-card {
+.rotation-card {
     background-color: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: 16px;
@@ -166,8 +165,7 @@
 }
 
 .screen-card:hover,
-.rotation-card:hover,
-.doc-card:hover {
+.rotation-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 12px 35px rgba(0, 0, 0, 0.08);
 }
@@ -356,14 +354,6 @@
 .priority-2 { background-color: color-mix(in srgb, var(--info-color) 18%, var(--surface-color)); color: var(--info-color); }
 .priority-3 { background-color: color-mix(in srgb, var(--text-muted) 18%, var(--surface-color)); color: var(--text-muted); }
 
-.doc-card table {
-    margin-top: 1rem;
-}
-
-.doc-card code {
-    font-size: 0.9rem;
-}
-
 .rotation-flags {
     display: flex;
     flex-wrap: wrap;
@@ -445,6 +435,9 @@
     <button class="btn btn-outline-light btn-sm" onclick="showCreateScreenModal()" title="Advanced: Create screen with JSON">
         <i class="fas fa-code"></i>
     </button>
+    <a href="/help" class="btn btn-outline-light" title="Template variables, data sources, and examples">
+        <i class="fas fa-book me-1"></i>Documentation
+    </a>
 {% endset %}
 {% include 'components/page_header.html' %}
 <div class="container-fluid mt-4 screens-page">
@@ -560,11 +553,6 @@
                 <i class="fas fa-sync"></i> Rotations
             </button>
         </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="docs-tab" data-bs-toggle="tab" data-bs-target="#docs-pane" type="button" role="tab">
-                <i class="fas fa-book"></i> Documentation
-            </button>
-        </li>
     </ul>
 
     <div class="tab-content">
@@ -588,111 +576,6 @@
             </div>
         </div>
 
-        <!-- Documentation Tab -->
-        <div class="tab-pane fade" id="docs-pane" role="tabpanel">
-            <div class="doc-card">
-                <div class="card-body">
-                    <h2 class="h3"><i class="fas fa-book"></i> Custom Screens Documentation</h2>
-                    <p class="lead">Create dynamic display templates with API data integration.</p>
-
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle"></i>
-                        <strong>Quick Start:</strong> Click "Create Screen" to build a custom template. Choose LED or VFD, add data sources, and define your layout.
-                        For complete documentation, see <a href="/static/docs/guides/CUSTOM_DISPLAY_SCREENS.md" target="_blank">Custom Display Screens Guide</a>.
-                    </div>
-
-                    <h3 class="h4"><i class="fas fa-code"></i> Template Variables</h3>
-                    <p>Use these variables in your screen templates:</p>
-
-                    <div class="table-responsive">
-                    <table class="table table-striped">
-                        <thead>
-                            <tr>
-                                <th>Variable</th>
-                                <th>Description</th>
-                                <th>Example</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td><code>{status.status}</code></td>
-                                <td>System health status</td>
-                                <td>healthy, warning, critical</td>
-                            </tr>
-                            <tr>
-                                <td><code>{status.active_alerts_count}</code></td>
-                                <td>Number of active alerts</td>
-                                <td>3</td>
-                            </tr>
-                            <tr>
-                                <td><code>{status.system_resources.cpu_usage_percent}</code></td>
-                                <td>CPU usage percentage</td>
-                                <td>45.2</td>
-                            </tr>
-                            <tr>
-                                <td><code>{alerts.features[0].properties.event}</code></td>
-                                <td>Latest alert event type</td>
-                                <td>Tornado Warning</td>
-                            </tr>
-                            <tr>
-                                <td><code>{now.time}</code></td>
-                                <td>Current time (12-hour)</td>
-                                <td>03:45 PM</td>
-                            </tr>
-                            <tr>
-                                <td><code>{now.date}</code></td>
-                                <td>Current date</td>
-                                <td>11/06/2025</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    </div>
-
-                    <h3 class="h4"><i class="fas fa-database"></i> Available Data Sources</h3>
-                    <ul>
-                        <li><code>/api/system_status</code> - System health and resources</li>
-                        <li><code>/api/alerts</code> - Active emergency alerts</li>
-                        <li><code>/api/monitoring/radio</code> - Radio receiver status</li>
-                        <li><code>/health</code> - Basic health check</li>
-                        <li><code>/version</code> - System version info</li>
-                    </ul>
-
-                    <h3 class="h4"><i class="fas fa-tv"></i> LED Screen Example</h3>
-                    <pre class="bg-dark text-light p-3 rounded"><code>{
-  "lines": [
-    "SYSTEM STATUS",
-    "Health: {status.status}",
-    "CPU: {status.system_resources.cpu_usage_percent}%",
-    "Alerts: {status.active_alerts_count}"
-  ],
-  "color": "GREEN",
-  "mode": "HOLD",
-  "speed": "SPEED_3"
-}</code></pre>
-
-                    <h3 class="h4"><i class="fas fa-desktop"></i> VFD Screen Example (VU Meters)</h3>
-                    <pre class="bg-dark text-light p-3 rounded"><code>{
-  "elements": [
-    {
-      "type": "text",
-      "x": 2,
-      "y": 1,
-      "text": "SYSTEM RESOURCES"
-    },
-    {
-      "type": "progress_bar",
-      "x": 10,
-      "y": 8,
-      "width": 120,
-      "height": 6,
-      "value": "{status.system_resources.cpu_usage_percent}",
-      "label": "CPU"
-    }
-  ]
-}</code></pre>
-                </div>
-            </div>
-        </div>
     </div>
 </div>
 
