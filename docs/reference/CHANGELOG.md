@@ -8,6 +8,15 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.232.1] - 2026-09-11 - Make the SMS opt-in page discoverable, and instance-safe
+
+The self-serve opt-in page from 2.232.0 was live but not linked from anywhere a visitor or a Twilio reviewer would naturally look, and had no way to hand someone a printable/scannable link. An operator confirmed they run more than one EAS Station deployment, so anything added here has to derive its URL from the actual request, never a hardcoded host.
+
+### Added
+- **Settings → Notifications**: a QR code (`/admin/notifications/sms-optin-qr.png`, gated behind `system.configure`) next to the existing "share this link" callout, for signage or printed material. Generated fresh per request from `url_for(..., _external=True)` -- never a fixed hostname -- so each deployment's QR code always points at itself.
+- `/sms-compliance` now links directly to `/sms-opt-in` in its Opt-In/Consent Disclosure section (instead of only describing the admin-added path), and renders the consent disclosure language from the same `CONSENT_TEXT` constant `/sms-opt-in` itself uses, so the two pages can't drift out of sync.
+- `tests/test_sms_optin_qr.py` (3 tests): permission gate, and that the URL encoded into the QR reflects the requesting host -- proving two different instances get two different, correct codes.
+
 ## [2.232.0] - 2026-09-11 - Public double opt-in for SMS alerts
 
 A carrier/Twilio A2P 10DLC campaign review needs a verifiable opt-in flow to point at. The previous design — an administrator adds a phone number and attests consent was obtained elsewhere (verbally, on paper) — gave a reviewer nothing to click through.

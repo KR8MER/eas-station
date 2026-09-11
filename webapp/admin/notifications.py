@@ -145,6 +145,31 @@ def notification_settings():
     )
 
 
+@notifications_bp.route('/sms-optin-qr.png', methods=['GET'])
+@require_auth
+@require_permission('system.configure')
+def sms_optin_qr():
+    """QR code for this instance's own /sms-opt-in page, for signage/print
+    material. Generated fresh per request from request.url_root -- never
+    a hardcoded host -- so it's correct on every deployment (an operator
+    running more than one EAS Station instance gets the right URL on
+    each), and stays correct if a domain changes.
+    """
+    from io import BytesIO
+
+    from flask import send_file, url_for
+
+    from app_core.auth.mfa import MFAManager
+
+    optin_url = url_for('sms_optin_page', _external=True)
+    qr_bytes = MFAManager.generate_qr_code(optin_url)
+    response = send_file(BytesIO(qr_bytes), mimetype='image/png', as_attachment=False)
+    # Not secret, but no reason to let it go stale in a cache if the
+    # instance's own domain ever changes.
+    response.headers['Cache-Control'] = 'no-cache, must-revalidate'
+    return response
+
+
 @notifications_bp.route('/update', methods=['POST'])
 @require_auth
 @require_permission('system.configure')

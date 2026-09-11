@@ -144,7 +144,8 @@ def register(app, route_logger, policy_docs_root) -> None:
 
     @app.route("/sms-compliance")
     def sms_compliance_page():
-        return render_template("sms_compliance.html")
+        from webapp.public.sms_optin import CONSENT_TEXT
+        return render_template("sms_compliance.html", optin_consent_text=CONSENT_TEXT)
 
     @app.route("/system_health")
     def system_health_page():
