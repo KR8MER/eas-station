@@ -600,6 +600,13 @@ _HELP = NavSection(
                     requires_auth=False,
                 ),
                 NavItem(
+                    label="Sign Up for SMS Alerts",
+                    icon="fas fa-mobile-screen-button",
+                    endpoint="sms_optin_page",
+                    description="Public self-serve sign-up for emergency alert text messages.",
+                    requires_auth=False,
+                ),
+                NavItem(
                     label="UI Style Guide",
                     icon="fas fa-palette",
                     endpoint="style_guide_page",

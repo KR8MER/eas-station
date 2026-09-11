@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+{% block title %}SMS Alert Sign-Up | EAS Station™{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-8 col-xl-6">
+            {% with hero_logo=true, hero_title='Sign Up for SMS Alerts', hero_lead='Get emergency alerts by text message' %}
+                {% include 'partials/hero.html' %}
+            {% endwith %}
+
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body p-4 p-md-5">
+
+                    <div id="optin-error" class="alert alert-danger d-none" role="alert"></div>
+                    <div id="optin-info" class="alert alert-success d-none" role="alert"></div>
+
+                    <!-- Step 1: phone number + consent -->
+                    <form id="optin-start-form" novalidate>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <div class="mb-3">
+                            <label for="phone_number" class="form-label">Phone Number</label>
+                            <input type="tel" class="form-control" id="phone_number" name="phone_number"
+                                   placeholder="+15555550100" required
+                                   pattern="^\+[1-9]\d{1,14}$"
+                                   title="Enter your number in international format, e.g. +15555550100">
+                            <div class="form-text">Include your country code, e.g. <code>+1</code> for the US/Canada.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="optin_name" class="form-label">Name <span class="text-muted">(optional)</span></label>
+                            <input type="text" class="form-control" id="optin_name" name="name" maxlength="255">
+                        </div>
+                        <div class="form-check mb-4">
+                            <input class="form-check-input" type="checkbox" id="consent" name="consent" required>
+                            <label class="form-check-label small" for="consent">{{ consent_text }}</label>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100" id="optin-start-btn">
+                            <i class="fas fa-mobile-screen-button me-1"></i> Send Verification Code
+                        </button>
+                    </form>
+
+                    <!-- Step 2: enter the texted code (hidden until step 1 succeeds) -->
+                    <form id="optin-confirm-form" class="d-none" novalidate>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <div class="mb-3">
+                            <label for="code" class="form-label">Verification Code</label>
+                            <input type="text" class="form-control" id="code" name="code"
+                                   inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
+                                   autocomplete="one-time-code" required>
+                            <div class="form-text">Enter the 6-digit code we just texted you. It expires in 10 minutes.</div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100" id="optin-confirm-btn">
+                            <i class="fas fa-check me-1"></i> Confirm
+                        </button>
+                        <button type="button" class="btn btn-link w-100 mt-2" id="optin-start-over-btn">Start over</button>
+                    </form>
+
+                    <!-- Step 3: done (hidden until confirmed) -->
+                    <div id="optin-done" class="d-none text-center">
+                        <i class="fas fa-circle-check fa-3x text-success mb-3"></i>
+                        <p class="mb-0" id="optin-done-message"></p>
+                    </div>
+
+                </div>
+            </div>
+
+            <p class="text-muted small text-center">
+                By signing up you agree to our <a href="/terms">Terms of Use</a> and
+                <a href="/privacy">Privacy Policy</a>. See the
+                <a href="/sms-compliance">SMS Messaging Policy</a> for full details, including
+                how to opt out at any time.
+            </p>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    const errorBox = document.getElementById('optin-error');
+    const infoBox = document.getElementById('optin-info');
+    const startForm = document.getElementById('optin-start-form');
+    const confirmForm = document.getElementById('optin-confirm-form');
+    const doneBox = document.getElementById('optin-done');
+    const doneMessage = document.getElementById('optin-done-message');
+
+    function showError(message) {
+        infoBox.classList.add('d-none');
+        errorBox.textContent = message;
+        errorBox.classList.remove('d-none');
+    }
+
+    function showInfo(message) {
+        errorBox.classList.add('d-none');
+        infoBox.textContent = message;
+        infoBox.classList.remove('d-none');
+    }
+
+    function clearMessages() {
+        errorBox.classList.add('d-none');
+        infoBox.classList.add('d-none');
+    }
+
+    async function postForm(url, formEl) {
+        const response = await fetch(url, {
+            method: 'POST',
+            body: new FormData(formEl),
+        });
+        let data;
+        try {
+            data = await response.json();
+        } catch (e) {
+            data = { error: 'Unexpected response from the server.' };
+        }
+        return { ok: response.ok, data };
+    }
+
+    startForm.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        clearMessages();
+        const btn = document.getElementById('optin-start-btn');
+        btn.disabled = true;
+        try {
+            const { ok, data } = await postForm('/sms-opt-in/start', startForm);
+            if (!ok || data.error) {
+                showError(data.error || 'Something went wrong. Please try again.');
+                return;
+            }
+            if (data.already_subscribed) {
+                showInfo(data.message);
+                startForm.classList.add('d-none');
+                return;
+            }
+            showInfo(data.message);
+            startForm.classList.add('d-none');
+            confirmForm.classList.remove('d-none');
+            document.getElementById('code').focus();
+        } catch (error) {
+            showError('Could not reach the server. Please check your connection and try again.');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    confirmForm.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        clearMessages();
+        const btn = document.getElementById('optin-confirm-btn');
+        btn.disabled = true;
+        try {
+            const { ok, data } = await postForm('/sms-opt-in/confirm', confirmForm);
+            if (!ok || data.error) {
+                showError(data.error || 'Something went wrong. Please try again.');
+                return;
+            }
+            confirmForm.classList.add('d-none');
+            doneMessage.textContent = data.message;
+            doneBox.classList.remove('d-none');
+        } catch (error) {
+            showError('Could not reach the server. Please check your connection and try again.');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    document.getElementById('optin-start-over-btn').addEventListener('click', function () {
+        clearMessages();
+        confirmForm.classList.add('d-none');
+        confirmForm.reset();
+        startForm.classList.remove('d-none');
+    });
+})();
+</script>
+{% endblock %}

@@ -22,15 +22,36 @@ added exclusively by the system administrator.
 
 ## Opt-In Mechanism
 
-Because EAS Station™ is self-hosted software operated by a system administrator (not a
-public-facing service), opt-in is managed at the operator level:
+EAS Station™ supports two ways a phone number is added to the recipient list:
 
-- The system administrator adds recipient phone numbers in the EAS Station™ admin panel
-  under **Settings → Notifications → SMS Recipients**.
+**1. Self-serve double opt-in (recommended).** A public page at
+`/sms-opt-in` lets a person enter their own phone number, review the
+consent language below, and confirm by entering a one-time code texted to
+that number. Only once the code is confirmed is the number added to the
+live recipient list. Every attempt — the exact consent text shown, the
+submitter's IP address, and the confirmation timestamp — is permanently
+recorded and visible to the administrator under **Settings → Notifications
+→ Consent Records**. This is the flow a carrier or Twilio compliance
+reviewer can be pointed at directly.
+
+> Consent checkbox text shown on `/sms-opt-in`:
+> *"I agree to receive SMS emergency alerts from this EAS Station. Message
+> frequency varies. Message and data rates may apply. Reply STOP to opt out
+> at any time, HELP for help. See the Terms of Use and Privacy Policy."*
+
+**2. Administrator-added (legacy / non-self-serve cases).** The system
+administrator may still add recipient phone numbers directly in the admin
+panel under **Settings → Notifications → SMS Recipients**, for situations
+where the recipient cannot use the self-serve page themselves. In that
+case:
+
 - Only individuals who have provided **explicit prior written consent** may be added.
 - Adding a number constitutes the operator's attestation that the individual has
   consented to receive EAS alert SMS messages from this system.
 - Consent must be obtained and documented **before** any messages are sent.
+- Operators submitting a carrier/Twilio campaign for review should prefer
+  the self-serve flow above wherever possible — it produces verifiable
+  evidence this method cannot.
 
 ---
 
@@ -143,6 +164,8 @@ for the verification process.
 | Resource | Location |
 |---|---|
 | Notifications setup guide | [guides/notifications.md](../guides/notifications.md) |
+| SMS opt-in flow guide | [guides/SMS_OPT_IN.md](../guides/SMS_OPT_IN.md) |
 | Terms of Use | [policies/TERMS_OF_USE.md](TERMS_OF_USE.md) |
 | Privacy Policy | [policies/PRIVACY_POLICY.md](PRIVACY_POLICY.md) |
 | Live SMS policy page (web UI) | `/sms-compliance` on your EAS Station™ instance |
+| Public opt-in page (web UI) | `/sms-opt-in` on your EAS Station™ instance |

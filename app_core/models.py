@@ -85,6 +85,7 @@ from ._models_gating import AlertGatingSettings, GatedAlert
 from ._models_backup import BackupVerificationRun
 from ._models_gpio_interlocks import RelayInterlockGroup, RelayInterlockMember
 from ._models_heartbeat import HeartbeatSettings
+from ._models_sms_optin import SmsOptInRequest
 from ._models_polling import PollDebugRecord, PollHistory, PollerSettings
 from ._models_tickstem import TickstemSettings, TickstemServiceHeartbeat
 from ._models_settings import (
@@ -170,6 +171,7 @@ __all__ = [
     "GatedAlert",
     "GPIOActivationLog",
     "HeartbeatSettings",
+    "SmsOptInRequest",
     "IcecastSettings",
     "Intersection",
     "LEDMessage",

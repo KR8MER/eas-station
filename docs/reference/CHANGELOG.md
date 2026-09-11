@@ -8,6 +8,18 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.232.0] - 2026-09-11 - Public double opt-in for SMS alerts
+
+A carrier/Twilio A2P 10DLC campaign review needs a verifiable opt-in flow to point at. The previous design — an administrator adds a phone number and attests consent was obtained elsewhere (verbally, on paper) — gave a reviewer nothing to click through.
+
+### Added
+- New public page `/sms-opt-in`: a visitor enters their own phone number, agrees to explicit TCPA-style consent language, and confirms by entering a one-time code texted to that number (double opt-in). Only then is the number added to the live SMS recipient list.
+- `app_core/_models_sms_optin.py` (`SmsOptInRequest`, migration `20260911_add_sms_opt_in_requests`): one row per opt-in attempt — a verbatim snapshot of the consent text shown, the submitter's IP, and a nullable `verified_at` that's the actual evidence of confirmed consent.
+- **Settings → Notifications → Consent Records**: an admin-facing audit table of every verified sign-up, plus a link to share the opt-in page.
+- Abuse protection: rate-limited per IP (reusing `/login`'s `LoginRateLimiter`) and per phone number (a 60-second resend cooldown, so a bystander can't be used to spam a number they don't control), a 5-attempt cap on wrong confirmation codes, and hashed (never plaintext) codes at rest.
+- `docs/guides/SMS_OPT_IN.md`, and `docs/policies/SMS_MESSAGING.md` updated to describe both opt-in paths (self-serve and the legacy admin-added one, which still exists for cases the self-serve flow can't cover).
+- `tests/test_sms_optin.py` (14 tests): consent/phone validation, already-subscribed short-circuit, IP and per-phone rate limiting, and the confirm step's wrong-code/expired-code/lockout paths.
+
 ## [2.231.1] - 2026-09-11 - Rate-limit the MFA verification step, no-store the enrollment QR code
 
 A follow-up to the pgweb pentest finding: while reviewing MFA (prompted by "anything else we can improve for 2FA"), found the login-time TOTP/backup-code check had no rate limiting at all, unlike the password step right before it.

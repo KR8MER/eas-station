@@ -38,7 +38,7 @@ from pathlib import Path
 
 from flask import Flask
 
-from webapp.public import alerts, logs, logs_data, pages, sitemap, stats
+from webapp.public import alerts, logs, logs_data, pages, sitemap, sms_optin, stats
 
 
 def register(app: Flask, logger) -> None:
@@ -48,6 +48,7 @@ def register(app: Flask, logger) -> None:
     policy_docs_root = Path(app.root_path) / "docs" / "policies"
 
     pages.register(app, route_logger, policy_docs_root)
+    sms_optin.register(app, route_logger)
     sitemap.register(app, route_logger)
     stats.register(app, route_logger)
     alerts.register(app, route_logger)

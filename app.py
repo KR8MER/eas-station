@@ -536,6 +536,13 @@ _PUBLIC_PAGE_PATHS = frozenset({
     '/terms',
     '/privacy',
     '/sms-compliance',
+    # Public double opt-in for the SMS alert recipient list (web form +
+    # SMS code confirmation) -- see webapp/public/sms_optin.py. Must stay
+    # reachable by a visitor with no account at all; that's the entire
+    # point of it existing.
+    '/sms-opt-in',
+    '/sms-opt-in/start',
+    '/sms-opt-in/confirm',
     '/sitemap.xml',
     '/robots.txt',
     '/favicon.ico',

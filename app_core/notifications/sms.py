@@ -117,6 +117,54 @@ def send_eas_alert_sms(
     return success
 
 
+def send_verification_sms(
+    account_sid: str,
+    auth_token: str,
+    from_number: str,
+    recipient: str,
+    code: str,
+) -> Tuple[bool, str]:
+    """Send a one-time confirmation code for the public SMS opt-in flow
+    (see webapp/public/sms_optin.py). Double opt-in: the recipient must
+    prove they actually control the number they submitted by relaying
+    this code back, before it's added to the live alert recipient list.
+
+    Args:
+        account_sid: Twilio Account SID.
+        auth_token:  Twilio Auth Token.
+        from_number: Twilio sending number in E.164 format.
+        recipient:   Destination phone number in E.164 format.
+        code:        The plaintext code to send (caller generates/hashes it
+                     for storage; this function only sends it).
+
+    Returns:
+        (success: bool, message: str)
+    """
+    if not account_sid or not auth_token or not from_number:
+        return False, "SMS notifications are not configured on this system."
+
+    try:
+        from twilio.rest import Client  # type: ignore[import]
+    except ImportError:
+        return False, "twilio library is not installed."
+
+    try:
+        client = Client(account_sid, auth_token)
+        msg = client.messages.create(
+            body=(
+                f"EAS Station verification code: {code}\n"
+                "Enter this on the page where you requested it to confirm "
+                "you want to receive emergency alert texts. Expires in 10 "
+                "minutes. Reply STOP to opt out, HELP for help."
+            ),
+            from_=from_number,
+            to=recipient,
+        )
+        return True, f"Verification code sent (SID: {msg.sid})"
+    except Exception as exc:
+        return False, f"Failed to send verification code: {exc}"
+
+
 def test_sms(
     account_sid: str,
     auth_token: str,
@@ -168,4 +216,4 @@ def test_sms(
         return False, f"Failed to send test SMS: {exc}"
 
 
-__all__ = ["send_eas_alert_sms", "test_sms"]
+__all__ = ["send_eas_alert_sms", "send_verification_sms", "test_sms"]

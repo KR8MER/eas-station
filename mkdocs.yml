@@ -139,6 +139,7 @@ nav:
       - Pre/Post-Alert Signaling: guides/ALERT_SIGNALS.md
       - TTS Normalization: guides/TTS_NORMALIZATION.md
       - Notifications (Email & SMS): guides/notifications.md
+      - SMS Opt-In (Double Opt-In): guides/SMS_OPT_IN.md
       - Local Mail Server (Postfix): guides/local_mail_server.md
       - Multi-Factor Authentication (TOTP): guides/MFA_TOTP_SETUP.md
       - API Key Management: guides/API_KEY_MANAGEMENT.md

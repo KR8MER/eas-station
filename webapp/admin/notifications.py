@@ -121,7 +121,28 @@ def notification_settings():
             'danger',
         )
         settings = _fallback_notification_settings()
-    return render_template('admin/notifications.html', settings=settings)
+
+    # Verified SMS opt-in records, newest first -- the audit trail behind
+    # the public double opt-in flow (webapp/public/sms_optin.py). Shown
+    # here so an admin (or a carrier/Twilio compliance reviewer) can see
+    # actual consent evidence, not just the raw recipient list.
+    try:
+        from app_core.models import SmsOptInRequest
+        consent_records = (
+            SmsOptInRequest.query
+            .filter(SmsOptInRequest.verified_at.isnot(None))
+            .order_by(SmsOptInRequest.verified_at.desc())
+            .limit(200)
+            .all()
+        )
+    except SQLAlchemyError as e:
+        logger.error(f"Database error loading SMS consent records: {str(e)}")
+        db.session.rollback()
+        consent_records = []
+
+    return render_template(
+        'admin/notifications.html', settings=settings, consent_records=consent_records
+    )
 
 
 @notifications_bp.route('/update', methods=['POST'])
