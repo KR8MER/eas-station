@@ -7,6 +7,15 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.1.0] - 2026-09-11 - Site reorganization Phase 1: split Bad Actor Blocklist out of Application Settings
+
+Continues the initiative from `docs/roadmap/SITE_REORGANIZATION.md`. The Bad Actor Blocklist panel is a fully independent subsystem -- own nginx geo-map config files, own systemd refresh timer, own JSON API (`webapp/admin/bad_actors.py`) -- that only shared a page with logging/storage/branding/password-policy settings for lack of a better home. None of its inputs were even part of the settings `<form>` it visually lived inside.
+
+### Added
+- New page **Settings → Bad Actor Blocklist** (`/admin/security/bad-actors/`), on the existing `bad_actors` blueprint. `templates/admin/application_settings.html` links out to it instead of embedding the panel; Project Honeypot (a genuine two-field settings toggle saved through the normal settings form, not an independent subsystem) stays on the main page.
+- New `NavItem` in `registry_settings.py`'s "Security & Access" group.
+- `tests/test_bad_actor_blocklist_page.py` (3 tests): permission gate, the new page renders the panel, the main page no longer does.
+
 ## [3.0.1] - 2026-09-11 - Fix stale "not a public subscription service" wording on /sms-compliance
 
 ### Fixed
