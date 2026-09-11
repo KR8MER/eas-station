@@ -1,0 +1,470 @@
+{% extends "base.html" %}
+
+{% block title %}SMS Notification Settings - EAS Station™{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set header_icon = 'fas fa-sms' %}
+{% set header_title = 'SMS Notification Settings' %}
+{% set header_subtitle = 'Twilio configuration, self-serve opt-in, consent records, and message log' %}
+{% set header_actions %}
+    <a href="{{ url_for('notifications.notification_settings') }}" class="btn btn-outline-light">
+        <i class="fas fa-envelope me-1"></i>Email &amp; SNMP Notifications
+    </a>
+{% endset %}
+{% include 'components/page_header.html' %}
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-lg-8">
+            <form id="smsSettingsForm">
+
+                <!-- ============================================================
+                     SMS NOTIFICATIONS
+                     ============================================================ -->
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h2 class="mb-0 h5"><i class="fas fa-sms"></i> SMS Notifications (Twilio)</h2>
+                        <span class="badge bg-{{ 'success' if settings.sms_enabled else 'secondary' }}" id="smsBadge">
+                            {{ 'Enabled' if settings.sms_enabled else 'Disabled' }}
+                        </span>
+                    </div>
+                    <div class="card-body">
+
+                        <div class="mb-3">
+                            <label for="sms_enabled" class="form-label">
+                                <i class="fas fa-toggle-on"></i> Enable SMS Notifications
+                            </label>
+                            <select class="form-select" id="sms_enabled" name="sms_enabled">
+                                <option value="true" {% if settings.sms_enabled %}selected{% endif %}>Enabled</option>
+                                <option value="false" {% if not settings.sms_enabled %}selected{% endif %}>Disabled</option>
+                            </select>
+                            <div class="form-text">Master switch for SMS notifications.</div>
+                        </div>
+
+                        <input type="hidden" name="sms_provider" value="twilio">
+
+                        <div class="alert alert-info py-2 mb-3">
+                            <i class="fas fa-info-circle"></i>
+                            SMS delivery uses <strong>Twilio</strong>. You need a Twilio account with a purchased
+                            phone number. Sign up at
+                            <a href="https://www.twilio.com/" target="_blank" rel="noopener">twilio.com</a>.
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="sms_account_sid" class="form-label">
+                                <i class="fas fa-key"></i> Account SID
+                            </label>
+                            <input type="text" class="form-control" id="sms_account_sid"
+                                   name="sms_account_sid"
+                                   value="{{ settings.sms_account_sid or '' }}"
+                                   placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                                   autocomplete="off">
+                            <div class="form-text">Found on your Twilio Console dashboard.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="sms_auth_token" class="form-label">
+                                <i class="fas fa-lock"></i> Auth Token
+                            </label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="sms_auth_token"
+                                       name="sms_auth_token"
+                                       placeholder="{% if settings.sms_auth_token %}(saved &ndash; leave blank to keep){% else %}Enter Twilio Auth Token{% endif %}"
+                                       autocomplete="new-password">
+                                <button class="btn btn-outline-secondary" type="button" id="toggleAuthToken"
+                                        title="Show/hide auth token">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                            <div class="form-text">
+                                Found on your Twilio Console dashboard.
+                                {% if settings.sms_auth_token %}Leave blank to keep the existing token.{% endif %}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="sms_from_number" class="form-label">
+                                <i class="fas fa-phone"></i> From Number
+                            </label>
+                            <input type="text" class="form-control" id="sms_from_number"
+                                   name="sms_from_number"
+                                   value="{{ settings.sms_from_number or '' }}"
+                                   placeholder="+15555550100">
+                            <div class="form-text">
+                                Your Twilio phone number in E.164 format (e.g. <code>+15555550100</code>).
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="sms_recipients" class="form-label">
+                                <i class="fas fa-users"></i> SMS Recipients
+                            </label>
+                            <textarea class="form-control" id="sms_recipients"
+                                      name="sms_recipients" rows="4"
+                                      placeholder="+15555551234&#10;+15555555678">{{ (settings.sms_recipients or []) | join('\n') }}</textarea>
+                            <div class="form-text">
+                                One phone number per line in E.164 format (e.g. <code>+15555551234</code>).
+                                Each recipient is sent an SMS when an EAS alert is broadcast.
+                            </div>
+                        </div>
+
+                        <div class="alert alert-warning py-2 mb-3 small">
+                            <i class="fas fa-triangle-exclamation me-1"></i>
+                            <strong>Consent required:</strong> Only add numbers from individuals who have
+                            given explicit prior consent to receive EAS alert SMS messages from this system.
+                            Recipients can opt out at any time by replying <strong>STOP</strong>.
+                            Message and data rates may apply. Message frequency varies with alert volume.
+                            See the <a href="/sms-compliance" target="_blank">SMS Messaging Policy</a> for full disclosures.
+                        </div>
+
+                        <div class="alert alert-info py-2 mb-3 small">
+                            <div class="d-flex align-items-start gap-3">
+                                <img src="{{ url_for('notifications.sms_optin_qr') }}" alt="QR code for the SMS alert sign-up page"
+                                     width="96" height="96" class="rounded border bg-white p-1 flex-shrink-0">
+                                <div>
+                                    <i class="fas fa-link me-1"></i>
+                                    Prefer verifiable, self-serve consent (recommended for carrier/Twilio campaign
+                                    review)? Share
+                                    <a href="/sms-opt-in" target="_blank">{{ request.url_root.rstrip('/') }}/sms-opt-in</a>
+                                    or the QR code &mdash; a public page where someone enters their own number and
+                                    confirms it via a texted code before they're added here automatically. The QR
+                                    code always points at this instance's own address, so it's safe to print or
+                                    reuse even if you run more than one station. Verified sign-ups appear in
+                                    <strong>Consent Records</strong> below.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2 align-items-center">
+                            <div class="input-group" style="max-width:240px;">
+                                <input type="tel" class="form-control form-control-sm"
+                                       id="testSmsRecipient"
+                                       placeholder="Test number (+1...)">
+                            </div>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="testSmsBtn">
+                                <i class="fas fa-paper-plane"></i> Send Test SMS
+                            </button>
+                        </div>
+                        <div class="form-text mt-1">
+                            Leave blank to use the first configured SMS recipient.
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- ============================================================
+                     SMS CONSENT RECORDS (from the public double opt-in flow)
+                     ============================================================ -->
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h2 class="mb-0 h5"><i class="fas fa-clipboard-check"></i> Consent Records</h2>
+                        <span class="badge bg-secondary">{{ consent_records | length }}</span>
+                    </div>
+                    <div class="card-body">
+                        {% if consent_records %}
+                        <p class="text-muted small">
+                            Verified sign-ups from <a href="/sms-opt-in" target="_blank">/sms-opt-in</a> &mdash;
+                            each row is a phone number that entered a code texted to it, confirming they control
+                            that number. This is the evidence trail a carrier/Twilio compliance reviewer expects.
+                        </p>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Phone Number</th>
+                                        <th>Name</th>
+                                        <th>Confirmed</th>
+                                        <th>IP Address</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for record in consent_records %}
+                                    <tr>
+                                        <td>{{ record.phone_number }}</td>
+                                        <td>{{ record.name or '—' }}</td>
+                                        <td class="text-break-anywhere">{{ record.verified_at | localtime('%Y-%m-%d %H:%M %Z', '—') }}</td>
+                                        <td class="text-break-anywhere">{{ record.ip_address or '—' }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-muted small mb-0">
+                            No self-serve sign-ups yet. Share
+                            <a href="/sms-opt-in" target="_blank">/sms-opt-in</a> with people who want emergency
+                            alerts by text.
+                        </p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- ============================================================
+                     SMS MESSAGE LOG (every outbound send attempt, searchable
+                     by recipient number)
+                     ============================================================ -->
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h2 class="mb-0 h5"><i class="fas fa-list-check"></i> SMS Message Log</h2>
+                        <span class="badge bg-secondary">{{ sms_message_log | length }}</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small">
+                            Every SMS this system has asked Twilio to send &mdash; alert broadcasts,
+                            opt-in verification codes, and test messages &mdash; most recent first.
+                        </p>
+                        <form method="get" action="{{ url_for('notifications.sms_settings') }}"
+                              class="d-flex gap-2 mb-3" style="max-width:360px;">
+                            <input type="search" class="form-control form-control-sm" name="sms_log_search"
+                                   value="{{ sms_log_search }}" placeholder="Search by phone number&hellip;">
+                            <button type="submit" class="btn btn-outline-secondary btn-sm text-nowrap">
+                                <i class="fas fa-magnifying-glass"></i> Search
+                            </button>
+                            {% if sms_log_search %}
+                            <a href="{{ url_for('notifications.sms_settings') }}"
+                               class="btn btn-outline-secondary btn-sm text-nowrap">Clear</a>
+                            {% endif %}
+                        </form>
+                        {% if sms_message_log %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Phone Number</th>
+                                        <th>Type</th>
+                                        <th>Event</th>
+                                        <th>Status</th>
+                                        <th>Sent</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for entry in sms_message_log %}
+                                    <tr>
+                                        <td class="text-break-anywhere">{{ entry.phone_number }}</td>
+                                        <td><span class="badge bg-light text-dark border">{{ entry.message_type }}</span></td>
+                                        <td>{{ entry.event_code or '—' }}</td>
+                                        <td>
+                                            {% if entry.success %}
+                                            <span class="badge bg-success">Sent</span>
+                                            {% else %}
+                                            <span class="badge bg-danger" title="{{ entry.error_message or '' }}">Failed</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-break-anywhere">{{ entry.created_at | localtime('%Y-%m-%d %H:%M %Z', '—') }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% elif sms_log_search %}
+                        <p class="text-muted small mb-0">No messages found for "{{ sms_log_search }}".</p>
+                        {% else %}
+                        <p class="text-muted small mb-0">No SMS messages sent yet.</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Save Button -->
+                <div class="d-grid gap-2 d-md-flex justify-content-md-end mb-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save SMS Settings
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- ============================================================
+             SIDEBAR
+             ============================================================ -->
+        <div class="col-lg-4">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h2 class="mb-0 h5"><i class="fas fa-info-circle"></i> Current Status</h2>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2">
+                            <strong>SMS:</strong>
+                            <span class="badge bg-{{ 'success' if settings.sms_enabled else 'secondary' }}" id="smsBadgeSidebar">
+                                {{ 'Enabled' if settings.sms_enabled else 'Disabled' }}
+                            </span>
+                        </li>
+                        <li class="mb-2">
+                            <strong>Twilio Configured:</strong>
+                            <span id="twilioConfigured" class="text-muted small">
+                                {% if settings.sms_account_sid and settings.sms_auth_token and settings.sms_from_number %}Yes{% else %}No{% endif %}
+                            </span>
+                        </li>
+                        <li class="mb-0">
+                            <strong>SMS Recipients:</strong>
+                            <span id="smsRecipientCount">{{ (settings.sms_recipients or []) | length }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="mb-0 h5"><i class="fas fa-question-circle"></i> SMS Help</h2>
+                </div>
+                <div class="card-body small">
+                    <h3 class="h6">Getting Started with Twilio</h3>
+                    <ol class="mb-2 ps-3">
+                        <li>Create a free account at <a href="https://www.twilio.com/" target="_blank" rel="noopener"><strong>twilio.com</strong></a></li>
+                        <li>Buy a toll-free or long-code phone number</li>
+                        <li>Copy your <strong>Account SID</strong> and <strong>Auth Token</strong></li>
+                        <li>Enter the phone number in E.164 format: <code>+15555550100</code></li>
+                    </ol>
+                    <h3 class="h6">Phone Number Format</h3>
+                    <p class="mb-2">All numbers must use E.164 format:<br>
+                    <code>+[country code][number]</code><br>
+                    US example: <code>+15555551234</code></p>
+                </div>
+            </div>
+
+            <div class="card mt-3 border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h2 class="mb-0 h5"><i class="fas fa-certificate"></i> Toll-Free Verification</h2>
+                </div>
+                <div class="card-body small">
+                    <p class="mb-2">Toll-free numbers <strong>must be verified</strong> in the Twilio Console
+                       before they can send at scale. Unverified numbers are blocked by most carriers.</p>
+                    <p class="mb-1"><strong>Required fields &amp; what to enter:</strong></p>
+                    <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-2">
+                        <tbody>
+                            <tr><td class="text-muted">Use case</td><td>Emergency / public-safety alert notifications</td></tr>
+                            <tr><td class="text-muted">Opt-in type</td><td>Website / offline — explicit prior written consent obtained by operator</td></tr>
+                            <tr><td class="text-muted">Opt-in page URL</td><td><code>/sms-compliance</code> on this server</td></tr>
+                            <tr><td class="text-muted">Privacy policy URL</td><td><code>/privacy</code> on this server</td></tr>
+                            <tr><td class="text-muted">Terms of service URL</td><td><code>/terms</code> on this server</td></tr>
+                            <tr><td class="text-muted">Message sample</td><td>EAS ALERT: TOR&lt;newline&gt;Tornado Warning for County&lt;newline&gt;Areas: 039137&lt;newline&gt;- EAS Station™&lt;newline&gt;Reply STOP to stop msgs</td></tr>
+                        </tbody>
+                    </table>
+                    </div>
+                    <p class="mb-1">Compliance pages (accessible without login):</p>
+                    <ul class="ps-3 mb-0">
+                        <li><a href="/sms-compliance" target="_blank">SMS Messaging Policy</a></li>
+                        <li><a href="/privacy" target="_blank">Privacy Policy</a></li>
+                        <li><a href="/terms" target="_blank">Terms of Use</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('smsSettingsForm');
+
+    // ----------------------------------------------------------------
+    // Save settings
+    // ----------------------------------------------------------------
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const formData = new FormData(form);
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const originalBtnText = submitBtn.innerHTML;
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+        try {
+            const response = await fetch('/admin/notifications/sms/update', {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-CSRF-Token': window.CSRF_TOKEN }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showToast('SMS notification settings saved successfully', 'success');
+                _updateSidebar(data.settings);
+            } else {
+                showToast(data.error || 'Failed to save settings', 'danger');
+            }
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            showToast('Error saving settings', 'danger');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalBtnText;
+        }
+    });
+
+    // ----------------------------------------------------------------
+    // Toggle auth token visibility
+    // ----------------------------------------------------------------
+    const toggleBtn = document.getElementById('toggleAuthToken');
+    const tokenInput = document.getElementById('sms_auth_token');
+    if (toggleBtn && tokenInput) {
+        toggleBtn.addEventListener('click', function() {
+            const isPassword = tokenInput.type === 'password';
+            tokenInput.type = isPassword ? 'text' : 'password';
+            toggleBtn.querySelector('i').className = isPassword ? 'fas fa-eye-slash' : 'fas fa-eye';
+        });
+    }
+
+    // ----------------------------------------------------------------
+    // Send test SMS
+    // ----------------------------------------------------------------
+    document.getElementById('testSmsBtn').addEventListener('click', async function() {
+        const btn = this;
+        const recipient = document.getElementById('testSmsRecipient').value.trim();
+        const original = btn.innerHTML;
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+
+        try {
+            const fd = new FormData();
+            if (recipient) fd.append('test_recipient', recipient);
+
+            const response = await fetch('/admin/notifications/test-sms', {
+                method: 'POST',
+                body: fd,
+                headers: { 'X-CSRF-Token': window.CSRF_TOKEN }
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                showToast(data.message || 'Test SMS sent', 'success');
+            } else {
+                showToast(data.error || 'Test SMS failed', 'danger');
+            }
+        } catch (err) {
+            showToast('Error sending test SMS', 'danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    });
+
+    // ----------------------------------------------------------------
+    // Update sidebar after save
+    // ----------------------------------------------------------------
+    function _updateSidebar(s) {
+        _setBadge('smsBadge', s.sms_enabled);
+        _setBadge('smsBadgeSidebar', s.sms_enabled);
+
+        document.getElementById('smsRecipientCount').textContent = (s.sms_recipients || []).length;
+        document.getElementById('twilioConfigured').textContent =
+            (s.sms_account_sid && s.sms_from_number) ? 'Yes' : 'No';
+    }
+
+    function _setBadge(id, enabled) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = enabled ? 'Enabled' : 'Disabled';
+        el.className = 'badge bg-' + (enabled ? 'success' : 'secondary');
+    }
+});
+</script>
+{% endblock %}

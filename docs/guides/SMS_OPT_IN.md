@@ -33,19 +33,19 @@ point the reviewer at this page.
 
 3. EAS Station™ texts a 6-digit code to that number via Twilio (valid for 10 minutes).
 4. The visitor enters the code on the same page.
-5. On a correct code: the number is added to `Settings → Notifications → SMS
+5. On a correct code: the number is added to `Settings → SMS Notifications → SMS
    Recipients` automatically, and a permanent record is written — phone number, name,
    the exact consent text shown, the submitter's IP address, and the confirmation
    timestamp.
 
-Administrators can review every confirmed sign-up under **Settings → Notifications →
-Consent Records**.
+Administrators can review every confirmed sign-up under **Settings → SMS
+Notifications → Consent Records**.
 
 Every SMS this system actually asks Twilio to send — alert broadcasts, opt-in
 verification codes, and admin test messages — is separately recorded in
-**Settings → Notifications → SMS Message Log**, searchable by recipient phone number.
-Consent Records answers "did this number agree to receive alerts and when"; the
-Message Log answers "was a text actually sent to this number, and did it succeed."
+**Settings → SMS Notifications → SMS Message Log**, searchable by recipient phone
+number. Consent Records answers "did this number agree to receive alerts and when";
+the Message Log answers "was a text actually sent to this number, and did it succeed."
 
 ---
 
@@ -64,8 +64,8 @@ Message Log answers "was a text actually sent to this number, and did it succeed
 
 ## Prerequisites
 
-SMS notifications must already be configured under **Settings → Notifications → SMS
-Notifications** (Twilio Account SID, Auth Token, and From Number) — see
+SMS notifications must already be configured under **Settings → SMS Notifications**
+(Twilio Account SID, Auth Token, and From Number) — see
 [guides/notifications.md](notifications.md). `/sms-opt-in` returns a clear error if SMS
 isn't configured yet rather than silently failing.
 
@@ -73,7 +73,7 @@ isn't configured yet rather than silently failing.
 
 ## Removing a self-serve sign-up
 
-Self-serve sign-ups land in the same `Settings → Notifications → SMS Recipients` list
+Self-serve sign-ups land in the same `Settings → SMS Notifications → SMS Recipients` list
 as administrator-added numbers — remove a number there the same way regardless of how
 it was added. The corresponding row in **Consent Records** is kept as a historical
 record even after removal (it's evidence of what consent was given and when, not a
@@ -88,4 +88,4 @@ live subscription flag).
 | SMS messaging policy (opt-in, opt-out, message content) | [policies/SMS_MESSAGING.md](../policies/SMS_MESSAGING.md) |
 | Notifications setup guide | [notifications.md](notifications.md) |
 | Public opt-in page (web UI) | `/sms-opt-in` on your EAS Station™ instance |
-| Consent records (admin, web UI) | `Settings → Notifications → Consent Records` |
+| Consent records (admin, web UI) | `Settings → SMS Notifications → Consent Records` |

@@ -201,7 +201,7 @@ class TestSmsMessageLogAdminSearch:
              patch("app_core.models.SmsMessageLog.query", mock_sms_log_query), \
              patch("app_core.models.NotificationSettings.query", mock_settings_query), \
              patch("app_core.models.SmsOptInRequest.query", mock_optin_query):
-            response = client.get("/admin/notifications/?sms_log_search=5550001")
+            response = client.get("/admin/notifications/sms?sms_log_search=5550001")
 
         assert response.status_code == 200
         mock_sms_log_query.filter.assert_called_once()

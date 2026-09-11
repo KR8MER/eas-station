@@ -153,7 +153,7 @@ phone number (toll-free or long code).
 
 ### Configuration Steps
 
-1. Go to **Settings → Notifications**.
+1. Go to **Settings → SMS Notifications**.
 2. Set **Enable SMS Notifications** to **Enabled**.
 3. Enter your **Account SID** (starts with `AC…`).
 4. Enter your **Auth Token**.
