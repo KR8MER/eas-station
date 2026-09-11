@@ -143,6 +143,7 @@ nav:
       - Multi-Factor Authentication (TOTP): guides/MFA_TOTP_SETUP.md
       - API Key Management: guides/API_KEY_MANAGEMENT.md
       - Database Backups: guides/DATABASE_BACKUPS.md
+      - Database Browser (pgweb): guides/DATABASE_BROWSER.md
       - Analytics and Reporting: guides/ANALYTICS_AND_REPORTING.md
       - Audit Log Review: guides/AUDIT_LOG_REVIEW.md
       - Application Settings: guides/APPLICATION_SETTINGS.md

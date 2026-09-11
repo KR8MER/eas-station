@@ -8,6 +8,21 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.231.0] - 2026-09-11 - Authenticated access gate for the pgweb database browser
+
+A pentest against a live deployment (following the security-audit pass in 2.230.0) found `pgweb` -- an optional, operator-installed third-party PostgreSQL browser with no authentication of its own -- listening on `0.0.0.0:8081`, with a firewall rule allowing the entire LAN subnet in. Anyone on that LAN got full, unauthenticated read/write SQL access to the production database, including administrator accounts; the nav registry even linked directly to the raw port with a description acknowledging the risk rather than closing it.
+
+### Added
+- `config/nginx-eas-station.conf`: new `listen 8081` server block that proxies to pgweb only after an `auth_request` subrequest confirms the caller has a logged-in session with the `system.configure` permission -- the same gate this app's other highest-sensitivity admin actions (e.g. downloading the TLS private key) already use. A denied request is redirected to `/login` instead of reaching pgweb.
+- `app.py`: `/api/internal/pgweb-auth-check`, the endpoint that `auth_request` subrequest calls. Deliberately hand-written rather than using `@require_permission` -- that decorator's denial path redirects for a non-JSON request instead of returning a bare status, and nginx's `auth_request` module treats anything other than 2xx/401/403 as an upstream *error* (producing a 500 for the real client), not a denial.
+- `bin/eas-station-pgweb-launch.sh`, `systemd/eas-station-pgweb.service`: corrected, repository-tracked versions of this box's ad-hoc setup, binding pgweb to `127.0.0.1` only (an internal port nginx proxies to) instead of `0.0.0.0`.
+- **Settings → Data & Storage → Database Browser (pgweb)** (`webapp/admin/database_browser.py`, `/admin/database-browser/`): shows whether pgweb is installed/running and links to the authenticated port. Replaces the nav registry's previous raw, hardcoded-IP link to the unauthenticated port directly.
+- `docs/guides/DATABASE_BROWSER.md`: setup, removal, and the access-control design above.
+- `tests/test_database_browser.py`: pins down the exact status codes nginx's `auth_request` contract needs (401 unauthenticated, 403 authenticated-without-permission, 200 authenticated-with-permission -- never a redirect) and the status page's rendering for both installed states.
+
+### Why this wasn't caught by the earlier audit
+The five-area security audit that produced 2.230.0 covered this application's own code; pgweb is a third-party binary an operator installs outside that code entirely; nothing in the codebase's automated checks (tests, CodeQL, dependency scanning) has visibility into a manually-run process's bind address or an ad-hoc firewall rule. Found only by actually enumerating the live host's listening ports during a hands-on pentest of the deployed system.
+
 ## [2.230.0] - 2026-09-11 - Security audit fixes: TLS key exposure, WebSocket auth, stored XSS, broken access control
 
 A full security audit (injection/command execution, authN/authZ, file handling/SSRF, secrets/config, dependencies/shell scripts) turned up the issues below. Ranked by severity; deferred items are noted with why.

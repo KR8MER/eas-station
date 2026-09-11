@@ -58,6 +58,7 @@ from .pending_alerts import pending_alerts_bp
 from .alert_purge import alert_purge_bp
 from .mail_server import register_mail_server_routes
 from .ntp_server import register_ntp_server_routes
+from .database_browser import register_database_browser_routes
 from .fail2ban import register_fail2ban_routes
 from .bad_actors import register_bad_actors_routes
 from .edge_defense import register_edge_defense_routes
@@ -117,6 +118,7 @@ def register(app, logger):
     register_tailscale_routes(app, logger)  # Tailscale VPN configuration
     register_mail_server_routes(app, logger)  # Local Postfix mail server management
     register_ntp_server_routes(app, logger)  # LAN NTP server (chrony allow + firewall) management
+    register_database_browser_routes(app, logger)  # pgweb authenticated-proxy status page
     register_fail2ban_routes(app, logger)  # fail2ban host-level intrusion banning
     register_bad_actors_routes(app, logger)  # nginx-level Spamhaus known-bad-actor blocklist
     register_edge_defense_routes(app, logger)  # Security Center "Edge Defense" tab analytics

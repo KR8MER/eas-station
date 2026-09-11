@@ -1,0 +1,20 @@
+[Unit]
+Description=pgweb - PostgreSQL web-based database browser for EAS Station (loopback-only; see nginx's authenticated proxy on port 8081)
+Documentation=https://github.com/KR8MER/eas-station
+After=network.target postgresql.service eas-station-web.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+ExecStart=/opt/eas-station/bin/eas-station-pgweb-launch.sh
+Restart=on-failure
+RestartSec=5
+User=eas-station
+Group=eas-station
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

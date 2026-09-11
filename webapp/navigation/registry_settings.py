@@ -327,8 +327,8 @@ SETTINGS_SECTION = NavSection(
                 NavItem(
                     label="Database Browser (pgweb)",
                     icon="fas fa-table",
-                    href="http://192.168.8.152:8081",
-                    description="Raw PostgreSQL browser/editor. LAN-only (not reachable off-network), and it has no login of its own -- see docs/guides/PGWEB_DATABASE_BROWSER.md before using it.",
+                    href="/admin/database-browser/",
+                    description="Status and authenticated access to the optional pgweb SQL browser -- see docs/guides/DATABASE_BROWSER.md.",
                     permissions=(SYSTEM_CONFIGURE,),
                 ),
             ),

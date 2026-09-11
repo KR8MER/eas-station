@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Database Browser — EAS Station™{% endblock %}
+
+{% block content %}
+{% set header_icon = 'fas fa-database' %}
+{% set header_title = 'Database Browser' %}
+{% set header_subtitle = 'Authenticated access to the optional pgweb SQL browser' %}
+{% include 'components/page_header.html' %}
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h2 class="mb-0 h5"><i class="fas fa-circle-info"></i> pgweb Status</h2>
+                    <div class="d-flex gap-2 align-items-center">
+                        <span class="badge bg-{{ 'success' if status.installed else 'secondary' }}">
+                            {{ 'Installed' if status.installed else 'Not Installed' }}
+                        </span>
+                        <span class="badge bg-{{ 'success' if status.running else 'secondary' }}">
+                            {{ 'Running' if status.running else 'Stopped' }}
+                        </span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if status.running %}
+                    <p>
+                        <a href="{{ status.proxy_url }}" target="_blank" rel="noopener"
+                           class="btn btn-primary">
+                            <i class="fas fa-up-right-from-square me-1"></i> Open Database Browser
+                        </a>
+                    </p>
+                    <p class="text-muted small mb-0">
+                        Opens in a new tab on port 8081. You'll only see data if you're already
+                        signed in here with permission to configure this system &mdash; there is
+                        no separate password for the database browser itself.
+                    </p>
+                    {% else %}
+                    <p class="text-muted mb-0">
+                        <i class="fas fa-circle-exclamation text-warning"></i>
+                        pgweb {{ 'is not currently running' if status.installed else 'is not installed on this host' }}.
+                        See <code>docs/guides/DATABASE_BROWSER.md</code> for setup instructions.
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="mb-0 h5"><i class="fas fa-shield-halved"></i> How access is protected</h2>
+                </div>
+                <div class="card-body">
+                    <p>
+                        <a href="https://github.com/sosedoff/pgweb" target="_blank" rel="noopener">pgweb</a>
+                        is a third-party tool for browsing and querying a PostgreSQL database directly
+                        &mdash; useful for ad-hoc troubleshooting, but it has <strong>no login of its
+                        own</strong>. Whoever can reach its port gets full read/write SQL access to
+                        every table in this system, including administrator accounts.
+                    </p>
+                    <p class="mb-0">
+                        pgweb itself only listens on <code>127.0.0.1</code>, so it can never be reached
+                        directly over the network. The only way in is through nginx on port 8081, which
+                        checks with this application first &mdash; the same sign-in and
+                        <code>system.configure</code> permission this page required to load &mdash;
+                        before it will proxy the connection through.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
