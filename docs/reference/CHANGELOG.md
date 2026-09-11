@@ -8,6 +8,16 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.228.23] - 2026-09-10 - Share cards: same information across every aspect ratio, and instruction can no longer get crowded out
+
+The narrow (landscape, FB/X/LinkedIn) share card and the wide cards (square/portrait/story, Instagram/TikTok/Snap) used to show genuinely different information for the same alert -- the narrow layout only drew HEADLINE/DESCRIPTION as a fallback when no threat-specific content rendered, and never drew AFFECTED AREAS or COVERAGE at all. All layouts must carry the same information regardless of width.
+
+### Fixed
+- `app_utils/image_export/render.py`: HEADLINE, AFFECTED AREAS, DESCRIPTION and COVERAGE now render unconditionally in the narrow layout too, matching the wide layout's content set.
+- Rendering an actual sample card with this fix exposed a second, related bug in **both** layouts: on a content-dense product (storm threat data + a long NWS headline), HEADLINE + AFFECTED AREAS + DESCRIPTION could fill the entire info panel before ever reaching INSTRUCTION, silently dropping "move to an interior room" off the bottom while less safety-critical narrative text survived. INSTRUCTION now draws immediately after the threat-summary section in both layouts, so space pressure can only clip the narrative sections (which already degrade gracefully everywhere else in this file), never the one thing on the card that tells someone what to physically do.
+
+New tests in `tests/test_image_export_broadcast_panels.py` and `tests/test_image_export_themes.py` cover both the content-parity fix and the instruction-ordering fix, for both layout families, at the unit (drawer call order) and end-to-end (rendered pixel) level -- verified each new test actually fails against the pre-fix code before confirming it passes against the fix. Full test suite (3126 tests) passes.
+
 ## [2.228.22] - 2026-09-10 - Cache the share-card radar overlay fetch
 
 An audit of `app_utils/image_export/` found `_fetch_radar_overlay()` (`maps.py`) doing an uncached synchronous WMS network fetch on every call, unlike its sibling basemap-tile fetcher in `tiles.py`, which already has a two-level (in-memory LRU + disk) cache. This isn't just an on-demand cost: `generate_alert_image()` runs on an automated path -- `app_core/notifications/alert_image.py`'s `build_alert_image()` calls it for every notification email the CAP poller and audio monitoring services send for weather alerts. During a severe-weather outbreak, several warnings issued minutes apart, often with overlapping bounding boxes, frequently land in the same 5-minute WMS time bucket -- each previously triggered its own independent network fetch of what's very possibly the identical radar tile.

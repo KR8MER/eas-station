@@ -1374,3 +1374,79 @@ def test_tagged_description_renders_in_every_aspect_ratio(ratio):
     img = Image.open(io.BytesIO(png))
     layout = image_export._LAYOUTS[ratio]
     assert img.size == (layout.width, layout.height)
+
+
+@pytest.mark.parametrize("ratio", ["square", "portrait", "story"])
+def test_wide_layout_draws_instruction_before_headline(ratio, monkeypatch):
+    """Regression for a bug caught by rendering an actual sample card: on a
+    content-dense product (storm threat gauge cards + a long NWS headline),
+    HEADLINE + AFFECTED AREAS + DESCRIPTION filled a wide layout's info
+    panel entirely before ever reaching INSTRUCTION, so "move to an
+    interior room" silently vanished off the bottom while the less
+    safety-critical HEADLINE text survived -- the same failure the narrow
+    (landscape) layout had. INSTRUCTION must be drawn right after
+    _draw_threats, before HEADLINE/AREAS/DESCRIPTION, so space pressure can
+    only clip the narrative sections."""
+    calls = []
+    for name in ("_draw_instruction", "_draw_nws_headline", "_draw_areas", "_draw_description"):
+        monkeypatch.setattr(
+            image_export.render, name,
+            lambda *a, _n=name, **k: calls.append(_n) or (a[4] if len(a) > 4 else 0),
+        )
+
+    alert = _FakeAlert()
+    alert.headline = (
+        "The National Weather Service in Wilmington has issued a Severe "
+        "Thunderstorm Warning for southern Test County"
+    )
+    ipaws_data = {
+        "threat_data": {
+            "wind": {"threat": "DESTRUCTIVE", "gust": "80", "gust_unit": "MPH",
+                     "display": "Destructive!", "level": "possible"},
+        },
+    }
+
+    image_export.generate_alert_image(
+        alert, {}, ipaws_data, {"county_name": "Test County, OH"},
+        aspect_ratio=ratio,
+    )
+
+    assert calls[0] == "_draw_instruction"
+
+
+def test_square_layout_instruction_survives_a_content_dense_card():
+    """End-to-end version of the ordering test above: render a real square
+    card with the exact dense combination that triggered the bug (a
+    tornado/wind/hail threat-card row, storm motion, a long NWS headline)
+    and confirm the WHAT TO DO band actually paints pixels."""
+    alert = _FakeAlert()
+    alert.headline = (
+        "The National Weather Service in Wilmington has issued a Severe "
+        "Thunderstorm Warning for southern Test County"
+    )
+    ipaws_data = {
+        "nws_headline": alert.headline,
+        "threat_data": {
+            "wind": {"threat": "DESTRUCTIVE", "gust": "80", "gust_unit": "MPH",
+                     "display": "Destructive!", "level": "possible"},
+            "hail": {"threat": "CONSIDERABLE", "size": "1.75",
+                     "descriptor": "Golf Ball", "display": "Considerable",
+                     "level": "possible"},
+            "tornado": {"level": "none", "display": "None"},
+        },
+        "storm_motion": {"compass_toward": "SE", "speed_mph": "45", "toward_deg": 135},
+    }
+
+    png = image_export.generate_alert_image(
+        alert, {}, ipaws_data, {"county_name": "Test County, OH"},
+        aspect_ratio="square",
+    )
+    img = Image.open(io.BytesIO(png)).convert("RGB")
+
+    # _INSTR_ACCENT (warning-yellow) is _draw_instruction's distinctive
+    # accent-bar colour -- nothing else on this card uses it, so its
+    # presence anywhere in the info panel is an unambiguous signal the
+    # instruction band actually painted.
+    ix, iy, iw, ih = image_export._LAYOUTS["square"].info_rect
+    panel = img.crop((ix, iy, ix + iw, iy + ih))
+    assert image_export._INSTR_ACCENT in {px for px in panel.getdata()}
