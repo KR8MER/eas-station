@@ -8,6 +8,15 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.229.1] - 2026-09-10 - DOS-installer blue theme for every whiptail dialog, and a black-gutter box-art bug fix
+
+### Added
+- `scripts/lib/ui.sh`: every `whiptail` dialog install.sh/update.sh show (`--yesno`, `--msgbox`, `--gauge`, `--menu`, ...) now renders in a solid Turbo-Vision-blue `NEWT_COLORS` theme, instead of newt's own default grey -- this is what actually ties the whole install experience together into one consistent DOS-installer look end to end, matching the hand-drawn banner/completion box screens rather than clashing with them. Respects a caller-supplied `NEWT_COLORS` if one is already set.
+- The `--gauge` progress bar's filled portion is now green instead of red, which read as an error/danger color rather than progress.
+
+### Fixed
+- `_DOS_GREY` used `\033[0;37m`, whose leading `0` resets ALL SGR attributes -- including the active blue background -- before setting the grey foreground. Inside the hand-drawn blue-background box screens (`ui_banner`, `show_celebration`), this silently knocked the background back to black for every box-rule character (`╔═╗║╚╝`) and every grey-colored label, leaving a black gutter around what should have been a solid blue box. Now `\033[37m` (foreground only).
+
 ## [2.229.0] - 2026-09-10 - Progress bars now show elapsed/remaining time, and the alert-verification bar no longer freezes after 5 minutes
 
 ### Added
