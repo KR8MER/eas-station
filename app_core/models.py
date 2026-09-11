@@ -86,6 +86,7 @@ from ._models_backup import BackupVerificationRun
 from ._models_gpio_interlocks import RelayInterlockGroup, RelayInterlockMember
 from ._models_heartbeat import HeartbeatSettings
 from ._models_sms_optin import SmsOptInRequest
+from ._models_sms_log import SmsMessageLog, record_sms_message
 from ._models_polling import PollDebugRecord, PollHistory, PollerSettings
 from ._models_tickstem import TickstemSettings, TickstemServiceHeartbeat
 from ._models_settings import (
@@ -172,6 +173,8 @@ __all__ = [
     "GPIOActivationLog",
     "HeartbeatSettings",
     "SmsOptInRequest",
+    "SmsMessageLog",
+    "record_sms_message",
     "IcecastSettings",
     "Intersection",
     "LEDMessage",

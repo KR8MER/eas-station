@@ -140,8 +140,31 @@ def notification_settings():
         db.session.rollback()
         consent_records = []
 
+    # Outbound SMS message log (alert broadcasts, opt-in verification codes,
+    # and admin test messages) -- see app_core/_models_sms_log.py. Searchable
+    # by recipient phone number via ?sms_log_search=.
+    sms_log_search = request.args.get('sms_log_search', '').strip()
+    try:
+        from app_core.models import SmsMessageLog
+        sms_log_query = SmsMessageLog.query
+        if sms_log_search:
+            sms_log_query = sms_log_query.filter(
+                SmsMessageLog.phone_number.ilike(f"%{sms_log_search}%")
+            )
+        sms_message_log = (
+            sms_log_query.order_by(SmsMessageLog.created_at.desc()).limit(200).all()
+        )
+    except SQLAlchemyError as e:
+        logger.error(f"Database error loading SMS message log: {str(e)}")
+        db.session.rollback()
+        sms_message_log = []
+
     return render_template(
-        'admin/notifications.html', settings=settings, consent_records=consent_records
+        'admin/notifications.html',
+        settings=settings,
+        consent_records=consent_records,
+        sms_message_log=sms_message_log,
+        sms_log_search=sms_log_search,
     )
 
 

@@ -34,6 +34,11 @@ recorded and visible to the administrator under **Settings → Notifications
 → Consent Records**. This is the flow a carrier or Twilio compliance
 reviewer can be pointed at directly.
 
+Separately from consent, every SMS this system actually sends — alert
+broadcasts, verification codes, and test messages — is logged under
+**Settings → Notifications → SMS Message Log**, searchable by recipient
+phone number.
+
 > Consent checkbox text shown on `/sms-opt-in`:
 > *"I agree to receive SMS emergency alerts from this EAS Station. Message
 > frequency varies. Message and data rates may apply. Reply STOP to opt out

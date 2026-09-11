@@ -8,6 +8,18 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.233.0] - 2026-09-11 - Searchable SMS message log
+
+An operator asked whether there's a record of SMS messages actually sent, searchable by
+number. There wasn't -- Twilio sends only ever produced a `logger.info()` line, so the
+only way to find "did we text this number" was to grep journalctl for a service you'd
+have to guess.
+
+### Added
+- `app_core/_models_sms_log.py` (`SmsMessageLog`, migration `20260911_add_sms_message_log`): one row per outbound SMS send attempt, recorded right next to each Twilio call in `app_core/notifications/sms.py` (not at the call sites) so every current and future send path is covered automatically. Records the recipient number, message type (`alert` / `verification` / `test`), event code (for alerts), success/failure, the Twilio SID, and the error on failure. Recording is best-effort and never raises -- a logging hiccup can't be mistaken for a send failure. Verification codes themselves are never stored, only the outcome.
+- **Settings → Notifications → SMS Message Log**: the last 200 send attempts, most recent first, with a search box that filters by recipient phone number (`?sms_log_search=`).
+- `tests/test_sms_message_log.py` (7 tests): logging never raises even if the DB write fails, each of the three send paths (alert/verification/test) logs with the right type and outcome, and the admin search filters by number.
+
 ## [2.232.1] - 2026-09-11 - Make the SMS opt-in page discoverable, and instance-safe
 
 The self-serve opt-in page from 2.232.0 was live but not linked from anywhere a visitor or a Twilio reviewer would naturally look, and had no way to hand someone a printable/scannable link. An operator confirmed they run more than one EAS Station deployment, so anything added here has to derive its URL from the actual request, never a hardcoded host.
