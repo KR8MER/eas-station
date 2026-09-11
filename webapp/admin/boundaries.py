@@ -909,23 +909,28 @@ def upload_shapefile():
         # must be too, rather than trusting a client-supplied path outright
         # (an arbitrary-file-read primitive otherwise: pyshp errors can
         # reveal whether an out-of-tree file exists and something about
-        # its shape). Reuses the same resolve()+parents containment check
-        # webapp/routes_backups.py's resolve_backup_path() already uses.
+        # its shape). Rather than resolving the client-supplied path and
+        # checking containment after the fact (which static analysis
+        # tools reasonably flag, since the value handed to pyshp still
+        # traces back to attacker-controlled input even once validated),
+        # match it by exact string equality against a fresh, independent
+        # enumeration of the *.shp files the configured directory actually
+        # contains -- the same listing /admin/list_shapefiles hands the
+        # UI to populate this form field from in the first place. The
+        # path pyshp actually opens then always originates from that
+        # trusted glob(), never from the request.
         elif "shapefile_path" in request.form:
             shp_path_raw = request.form["shapefile_path"]
-            try:
-                shapefile_dir = get_shapefile_directory().resolve()
-                candidate = Path(shp_path_raw).resolve()
-            except (OSError, RuntimeError, ValueError):
-                return jsonify({"error": "Invalid shapefile_path"}), 400
-            if candidate != shapefile_dir and shapefile_dir not in candidate.parents:
-                return jsonify({
-                    "error": "shapefile_path must be within the configured shapefile directory"
-                }), 400
-            if not candidate.exists():
+            shapefile_dir = get_shapefile_directory()
+            matched_path = next(
+                (shp_file for shp_file in shapefile_dir.glob("*.shp")
+                 if str(shp_file) == shp_path_raw),
+                None,
+            )
+            if matched_path is None:
                 return jsonify({"error": f"Shapefile not found: {shp_path_raw}"}), 400
 
-            geojson_data = convert_shapefile_to_geojson(str(candidate))
+            geojson_data = convert_shapefile_to_geojson(str(matched_path))
         else:
             return jsonify({
                 "error": "Either file upload or shapefile_path must be provided"
