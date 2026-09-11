@@ -45,8 +45,8 @@ blocking the receiver.
 """
 
 import base64
+import json
 import logging
-import pickle
 import queue
 import threading
 import time
@@ -299,17 +299,19 @@ class DemodWorker:
 
         # Throttled: see _STATUS_PUBLISH_INTERVAL_S -- the reader caches for
         # 250ms already, so publishing on every ~32ms chunk was writing this
-        # pickle+base64+SETEX up to ~7-8x more often than any reader could
-        # ever see, for a cost py-spy measured as the single largest slice
-        # of this worker's CPU time.
+        # json+SETEX up to ~7-8x more often than any reader could ever see,
+        # for a cost py-spy measured as the single largest slice of this
+        # worker's CPU time.
         now = time.time()
         if status is not None and (now - self._last_status_publish_at) >= _STATUS_PUBLISH_INTERVAL_S:
             try:
+                from app_core.radio.demod.types import demodulator_status_to_json_dict
+
                 status_key = f"{RedisChannels.DEMOD_STATUS_PREFIX}{self.receiver_id}"
-                # base64 for the same reason as the audio envelope above --
-                # GET/SETEX go through the same decode_responses=True UTF-8
-                # decode as pub/sub, and a pickle stream is not valid UTF-8.
-                encoded = base64.b64encode(pickle.dumps(status)).decode('ascii')
+                # Plain JSON text is already valid UTF-8 (unlike the pickle
+                # bytestream this replaced), so no base64 wrapping is needed
+                # here the way the audio envelope above still needs it.
+                encoded = json.dumps(demodulator_status_to_json_dict(status))
                 self._redis_client.setex(
                     status_key,
                     RedisChannels.DEMOD_STATUS_TTL_SECONDS,

@@ -45,6 +45,7 @@ again share a GIL with anything real-time. See
 """
 
 import base64
+import json
 import logging
 import queue
 import threading
@@ -252,13 +253,13 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
             )
 
     def _get_remote_status(self):
-        """Fetch+unpickle the demod service's latest DemodulatorStatus.
+        """Fetch+decode the demod service's latest DemodulatorStatus.
 
         Replaces the old ``self._demodulator.get_last_status()`` call now
         that the demodulator lives in a different process. Cached briefly
         (see ``_STATUS_CACHE_TTL_S``) since ``_update_metrics()`` runs far
         more often than the status meaningfully changes. Returns ``None``
-        on any failure (Redis down, key expired/absent, unpickle error) --
+        on any failure (Redis down, key expired/absent, decode error) --
         callers already treat "no status" as "nothing decoded yet", the
         same as the old in-process path when a demodulator hadn't produced
         a status yet.
@@ -271,21 +272,19 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
             return None
 
         try:
-            import pickle
-
             from app_core.config.redis_config import RedisChannels
+            from app_core.radio.demod.types import demodulator_status_from_json_dict
 
             raw = self._redis_client.get(f"{RedisChannels.DEMOD_STATUS_PREFIX}{self._receiver_id}")
             if raw is None:
                 return self._status_cache  # keep last-known rather than flapping to None on a TTL gap
-            # base64-decoded, not raw bytes -- see the matching comment in
-            # services/demod/worker.py::DemodWorker._publish for why: the
-            # shared Redis client's decode_responses=True UTF-8-decodes
-            # every value it reads back, and a pickle stream is not valid
-            # UTF-8.
+            # The writer (services/demod/worker.py::DemodWorker._publish)
+            # writes plain JSON text here, not pickle -- pickle.loads on a
+            # value read from a shared store is an arbitrary-code-execution
+            # primitive the moment anything untrusted can write to this key.
             if isinstance(raw, bytes):
-                raw = raw.decode('ascii')
-            status = pickle.loads(base64.b64decode(raw))
+                raw = raw.decode('utf-8')
+            status = demodulator_status_from_json_dict(json.loads(raw))
             self._status_cache = status
             self._status_cache_at = now
             return status

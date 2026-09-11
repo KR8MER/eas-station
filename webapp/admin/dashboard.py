@@ -348,6 +348,7 @@ def admin_user_detail(user_id: int):
     return jsonify({'message': 'User deleted successfully.'})
 
 @dashboard_bp.route('/api/admin/sessions', methods=['GET'])
+@require_permission('system.manage_users')
 def api_admin_sessions():
     """List active and recent administrator sessions.
 
@@ -443,11 +444,13 @@ def api_terminate_admin_sessions_bulk():
 
 
 @dashboard_bp.route('/admin/sessions')
+@require_permission('system.manage_users')
 def admin_sessions_page():
     """Active administrator session monitoring."""
     return render_template('admin/sessions.html')
 
 @dashboard_bp.route('/admin/rbac')
+@require_permission('system.view_users')
 def rbac_management():
     """RBAC management interface for roles, permissions, and user assignments"""
     return render_template('admin/rbac_management.html')
@@ -463,6 +466,7 @@ def audit_logs_page():
     return redirect(url_for('logs', type='audit'), code=302)
 
 @dashboard_bp.route('/admin/gpio/statistics')
+@require_permission('gpio.view')
 def gpio_statistics_page():
     """GPIO activation statistics and analytics"""
     return render_template('admin/gpio_statistics.html')

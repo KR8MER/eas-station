@@ -777,6 +777,7 @@ def upload_boundaries():
         return jsonify({"error": f"Upload failed: {exc}"}), 500
 
 @boundaries_bp.route("/admin/list_shapefiles", methods=["GET"])
+@require_permission('system.configure')
 def list_shapefiles():
     """List available shapefiles in the server directory."""
     try:
@@ -902,13 +903,29 @@ def upload_shapefile():
                     )
                 }), 400
 
-        # Handle directory path for existing shapefiles on server
+        # Handle directory path for existing shapefiles on server. Every
+        # sibling upload path in this function is scoped to a temp
+        # directory or the configured shapefile directory -- this branch
+        # must be too, rather than trusting a client-supplied path outright
+        # (an arbitrary-file-read primitive otherwise: pyshp errors can
+        # reveal whether an out-of-tree file exists and something about
+        # its shape). Reuses the same resolve()+parents containment check
+        # webapp/routes_backups.py's resolve_backup_path() already uses.
         elif "shapefile_path" in request.form:
-            shp_path = request.form["shapefile_path"]
-            if not Path(shp_path).exists():
-                return jsonify({"error": f"Shapefile not found: {shp_path}"}), 400
+            shp_path_raw = request.form["shapefile_path"]
+            try:
+                shapefile_dir = get_shapefile_directory().resolve()
+                candidate = Path(shp_path_raw).resolve()
+            except (OSError, RuntimeError, ValueError):
+                return jsonify({"error": "Invalid shapefile_path"}), 400
+            if candidate != shapefile_dir and shapefile_dir not in candidate.parents:
+                return jsonify({
+                    "error": "shapefile_path must be within the configured shapefile directory"
+                }), 400
+            if not candidate.exists():
+                return jsonify({"error": f"Shapefile not found: {shp_path_raw}"}), 400
 
-            geojson_data = convert_shapefile_to_geojson(shp_path)
+            geojson_data = convert_shapefile_to_geojson(str(candidate))
         else:
             return jsonify({
                 "error": "Either file upload or shapefile_path must be provided"

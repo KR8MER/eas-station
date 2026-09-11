@@ -129,7 +129,16 @@ echo
 
 # 9. Test Python SMART code
 echo "9. Testing Python SMART collection:"
-cat > /tmp/test_smart.py <<'PYTEST'
+# mktemp, not a fixed /tmp/test_smart.py path: this script typically runs
+# as root, and a predictable filename in a world-writable directory is a
+# classic symlink race (CWE-377) -- a local user could pre-plant it
+# pointing at an arbitrary file before this line ever runs. chmod 644
+# because it's read below by a *different* user (sudo -u "$SERVICE_USER"),
+# not secret content, so it needs to stay world-readable like the plain
+# `cat >` it replaces would have produced under a typical root umask.
+SMART_TEST_SCRIPT=$(mktemp /tmp/eas-test-smart.XXXXXX.py)
+chmod 644 "$SMART_TEST_SCRIPT"
+cat > "$SMART_TEST_SCRIPT" <<'PYTEST'
 import sys
 sys.path.insert(0, '/opt/eas-station')
 
@@ -171,10 +180,11 @@ except Exception as e:
 PYTEST
 
 if [ -f "$VENV_PATH" ]; then
-    sudo -u "$SERVICE_USER" $VENV_PATH /tmp/test_smart.py 2>&1 | sed 's/^/   /'
+    sudo -u "$SERVICE_USER" $VENV_PATH "$SMART_TEST_SCRIPT" 2>&1 | sed 's/^/   /'
 else
     echo "   Skipped (venv not found)"
 fi
+rm -f "$SMART_TEST_SCRIPT"
 echo
 
 # 10. Check logs

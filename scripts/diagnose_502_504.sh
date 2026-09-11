@@ -18,6 +18,15 @@ NC='\033[0m' # No Color
 ERRORS=0
 WARNINGS=0
 
+# mktemp, not fixed /tmp/*.txt paths: this script is typically run as root
+# (sudo), and a predictable world-writable-directory filename is a classic
+# symlink race (CWE-377) -- a local user could pre-plant a symlink there
+# and have this script's redirects overwrite an arbitrary file as root.
+DEP_CHECK_FILE=$(mktemp /tmp/eas-dep-check.XXXXXX)
+GEVENT_CHECK_FILE=$(mktemp /tmp/eas-gevent-check.XXXXXX)
+APP_IMPORT_FILE=$(mktemp /tmp/eas-app-import.XXXXXX)
+trap 'rm -f "$DEP_CHECK_FILE" "$GEVENT_CHECK_FILE" "$APP_IMPORT_FILE"' EXIT
+
 # Check 1: Service status
 echo "[1] Checking service status..."
 if systemctl is-active --quiet eas-station-web.service; then
@@ -88,13 +97,13 @@ if [ -x /opt/eas-station/venv/bin/python3 ]; then
     echo -e "${GREEN}✓${NC} Virtual environment exists"
     
     # Run dependency check
-    if /opt/eas-station/venv/bin/python3 /opt/eas-station/scripts/check_dependencies.py &>/tmp/dep_check.txt; then
+    if /opt/eas-station/venv/bin/python3 /opt/eas-station/scripts/check_dependencies.py &>"$DEP_CHECK_FILE"; then
         echo -e "${GREEN}✓${NC} All critical dependencies installed"
     else
         echo -e "${RED}✗${NC} Dependency check failed"
         ERRORS=$((ERRORS + 1))
         echo "  Details:"
-        cat /tmp/dep_check.txt | sed 's/^/    /'
+        cat "$DEP_CHECK_FILE" | sed 's/^/    /'
     fi
 else
     echo -e "${RED}✗${NC} Virtual environment does NOT exist"
@@ -104,13 +113,13 @@ echo ""
 
 # Check 5: Gevent compatibility
 echo "[5] Checking gevent compatibility..."
-if /opt/eas-station/venv/bin/python3 /opt/eas-station/scripts/check_gevent_compat.py &>/tmp/gevent_check.txt; then
+if /opt/eas-station/venv/bin/python3 /opt/eas-station/scripts/check_gevent_compat.py &>"$GEVENT_CHECK_FILE"; then
     echo -e "${GREEN}✓${NC} Gevent compatibility check passed"
 else
     echo -e "${RED}✗${NC} Gevent compatibility issues detected"
     ERRORS=$((ERRORS + 1))
     echo "  Details:"
-    cat /tmp/gevent_check.txt | sed 's/^/    /'
+    cat "$GEVENT_CHECK_FILE" | sed 's/^/    /'
 fi
 echo ""
 
@@ -118,13 +127,13 @@ echo ""
 echo "[6] Testing app.py import..."
 cd /opt/eas-station
 export SKIP_DB_INIT=1  # Skip background services during import test
-if /opt/eas-station/venv/bin/python3 -c "from app import app; print('Import successful')" 2>/tmp/app_import.txt; then
+if /opt/eas-station/venv/bin/python3 -c "from app import app; print('Import successful')" 2>"$APP_IMPORT_FILE"; then
     echo -e "${GREEN}✓${NC} app.py imports successfully"
 else
     echo -e "${RED}✗${NC} app.py import FAILED - this is likely the cause of 502/504"
     ERRORS=$((ERRORS + 1))
     echo "  Error details:"
-    cat /tmp/app_import.txt | sed 's/^/    /'
+    cat "$APP_IMPORT_FILE" | sed 's/^/    /'
 fi
 unset SKIP_DB_INIT
 echo ""
@@ -230,6 +239,5 @@ fi
 echo ""
 
 # Cleanup
-rm -f /tmp/dep_check.txt /tmp/gevent_check.txt /tmp/app_import.txt
 
 exit $ERRORS

@@ -530,15 +530,17 @@
                             and ensure it's stored securely. Never share or commit the private key to version control.
                         </p>
                         <div class="d-flex gap-2">
-                            <a href="${window.location.origin}/admin/environment/download-ssl-cert" 
+                            <a href="${window.location.origin}/admin/environment/download-ssl-cert"
                                class="btn btn-outline-primary" target="_blank">
                                 <i class="fas fa-certificate me-2"></i>Download Certificate (fullchain.pem)
                             </a>
-                            <a href="${window.location.origin}/admin/environment/download-ssl-key" 
+                            ${canEdit ? `
+                            <a href="${window.location.origin}/admin/environment/download-ssl-key"
                                class="btn btn-outline-danger" target="_blank"
                                onclick="return confirm('WARNING: You are about to download the SSL private key. This is sensitive security data. Only proceed if you need to use this certificate in another deployment (e.g., Portainer). Do you want to continue?');">
                                 <i class="fas fa-key me-2"></i>Download Private Key (privkey.pem)
                             </a>
+                            ` : ''}
                         </div>
                         <small class="text-muted d-block mt-2">
                             <i class="fas fa-info-circle"></i> 

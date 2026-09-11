@@ -104,7 +104,7 @@
                     <strong>Public Message</strong>
                 </div>
                 <div class="card-body">
-                    <p class="mb-0">{{ event.message_text.replace('\n', '<br>')|safe }}</p>
+                    <p class="mb-0">{{ event.message_text | e | replace('\n', '<br>') | safe }}</p>
                 </div>
             </div>
             {% endif %}
@@ -115,7 +115,7 @@
                     <strong>Instructions</strong>
                 </div>
                 <div class="card-body">
-                    <p class="mb-0">{{ event.instruction_text.replace('\n', '<br>')|safe }}</p>
+                    <p class="mb-0">{{ event.instruction_text | e | replace('\n', '<br>') | safe }}</p>
                 </div>
             </div>
             {% endif %}

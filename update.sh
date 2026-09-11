@@ -1028,13 +1028,19 @@ if [ -d "$INSTALL_DIR/systemd" ]; then
     # Keep ownership root:root (not eas-station) so certbot's internal
     # copy_ownership_and_apply_mode() step doesn't try to chown new key
     # files to a non-root group — that chown fails with EPERM under
-    # AppArmor and aborts the renewal. chmod 777 preserves read access
-    # for the eas-station user.
+    # AppArmor and aborts the renewal. 755 (not world-writable 777) still
+    # gives eas-station read+traverse access for the .exists()/iterdir()
+    # checks and openssl/read_text() calls in webapp/admin/certbot/ --
+    # none of which ever read a private key's actual bytes, only its path
+    # or (for fullchain.pem, public PKI material by design) its content.
+    # The privkey*.pem chmod below locks down the one thing in this tree
+    # that's actually secret.
     echo_progress "Fixing certbot data directories permissions..."
     CERTBOT_DATA_DIR="$INSTALL_DIR/certbot_data"
     mkdir -p "$CERTBOT_DATA_DIR/config" "$CERTBOT_DATA_DIR/work" "$CERTBOT_DATA_DIR/logs"
-    chmod -R 777 "$CERTBOT_DATA_DIR"
+    chmod -R 755 "$CERTBOT_DATA_DIR"
     chown -R root:root "$CERTBOT_DATA_DIR"
+    find "$CERTBOT_DATA_DIR" -name 'privkey*.pem' -exec chmod 600 {} +
     # Remove any stale lock files that can cause permission errors
     find "$CERTBOT_DATA_DIR" -name ".certbot.lock" -delete 2>/dev/null || true
     echo_success "Certbot data directories configured"
