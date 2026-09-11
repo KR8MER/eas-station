@@ -8,6 +8,12 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.229.2] - 2026-09-10 - Dithered "desktop" backdrop behind the DOS-installer banner and completion screens
+
+### Added
+- `scripts/lib/ui.sh`: `ui_banner` and `show_celebration` now center their box on a full-width, stippled two-tone "desktop" (a `▒` MEDIUM SHADE fill in the same grey-on-blue as the box border) instead of leaving plain terminal background on either side -- matching the floating-box-on-textured-backdrop look of the reference DOS installers (DOOM Setup, DOSBox config, Beneath a Steel Sky), rather than just a solid-blue box with black on both sides. Falls back to no margin/no dither on a terminal narrower than the box itself.
+- This only applies to the two screens this file draws by hand. The live `whiptail --gauge` progress screen can't carry it: newt repaints its own root as a flat color fill on every redraw (confirmed by pre-filling the screen with the same dither pattern and watching whiptail's first paint wipe it), so dithering it would require replacing whiptail with a fully custom-drawn progress display.
+
 ## [2.229.1] - 2026-09-10 - DOS-installer blue theme for every whiptail dialog, and a black-gutter box-art bug fix
 
 ### Added

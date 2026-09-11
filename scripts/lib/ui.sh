@@ -431,6 +431,59 @@ format_duration() {
 _DOS_BOX_WIDTH=70
 _UI_ROW=0
 
+# ── Dithered "desktop" backdrop (Turbo-Vision style) ────────────────────────
+# The reference DOS installers this look is modeled on (DOOM Setup, DOSBox
+# config, Beneath a Steel Sky) don't just color the box itself -- the whole
+# screen behind it is a stippled two-tone "desktop" the box floats on top
+# of, centered, with visible margin on both sides. This is only achievable
+# on the two screens this file draws by hand (ui_banner, show_celebration):
+# whiptail/newt repaints its own root as a flat color fill on every single
+# redraw (confirmed empirically -- pre-filling the screen with this same
+# dither pattern and watching whiptail's very first paint wipe it back to
+# plain spaces outside its own dialog box), so the live --gauge screen
+# can't carry this without abandoning newt for a fully custom-drawn
+# progress display.
+_DOS_DITHER_CH="▒"
+_DOS_TERM_COLS=0
+
+# Real terminal width, once per screen (ui_banner/show_celebration each set
+# this at the start of their own run) -- a mid-run resize isn't something
+# either one-shot screen needs to react to live. `tput` needs a TTY to
+# query against; COLUMNS is the fallback when there isn't one (matches
+# every other width assumption already baked into _DOS_BOX_WIDTH=70).
+_dos_term_cols() {
+    local cols=""
+    if [ "$_UI_HAS_CONTROLLING_TTY" = "1" ]; then
+        cols=$(tput cols </dev/tty 2>/dev/null)
+    fi
+    if ! [ "$cols" -gt 0 ] 2>/dev/null; then
+        cols="${COLUMNS:-80}"
+    fi
+    printf '%s' "$cols"
+}
+
+# Half of the leftover width once the (bordered) box is centered. 0 (no
+# margin, no dither) if the terminal is narrower than the box itself --
+# e.g. a resized SSH window -- rather than a negative span.
+_dos_box_margin() {
+    local total=$(( _DOS_BOX_WIDTH + 2 ))
+    local margin=$(( (_DOS_TERM_COLS - total) / 2 ))
+    [ "$margin" -lt 0 ] && margin=0
+    printf '%s' "$margin"
+}
+
+# Print `n` dither cells (no trailing newline); a no-op for n<=0. Colored
+# the same grey-on-blue as the box border itself ($_DOS_GREY/$_DOS_BLUEBG),
+# so the stipple reads as part of the same surface rather than a clashing
+# third color.
+_dos_dither_span() {
+    local n="$1"
+    [ "$n" -gt 0 ] 2>/dev/null || return 0
+    local span="" i
+    for ((i=0; i<n; i++)); do span+="$_DOS_DITHER_CH"; done
+    printf '%s%s%s' "$_DOS_GREY" "$span" "$NC$_DOS_BLUEBG"
+}
+
 _dos_newline() {
     printf '\n' >/dev/tty 2>/dev/null || true
     _UI_ROW=$((_UI_ROW + 1))
@@ -446,7 +499,14 @@ _dos_box_rule() {
     local corner_l="$1" corner_r="$2"
     local fill="" i
     for ((i=0; i<_DOS_BOX_WIDTH; i++)); do fill+="═"; done
-    printf '%s%s%s%s%s\n' "$_DOS_GREY" "$corner_l" "$fill" "$corner_r" "$NC$_DOS_BLUEBG" >/dev/tty 2>/dev/null || true
+    local margin; margin=$(_dos_box_margin)
+    local right=$(( _DOS_TERM_COLS - margin - _DOS_BOX_WIDTH - 2 ))
+    {
+        _dos_dither_span "$margin"
+        printf '%s%s%s%s%s' "$_DOS_GREY" "$corner_l" "$fill" "$corner_r" "$NC$_DOS_BLUEBG"
+        _dos_dither_span "$right"
+        printf '\n'
+    } >/dev/tty 2>/dev/null || true
     _UI_ROW=$((_UI_ROW + 1))
 }
 
@@ -456,9 +516,15 @@ _dos_box_line() {
     local visible=$(( ${#plain} + 2 ))  # +2 for the two leading spaces
     local pad=$(( _DOS_BOX_WIDTH - visible ))
     [ "$pad" -lt 0 ] && pad=0
-    printf '%s║%s  %s%*s%s║%s\n' \
-        "$_DOS_GREY" "$NC$_DOS_BLUEBG" "$styled" "$pad" "" "$_DOS_GREY" "$NC$_DOS_BLUEBG" \
-        >/dev/tty 2>/dev/null || true
+    local margin; margin=$(_dos_box_margin)
+    local right=$(( _DOS_TERM_COLS - margin - _DOS_BOX_WIDTH - 2 ))
+    {
+        _dos_dither_span "$margin"
+        printf '%s║%s  %s%*s%s║%s' \
+            "$_DOS_GREY" "$NC$_DOS_BLUEBG" "$styled" "$pad" "" "$_DOS_GREY" "$NC$_DOS_BLUEBG"
+        _dos_dither_span "$right"
+        printf '\n'
+    } >/dev/tty 2>/dev/null || true
     _UI_ROW=$((_UI_ROW + 1))
 }
 
@@ -486,6 +552,7 @@ ui_banner() {
     # opening screen.
     _tty_raw $'\033[2J\033[H'
     _UI_ROW=1
+    _DOS_TERM_COLS=$(_dos_term_cols)
 
     if _ui_tty_supports_color; then
         {
@@ -886,6 +953,7 @@ show_celebration() {
     # 1. Double-line CP437 box card on a blue-background screen.
     if _ui_tty_supports_color; then
         _tty_raw $'\033[2J\033[H'
+        _DOS_TERM_COLS=$(_dos_term_cols)
         {
             printf '%s' "$_DOS_BLUEBG"
         } >/dev/tty 2>/dev/null || true
