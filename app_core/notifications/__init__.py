@@ -172,6 +172,7 @@ def send_alert_notifications(
                         account_sid=settings.sms_account_sid,
                         auth_token=settings.sms_auth_token,
                         from_number=settings.sms_from_number,
+                        db_session=db_session,
                     )
                 except Exception as exc:
                     log.error("Alert SMS notification failed: %s", exc)

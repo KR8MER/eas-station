@@ -41,6 +41,12 @@ point the reviewer at this page.
 Administrators can review every confirmed sign-up under **Settings → Notifications →
 Consent Records**.
 
+Every SMS this system actually asks Twilio to send — alert broadcasts, opt-in
+verification codes, and admin test messages — is separately recorded in
+**Settings → Notifications → SMS Message Log**, searchable by recipient phone number.
+Consent Records answers "did this number agree to receive alerts and when"; the
+Message Log answers "was a text actually sent to this number, and did it succeed."
+
 ---
 
 ## Abuse protection

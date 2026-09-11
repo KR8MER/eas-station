@@ -25,12 +25,42 @@ from typing import Any, Dict, List, Tuple
 logger = logging.getLogger(__name__)
 
 
+def _log_sms(
+    phone_number: str,
+    message_type: str,
+    success: bool,
+    *,
+    event_code: str = None,
+    twilio_sid: str = None,
+    error_message: str = None,
+    db_session=None,
+) -> None:
+    """Best-effort write to the sms_message_log table. Never raises --
+    see app_core._models_sms_log.record_sms_message's docstring."""
+    try:
+        from app_core._models_sms_log import record_sms_message
+
+        record_sms_message(
+            phone_number,
+            message_type,
+            success,
+            event_code=event_code,
+            twilio_sid=twilio_sid,
+            error_message=error_message,
+            db_session=db_session,
+            logger=logger,
+        )
+    except Exception:
+        logger.debug("SMS message log unavailable; skipping", exc_info=True)
+
+
 def send_eas_alert_sms(
     alert_info: Dict[str, Any],
     recipients: List[str],
     account_sid: str,
     auth_token: str,
     from_number: str,
+    db_session=None,
 ) -> bool:
     """Send EAS alert SMS notifications via Twilio.
 
@@ -46,6 +76,13 @@ def send_eas_alert_sms(
         account_sid:  Twilio Account SID.
         auth_token:   Twilio Auth Token.
         from_number:  Twilio sending phone number in E.164 format.
+        db_session:   Optional SQLAlchemy session to record each send
+                      attempt with (see app_core._models_sms_log). Pass
+                      the session this function's caller was itself
+                      threaded, if it has one -- callers running in a
+                      background worker context may not have Flask's
+                      request-scoped global session available. Falls
+                      back to that global session if omitted.
 
     Returns:
         True if at least one message was sent successfully.
@@ -111,8 +148,16 @@ def send_eas_alert_sms(
             )
             logger.info("SMS sent to %s (SID: %s)", number, msg.sid)
             success = True
+            _log_sms(
+                number, "alert", True,
+                event_code=event_code, twilio_sid=msg.sid, db_session=db_session,
+            )
         except Exception as exc:
             logger.error("Failed to send SMS to %s: %s", number, exc)
+            _log_sms(
+                number, "alert", False,
+                event_code=event_code, error_message=str(exc), db_session=db_session,
+            )
 
     return success
 
@@ -160,8 +205,10 @@ def send_verification_sms(
             from_=from_number,
             to=recipient,
         )
+        _log_sms(recipient, "verification", True, twilio_sid=msg.sid)
         return True, f"Verification code sent (SID: {msg.sid})"
     except Exception as exc:
+        _log_sms(recipient, "verification", False, error_message=str(exc))
         return False, f"Failed to send verification code: {exc}"
 
 
@@ -210,9 +257,11 @@ def test_sms(
             from_=from_number,
             to=recipient,
         )
+        _log_sms(recipient, "test", True, twilio_sid=msg.sid)
         return True, f"Test SMS sent successfully (SID: {msg.sid})"
 
     except Exception as exc:
+        _log_sms(recipient, "test", False, error_message=str(exc))
         return False, f"Failed to send test SMS: {exc}"
 
 

@@ -416,6 +416,71 @@
                 </div>
 
                 <!-- ============================================================
+                     SMS MESSAGE LOG (every outbound send attempt, searchable
+                     by recipient number)
+                     ============================================================ -->
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h2 class="mb-0 h5"><i class="fas fa-list-check"></i> SMS Message Log</h2>
+                        <span class="badge bg-secondary">{{ sms_message_log | length }}</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small">
+                            Every SMS this system has asked Twilio to send &mdash; alert broadcasts,
+                            opt-in verification codes, and test messages &mdash; most recent first.
+                        </p>
+                        <form method="get" action="{{ url_for('notifications.notification_settings') }}"
+                              class="d-flex gap-2 mb-3" style="max-width:360px;">
+                            <input type="search" class="form-control form-control-sm" name="sms_log_search"
+                                   value="{{ sms_log_search }}" placeholder="Search by phone number&hellip;">
+                            <button type="submit" class="btn btn-outline-secondary btn-sm text-nowrap">
+                                <i class="fas fa-magnifying-glass"></i> Search
+                            </button>
+                            {% if sms_log_search %}
+                            <a href="{{ url_for('notifications.notification_settings') }}"
+                               class="btn btn-outline-secondary btn-sm text-nowrap">Clear</a>
+                            {% endif %}
+                        </form>
+                        {% if sms_message_log %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Phone Number</th>
+                                        <th>Type</th>
+                                        <th>Event</th>
+                                        <th>Status</th>
+                                        <th>Sent</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for entry in sms_message_log %}
+                                    <tr>
+                                        <td class="text-break-anywhere">{{ entry.phone_number }}</td>
+                                        <td><span class="badge bg-light text-dark border">{{ entry.message_type }}</span></td>
+                                        <td>{{ entry.event_code or '—' }}</td>
+                                        <td>
+                                            {% if entry.success %}
+                                            <span class="badge bg-success">Sent</span>
+                                            {% else %}
+                                            <span class="badge bg-danger" title="{{ entry.error_message or '' }}">Failed</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-break-anywhere">{{ entry.created_at | localtime('%Y-%m-%d %H:%M %Z', '—') }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% elif sms_log_search %}
+                        <p class="text-muted small mb-0">No messages found for "{{ sms_log_search }}".</p>
+                        {% else %}
+                        <p class="text-muted small mb-0">No SMS messages sent yet.</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- ============================================================
                      SNMP TRAP NOTIFICATIONS
                      ============================================================ -->
                 <div class="card mb-3">
