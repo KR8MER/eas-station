@@ -99,7 +99,7 @@ from app_core.radio import (
     ensure_radio_frequency_correction_column,
 )
 from app_core.zones import ensure_zone_catalog
-from app_core.auth.roles import initialize_default_roles_and_permissions, Role
+from app_core.auth.roles import has_permission, initialize_default_roles_and_permissions, Role
 from app_core.auth.ip_filter import IPFilter
 from webapp import register_routes
 from webapp.admin.boundaries import (
@@ -769,6 +769,34 @@ def _socketio_require_authenticated_session():
     if not user or not user.is_active:
         return False
     return True
+
+
+@app.route('/api/internal/pgweb-auth-check')
+def internal_pgweb_auth_check():
+    """nginx `auth_request` target gating the pgweb database-browser proxy.
+
+    See the `listen 8081` server block in config/nginx-eas-station.conf:
+    pgweb (when an operator has set it up -- see docs/guides/DATABASE_BROWSER.md)
+    has no authentication of its own, so without this it would be full,
+    unauthenticated read/write SQL access to the production database for
+    anyone who can reach the port. nginx calls this as an internal
+    subrequest before proxying to pgweb; a non-2xx response here (401/403)
+    makes nginx deny the real request instead of proxying it through.
+
+    Deliberately does NOT use @require_permission: that decorator's
+    permission-denied response redirects (302) for a non-JSON request
+    instead of returning a bare status, and nginx's auth_request module
+    treats anything other than 2xx/401/403 as an upstream ERROR (producing
+    a 500 for the real client) rather than "deny" -- so this always
+    returns a bare, empty-body status. Being under /api/ also means
+    before_request's own deny-by-default gate already returns a clean 401
+    JSON for an unauthenticated caller before this view ever runs, so
+    g.current_user is guaranteed set here; only the permission check below
+    can still deny.
+    """
+    if not has_permission('system.configure'):
+        return '', 403
+    return '', 200
 
 
 logger.info("Checking database connectivity at startup...")
