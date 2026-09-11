@@ -69,8 +69,54 @@ _DOS_YELLOW=$'\033[1;33m'  # bright yellow — subtitle, percentages, bar fill
 _DOS_CYAN=$'\033[1;36m'    # light cyan    — secondary emphasis, spinner
 _DOS_GREEN=$'\033[1;32m'   # bright green  — success glyph
 _DOS_RED=$'\033[1;31m'     # bright red    — error glyph
-_DOS_GREY=$'\033[0;37m'    # light grey    — box art, copyright, dim text
+_DOS_GREY=$'\033[37m'      # light grey    — box art, copyright, dim text
+# Deliberately NOT "\033[0;37m": SGR parameter 0 resets ALL attributes,
+# including any active background color -- inside the blue-background box
+# screens (ui_banner/show_celebration) that reset silently knocked the
+# background back to black for every box-rule character (╔═╗║╚╝) and every
+# _DOS_GREY-colored label, leaving a black gutter around what should have
+# been a solid blue box. Bare "37" sets only the foreground, leaving
+# $_DOS_BLUEBG (already active on those screens) alone -- rendering this
+# actually onscreen, not just eyeballing the source, is what caught it.
 _DOS_BLUEBG=$'\033[44m'    # blue background — banner / completion screens only
+
+# ── Whiptail (newt) color theme ─────────────────────────────────────────────
+# Every whiptail dialog in install.sh/update.sh (--yesno, --msgbox, --gauge,
+# --menu, ...) otherwise renders in newt's own default grey theme, which
+# looks nothing like the solid Turbo-Vision-blue screens ui_banner/
+# show_celebration draw by hand above -- the two styles clash the moment a
+# --yesno confirmation appears between them. Setting this once, here, is
+# what actually ties the whole install experience together into one
+# consistent DOS-installer look, not just the screens this file draws
+# itself. Only set if the caller/environment hasn't already picked a theme
+# (e.g. an operator's own high-contrast NEWT_COLORS for accessibility) --
+# never override an explicit choice.
+if [ -z "${NEWT_COLORS:-}" ]; then
+    export NEWT_COLORS='
+root=white,blue
+border=white,blue
+window=white,blue
+shadow=black,black
+title=yellow,blue
+button=black,cyan
+actbutton=white,black
+compactbutton=black,white
+checkbox=black,cyan
+actcheckbox=white,cyan
+entry=black,cyan
+label=white,blue
+listbox=black,cyan
+actlistbox=white,cyan
+textbox=black,cyan
+acttextbox=white,cyan
+helpline=white,blue
+roottext=yellow,blue
+emptyscale=,cyan
+fullscale=,green
+disentry=white,blue
+disabledentry=white,blue
+'
+fi
 
 # ── Step tracking (kept as global state for backward compatibility) ────────
 STEP_NUM=${STEP_NUM:-0}
