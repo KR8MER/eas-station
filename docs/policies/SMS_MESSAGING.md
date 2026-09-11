@@ -30,13 +30,13 @@ consent language below, and confirm by entering a one-time code texted to
 that number. Only once the code is confirmed is the number added to the
 live recipient list. Every attempt — the exact consent text shown, the
 submitter's IP address, and the confirmation timestamp — is permanently
-recorded and visible to the administrator under **Settings → Notifications
-→ Consent Records**. This is the flow a carrier or Twilio compliance
-reviewer can be pointed at directly.
+recorded and visible to the administrator under **Settings → SMS
+Notifications → Consent Records**. This is the flow a carrier or Twilio
+compliance reviewer can be pointed at directly.
 
 Separately from consent, every SMS this system actually sends — alert
 broadcasts, verification codes, and test messages — is logged under
-**Settings → Notifications → SMS Message Log**, searchable by recipient
+**Settings → SMS Notifications → SMS Message Log**, searchable by recipient
 phone number.
 
 > Consent checkbox text shown on `/sms-opt-in`:
@@ -46,7 +46,7 @@ phone number.
 
 **2. Administrator-added (legacy / non-self-serve cases).** The system
 administrator may still add recipient phone numbers directly in the admin
-panel under **Settings → Notifications → SMS Recipients**, for situations
+panel under **Settings → SMS Notifications → SMS Recipients**, for situations
 where the recipient cannot use the self-serve page themselves. In that
 case:
 

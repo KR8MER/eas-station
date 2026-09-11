@@ -1,12 +1,23 @@
 # Changelog
 
 All notable changes to this project are documented in this file. The format is based on
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
-tracks releases under the 2.x series.
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
+
+## [3.0.0] - 2026-09-11 - Site reorganization: split SMS out of Notifications
+
+The first landing of a broader initiative to split pages that bundle multiple unrelated features into their own dedicated pages -- see `docs/roadmap/SITE_REORGANIZATION.md` for the full scope and rationale. `templates/admin/notifications.html` had grown to 1,029 lines (email + SMS + SNMP + Postfix, plus SMS's own Consent Records and Message Log audit trails); SMS is a fully separate feature from Email/SNMP and only shared the page for lack of a better home.
+
+### Changed
+- **Breaking (URL addition, not a removal)**: SMS notification settings, the opt-in QR/link callout, Consent Records, and the SMS Message Log moved from `/admin/notifications/` to a new page, `/admin/notifications/sms` (**Settings → SMS Notifications**). `/admin/notifications/` still exists and works -- it now shows Email + SNMP + Postfix only. Each page links to the other.
+- `webapp/admin/notifications.py`: new `sms_settings()` view and `update_sms_settings()` POST route (`/admin/notifications/sms/update`), split out of `notification_settings()`/`update_notification_settings()`. Kept as genuinely separate routes rather than one shared form-with-defaults handler -- that handler blanks out any field it doesn't see in the posted form, so a page that only submits SMS fields would have silently cleared Email/SNMP settings (and vice versa) had the routes stayed shared.
+- `webapp/navigation/registry_settings.py`: new "SMS Notifications" `NavItem` alongside the existing "Notifications" item.
+- `docs/guides/SMS_OPT_IN.md`, `docs/policies/SMS_MESSAGING.md`, `docs/guides/notifications.md`, `templates/sms_compliance.html`: updated to reference the new page location.
+- `docs/roadmap/SITE_REORGANIZATION.md` (new): the prioritized plan for splitting the next few pages that bundle unrelated features -- explicitly scoped to not duplicate `docs/development/LARGE_FILE_REFACTOR_PLAN.md`'s already-tracked backend-module-split and frontend-JS-extraction work.
+- `tests/test_sms_settings_page.py` (new, 4 tests): the two update routes stay disjoint, the new page renders SMS content, the main page no longer does.
 
 ## [2.233.0] - 2026-09-11 - Searchable SMS message log
 

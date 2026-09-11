@@ -106,7 +106,37 @@ def _fallback_notification_settings():
 @require_auth
 @require_permission('system.configure')
 def notification_settings():
-    """Display notification configuration settings page."""
+    """Display notification configuration settings page (Email + SNMP +
+    Postfix). SMS has its own dedicated page -- see sms_settings() below --
+    since it's a fully separate feature (own model, own compliance
+    audience) that only used to share this page for lack of a better home.
+    """
+    try:
+        settings = _get_or_create_settings()
+    except SQLAlchemyError as e:
+        logger.error(f"Database error loading notification settings: {str(e)}")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        flash(
+            'Database error loading notification settings. '
+            'Settings are shown with defaults — run database migrations to restore full functionality.',
+            'danger',
+        )
+        settings = _fallback_notification_settings()
+
+    return render_template('admin/notifications.html', settings=settings)
+
+
+@notifications_bp.route('/sms', methods=['GET'])
+@require_auth
+@require_permission('system.configure')
+def sms_settings():
+    """Display SMS notification settings, the opt-in QR/link callout,
+    Consent Records, and the SMS Message Log -- split out of the main
+    Notifications page (see notification_settings() above) since SMS is
+    a fully separate feature from Email/SNMP, not just another section."""
     try:
         settings = _get_or_create_settings()
     except SQLAlchemyError as e:
@@ -160,7 +190,7 @@ def notification_settings():
         sms_message_log = []
 
     return render_template(
-        'admin/notifications.html',
+        'admin/sms_settings.html',
         settings=settings,
         consent_records=consent_records,
         sms_message_log=sms_message_log,
@@ -197,7 +227,9 @@ def sms_optin_qr():
 @require_auth
 @require_permission('system.configure')
 def update_notification_settings():
-    """Update notification settings."""
+    """Update Email + SNMP notification settings (SMS has its own
+    update_sms_settings() route below -- keeping them separate means this
+    form submitting doesn't touch fields it never displayed)."""
     try:
         settings = NotificationSettings.query.first()
         if not settings:
@@ -244,7 +276,54 @@ def update_notification_settings():
             addr.strip() for addr in alert_raw.splitlines() if addr.strip()
         ]
 
-        # --- SMS ---
+        # --- SNMP ---
+        settings.snmp_enabled = request.form.get('snmp_enabled', 'false').lower() == 'true'
+        settings.snmp_community = request.form.get('snmp_community', 'public').strip() or 'public'
+
+        # SNMP targets: one host:port per line
+        snmp_raw = request.form.get('snmp_targets', '').strip()
+        settings.snmp_targets = [
+            t.strip() for t in snmp_raw.splitlines() if t.strip()
+        ]
+
+        db.session.commit()
+        logger.info(
+            "Updated notification settings: email_enabled=%s smtp=%s:%d, "
+            "snmp_enabled=%s, alert_emails=%d, snmp_targets=%d",
+            settings.email_enabled,
+            settings.smtp_host or '(none)',
+            settings.smtp_port or 587,
+            settings.snmp_enabled,
+            len(settings.alert_emails or []),
+            len(settings.snmp_targets or []),
+        )
+
+        return jsonify({
+            'success': True,
+            'message': 'Notification settings updated successfully',
+            'settings': settings.to_dict(),
+        })
+
+    except SQLAlchemyError as e:
+        logger.error(f"Database error updating notification settings: {str(e)}")
+        db.session.rollback()
+        return jsonify({'success': False, 'error': 'Database error saving notification settings'}), 500
+
+
+@notifications_bp.route('/sms/update', methods=['POST'])
+@require_auth
+@require_permission('system.configure')
+def update_sms_settings():
+    """Update SMS notification settings only. Kept separate from
+    update_notification_settings() above -- that handler defaults every
+    field it doesn't see in the posted form, so posting this page's
+    SMS-only form to it would silently blank out Email/SNMP settings."""
+    try:
+        settings = NotificationSettings.query.first()
+        if not settings:
+            settings = NotificationSettings(id=1)
+            db.session.add(settings)
+
         settings.sms_enabled = request.form.get('sms_enabled', 'false').lower() == 'true'
         settings.sms_provider = request.form.get('sms_provider', 'twilio').strip() or 'twilio'
         settings.sms_account_sid = request.form.get('sms_account_sid', '').strip()
@@ -261,40 +340,23 @@ def update_notification_settings():
             num.strip() for num in sms_raw.splitlines() if num.strip()
         ]
 
-        # --- SNMP ---
-        settings.snmp_enabled = request.form.get('snmp_enabled', 'false').lower() == 'true'
-        settings.snmp_community = request.form.get('snmp_community', 'public').strip() or 'public'
-
-        # SNMP targets: one host:port per line
-        snmp_raw = request.form.get('snmp_targets', '').strip()
-        settings.snmp_targets = [
-            t.strip() for t in snmp_raw.splitlines() if t.strip()
-        ]
-
         db.session.commit()
         logger.info(
-            "Updated notification settings: email_enabled=%s smtp=%s:%d, sms_enabled=%s, "
-            "snmp_enabled=%s, alert_emails=%d, sms_recipients=%d, snmp_targets=%d",
-            settings.email_enabled,
-            settings.smtp_host or '(none)',
-            settings.smtp_port or 587,
+            "Updated SMS notification settings: sms_enabled=%s, sms_recipients=%d",
             settings.sms_enabled,
-            settings.snmp_enabled,
-            len(settings.alert_emails or []),
             len(settings.sms_recipients or []),
-            len(settings.snmp_targets or []),
         )
 
         return jsonify({
             'success': True,
-            'message': 'Notification settings updated successfully',
+            'message': 'SMS notification settings updated successfully',
             'settings': settings.to_dict(),
         })
 
     except SQLAlchemyError as e:
-        logger.error(f"Database error updating notification settings: {str(e)}")
+        logger.error(f"Database error updating SMS notification settings: {str(e)}")
         db.session.rollback()
-        return jsonify({'success': False, 'error': 'Database error saving notification settings'}), 500
+        return jsonify({'success': False, 'error': 'Database error saving SMS notification settings'}), 500
 
 
 @notifications_bp.route('/test-email', methods=['POST'])

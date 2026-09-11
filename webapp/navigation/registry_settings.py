@@ -136,8 +136,15 @@ SETTINGS_SECTION = NavSection(
                     label="Notifications",
                     icon="fas fa-bell",
                     href="/admin/notifications/",
-                    description="Email, SMS and SNMP trap notification settings.",
+                    description="Email and SNMP trap notification settings.",
                     permissions=(SYSTEM_VIEW_CONFIG,),
+                ),
+                NavItem(
+                    label="SMS Notifications",
+                    icon="fas fa-sms",
+                    href="/admin/notifications/sms",
+                    description="Twilio SMS config, self-serve opt-in QR/link, consent records, and message log.",
+                    permissions=(SYSTEM_CONFIGURE,),
                 ),
                 NavItem(
                     label="Map Tiles",
