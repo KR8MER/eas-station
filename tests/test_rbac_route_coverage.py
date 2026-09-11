@@ -78,6 +78,14 @@ ALLOWLISTED_PATHS = {
     "/login",            # auth: sign in
     "/logout",           # auth: sign out
     "/permissions/check",  # returns the *current* user's own permission status
+    # Public double opt-in for the SMS alert recipient list (webapp/public/
+    # sms_optin.py) -- deliberately unauthenticated, that's the entire
+    # point (a visitor with no account confirms their own phone number via
+    # a texted code). Protected instead by per-IP/per-phone rate limiting
+    # and a hashed, expiring, attempt-limited confirmation code -- see
+    # that module's docstring and tests/test_sms_optin.py.
+    "/sms-opt-in/start",
+    "/sms-opt-in/confirm",
 }
 ALLOWLISTED_PREFIXES = (
     "/setup",  # first-run wizard, gated by SETUP_MODE in before_request

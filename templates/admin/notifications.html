@@ -333,6 +333,16 @@
                             See the <a href="/sms-compliance" target="_blank">SMS Messaging Policy</a> for full disclosures.
                         </div>
 
+                        <div class="alert alert-info py-2 mb-3 small">
+                            <i class="fas fa-link me-1"></i>
+                            Prefer verifiable, self-serve consent (recommended for carrier/Twilio campaign
+                            review)? Share
+                            <a href="/sms-opt-in" target="_blank">{{ request.url_root.rstrip('/') }}/sms-opt-in</a>
+                            &mdash; a public page where someone enters their own number and confirms it via a
+                            texted code before they're added here automatically. Verified sign-ups appear in
+                            <strong>Consent Records</strong> below.
+                        </div>
+
                         <div class="d-flex gap-2 align-items-center">
                             <div class="input-group" style="max-width:240px;">
                                 <input type="tel" class="form-control form-control-sm"
@@ -347,6 +357,53 @@
                             Leave blank to use the first configured SMS recipient.
                         </div>
 
+                    </div>
+                </div>
+
+                <!-- ============================================================
+                     SMS CONSENT RECORDS (from the public double opt-in flow)
+                     ============================================================ -->
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h2 class="mb-0 h5"><i class="fas fa-clipboard-check"></i> Consent Records</h2>
+                        <span class="badge bg-secondary">{{ consent_records | length }}</span>
+                    </div>
+                    <div class="card-body">
+                        {% if consent_records %}
+                        <p class="text-muted small">
+                            Verified sign-ups from <a href="/sms-opt-in" target="_blank">/sms-opt-in</a> &mdash;
+                            each row is a phone number that entered a code texted to it, confirming they control
+                            that number. This is the evidence trail a carrier/Twilio compliance reviewer expects.
+                        </p>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Phone Number</th>
+                                        <th>Name</th>
+                                        <th>Confirmed</th>
+                                        <th>IP Address</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for record in consent_records %}
+                                    <tr>
+                                        <td>{{ record.phone_number }}</td>
+                                        <td>{{ record.name or '—' }}</td>
+                                        <td class="text-break-anywhere">{{ record.verified_at | localtime('%Y-%m-%d %H:%M %Z', '—') }}</td>
+                                        <td class="text-break-anywhere">{{ record.ip_address or '—' }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-muted small mb-0">
+                            No self-serve sign-ups yet. Share
+                            <a href="/sms-opt-in" target="_blank">/sms-opt-in</a> with people who want emergency
+                            alerts by text.
+                        </p>
+                        {% endif %}
                     </div>
                 </div>
 
