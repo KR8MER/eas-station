@@ -142,6 +142,10 @@ class AudioArchiver:
         self._current_segment_start: float = 0.0
         self._current_chunks: List[np.ndarray] = []
 
+        # The previous segment's encode+write+prune, running in the
+        # background -- see _start_flush_async().
+        self._flush_thread: Optional[threading.Thread] = None
+
         # Statistics (written from archive thread, read from any thread)
         self._lock = threading.Lock()
         self._files_written: int = 0
@@ -215,7 +219,9 @@ class AudioArchiver:
         self._audio_queue = None
 
         if self._archive_thread:
-            self._archive_thread.join(timeout=30.0)
+            # _archive_loop() itself waits on the final flush thread before
+            # returning (see its tail), so this join covers both.
+            self._archive_thread.join(timeout=60.0)
             self._archive_thread = None
 
         with self._lock:
@@ -327,9 +333,8 @@ class AudioArchiver:
             )
 
             if segment_age >= flush_after:
-                self._flush_segment()
+                self._start_flush_async()
                 self._current_segment_start = time.time()
-                self._run_pruning()
                 first_segment = False
 
             # Drain up to 200 chunks per iteration to stay responsive
@@ -347,9 +352,12 @@ class AudioArchiver:
             if drained == 0:
                 self._stop_event.wait(0.05)
 
-        # Flush whatever is left when we are asked to stop
-        if self._current_chunks:
-            self._flush_segment()
+        # Flush whatever is left when we are asked to stop, and wait for it
+        # (and any still-running previous flush) so stop() doesn't return
+        # while a segment is mid-write.
+        self._start_flush_async()
+        if self._flush_thread:
+            self._flush_thread.join(timeout=30.0)
 
         logger.debug("AudioArchiver loop stopped for '%s'", self.source_name)
 
@@ -357,26 +365,60 @@ class AudioArchiver:
     # Segment writing
     # ------------------------------------------------------------------
 
-    def _flush_segment(self) -> None:
+    def _start_flush_async(self) -> None:
+        """Hand the current segment's chunks off to a background thread for
+        encoding, writing and pruning, and immediately reset the in-memory
+        buffer so the archive loop keeps draining the broadcast queue.
+
+        ARCHITECTURAL FIX: _flush_segment() used to run inline in this loop.
+        Encoding a full segment (e.g. 600s of 48kHz stereo) via FFmpeg takes
+        ~14s wall time on a Pi -- for that whole window the loop wasn't
+        calling audio_queue.get_nowait() at all, so the upstream
+        BroadcastQueue subscriber queue for this archiver filled and started
+        dropping chunks every single flush. Moving the encode off this
+        thread means the queue keeps draining in real time regardless of
+        how long encoding takes.
+        """
         if not self._current_chunks:
             return
 
-        seg_time = datetime.fromtimestamp(self._current_segment_start)
+        chunks = self._current_chunks
+        seg_start = self._current_segment_start
+        self._current_chunks = []
+
+        # Bound concurrency to one flush at a time -- with flushes 5-10
+        # minutes apart and a ~14s encode, this should never actually block,
+        # but a source misconfigured with a very short segment_duration_seconds
+        # (or a slow SD card) must not pile up unbounded encoder subprocesses.
+        if self._flush_thread and self._flush_thread.is_alive():
+            self._flush_thread.join(timeout=60.0)
+
+        self._flush_thread = threading.Thread(
+            target=self._flush_segment,
+            args=(chunks, seg_start),
+            name=f"archiver-flush-{self.source_name}",
+            daemon=True,
+        )
+        self._flush_thread.start()
+
+    def _flush_segment(self, chunks: List[np.ndarray], segment_start: float) -> None:
+        if not chunks:
+            return
+
+        seg_time = datetime.fromtimestamp(segment_start)
         date_dir = self._source_dir() / seg_time.strftime("%Y-%m-%d")
         try:
             date_dir.mkdir(parents=True, exist_ok=True)
         except Exception as exc:
             logger.error("AudioArchiver: cannot create date directory %s: %s", date_dir, exc)
-            self._current_chunks.clear()
             return
 
         ext = "mp3" if self.config.format == "mp3" else "wav"
         filename = f"{self.source_name}_{seg_time.strftime('%Y-%m-%d_%H-%M-%S')}.{ext}"
         filepath = date_dir / filename
 
-        # Concatenate all buffered chunks
-        audio = np.concatenate(self._current_chunks).astype(np.float32)
-        self._current_chunks = []
+        # Concatenate this segment's buffered chunks
+        audio = np.concatenate(chunks).astype(np.float32)
 
         duration_s = len(audio) / max(self.sample_rate, 1)
 
@@ -394,6 +436,7 @@ class AudioArchiver:
                     self.config.silence_threshold,
                     duration_s,
                 )
+                self._run_pruning()
                 return
 
         try:
@@ -425,6 +468,8 @@ class AudioArchiver:
                     filepath.unlink()
             except Exception:
                 pass
+
+        self._run_pruning()
 
     def _write_wav(self, audio: np.ndarray, filepath: Path) -> None:
         """Write *audio* (float32, [-1, 1]) to a WAV file."""
