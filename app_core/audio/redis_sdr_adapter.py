@@ -224,6 +224,29 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                     if center_frequency:
                         self._center_frequency = center_frequency
 
+                    # _unpack_audio_envelope always returns a flat 1-D array --
+                    # the demod worker publishes np.column_stack((left, right))
+                    # for stereo, which .tobytes() flattens to interleaved
+                    # L,R,L,R floats, and np.frombuffer() on the way back out
+                    # can't recover that (frames, channels) shape on its own.
+                    # Without reshaping here, IcecastOutputStreamer's
+                    # _samples_to_pcm_bytes() sees a 1-D array and treats every
+                    # one of the 2x-as-many flat values as an independent mono
+                    # sample, then upmixes each to fake stereo -- doubling the
+                    # frame count it hands FFmpeg. FFmpeg still thinks it's
+                    # getting config.sample_rate frames/sec, so the encoded
+                    # stream ends up representing ~2x as much declared audio
+                    # duration per real second of broadcast, which plays back
+                    # at roughly half speed (deep, dragging pitch) and destroys
+                    # the actual L/R stereo image in the process.
+                    channels = max(1, int(self.config.channels))
+                    if (
+                        channels > 1
+                        and audio_samples.ndim == 1
+                        and audio_samples.size % channels == 0
+                    ):
+                        audio_samples = audio_samples.reshape(-1, channels)
+
                     if audio_samples is not None and len(audio_samples) > 0:
                         # Put audio in queue for _read_audio_chunk() to consume
                         # The base class capture loop will handle metrics updates and broadcasting

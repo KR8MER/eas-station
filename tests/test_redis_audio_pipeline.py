@@ -200,6 +200,70 @@ class TestRedisSdrAdapter(unittest.TestCase):
         queued = adapter._audio_chunk_queue.get_nowait()
         np.testing.assert_array_almost_equal(queued, audio)
 
+    def test_subscriber_loop_reshapes_stereo_audio_envelope(self):
+        """Regression test: services/demod/worker.py publishes stereo audio
+        as np.column_stack((left, right)) -- a (frames, 2) array -- and
+        .tobytes() flattens that to interleaved L,R,L,R floats. The receive
+        side (_unpack_audio_envelope) can only hand back a flat 1-D array,
+        since the wire format carries no shape info.
+
+        Without reshaping using the adapter's own config.channels, that flat
+        array reached IcecastOutputStreamer._samples_to_pcm_bytes() as
+        ndim==1, which treated every one of the 2x-as-many interleaved
+        values as an independent mono sample and upmixed each to fake
+        stereo -- doubling the frame count FFmpeg received per real second
+        of audio (and scrambling the L/R image in the process). FFmpeg still
+        assumed config.sample_rate frames/sec, so the encoded stream ended
+        up representing ~2x the declared audio duration per real second --
+        audible on the live Icecast relay as playback running at roughly
+        half speed (deep, dragging pitch).
+        """
+        from services.demod.worker import _pack_audio_envelope
+        from app_core.audio.ingest import AudioSourceConfig, AudioSourceType
+
+        stereo_config = AudioSourceConfig(
+            source_type=AudioSourceType.STREAM,
+            name="test-redis-sdr-stereo",
+            enabled=True,
+            priority=1,
+            sample_rate=48000,
+            channels=2,
+            buffer_size=4096,
+            device_params={'receiver_id': 'test-receiver', 'demod_mode': 'WFM'},
+        )
+        from app_core.audio.redis_sdr_adapter import RedisSDRSourceAdapter
+        adapter = RedisSDRSourceAdapter(stereo_config)
+        adapter._receiver_id = 'test-receiver'
+
+        left = np.random.randn(200).astype(np.float32)
+        right = np.random.randn(200).astype(np.float32)
+        stereo_audio = np.column_stack((left, right))  # what fm.py actually returns
+        envelope = base64.b64encode(
+            _pack_audio_envelope(stereo_audio.astype(np.float32).tobytes(), 256000, 93900000)
+        ).decode('ascii')
+
+        call_count = {'n': 0}
+
+        def _get_message(*_args, **_kwargs):
+            call_count['n'] += 1
+            if call_count['n'] == 1:
+                return {'type': 'message', 'data': envelope}
+            adapter._stop_event.set()
+            return None
+
+        mock_pubsub = MagicMock()
+        mock_pubsub.get_message.side_effect = _get_message
+        adapter._pubsub = mock_pubsub
+        adapter._stop_event.clear()
+
+        adapter._redis_subscriber_loop()
+
+        queued = adapter._audio_chunk_queue.get_nowait()
+        # Must come back as (frames, channels), not a flat (frames*channels,)
+        # array -- otherwise the frame count downstream doubles.
+        self.assertEqual(queued.shape, (200, 2))
+        np.testing.assert_array_almost_equal(queued, stereo_audio)
+
 
 class TestAudioService(unittest.TestCase):
     """Test audio service modifications."""
