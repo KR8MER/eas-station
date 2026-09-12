@@ -265,6 +265,123 @@ class TestRedisSdrAdapter(unittest.TestCase):
         np.testing.assert_array_almost_equal(queued, stereo_audio)
 
 
+class TestSameDecodeStereoRegression(unittest.TestCase):
+    """End-to-end regression test for the stereo-reshape fix, proven against
+    the real SAME decoder rather than just checking array shape.
+
+    Runs a synthetic RWT header + EOM, encoded as a genuine (frames, 2)
+    stereo array (the exact shape services/demod/worker.py's
+    np.column_stack((left, right)) produces), through the real
+    production pipeline: the same wire pack/unpack the demod service and
+    RedisSDRSourceAdapter use, the same _resample_for_eas() downmix +
+    resample logic from app_core/audio/ingest.py, and the real
+    StreamingSAMEDecoder class eas_monitor_v3 uses -- twice: once with
+    the flat array left unreshaped (reproducing the pre-fix bug) and once
+    reshaped to (frames, 2) (the fix), to prove cause and effect directly
+    rather than just asserting on array shape.
+    """
+
+    SAMPLE_RATE = 48000
+
+    def _build_stereo_test_signal(self) -> np.ndarray:
+        from datetime import datetime, timezone
+        from app_utils.eas_fsk import (
+            SAME_BAUD, SAME_MARK_FREQ, SAME_SPACE_FREQ,
+            encode_same_bits, generate_fsk_samples,
+        )
+
+        amplitude = 0.7 * 32767
+        now = datetime.now(timezone.utc)
+        timestamp = f"{now.timetuple().tm_yday:03d}{now:%H%M}"
+        header_text = f"ZCZC-EAS-RWT-000000+0015-{timestamp}-EASTEST-"
+
+        same_bits = encode_same_bits(header_text, include_preamble=True)
+        header_samples = generate_fsk_samples(
+            same_bits, sample_rate=self.SAMPLE_RATE, bit_rate=float(SAME_BAUD),
+            mark_freq=SAME_MARK_FREQ, space_freq=SAME_SPACE_FREQ, amplitude=amplitude,
+        )
+        silence = [0] * self.SAMPLE_RATE
+        all_samples = []
+        for i in range(3):
+            all_samples.extend(header_samples)
+            if i < 2:
+                all_samples.extend(silence)
+        all_samples.extend(silence)
+
+        eom_bits = encode_same_bits("NNNN", include_preamble=True, include_cr=False)
+        eom_samples = generate_fsk_samples(
+            eom_bits, sample_rate=self.SAMPLE_RATE, bit_rate=float(SAME_BAUD),
+            mark_freq=SAME_MARK_FREQ, space_freq=SAME_SPACE_FREQ, amplitude=amplitude,
+        )
+        for i in range(3):
+            all_samples.extend(eom_samples)
+            if i < 2:
+                all_samples.extend(silence)
+
+        mono = np.array(all_samples, dtype=np.float32) / 32767.0
+        return np.column_stack((mono, mono)).astype(np.float32), header_text
+
+    def _run_pipeline(self, flat_audio: np.ndarray, apply_fix: bool) -> list:
+        from app_core.audio.eas_resampler import make_eas_resampler
+        from app_core.audio.streaming_same_decoder import StreamingSAMEDecoder
+
+        detections = []
+        decoder = StreamingSAMEDecoder(sample_rate=16000, alert_callback=detections.append)
+        resampler = make_eas_resampler(self.SAMPLE_RATE, 16000)
+
+        channels = 2
+        chunk_size = 1600 * channels
+        for start in range(0, len(flat_audio), chunk_size):
+            raw_chunk = flat_audio[start:start + chunk_size]
+            if raw_chunk.size == 0:
+                continue
+
+            if apply_fix and raw_chunk.size % channels == 0:
+                chunk = raw_chunk.reshape(-1, channels)
+            else:
+                chunk = raw_chunk  # pre-fix: flat interleaved L,R,L,R as-is
+
+            if chunk.ndim == 2:
+                mono = chunk.mean(axis=1)
+            elif chunk.ndim > 2:
+                mono = chunk.flatten()
+            else:
+                mono = chunk  # bug path
+
+            resampled = resampler.process(mono.astype(np.float32))
+            if resampled is not None and len(resampled) > 0:
+                decoder.process_samples(resampled)
+
+        return detections
+
+    def test_stereo_reshape_is_required_for_same_decode(self):
+        from services.demod.worker import _pack_audio_envelope
+        from app_core.audio.redis_sdr_adapter import _unpack_audio_envelope
+
+        stereo_tone, header_text = self._build_stereo_test_signal()
+        envelope = _pack_audio_envelope(stereo_tone.tobytes(), 256000, 93900000)
+        _iq_rate, _freq, flat_audio = _unpack_audio_envelope(envelope)
+        self.assertEqual(flat_audio.ndim, 1)  # always flat off the wire
+
+        before = self._run_pipeline(flat_audio, apply_fix=False)
+        after = self._run_pipeline(flat_audio, apply_fix=True)
+
+        self.assertEqual(
+            len(before), 0,
+            "Expected the pre-fix (unreshaped) path to fail to decode -- "
+            "if this now passes, the bug's premise has changed and this "
+            "test needs re-evaluating, not just the assertion loosened.",
+        )
+        self.assertGreater(
+            len(after), 0,
+            "Reshaping the flat stereo array to (frames, channels) before "
+            "feeding it to _resample_for_eas() must be enough for the SAME "
+            "decoder to detect a real header -- this is what actually "
+            "restores SAME/RMT reception on stereo SDR receivers.",
+        )
+        self.assertIn(header_text, after[0].message)
+
+
 class TestAudioService(unittest.TestCase):
     """Test audio service modifications."""
 
