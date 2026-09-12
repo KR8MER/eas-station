@@ -7,6 +7,12 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.2.6] - 2026-09-12 - Fix AudioArchiver dropping chunks on every segment flush
+
+- **Fixed**: `AudioArchiver` for `sdr-wbks` (and every other archived source) was dropping hundreds to thousands of audio chunks on the source's `BroadcastQueue` subscription around every segment boundary ("consuming slower than real time"), observed live climbing past 92,000 total dropped chunks. Root cause: `_flush_segment()` ran inline in `_archive_loop()`, and encoding a full segment via FFmpeg (measured live: ~14s wall time for a 600s 48kHz-stereo segment on this Raspberry Pi) blocked the loop from calling `audio_queue.get_nowait()` for that entire window -- so on every single flush, the upstream `BroadcastQueue` filled and started dropping chunks for this subscriber only.
+- Fixed in `app_core/audio/archiver.py`: `_start_flush_async()` now snapshots and resets the in-memory chunk buffer synchronously, then hands the actual concatenate/encode/write/prune work to a background thread -- the archive loop keeps draining the queue in real time regardless of how long encoding takes. `stop()` now waits (bounded, 60s) for the loop thread, which itself waits for the final flush thread, so a shutdown can't cut off the last segment mid-write.
+- `tests/test_audio_archiver_async_flush.py`: new regression test asserting the chunk buffer is reset (and can accept new audio) while a simulated slow encode is still running in the background, plus a no-op check when there's nothing to flush. Also manually end-to-end verified (real `BroadcastQueue` + real WAV encode) that segments still write correctly with intact audio and accurate stats.
+
 ## [3.2.5] - 2026-09-12 - Fix stereo SDR audio doubling: slow Icecast playback and broken SAME/RMT decode
 
 - **Fixed**: The live Icecast relay for stereo SDR receivers (e.g. `sdr-wbks.mp3`, WFM+RBDS) played back audibly slow -- deep, dragging pitch -- confirmed by measuring the running FFmpeg encoder's actual stdin byte rate (`/proc/<pid>/io`) against real elapsed time: it was reading raw PCM at ~1.95x the byte rate `-ar 48000 -ac 2` calls for in real time, while `services/demod/worker.py`'s Redis publish rate was independently verified to be exact real-time (bisected by subscribing to the `demod:audio:<id>` channel directly and comparing decoded sample count to wall-clock elapsed time).
