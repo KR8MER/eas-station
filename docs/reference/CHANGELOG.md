@@ -7,6 +7,11 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.2.4] - 2026-09-12 - Fix CAP poller hanging for minutes per cycle on broken IPv6
+
+- **Fixed**: `poller/cap_poller.py` poll cycles were taking minutes instead of seconds. Root cause: this host's router advertises an IPv6 default route via RA, but has no working IPv6 upstream (SYN packets to public IPv6 addresses get no reply, confirmed via `ss -tnp` showing a stuck `SYN-SENT` socket and `ping -6` to a public host timing out). `apps.fema.gov` and `api.weather.gov` are dual-stack, so Python's `requests`/`urllib3` resolved and attempted each unreachable IPv6 address in turn, burning the full per-connection timeout before ever falling back to the working IPv4 address. Forced IPv4-only DNS resolution for the poller process via `urllib3.util.connection.allowed_gai_family`, which avoids the IPv6 attempts entirely regardless of what the network advertises.
+- Investigated a companion report of "wrong rtlsdr sample rate" causing slowness: the active `wbks` receiver is configured for 1,024,000 Hz (a standard, driver-recommended RTL-SDR rate), decimated by design to 256,000 Hz effective for FM+RBDS processing (`app_core/radio/decimation.py`). `eas-station-sdr.service` logs show steady, drop-free throughput at the configured rate with buffer utilization under 2% -- no evidence of a sample-rate-driven slowdown in the capture pipeline itself. Not changed pending clarification of what symptom was observed.
+
 ## [3.2.3] - 2026-09-11 - Close out the two items flagged after Phase 4
 
 - **Investigated, not a bug**: `data_management.html`'s generic boundary uploader offers a `county` type alongside electric/fire/school/etc; checked whether it duplicates `/admin/county_boundaries`. It writes to `Boundary` (table `boundaries`, arbitrary `type` string, map-overlay/intersection use) while `/admin/county_boundaries` writes to `USCountyBoundary` (table `us_county_boundaries`, FIPS/GEOID-keyed, Census TIGER/Line data for SAME-code alert matching) -- different tables, different purpose. Documented in `docs/roadmap/SITE_REORGANIZATION.md`; no code change.

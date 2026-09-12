@@ -51,11 +51,21 @@ import re
 import threading
 import uuid
 print("[CAP_POLLER_INIT] time, re, uuid imported", flush=True)
+import socket
 import requests
+import urllib3.util.connection as urllib3_cn
 import logging
 import hashlib
 import math
 print("[CAP_POLLER_INIT] requests, logging, hashlib, math imported", flush=True)
+
+# This host advertises an IPv6 default route (via router RA) with no working
+# upstream -- SYN packets to public IPv6 hosts never get a reply. Left alone,
+# every HTTPS call to a dual-stack host (apps.fema.gov, api.weather.gov) burns
+# the full connect timeout on each unreachable IPv6 address before urllib3
+# falls back to IPv4, turning a sub-second fetch into minutes per poll cycle.
+# Forcing IPv4-only DNS resolution for this process avoids that entirely.
+urllib3_cn.allowed_gai_family = lambda: socket.AF_INET
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
