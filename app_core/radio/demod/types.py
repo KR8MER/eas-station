@@ -297,6 +297,17 @@ class DemodulatorStatus:
     # rbds_enabled) -- unlike pilot injection, this needs a small new
     # bandpass filter (mirrors the existing pilot filter exactly).
     rds_injection_hz: float = 0.0
+    # Modulation power (Pm): RMS power of the whole composite MPX signal in
+    # dBr, referenced to a full-scale sine at the deviation limit (0 dBr =
+    # 100% modulation) -- the standard broadcast-engineering compliance
+    # figure, distinct from peak_deviation_hz's instantaneous peak.
+    modulation_power_dbr: float = -120.0
+    # Relative L vs. R modulation level in dB (20*log10(R/L) RMS), computed
+    # in the same kHz-deviation domain as peak_deviation_hz rather than
+    # normalized playback-audio loudness. 0.0 when stereo is unavailable
+    # (pilot not locked / mono receiver), matching pilot_injection_hz's
+    # default-when-unavailable convention.
+    stereo_balance_db: float = 0.0
 
 
 # ── JSON round-trip for cross-process status sharing ────────────────────────

@@ -190,5 +190,94 @@ def test_rds_injection_filter_rejects_the_pilot_band():
     assert rms < 200.0
 
 
+def test_modulation_power_dbr_is_near_zero_for_a_full_scale_sine():
+    """A single tone at exactly the 75 kHz broadcast-FM deviation limit is
+    the 0 dBr reference point by definition -- its RMS equals
+    75000/sqrt(2), the same reference modulation_power_dbr is computed
+    against."""
+    demod = _make_demodulator()
+    n = int(SR * 0.05)
+    t = np.arange(n) / SR
+    inst_freq = 75_000.0 * np.cos(2 * np.pi * 1_000.0 * t)
+
+    iq = _fm_modulate(inst_freq, SR)
+    audio, status = demod.demodulate(iq)
+
+    assert status is not None
+    assert status.modulation_power_dbr == pytest.approx(0.0, abs=1.0)
+
+
+def test_modulation_power_dbr_is_negative_for_a_half_scale_sine():
+    """Half the full-scale deviation must read ~-6.02 dBr
+    (20*log10(0.5)) -- RMS scales linearly with peak amplitude for a
+    fixed-shape tone."""
+    demod = _make_demodulator()
+    n = int(SR * 0.05)
+    t = np.arange(n) / SR
+    inst_freq = 37_500.0 * np.cos(2 * np.pi * 1_000.0 * t)
+
+    iq = _fm_modulate(inst_freq, SR)
+    audio, status = demod.demodulate(iq)
+
+    assert status is not None
+    expected_dbr = 20.0 * np.log10(0.5)
+    assert status.modulation_power_dbr == pytest.approx(expected_dbr, abs=1.0)
+
+
+def test_modulation_power_dbr_floors_for_an_unmodulated_carrier():
+    """A silent/unmodulated carrier must not blow up log10(0) -- it should
+    floor to a deep negative value instead."""
+    demod = _make_demodulator()
+    n = int(SR * 0.02)
+    iq = np.ones(n, dtype=np.complex64)
+
+    audio, status = demod.demodulate(iq)
+
+    assert status is not None
+    assert status.modulation_power_dbr <= -60.0
+
+
+def test_stereo_balance_db_matches_a_known_lr_ratio():
+    """R at exactly 2x L's deviation amplitude (same tone frequency/phase,
+    amplitude-only difference) must read back ~+6.02 dB
+    (20*log10(2)) -- the ratio is preserved end-to-end through the stereo
+    decode chain regardless of the chain's absolute gain."""
+    demod = _make_demodulator()
+    n = int(SR * 0.1)
+    t = np.arange(n) / SR
+    left_hz = 10_000.0 * np.cos(2 * np.pi * 300.0 * t)
+    right_hz = 20_000.0 * np.cos(2 * np.pi * 300.0 * t)
+
+    lpr = (left_hz + right_hz) * 0.5
+    lmr = (left_hz - right_hz) * 0.5
+    pilot = 6_750.0 * np.cos(2 * np.pi * 19_000.0 * t)
+    subcarrier = lmr * np.cos(2 * np.pi * 38_000.0 * t)
+    multiplex_hz = lpr + pilot + subcarrier
+
+    iq = _fm_modulate(multiplex_hz, SR)
+    audio, status = demod.demodulate(iq)
+
+    assert status is not None
+    assert status.stereo_pilot_locked
+    expected_db = 20.0 * np.log10(2.0)
+    assert status.stereo_balance_db == pytest.approx(expected_db, abs=1.5)
+
+
+def test_stereo_balance_db_defaults_to_zero_when_mono():
+    """No pilot -> mono path -> no L/R ratio to measure, defaults to 0.0
+    rather than a stale or undefined value."""
+    demod = _make_demodulator()
+    n = int(SR * 0.02)
+    t = np.arange(n) / SR
+    inst_freq = 5_000.0 * np.cos(2 * np.pi * 1_000.0 * t)
+
+    iq = _fm_modulate(inst_freq, SR)
+    audio, status = demod.demodulate(iq)
+
+    assert status is not None
+    assert not status.stereo_pilot_locked
+    assert status.stereo_balance_db == 0.0
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
