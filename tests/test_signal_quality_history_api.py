@@ -208,3 +208,104 @@ def test_history_downsamples_long_series(history_app):
         data = resp.get_json()
         assert data['sample_count'] == 1000
         assert len(data['points']) <= 500
+
+
+def test_history_returns_modulation_power_and_stereo_balance_points(history_app):
+    with history_app.app_context():
+        base = utc_now() - timedelta(minutes=10)
+        _add_snapshot(base, {
+            'modulation_power_dbr': -1.5,
+            'stereo_balance_db': 0.3,
+        })
+        db.session.commit()
+
+        client = history_app.test_client()
+        resp = client.get('/api/audio/sources/sdr-test/signal_quality/history')
+        assert resp.status_code == 200
+        data = resp.get_json()
+
+        point = data['points'][0]
+        assert point['modulation_power_dbr'] == pytest.approx(-1.5)
+        assert point['stereo_balance_db'] == pytest.approx(0.3)
+
+
+# ── Deviation histogram ──────────────────────────────────────────────────
+
+def test_deviation_histogram_bins_known_samples(history_app):
+    with history_app.app_context():
+        base = utc_now() - timedelta(minutes=10)
+        # 2 kHz-wide bins starting at 0: 1000 Hz -> bin 0, 3000 Hz -> bin 1,
+        # 59000 Hz -> bin 29.
+        values = [1_000.0, 1_500.0, 3_000.0, 59_000.0]
+        for i, v in enumerate(values):
+            _add_snapshot(base + timedelta(seconds=i), {'peak_deviation_hz': v})
+        db.session.commit()
+
+        client = history_app.test_client()
+        resp = client.get('/api/audio/sources/sdr-test/signal_quality/deviation_histogram')
+        assert resp.status_code == 200
+        data = resp.get_json()
+
+        assert data['total_samples'] == 4
+        assert data['bin_width_hz'] == 2000
+        assert data['bins'][0] == 2   # 1000, 1500
+        assert data['bins'][1] == 1   # 3000
+        assert data['bins'][29] == 1  # 59000
+        assert data['max_hz'] == pytest.approx(59_000.0)
+        assert data['min_hz'] == pytest.approx(1_000.0)
+
+
+def test_deviation_histogram_pct_above_limit(history_app):
+    with history_app.app_context():
+        base = utc_now() - timedelta(minutes=10)
+        # 3 below the 75 kHz limit, 1 above.
+        values = [50_000.0, 60_000.0, 70_000.0, 90_000.0]
+        for i, v in enumerate(values):
+            _add_snapshot(base + timedelta(seconds=i), {'peak_deviation_hz': v})
+        db.session.commit()
+
+        client = history_app.test_client()
+        resp = client.get('/api/audio/sources/sdr-test/signal_quality/deviation_histogram')
+        assert resp.status_code == 200
+        data = resp.get_json()
+
+        assert data['limit_hz'] == 75_000
+        assert data['pct_above_limit'] == pytest.approx(25.0)
+
+
+def test_deviation_histogram_ignores_unrelated_snapshots(history_app):
+    """A window with real signal-quality data but no peak_deviation_hz at
+    all must report zero samples, not error."""
+    with history_app.app_context():
+        base = utc_now() - timedelta(minutes=5)
+        _add_snapshot(base, {'stereo_pilot_strength': 0.9})
+        db.session.commit()
+
+        client = history_app.test_client()
+        resp = client.get('/api/audio/sources/sdr-test/signal_quality/deviation_histogram')
+        assert resp.status_code == 200
+        data = resp.get_json()
+
+        assert data['total_samples'] == 0
+        assert data['max_hz'] is None
+        assert data['min_hz'] is None
+        assert data['pct_above_limit'] is None
+        assert data['bins'] == [0] * (120_000 // 2000)
+
+
+def test_deviation_histogram_clamps_values_above_axis_max_into_last_bin(history_app):
+    """A deviation reading beyond the histogram's 120 kHz axis (a very
+    over-modulated or noisy chunk) must not raise an IndexError -- it
+    lands in the last bin instead of being silently dropped."""
+    with history_app.app_context():
+        base = utc_now() - timedelta(minutes=5)
+        _add_snapshot(base, {'peak_deviation_hz': 500_000.0})
+        db.session.commit()
+
+        client = history_app.test_client()
+        resp = client.get('/api/audio/sources/sdr-test/signal_quality/deviation_histogram')
+        assert resp.status_code == 200
+        data = resp.get_json()
+
+        assert data['total_samples'] == 1
+        assert data['bins'][-1] == 1

@@ -20,7 +20,10 @@ Repository: https://github.com/KR8MER/eas-station
 from __future__ import annotations
 
 """The MPX (demodulated baseband) spectrum -- the FM-analyzer "MPX scope"
-view showing the 19 kHz pilot / 38 kHz stereo / 57 kHz RDS subcarriers.
+view showing the 19 kHz pilot / 38 kHz stereo / 57 kHz RDS subcarriers,
+plus two raw time-domain "oscilloscope" traces (the composite multiplex
+waveform, and the decoded L/R channels when stereo is locked) captured on
+the same gate and bundled into the same payload.
 
 Sibling of routes_signal.py's /api/radio/spectrum/<id> (the RF spectrum
 around the tuned carrier), kept in its own file rather than added there --
@@ -64,7 +67,11 @@ def register(app: Flask, route_logger) -> None:
 
         Returns:
             200 with {receiver_id, identifier, display_name, sample_rate,
-            freq_min, freq_max, fft_size, spectrum, timestamp, status}.
+            freq_min, freq_max, fft_size, spectrum, waveform, audio_left,
+            audio_right, timestamp, status}. ``audio_left``/``audio_right``
+            are omitted (not merely empty) when stereo isn't locked, so the
+            frontend can distinguish "no stereo audio to show" from "an
+            empty trace".
         """
         receiver = RadioReceiver.query.get_or_404(receiver_id)
 
@@ -92,7 +99,7 @@ def register(app: Flask, route_logger) -> None:
             payload = json.loads(raw)
 
             sample_rate = int(payload.get("sample_rate", 0) or 0)
-            return jsonify({
+            response = {
                 "receiver_id": receiver.id,
                 "identifier": receiver.identifier,
                 "display_name": receiver.display_name,
@@ -105,9 +112,14 @@ def register(app: Flask, route_logger) -> None:
                 "freq_max": sample_rate // 2,
                 "fft_size": payload.get("fft_size", 0),
                 "spectrum": payload.get("spectrum", []),
+                "waveform": payload.get("waveform", []),
                 "timestamp": payload.get("timestamp", time.time()),
                 "status": "available",
-            })
+            }
+            if "audio_left" in payload and "audio_right" in payload:
+                response["audio_left"] = payload["audio_left"]
+                response["audio_right"] = payload["audio_right"]
+            return jsonify(response)
         except Exception as exc:
             route_logger.error(
                 "Failed to get MPX spectrum for receiver %s: %s", receiver_id, exc, exc_info=True,

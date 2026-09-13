@@ -158,5 +158,110 @@ def test_demodulator_rate_limits_mpx_spectrum_computation():
     assert demod.last_mpx_spectrum_fresh is True
 
 
+def _fm_modulate(inst_freq_hz: np.ndarray, sample_rate: int) -> np.ndarray:
+    """Synthesize complex baseband IQ for an instantaneous-frequency
+    trajectory -- same helper as test_fm_deviation_injection_metrics.py."""
+    phase = np.cumsum(2.0 * np.pi * inst_freq_hz / sample_rate)
+    return np.exp(1j * phase).astype(np.complex64)
+
+
+def test_mpx_waveform_is_captured_alongside_the_spectrum():
+    """The raw MPX oscilloscope trace is captured on the same gate as the
+    spectrum FFT -- present and length-bounded whenever the spectrum is
+    fresh, in Hz units (not raw radians/sample)."""
+    cfg = DemodulatorConfig(
+        modulation_type="FM", sample_rate=SR, audio_sample_rate=48_000,
+        stereo_enabled=True, enable_rbds=False,
+    )
+    demod = FMDemodulator(cfg)
+    assert demod.last_mpx_waveform is None
+
+    n = 8192
+    t = np.arange(n) / SR
+    inst_freq = 6_750.0 * np.cos(2 * np.pi * 19_000.0 * t)
+    chunk = _fm_modulate(inst_freq, SR)
+
+    demod.demodulate(chunk)
+    assert demod.last_mpx_spectrum_fresh is True
+    assert demod.last_mpx_waveform is not None
+    assert 0 < len(demod.last_mpx_waveform) <= demod._SCOPE_SNAPSHOT_SAMPLES
+    # Hz-scale, not radians/sample -- a 6.75 kHz-peak tone shouldn't produce
+    # a trace with values in the thousands-of-radians range a unit mixup
+    # would cause.
+    assert max(abs(v) for v in demod.last_mpx_waveform) < 50_000.0
+
+
+def test_mpx_waveform_length_capped_when_chunk_is_larger():
+    """A chunk longer than _SCOPE_SNAPSHOT_SAMPLES must still only capture
+    a fixed-size slice, not the whole chunk."""
+    cfg = DemodulatorConfig(
+        modulation_type="FM", sample_rate=SR, audio_sample_rate=48_000,
+        stereo_enabled=True, enable_rbds=False,
+    )
+    demod = FMDemodulator(cfg)
+    n = demod._SCOPE_SNAPSHOT_SAMPLES * 4
+    t = np.arange(n) / SR
+    inst_freq = 6_750.0 * np.cos(2 * np.pi * 19_000.0 * t)
+    chunk = _fm_modulate(inst_freq, SR)
+
+    demod.demodulate(chunk)
+    assert len(demod.last_mpx_waveform) == demod._SCOPE_SNAPSHOT_SAMPLES
+
+
+def _synthesize_stereo_multiplex_hz(left_hz, right_hz, sample_rate, pilot_hz=19_000.0, pilot_amplitude_hz=6_750.0):
+    """Composite (L+R) + pilot + (L-R) DSB-SC multiplex, expressed directly
+    in Hz (instantaneous-frequency-contribution units), matching how
+    test_fm_deviation_injection_metrics.py treats single-tone signals."""
+    n = len(left_hz)
+    t = np.arange(n) / sample_rate
+    lpr = (left_hz + right_hz) * 0.5
+    lmr = (left_hz - right_hz) * 0.5
+    pilot = pilot_amplitude_hz * np.cos(2 * np.pi * pilot_hz * t)
+    subcarrier = lmr * np.cos(2 * np.pi * (2 * pilot_hz) * t)
+    return lpr + pilot + subcarrier
+
+
+def test_audio_scope_present_when_stereo_is_locked():
+    """L/R oscilloscope traces are populated once the pilot is locked."""
+    cfg = DemodulatorConfig(
+        modulation_type="FM", sample_rate=SR, audio_sample_rate=48_000,
+        stereo_enabled=True, enable_rbds=False,
+    )
+    demod = FMDemodulator(cfg)
+    n = int(SR * 0.05)
+    t = np.arange(n) / SR
+    left_hz = 10_000.0 * np.cos(2 * np.pi * 300.0 * t)
+    right_hz = 10_000.0 * np.cos(2 * np.pi * 300.0 * t)
+    multiplex_hz = _synthesize_stereo_multiplex_hz(left_hz, right_hz, SR)
+    chunk = _fm_modulate(multiplex_hz, SR)
+
+    audio, status = demod.demodulate(chunk)
+    assert status.stereo_pilot_locked
+    assert demod.last_audio_scope_left is not None
+    assert demod.last_audio_scope_right is not None
+    assert 0 < len(demod.last_audio_scope_left) <= demod._SCOPE_SNAPSHOT_SAMPLES
+    assert len(demod.last_audio_scope_left) == len(demod.last_audio_scope_right)
+
+
+def test_audio_scope_absent_for_mono_signal():
+    """No pilot -> mono path -> no separate L/R trace to show, and any
+    stale trace from an earlier stereo-locked chunk must be cleared."""
+    cfg = DemodulatorConfig(
+        modulation_type="FM", sample_rate=SR, audio_sample_rate=48_000,
+        stereo_enabled=True, enable_rbds=False,
+    )
+    demod = FMDemodulator(cfg)
+    n = int(SR * 0.02)
+    t = np.arange(n) / SR
+    # A plain audio-band tone with no 19 kHz pilot at all -- never locks.
+    inst_freq = 5_000.0 * np.cos(2 * np.pi * 1_000.0 * t)
+    chunk = _fm_modulate(inst_freq, SR)
+
+    audio, status = demod.demodulate(chunk)
+    assert not status.stereo_pilot_locked
+    assert demod.last_audio_scope_left is None
+    assert demod.last_audio_scope_right is None
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

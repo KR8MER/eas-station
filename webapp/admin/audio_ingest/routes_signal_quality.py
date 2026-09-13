@@ -20,7 +20,9 @@ Repository: https://github.com/KR8MER/eas-station
 from __future__ import annotations
 
 """Signal-quality history endpoint (stereo pilot strength, click rate,
-peak deviation, pilot/RDS injection level).
+peak deviation, pilot/RDS injection level, modulation power, stereo
+balance) plus an on-demand deviation histogram derived from the same
+stored history.
 
 Sibling of routes_rbds.py -- same query/downsample shape against the
 ``audio_source_metrics`` table, different fields. Kept separate from
@@ -80,8 +82,9 @@ def api_get_signal_quality_history(source_name: str):
     Returns:
         200 with {source, minutes, sample_count, points}, where each point
         is {t, stereo_pilot_strength, click_rate, peak_deviation_hz,
-        pilot_injection_hz, rds_injection_hz} (any field may be null if
-        that snapshot didn't carry it).
+        pilot_injection_hz, rds_injection_hz, modulation_power_dbr,
+        stereo_balance_db} (any field may be null if that snapshot didn't
+        carry it).
     """
     try:
         minutes = int(request.args.get('minutes', 60))
@@ -111,6 +114,7 @@ def api_get_signal_quality_history(source_name: str):
     _FIELDS = (
         'stereo_pilot_strength', 'click_rate',
         'peak_deviation_hz', 'pilot_injection_hz', 'rds_injection_hz',
+        'modulation_power_dbr', 'stereo_balance_db',
     )
 
     points: List[Dict[str, Any]] = []
@@ -133,4 +137,97 @@ def api_get_signal_quality_history(source_name: str):
         'minutes': minutes,
         'sample_count': sample_count,
         'points': points,
+    })
+
+
+# Broadcast-FM full-scale deviation, matching
+# FMDemodulator.DEFAULT_DEVIATION_HZ / FM_DEVIATION_HZ['WFM'] in
+# app_core/radio/demod/fm.py -- kept as a small web-layer-local constant
+# rather than importing the DSP class here, since this route only needs
+# the number, not the demodulator.
+_BROADCAST_FM_DEVIATION_LIMIT_HZ = 75000
+
+# Histogram covers 0-120 kHz in 2 kHz bins, matching the reference
+# broadcast-analyzer tool's own deviation-histogram axis range.
+_HISTOGRAM_MAX_HZ = 120000
+_HISTOGRAM_BIN_WIDTH_HZ = 2000
+_HISTOGRAM_BIN_COUNT = _HISTOGRAM_MAX_HZ // _HISTOGRAM_BIN_WIDTH_HZ
+
+
+@audio_ingest_bp.route('/api/audio/sources/<path:source_name>/signal_quality/deviation_histogram', methods=['GET'])
+def api_get_deviation_histogram(source_name: str):
+    """Distribution of peak composite deviation over a time window.
+
+    Unlike the box this feature set is modeled on (which needs a manual
+    "Acquire" pass over a live N-minute capture), this bins whatever
+    ``peak_deviation_hz`` samples are already sitting in
+    ``audio_source_metrics`` from the once/sec history snapshot -- no
+    separate acquisition step, and any of the windows already being
+    logged continuously works immediately.
+
+    Query:
+        minutes (int, optional): History window in minutes. Default 60,
+            clamped to 5..1440. Same semantics as the history endpoint.
+
+    Returns:
+        200 with {source, minutes, bin_width_hz, bins, max_hz, min_hz,
+        total_samples, limit_hz, pct_above_limit}. ``bins`` is a list of
+        ``_HISTOGRAM_BIN_COUNT`` integer counts, one per
+        ``bin_width_hz``-wide bucket starting at 0 Hz. All of
+        max_hz/min_hz/pct_above_limit are null when total_samples is 0.
+    """
+    try:
+        minutes = int(request.args.get('minutes', 60))
+    except (TypeError, ValueError):
+        minutes = 60
+    minutes = max(5, min(minutes, 1440))
+    cutoff = utc_now() - timedelta(minutes=minutes)
+
+    try:
+        rows = (
+            db.session.query(AudioSourceMetrics.source_metadata)
+            .filter(
+                AudioSourceMetrics.source_name == source_name,
+                AudioSourceMetrics.timestamp >= cutoff,
+            )
+            .limit(90000)
+            .all()
+        )
+    except Exception as exc:
+        logger.error('Error querying deviation histogram for %s: %s', source_name, exc)
+        return jsonify({'error': str(exc)}), 500
+
+    # A full window's worth of raw samples must be binned (not the
+    # downsampled series the /history endpoint returns for long windows) --
+    # a histogram over a downsampled series would misrepresent the true
+    # distribution.
+    values = []
+    for (md,) in rows:
+        md = md or {}
+        v = md.get('peak_deviation_hz')
+        if isinstance(v, (int, float)):
+            values.append(float(v))
+
+    bins = [0] * _HISTOGRAM_BIN_COUNT
+    for v in values:
+        idx = int(v // _HISTOGRAM_BIN_WIDTH_HZ)
+        idx = max(0, min(_HISTOGRAM_BIN_COUNT - 1, idx))
+        bins[idx] += 1
+
+    total_samples = len(values)
+    max_hz = max(values) if values else None
+    min_hz = min(values) if values else None
+    above_limit = sum(1 for v in values if v > _BROADCAST_FM_DEVIATION_LIMIT_HZ)
+    pct_above_limit = (above_limit / total_samples * 100.0) if total_samples else None
+
+    return jsonify({
+        'source': source_name,
+        'minutes': minutes,
+        'bin_width_hz': _HISTOGRAM_BIN_WIDTH_HZ,
+        'bins': bins,
+        'max_hz': max_hz,
+        'min_hz': min_hz,
+        'total_samples': total_samples,
+        'limit_hz': _BROADCAST_FM_DEVIATION_LIMIT_HZ,
+        'pct_above_limit': pct_above_limit,
     })

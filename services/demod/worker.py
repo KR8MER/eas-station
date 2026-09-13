@@ -332,13 +332,24 @@ class DemodWorker:
                 from app_core.radio.spectrum import FFT_SIZE as _MPX_FFT_SIZE
 
                 spectrum_key = f"{RedisChannels.MPX_SPECTRUM_PREFIX}{self.receiver_id}"
-                payload = json.dumps({
+                payload_dict = {
                     "receiver_id": self.receiver_id,
                     "sample_rate": self._iq_sample_rate,
                     "fft_size": _MPX_FFT_SIZE,
                     "spectrum": self._demodulator.last_mpx_spectrum,
+                    # Raw time-domain traces captured on the same gate --
+                    # bundled into this payload rather than a separate key
+                    # since they share the exact same source/cadence (see
+                    # FMDemodulator.demodulate()'s MPX gate).
+                    "waveform": getattr(self._demodulator, "last_mpx_waveform", None),
                     "timestamp": now,
-                })
+                }
+                audio_left = getattr(self._demodulator, "last_audio_scope_left", None)
+                audio_right = getattr(self._demodulator, "last_audio_scope_right", None)
+                if audio_left is not None and audio_right is not None:
+                    payload_dict["audio_left"] = audio_left
+                    payload_dict["audio_right"] = audio_right
+                payload = json.dumps(payload_dict)
                 self._redis_client.setex(
                     spectrum_key,
                     RedisChannels.MPX_SPECTRUM_TTL_SECONDS,

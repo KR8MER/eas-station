@@ -486,6 +486,25 @@ sudo systemctl restart eas-station</code></pre>
                     <div style="position:relative;height:180px;">
                         <canvas id="injectionHistoryChart" aria-label="Pilot and RDS subcarrier injection level over time" role="img"></canvas>
                     </div>
+                    <h4 class="text-muted mt-4 h6">Modulation Power
+                        <span class="small fw-normal">(dBr, 0 dBr = 100% modulation at the 75 kHz reference)</span>
+                    </h4>
+                    <div style="position:relative;height:180px;">
+                        <canvas id="modulationPowerHistoryChart" aria-label="Modulation power over time" role="img"></canvas>
+                    </div>
+                    <h4 class="text-muted mt-4 h6">Stereo Balance
+                        <span class="small fw-normal">(dB, R relative to L -- 0 dB is balanced)</span>
+                    </h4>
+                    <div style="position:relative;height:180px;">
+                        <canvas id="stereoBalanceHistoryChart" aria-label="Stereo balance over time" role="img"></canvas>
+                    </div>
+                    <h4 class="text-muted mt-4 h6">Frequency Deviation Histogram
+                        <span class="small fw-normal">(distribution over the selected window, unlike the charts above)</span>
+                    </h4>
+                    <div id="deviationHistogramReadout" class="small text-muted mb-1"></div>
+                    <div style="position:relative;height:180px;">
+                        <canvas id="deviationHistogramChart" aria-label="Frequency deviation histogram" role="img"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1204,6 +1223,9 @@ sudo systemctl restart eas-station</code></pre>
     let clickRateHistoryChart = null;
     let peakDeviationHistoryChart = null;
     let injectionHistoryChart = null;
+    let modulationPowerHistoryChart = null;
+    let stereoBalanceHistoryChart = null;
+    let deviationHistogramChart = null;
 
     async function loadSignalQualityHistory() {
         const statusEl = document.getElementById('signalQualityHistoryStatus');
@@ -1426,12 +1448,163 @@ sudo systemctl restart eas-station</code></pre>
                 });
             }
 
+            if (modulationPowerHistoryChart) {
+                modulationPowerHistoryChart.destroy();
+                modulationPowerHistoryChart = null;
+            }
+            const pmCanvas = document.getElementById('modulationPowerHistoryChart');
+            if (pmCanvas && window.Chart) {
+                modulationPowerHistoryChart = new Chart(pmCanvas.getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [{
+                            label: 'Modulation Power',
+                            data: points.map(p => (p.modulation_power_dbr === null || p.modulation_power_dbr === undefined) ? null : Number(p.modulation_power_dbr)),
+                            borderColor: '#f0ad4e',
+                            backgroundColor: 'rgba(240,173,78,.15)',
+                            pointRadius: 0,
+                            borderWidth: 1.5,
+                            tension: .25,
+                            spanGaps: true,
+                        }],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        interaction: { mode: 'index', intersect: false },
+                        scales: {
+                            // No fixed max -- unlike the percentage charts, dBr
+                            // genuinely varies with programme content and can
+                            // go positive on overmodulation, so a hard ceiling
+                            // would hide exactly the excursions worth seeing.
+                            y: { ticks: { callback: v => v + ' dBr' } },
+                            ...commonScales,
+                        },
+                        plugins: {
+                            legend: { labels: { boxWidth: 18 } },
+                            tooltip: { callbacks: { title: tooltipTitle } },
+                        },
+                    },
+                });
+            }
+
+            if (stereoBalanceHistoryChart) {
+                stereoBalanceHistoryChart.destroy();
+                stereoBalanceHistoryChart = null;
+            }
+            const balCanvas = document.getElementById('stereoBalanceHistoryChart');
+            if (balCanvas && window.Chart) {
+                stereoBalanceHistoryChart = new Chart(balCanvas.getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [{
+                            label: 'Stereo Balance',
+                            data: points.map(p => (p.stereo_balance_db === null || p.stereo_balance_db === undefined) ? null : Number(p.stereo_balance_db)),
+                            borderColor: '#5bc0de',
+                            backgroundColor: 'rgba(91,192,222,.15)',
+                            pointRadius: 0,
+                            borderWidth: 1.5,
+                            tension: .25,
+                            spanGaps: true,
+                        }],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        interaction: { mode: 'index', intersect: false },
+                        scales: {
+                            y: { ticks: { callback: v => v + ' dB' } },
+                            ...commonScales,
+                        },
+                        plugins: {
+                            legend: { labels: { boxWidth: 18 } },
+                            tooltip: { callbacks: { title: tooltipTitle } },
+                        },
+                    },
+                });
+            }
+
             statusEl.style.display = 'none';
             contentEl.style.display = '';
         } catch (error) {
             console.error('Failed to load signal-quality history:', error);
             statusEl.innerHTML = `<i class="fas fa-exclamation-triangle me-2" aria-hidden="true"></i>`
                 + `Couldn't load history: ${escapeHistText(error.message)}`;
+        }
+    }
+
+    // Deviation histogram: a distribution over the window, not a time
+    // series -- separate fetch/render from loadSignalQualityHistory()
+    // above, but triggered from the same places (same source, same range
+    // selector) since it's data-quality context for the same modal.
+    async function loadDeviationHistogram() {
+        const readoutEl = document.getElementById('deviationHistogramReadout');
+        const canvas = document.getElementById('deviationHistogramChart');
+        if (!signalQualityHistorySource || !canvas) return;
+
+        try {
+            const rangeEl = document.getElementById('signalQualityHistoryRange');
+            const minutes = rangeEl ? rangeEl.value : 60;
+            const resp = await fetch(
+                `/api/audio/sources/${encodeURIComponent(signalQualityHistorySource)}/signal_quality/deviation_histogram?minutes=${minutes}`,
+                { cache: 'no-store' }
+            );
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+            const data = await resp.json();
+
+            if (!data.total_samples) {
+                if (readoutEl) readoutEl.textContent = 'No stored deviation samples in this window yet.';
+            } else if (readoutEl) {
+                readoutEl.textContent =
+                    `Max: ${(data.max_hz / 1000).toFixed(1)} kHz · `
+                    + `Min: ${(data.min_hz / 1000).toFixed(1)} kHz · `
+                    + `% above ${(data.limit_hz / 1000).toFixed(0)} kHz: ${data.pct_above_limit.toFixed(1)}% · `
+                    + `${data.total_samples} samples`;
+            }
+
+            const labels = data.bins.map((_, i) => ((i * data.bin_width_hz) / 1000).toFixed(0));
+
+            if (deviationHistogramChart) {
+                deviationHistogramChart.destroy();
+                deviationHistogramChart = null;
+            }
+            if (window.Chart) {
+                deviationHistogramChart = new Chart(canvas.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [{
+                            label: 'Samples',
+                            data: data.bins,
+                            backgroundColor: labels.map((l) => Number(l) * 1000 > data.limit_hz ? 'rgba(217,83,79,.6)' : 'rgba(57,160,255,.6)'),
+                            barPercentage: 1.0,
+                            categoryPercentage: 1.0,
+                        }],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        scales: {
+                            x: {
+                                ticks: { maxTicksLimit: 12, autoSkip: true, maxRotation: 0 },
+                                title: { display: true, text: 'kHz' },
+                            },
+                            y: { beginAtZero: true },
+                        },
+                        plugins: { legend: { display: false } },
+                    },
+                });
+            }
+        } catch (error) {
+            console.error('Failed to load deviation histogram:', error);
+            if (readoutEl) {
+                readoutEl.textContent = `Couldn't load histogram: ${error.message}`;
+            }
         }
     }
 
@@ -1450,11 +1623,13 @@ sudo systemctl restart eas-station</code></pre>
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
         }
         loadSignalQualityHistory();
+        loadDeviationHistogram();
     });
 
     const signalQualityHistoryRangeEl = document.getElementById('signalQualityHistoryRange');
     if (signalQualityHistoryRangeEl) {
         signalQualityHistoryRangeEl.addEventListener('change', loadSignalQualityHistory);
+        signalQualityHistoryRangeEl.addEventListener('change', loadDeviationHistogram);
     }
 
     // ---- MPX (demodulated baseband) spectrum -- the FM-analyzer scope ----
@@ -1524,7 +1699,95 @@ sudo systemctl restart eas-station</code></pre>
         axisEl.innerHTML = '<span>0 kHz</span><span>' + (MPX_VIEW_MAX_HZ / 1000) + ' kHz</span>';
         container.appendChild(axisEl);
 
-        return { canvas, ctx: canvas.getContext('2d'), statusEl };
+        // MPX oscilloscope: the raw time-domain multiplex trace, distinct
+        // from the FFT above -- the literal waveform, same kHz-deviation
+        // units as the spectrum's frequency markers relate to.
+        const scopeHeader = document.createElement('div');
+        scopeHeader.className = 'd-flex flex-wrap gap-2 mb-1 mt-3 small align-items-center';
+        const scopeBadge = document.createElement('span');
+        scopeBadge.className = 'badge bg-secondary text-uppercase';
+        scopeBadge.textContent = 'MPX Scope';
+        scopeHeader.appendChild(scopeBadge);
+        container.appendChild(scopeHeader);
+
+        const waveformCanvas = document.createElement('canvas');
+        waveformCanvas.width = 512;
+        waveformCanvas.height = 100;
+        waveformCanvas.style.width = '100%';
+        waveformCanvas.style.height = '100px';
+        waveformCanvas.style.border = '1px solid rgba(128,128,128,0.3)';
+        waveformCanvas.style.display = 'block';
+        waveformCanvas.style.background = '#04040c';
+        container.appendChild(waveformCanvas);
+
+        // Audio oscilloscope: decoded L/R channels, in the same
+        // kHz-deviation domain (not normalized playback audio) -- only
+        // meaningful once the pilot is locked.
+        const audioHeader = document.createElement('div');
+        audioHeader.className = 'd-flex flex-wrap gap-2 mb-1 mt-3 small align-items-center';
+        const audioBadge = document.createElement('span');
+        audioBadge.className = 'badge bg-secondary text-uppercase';
+        audioBadge.textContent = 'Audio Scope';
+        audioHeader.appendChild(audioBadge);
+        const audioStatusEl = document.createElement('span');
+        audioStatusEl.className = 'text-muted';
+        audioHeader.appendChild(audioStatusEl);
+        container.appendChild(audioHeader);
+
+        const audioCanvas = document.createElement('canvas');
+        audioCanvas.width = 512;
+        audioCanvas.height = 100;
+        audioCanvas.style.width = '100%';
+        audioCanvas.style.height = '100px';
+        audioCanvas.style.border = '1px solid rgba(128,128,128,0.3)';
+        audioCanvas.style.display = 'block';
+        audioCanvas.style.background = '#04040c';
+        container.appendChild(audioCanvas);
+
+        return {
+            canvas, ctx: canvas.getContext('2d'), statusEl,
+            waveformCanvas, waveformCtx: waveformCanvas.getContext('2d'),
+            audioCanvas, audioCtx: audioCanvas.getContext('2d'), audioStatusEl,
+        };
+    }
+
+    // Shared by both oscilloscope traces: draw one or more centered,
+    // symmetric-around-zero line traces on a canvas, auto-scaled to
+    // whichever trace has the largest magnitude this frame.
+    function mpxDrawScopeTraces(ctx, w, h, traces) {
+        ctx.fillStyle = '#04040c';
+        ctx.fillRect(0, 0, w, h);
+
+        let peak = 0;
+        for (const { data } of traces) {
+            for (const v of data) {
+                const a = Math.abs(Number(v) || 0);
+                if (a > peak) peak = a;
+            }
+        }
+        if (peak <= 0) peak = 1;
+        const scaleY = v => h / 2 - (v / peak) * (h / 2) * 0.9;
+
+        ctx.strokeStyle = 'rgba(128,128,128,0.25)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, h / 2);
+        ctx.lineTo(w, h / 2);
+        ctx.stroke();
+
+        for (const { data, color } of traces) {
+            const n = data.length;
+            if (!n) continue;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.25;
+            ctx.beginPath();
+            for (let i = 0; i < n; i++) {
+                const x = (i / Math.max(1, n - 1)) * w;
+                const y = scaleY(Number(data[i]) || 0);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        }
     }
 
     function mpxRender(panel, payload) {
@@ -1539,6 +1802,8 @@ sudo systemctl restart eas-station</code></pre>
             panel.statusEl.textContent = payload.status === 'unavailable'
                 ? 'No MPX spectrum yet (FM/WFM receivers only -- wait a couple seconds after tuning)'
                 : 'No spectrum data';
+            if (panel.waveformCtx) panel.waveformCtx.clearRect(0, 0, panel.waveformCanvas.width, panel.waveformCanvas.height);
+            if (panel.audioCtx) panel.audioCtx.clearRect(0, 0, panel.audioCanvas.width, panel.audioCanvas.height);
             return;
         }
 
@@ -1592,6 +1857,34 @@ sudo systemctl restart eas-station</code></pre>
 
         panel.statusEl.textContent =
             `${(freqMax / 1000).toFixed(0)} kHz span (Nyquist) · showing 0-${MPX_VIEW_MAX_HZ / 1000} kHz`;
+
+        // MPX oscilloscope: raw time-domain trace, same payload/gate as
+        // the spectrum above (see FMDemodulator.demodulate()'s MPX gate).
+        const waveform = payload.waveform || [];
+        if (panel.waveformCanvas && waveform.length) {
+            mpxDrawScopeTraces(panel.waveformCtx, panel.waveformCanvas.width, panel.waveformCanvas.height, [
+                { data: waveform, color: '#39ff8f' },
+            ]);
+        }
+
+        // Audio oscilloscope: only present once stereo is locked --
+        // absent (not merely empty) fields mean "nothing to show", not
+        // "silence", so a stale trace doesn't linger on screen.
+        if (panel.audioCanvas) {
+            const left = payload.audio_left;
+            const right = payload.audio_right;
+            if (Array.isArray(left) && Array.isArray(right) && left.length) {
+                mpxDrawScopeTraces(panel.audioCtx, panel.audioCanvas.width, panel.audioCanvas.height, [
+                    { data: left, color: '#39a0ff' },
+                    { data: right, color: '#ff5c5c' },
+                ]);
+                if (panel.audioStatusEl) panel.audioStatusEl.textContent = 'L (blue) / R (red)';
+            } else {
+                panel.audioCtx.fillStyle = '#04040c';
+                panel.audioCtx.fillRect(0, 0, panel.audioCanvas.width, panel.audioCanvas.height);
+                if (panel.audioStatusEl) panel.audioStatusEl.textContent = 'Stereo not locked';
+            }
+        }
     }
 
     async function mpxFetchAndRender(receiverId) {

@@ -133,6 +133,10 @@ class FMDemodulator:
         # divides by π — it doesn't; fm_discriminator returns np.angle().)
         deviation_hz = self.FM_DEVIATION_HZ.get(self.config.modulation_type, self.DEFAULT_DEVIATION_HZ)
         self._audio_gain = config.sample_rate / (2.0 * np.pi * deviation_hz)
+        # Kept for modulation_power_dbr's reference RMS (full-scale sine at
+        # this deviation) -- deviation_hz above is otherwise thrown away
+        # once _audio_gain is computed.
+        self._deviation_limit_hz = deviation_hz
 
         # De-emphasis filter state
         self._deemph_alpha = 0.0
@@ -206,6 +210,16 @@ class FMDemodulator:
         self._last_mpx_spectrum_at: float = 0.0
         self.last_mpx_spectrum: Optional[list] = None
         self.last_mpx_spectrum_fresh: bool = False
+
+        # Raw time-domain "oscilloscope" traces, gated by the same flag
+        # above (last_mpx_spectrum_fresh) rather than a second timer --
+        # they're captured alongside the spectrum, at the same 2 Hz cadence.
+        # A fixed sample count rather than a precise ms-based slice: good
+        # enough for a qualitative trace, avoids per-receiver timebase math.
+        self._SCOPE_SNAPSHOT_SAMPLES = 512
+        self.last_mpx_waveform: Optional[list] = None
+        self.last_audio_scope_left: Optional[list] = None
+        self.last_audio_scope_right: Optional[list] = None
 
         # Early-decimation state (PySDR architecture).  The RBDSWorker's
         # filter chain (54-60 kHz bandpass, 57 kHz mix, 2.4 kHz post-mix
@@ -486,8 +500,24 @@ class FMDemodulator:
             float(np.max(np.abs(multiplex))) * hz_per_radian_sample
             if multiplex.size else 0.0
         )
+
+        # Modulation power (Pm): RMS power of the whole composite MPX
+        # signal relative to a full-scale sine at the deviation limit
+        # (0 dBr = 100% modulation), the same reference the MPX FFT already
+        # documents. Free -- one more RMS pass over multiplex, same cost
+        # class as the pilot RMS below.
+        if multiplex.size:
+            rms_hz = float(np.sqrt(np.mean(multiplex.astype(np.float64) ** 2))) * hz_per_radian_sample
+            reference_rms_hz = self._deviation_limit_hz / np.sqrt(2.0)
+            modulation_power_dbr = (
+                20.0 * float(np.log10(rms_hz / reference_rms_hz)) if rms_hz > 0 else -120.0
+            )
+        else:
+            modulation_power_dbr = -120.0
+
         pilot_injection_hz = 0.0
         rds_injection_hz = 0.0
+        stereo_balance_db = 0.0
 
         # Stereo pilot detection (19 kHz tone indicates stereo broadcast)
         if self._stereo_enabled and self.config.sample_rate >= 38000:
@@ -529,6 +559,13 @@ class FMDemodulator:
             if spectrum is not None:
                 self.last_mpx_spectrum = spectrum
                 self.last_mpx_spectrum_fresh = True
+            # MPX oscilloscope: a short raw slice of the same signal, in Hz
+            # (not the FFT above -- the literal waveform), captured on the
+            # same gate since it's free once we're already here.
+            n = min(self._SCOPE_SNAPSHOT_SAMPLES, multiplex.size)
+            self.last_mpx_waveform = (
+                (multiplex[:n] * hz_per_radian_sample).tolist() if n else []
+            )
             self._last_mpx_spectrum_at = now
 
         # RBDS extraction in a separate worker thread.  Submit samples
@@ -636,6 +673,25 @@ class FMDemodulator:
                 right = stereo_audio[:, 1]
                 intermediate_rate = self.config.sample_rate
 
+            # Stereo balance + audio oscilloscope: tap left/right here,
+            # still in raw radians/sample units (pre _audio_gain), so both
+            # are expressed in the same kHz-deviation domain as the MPX
+            # oscilloscope above rather than normalized ±1.0 playback
+            # audio -- this is a modulation-level view of each channel,
+            # not a loudness one.
+            left_rms_hz = float(np.sqrt(np.mean(left.astype(np.float64) ** 2))) * hz_per_radian_sample if left.size else 0.0
+            right_rms_hz = float(np.sqrt(np.mean(right.astype(np.float64) ** 2))) * hz_per_radian_sample if right.size else 0.0
+            if left_rms_hz > 0 and right_rms_hz > 0:
+                stereo_balance_db = 20.0 * float(np.log10(right_rms_hz / left_rms_hz))
+
+            if self.last_mpx_spectrum_fresh:
+                n = min(self._SCOPE_SNAPSHOT_SAMPLES, left.size, right.size)
+                self.last_audio_scope_left = (left[:n] * hz_per_radian_sample).tolist()
+                self.last_audio_scope_right = (right[:n] * hz_per_radian_sample).tolist()
+            else:
+                self.last_audio_scope_left = None
+                self.last_audio_scope_right = None
+
             # Scale to audio levels: full deviation → ±1.0.  The box
             # decimation above has unity DC gain, so the factor must not
             # depend on decim (the old /decim under-drove the audio).
@@ -649,6 +705,13 @@ class FMDemodulator:
 
             audio = np.column_stack((left, right))
         else:
+            # No stereo this chunk (pilot not locked / mono receiver) --
+            # clear the audio-scope traces so the frontend shows "stereo
+            # not locked" instead of a stale trace from the last time it was.
+            if self.last_mpx_spectrum_fresh:
+                self.last_audio_scope_left = None
+                self.last_audio_scope_right = None
+
             # Mono audio path.  Bandlimit the raw multiplex with the same
             # proper 16 kHz FIR the stereo decoder uses for L+R before any
             # decimation.  The old box-average decimation (fast_decimate)
@@ -727,6 +790,8 @@ class FMDemodulator:
             peak_deviation_hz=peak_deviation_hz,
             pilot_injection_hz=pilot_injection_hz,
             rds_injection_hz=rds_injection_hz,
+            modulation_power_dbr=modulation_power_dbr,
+            stereo_balance_db=stereo_balance_db,
         )
 
         return audio.astype(np.float32), status

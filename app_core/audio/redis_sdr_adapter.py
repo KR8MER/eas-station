@@ -467,6 +467,10 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                 self.metrics.metadata['pilot_injection_hz'] = float(status.pilot_injection_hz)
             if getattr(status, 'rds_injection_hz', None) is not None:
                 self.metrics.metadata['rds_injection_hz'] = float(status.rds_injection_hz)
+            if getattr(status, 'modulation_power_dbr', None) is not None:
+                self.metrics.metadata['modulation_power_dbr'] = float(status.modulation_power_dbr)
+            if getattr(status, 'stereo_balance_db', None) is not None:
+                self.metrics.metadata['stereo_balance_db'] = float(status.stereo_balance_db)
 
             # Extract RBDS/RDS data if available.  We cache the last decoded
             # object so that between decoder poll cycles we can keep showing
