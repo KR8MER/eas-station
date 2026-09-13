@@ -321,6 +321,32 @@ class DemodWorker:
             except Exception as exc:
                 logger.debug("demod worker %s: status publish failed: %s", self.receiver_id, exc)
 
+        # MPX (demodulated baseband) spectrum -- own key, own cadence (see
+        # RedisChannels.MPX_SPECTRUM_PREFIX's docstring for why this isn't
+        # folded into the status payload above). last_mpx_spectrum_fresh is
+        # set by FMDemodulator.demodulate() only on the calls where it
+        # actually recomputed the FFT (~2 Hz) -- getattr guards this being
+        # AM/IQ-passthrough, which have no such attribute at all.
+        if getattr(self._demodulator, "last_mpx_spectrum_fresh", False):
+            try:
+                from app_core.radio.spectrum import FFT_SIZE as _MPX_FFT_SIZE
+
+                spectrum_key = f"{RedisChannels.MPX_SPECTRUM_PREFIX}{self.receiver_id}"
+                payload = json.dumps({
+                    "receiver_id": self.receiver_id,
+                    "sample_rate": self._iq_sample_rate,
+                    "fft_size": _MPX_FFT_SIZE,
+                    "spectrum": self._demodulator.last_mpx_spectrum,
+                    "timestamp": now,
+                })
+                self._redis_client.setex(
+                    spectrum_key,
+                    RedisChannels.MPX_SPECTRUM_TTL_SECONDS,
+                    payload,
+                )
+            except Exception as exc:
+                logger.debug("demod worker %s: MPX spectrum publish failed: %s", self.receiver_id, exc)
+
 
 def _pack_audio_envelope(audio_bytes: bytes, iq_sample_rate: int, center_frequency: int) -> bytes:
     """Build the wire format for a ``demod:audio:<id>`` pub/sub message.

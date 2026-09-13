@@ -166,9 +166,14 @@ class TestDemodWorker(unittest.TestCase):
         publish_channel = self.redis_client.publish.call_args[0][0]
         self.assertEqual(publish_channel, "demod:audio:test-rx")
 
+        # setex is now used for two independent keys -- status and (on the
+        # first chunk, since its own throttle gate starts at 0.0 the same
+        # way status's does) the MPX spectrum -- so check by key rather
+        # than assume the *last* setex call is the status one.
         self.assertTrue(self.redis_client.setex.called)
-        status_key = self.redis_client.setex.call_args[0][0]
-        self.assertEqual(status_key, "demod:status:test-rx")
+        setex_keys = [call.args[0] for call in self.redis_client.setex.call_args_list]
+        self.assertIn("demod:status:test-rx", setex_keys)
+        self.assertIn("demod:mpx_spectrum:test-rx", setex_keys)
 
     def test_status_publish_is_throttled_across_rapid_chunks(self):
         """py-spy profiling on a live, CPU-contended box found the per-chunk
@@ -214,6 +219,12 @@ class TestDemodWorker(unittest.TestCase):
         through again -- this isn't a one-shot latch, just a rate limit."""
         from services.demod import worker as worker_module
 
+        def _status_setex_count():
+            return sum(
+                1 for call in self.redis_client.setex.call_args_list
+                if call.args[0] == "demod:status:test-rx"
+            )
+
         worker = self._make_worker()
         sample_rate = 250000
         num_samples = int(sample_rate * 0.02)
@@ -226,7 +237,12 @@ class TestDemodWorker(unittest.TestCase):
         deadline = time.monotonic() + 3.0
         while worker.get_stats()["chunks_processed"] < 1 and time.monotonic() < deadline:
             time.sleep(0.01)
-        first_count = self.redis_client.setex.call_count
+        # Filtered to the status key specifically -- setex's raw call_count
+        # also includes the MPX spectrum key (own independent throttle,
+        # see test_submit_and_publish_round_trip), which would make a raw
+        # count here timing-dependent on whether its own 0.5s window
+        # happened to also elapse between submissions.
+        first_count = _status_setex_count()
         self.assertEqual(first_count, 1)
 
         # Force the throttle window to have elapsed, as if real wall-clock
@@ -238,7 +254,7 @@ class TestDemodWorker(unittest.TestCase):
         while worker.get_stats()["chunks_processed"] < 2 and time.monotonic() < deadline:
             time.sleep(0.01)
 
-        self.assertEqual(self.redis_client.setex.call_count, first_count + 1)
+        self.assertEqual(_status_setex_count(), first_count + 1)
 
     def test_drops_on_backpressure_without_blocking(self):
         """submit_message() must never block the caller -- verify it

@@ -140,6 +140,16 @@ class RedisChannels:
     DEMOD_STATUS_TTL_SECONDS = 10
     DEMOD_METRICS_KEY = "demod:metrics"
 
+    # MPX (demodulated baseband) spectrum -- the "FM analyzer" view showing
+    # the 19 kHz pilot / 38 kHz stereo / 57 kHz RDS subcarriers, computed
+    # from the demodulator's own multiplex signal. Deliberately its own key
+    # rather than riding the status channel above: status's cadence/payload
+    # size were tuned for small fields (see the comment on this class'
+    # docstring intent), and RF spectrum already sets the precedent of
+    # keeping spectrum data on its own key, separate from receiver status.
+    MPX_SPECTRUM_PREFIX = "demod:mpx_spectrum:"  # + receiver_id
+    MPX_SPECTRUM_TTL_SECONDS = 5
+
     # Audio streaming
     AUDIO_SAMPLES_PREFIX = "audio:samples:"  # + source_name
 

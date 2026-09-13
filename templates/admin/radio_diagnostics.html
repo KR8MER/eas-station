@@ -794,6 +794,9 @@ sudo systemctl restart eas-station</code></pre>
                                     <button type="button" class="btn btn-sm btn-outline-info" data-action="spectrum-scope" data-receiver-id="${receiver.receiver_id}" title="Start/stop a live spectrum scope -- a classic frequency-vs-power line trace (as opposed to the waterfall's time-vs-frequency-vs-power heatmap), with a peak-hold overlay. Shares the same ~500 ms poll as Live Waterfall, so running both at once costs no extra requests.">
                                         <i class="fas fa-chart-line"></i> <span data-scope-label="${receiver.receiver_id}">Spectrum Scope</span>
                                     </button>
+                                    <button type="button" class="btn btn-sm btn-outline-info" data-action="mpx-scope" data-receiver-id="${receiver.receiver_id}" title="Start/stop a live MPX (demodulated baseband) spectrum -- the FM multiplex signal itself, showing the 19 kHz stereo pilot, 38 kHz stereo subcarrier, and 57 kHz RDS subcarrier as visible spectral features. FM/WFM receivers only; polls independently at ~2 Hz, matching how often eas-station-demod.service recomputes it.">
+                                        <i class="fas fa-broadcast-tower"></i> <span data-mpx-label="${receiver.receiver_id}">MPX Scope</span>
+                                    </button>
                                     <button type="button" class="btn btn-sm btn-outline-secondary" data-action="historical-trends" data-receiver-id="${receiver.receiver_id}" title="Show historical charts for this receiver: signal strength, lock %, sample-rate health, and buffer overflow/underflow counts, over a selectable window (1h/6h/24h/7d). Backed by a Redis trend archive sampled every 10s.">
                                         <i class="fas fa-chart-area"></i> <span data-trends-label="${receiver.receiver_id}">Historical Trends</span>
                                     </button>
@@ -811,6 +814,7 @@ sudo systemctl restart eas-station</code></pre>
                             ${receiver.receiver_id ? `
                                 <div class="waterfall-container mt-2" data-waterfall-for="${receiver.receiver_id}" style="display:none;"></div>
                                 <div class="spectrum-scope-container mt-2" data-scope-for="${receiver.receiver_id}" style="display:none;"></div>
+                                <div class="mpx-scope-container mt-2" data-mpx-for="${receiver.receiver_id}" style="display:none;"></div>
                                 <div class="trends-container mt-2" data-trends-for="${receiver.receiver_id}" style="display:none;"></div>
                                 <div class="diagnostic-container mt-2" data-diagnostic-for="${receiver.receiver_id}" style="display:none;"></div>
                             ` : ''}
@@ -1452,6 +1456,221 @@ sudo systemctl restart eas-station</code></pre>
     if (signalQualityHistoryRangeEl) {
         signalQualityHistoryRangeEl.addEventListener('change', loadSignalQualityHistory);
     }
+
+    // ---- MPX (demodulated baseband) spectrum -- the FM-analyzer scope ----
+    // Deliberately its OWN independent polling + rebuild-on-refresh
+    // mechanism, not integrated into the RF waterfall/scope's shared
+    // liveWaterfallState/zoom system: that system's live-DOM-node
+    // preservation across the ~1s auto-refresh is intricate (see the long
+    // comment above updateReceiverDetails() explaining why cloning breaks
+    // canvases and mid-drag zoom gestures), and MPX doesn't need zoom in
+    // this first pass. Instead this follows radio_diagnostics_trends.js's
+    // simpler, already-proven pattern for a canvas that must survive the
+    // receivers container being periodically replaced: track which
+    // receivers are "active" in a plain object, watch the container with a
+    // MutationObserver, and rebuild from scratch (cheap -- one fetch, one
+    // canvas) whenever a refresh clobbers an active panel.
+    const mpxActiveReceivers = {};
+    const mpxIntervals = {};
+    const MPX_POLL_MS = 500; // matches LIVE_WF_POLL_MS; demod recomputes ~2Hz
+
+    // 0-100 kHz covers pilot (19), stereo subcarrier (23-53) and RDS (57)
+    // with headroom -- multiplex's real span is far wider (up to Nyquist,
+    // e.g. 512 kHz for a 1.024 MHz receiver) but everything above ~95 kHz
+    // is empty for a standard FM broadcast. No zoom control in this first
+    // pass -- see the module comment above.
+    const MPX_VIEW_MAX_HZ = 100000;
+    const MPX_MARKERS = [
+        { hz: 19000, label: '19k Pilot' },
+        { hz: 38000, label: '38k Stereo' },
+        { hz: 57000, label: '57k RDS' },
+    ];
+
+    function mpxFindContainer(receiverId) {
+        return document.querySelector(`.mpx-scope-container[data-mpx-for="${CSS.escape(receiverId)}"]`);
+    }
+    function mpxFindLabel(receiverId) {
+        return document.querySelector(`span[data-mpx-label="${CSS.escape(receiverId)}"]`);
+    }
+
+    function mpxBuildPanel(container) {
+        container.innerHTML = '';
+        container.style.display = '';
+
+        const header = document.createElement('div');
+        header.className = 'd-flex flex-wrap gap-2 mb-1 small align-items-center';
+        const badge = document.createElement('span');
+        badge.className = 'badge bg-primary text-uppercase';
+        badge.textContent = 'MPX';
+        header.appendChild(badge);
+        const statusEl = document.createElement('span');
+        statusEl.className = 'text-muted';
+        statusEl.textContent = 'Waiting for spectrum…';
+        header.appendChild(statusEl);
+        container.appendChild(header);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 160;
+        canvas.style.width = '100%';
+        canvas.style.height = '160px';
+        canvas.style.border = '1px solid rgba(128,128,128,0.3)';
+        canvas.style.display = 'block';
+        canvas.style.background = '#04040c';
+        container.appendChild(canvas);
+
+        const axisEl = document.createElement('div');
+        axisEl.className = 'd-flex justify-content-between text-muted small mt-1';
+        axisEl.innerHTML = '<span>0 kHz</span><span>' + (MPX_VIEW_MAX_HZ / 1000) + ' kHz</span>';
+        container.appendChild(axisEl);
+
+        return { canvas, ctx: canvas.getContext('2d'), statusEl };
+    }
+
+    function mpxRender(panel, payload) {
+        const { canvas, ctx } = panel;
+        const w = canvas.width, h = canvas.height;
+        ctx.fillStyle = '#04040c';
+        ctx.fillRect(0, 0, w, h);
+
+        const spectrum = payload.spectrum || [];
+        const freqMax = payload.freq_max || 0;
+        if (payload.status !== 'available' || !spectrum.length || !freqMax) {
+            panel.statusEl.textContent = payload.status === 'unavailable'
+                ? 'No MPX spectrum yet (FM/WFM receivers only -- wait a couple seconds after tuning)'
+                : 'No spectrum data';
+            return;
+        }
+
+        const hzPerBin = freqMax / (spectrum.length - 1);
+        const viewBins = Math.min(spectrum.length, Math.ceil(MPX_VIEW_MAX_HZ / hzPerBin) + 1);
+
+        // Trace (auto-scaled to the visible 0-100kHz window's own min/max,
+        // same rationale as the RF scope's scopeRender(): a strong pilot
+        // shouldn't crush a weaker RDS subcarrier to an invisible sliver).
+        let lo = Infinity, hi = -Infinity;
+        for (let i = 0; i < viewBins; i++) {
+            const v = Number(spectrum[i]);
+            if (isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; }
+        }
+        if (!isFinite(lo) || !isFinite(hi) || hi <= lo) { lo = 0; hi = 1; }
+        const pad = (hi - lo) * 0.08;
+        lo = Math.max(0, lo - pad);
+        hi = Math.min(1, hi + pad);
+        const scaleY = v => h - ((Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo)) * h;
+        const xForHz = hz => (hz / MPX_VIEW_MAX_HZ) * w;
+
+        ctx.strokeStyle = '#39ff8f';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let i = 0; i < viewBins; i++) {
+            const x = (i / (viewBins - 1)) * w;
+            const y = scaleY(Number(spectrum[i]) || 0);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        // Subcarrier markers -- the actual point of this view: making the
+        // pilot/stereo/RDS humps identifiable at a glance, the way a
+        // hardware FM analyzer's MPX scope labels them.
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        for (const marker of MPX_MARKERS) {
+            if (marker.hz > MPX_VIEW_MAX_HZ) continue;
+            const x = xForHz(marker.hz);
+            ctx.strokeStyle = 'rgba(255,193,7,0.5)';
+            ctx.setLineDash([3, 3]);
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, h);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#ffc107';
+            ctx.fillText(marker.label, Math.min(w - 30, Math.max(30, x)), 12);
+        }
+
+        panel.statusEl.textContent =
+            `${(freqMax / 1000).toFixed(0)} kHz span (Nyquist) · showing 0-${MPX_VIEW_MAX_HZ / 1000} kHz`;
+    }
+
+    async function mpxFetchAndRender(receiverId) {
+        const container = mpxFindContainer(receiverId);
+        if (!container) return;
+        let panel = container._mpxPanel;
+        if (!panel || !container.contains(panel.canvas)) {
+            panel = mpxBuildPanel(container);
+            container._mpxPanel = panel;
+        }
+        try {
+            const resp = await fetch(`/api/radio/mpx_spectrum/${encodeURIComponent(receiverId)}`, { cache: 'no-store' });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const payload = await resp.json();
+            mpxRender(panel, payload);
+        } catch (error) {
+            panel.statusEl.textContent = `Fetch error: ${error.message}`;
+        }
+    }
+
+    function mpxStart(receiverId) {
+        mpxActiveReceivers[receiverId] = true;
+        mpxFetchAndRender(receiverId);
+        if (!mpxIntervals[receiverId]) {
+            mpxIntervals[receiverId] = window.setInterval(() => mpxFetchAndRender(receiverId), MPX_POLL_MS);
+        }
+        const label = mpxFindLabel(receiverId);
+        if (label) label.textContent = 'Stop MPX Scope';
+    }
+
+    function mpxStop(receiverId) {
+        delete mpxActiveReceivers[receiverId];
+        if (mpxIntervals[receiverId]) {
+            window.clearInterval(mpxIntervals[receiverId]);
+            delete mpxIntervals[receiverId];
+        }
+        const container = mpxFindContainer(receiverId);
+        if (container) {
+            container.innerHTML = '';
+            container.style.display = 'none';
+        }
+        const label = mpxFindLabel(receiverId);
+        if (label) label.textContent = 'MPX Scope';
+    }
+
+    function mpxRebuildActive() {
+        Object.keys(mpxActiveReceivers).forEach((receiverId) => {
+            const container = mpxFindContainer(receiverId);
+            if (!container) {
+                if (mpxIntervals[receiverId]) window.clearInterval(mpxIntervals[receiverId]);
+                delete mpxIntervals[receiverId];
+                delete mpxActiveReceivers[receiverId];
+                return;
+            }
+            if (container.firstChild) return; // not clobbered by this refresh
+            mpxFetchAndRender(receiverId);
+            const label = mpxFindLabel(receiverId);
+            if (label) label.textContent = 'Stop MPX Scope';
+        });
+    }
+
+    (() => {
+        const receiversContainer = document.getElementById('receiversContainer');
+        if (receiversContainer && window.MutationObserver) {
+            new MutationObserver(mpxRebuildActive).observe(receiversContainer, { childList: true });
+        }
+    })();
+
+    document.addEventListener('click', (ev) => {
+        const btn = ev.target.closest('button[data-action="mpx-scope"]');
+        if (!btn) return;
+        const receiverId = btn.getAttribute('data-receiver-id');
+        if (!receiverId) return;
+        if (mpxActiveReceivers[receiverId]) {
+            mpxStop(receiverId);
+        } else {
+            mpxStart(receiverId);
+        }
+    });
 
     async function loadDiagnostics() {
         try {
