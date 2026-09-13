@@ -22,6 +22,7 @@ from __future__ import annotations
 """FM demodulator with stereo decoding and RBDS extraction."""
 
 import logging
+import time
 from typing import Dict, Optional, Tuple
 
 import numpy as np
@@ -43,6 +44,7 @@ from .types import (
     RBDSDecoderStats,
 )
 from .rbds_worker import RBDSWorker
+from ..spectrum import compute_real_spectrum
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +192,20 @@ class FMDemodulator:
             self._design_fir_bandpass(55600.0, 58400.0, config.sample_rate, taps=audio_filter_taps)
             if self._rbds_enabled else None
         )
+
+        # MPX (demodulated baseband) spectrum -- the FM-analyzer "MPX scope"
+        # view. An FFT is real CPU cost regardless of whether anyone reads
+        # the result, so this gates the *computation*, not just whether the
+        # result gets published (mirrors DemodWorker._STATUS_PUBLISH_INTERVAL_S's
+        # wall-clock-gate pattern in services/demod/worker.py, just applied
+        # here since `multiplex` -- the FFT's input -- is local to this
+        # method and never leaves it otherwise). 2 Hz is fresh enough to
+        # feel live without adding meaningfully to the per-chunk DSP cost
+        # already proven acceptable for the pilot/RDS injection filters.
+        self._MPX_SPECTRUM_INTERVAL_S = 0.5
+        self._last_mpx_spectrum_at: float = 0.0
+        self.last_mpx_spectrum: Optional[list] = None
+        self.last_mpx_spectrum_fresh: bool = False
 
         # Early-decimation state (PySDR architecture).  The RBDSWorker's
         # filter chain (54-60 kHz bandpass, 57 kHz mix, 2.4 kHz post-mix
@@ -500,6 +516,20 @@ class FMDemodulator:
             rds_filtered = oaconvolve(multiplex, self._rds_injection_filter, mode="same")
             rds_rms = float(np.sqrt(np.mean(rds_filtered ** 2)))
             rds_injection_hz = rds_rms * hz_per_radian_sample
+
+        # MPX (demodulated baseband) spectrum -- gates the FFT itself, not
+        # just publishing, since the cost is in computing it (see the gate's
+        # construction in __init__ for why). last_mpx_spectrum_fresh lets
+        # the caller (services/demod/worker.py) know whether THIS call
+        # produced a new spectrum worth publishing, vs. one already sent.
+        self.last_mpx_spectrum_fresh = False
+        now = time.time()
+        if now - self._last_mpx_spectrum_at >= self._MPX_SPECTRUM_INTERVAL_S:
+            spectrum = compute_real_spectrum(multiplex, np)
+            if spectrum is not None:
+                self.last_mpx_spectrum = spectrum
+                self.last_mpx_spectrum_fresh = True
+            self._last_mpx_spectrum_at = now
 
         # RBDS extraction in a separate worker thread.  Submit samples
         # (non-blocking) and pick up whatever the worker has decoded since
