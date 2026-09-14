@@ -7,6 +7,17 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.9.2] - 2026-09-14 - Fix Identify Stations never completing a PS name
+
+3.9.1's ring-buffer fix was necessary but not sufficient: re-tested live afterward with a diagnostic build, Identify Stations was still 0/9 -- but this time with real evidence of *why*. RBDS sync itself was working correctly (confirmed live: PI=5862, call sign WBKS resolved, sync confirmed ~1.8s in) -- the bug was in how the result was read afterward, and in how much time was budgeted.
+
+- **Root cause**: the 8-character PS marquee text (`ps_name`) is assembled from 4 separate segments broadcast in different RDS groups over several seconds -- sync succeeding is necessary but not sufficient for a *complete* name. `_run_bandscan_identify`'s default `dwell_sec=2.5` left barely any runway after the ~1.8s sync itself, so `ps_name` was reliably still `''` (incomplete, not decoded) when the dwell ended on every peak, every time -- including a station live-verified to sync fine every single pass.
+- **Fixed**: `call_sign` (derived from the PI code carried in *every* synced group, available within ~1-2s of sync, no multi-group assembly needed) is now captured throughout the dwell as a fast, reliable fallback. The early-stop-on-decode path still only fires on a *complete* `ps_name`, so a lucky fast station still finishes quickly -- but a result that syncs without ever completing the marquee text now reports the call sign instead of silently reporting nothing.
+- Raised the default dwell budget from 2.5s to 6.0s to give PS assembly more real runway on top of the call-sign fallback.
+- `webapp/radio_settings` results list now shows `ps_name || call_sign`, preferring the fuller marquee text when it's actually complete.
+- 1 new test (`test_identify_falls_back_to_call_sign_when_ps_name_never_completes`) plus updated coverage across the existing identify tests for the new `call_sign` field.
+- This whole investigation (3.9.1 and 3.9.2 together) happened because the feature was tested against real hardware immediately after shipping, at the user's prompt, rather than trusting the unit tests' mocked demodulator -- see 3.9.1's own entry for why that specific bug class needed live testing to catch at all.
+
 ## [3.9.1] - 2026-09-14 - Fix Identify Stations decoding zero RDS (ring-buffer race)
 
 Live-tested against real hardware immediately after 3.9.0 shipped, at the user's prompt: Identify Stations decoded 0 of 9 real detected peaks -- including a station (93.9 MHz) the persistent live monitoring receiver decodes as "KISS" on every pass. This was a genuine functional bug, not bad luck.

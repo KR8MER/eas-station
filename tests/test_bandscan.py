@@ -314,30 +314,42 @@ from types import SimpleNamespace  # noqa: E402
 class _FakeIdentifyDemodulator:
     """Stand-in for app_core.radio.demod.fm.FMDemodulator.
 
-    Returns a canned RBDSData.ps_name (or None) from every demodulate()
-    call instead of actually decoding anything, so these tests exercise
-    _run_bandscan_identify's control flow (early-stop on decode, full-dwell
-    on no decode, per-frequency isolation) without needing synthetic
-    RDS-modulated IQ or real DSP -- that's app_core/radio/demod's own test
-    coverage (tests/test_rbds_demodulation.py), not this function's job.
+    Returns a canned RBDSData.ps_name/call_sign (or None) from every
+    demodulate() call instead of actually decoding anything, so these
+    tests exercise _run_bandscan_identify's control flow (early-stop on a
+    complete PS name, call_sign fallback when it never completes,
+    full-dwell on no decode, per-frequency isolation) without needing
+    synthetic RDS-modulated IQ or real DSP -- that's app_core/radio/demod's
+    own test coverage (tests/test_rbds_demodulation.py), not this
+    function's job.
     """
 
-    #: Queue of ps_name values (str or None), one per FMDemodulator
-    #: constructed, consumed in construction order -- _run_bandscan_identify
-    #: builds a fresh demodulator per target frequency, in the same order
-    #: as target_freqs_hz, so this queue's order lines up with that list.
-    #: None means "this frequency never decodes"; tests reset this before
-    #: use via the _fake_identify_demodulator fixture.
+    #: Queue of entries, one per FMDemodulator constructed, consumed in
+    #: construction order -- _run_bandscan_identify builds a fresh
+    #: demodulator per target frequency, in the same order as
+    #: target_freqs_hz, so this queue's order lines up with that list.
+    #: Each entry is either a plain ps_name (str/None, call_sign stays
+    #: None -- covers most tests, which don't care about call_sign) or a
+    #: (ps_name, call_sign) tuple for tests exercising the fallback
+    #: specifically. None/empty means "this frequency never decodes that
+    #: field"; tests reset this queue before use via the
+    #: _fake_identify_demodulator fixture.
     ps_name_queue: list = []
     demodulate_call_count = 0
 
     def __init__(self, config):
         self.config = config
-        self._ps_name = type(self).ps_name_queue.pop(0) if type(self).ps_name_queue else None
+        entry = type(self).ps_name_queue.pop(0) if type(self).ps_name_queue else None
+        if isinstance(entry, tuple):
+            self._ps_name, self._call_sign = entry
+        else:
+            self._ps_name, self._call_sign = entry, None
 
     def demodulate(self, iq_samples):
         type(self).demodulate_call_count += 1
-        status = SimpleNamespace(rbds_data=SimpleNamespace(ps_name=self._ps_name))
+        status = SimpleNamespace(
+            rbds_data=SimpleNamespace(ps_name=self._ps_name, call_sign=self._call_sign)
+        )
         return np.zeros(4, dtype=np.float32), status
 
 
@@ -367,7 +379,7 @@ def _run_identify(receiver, redis_client, cancel_event, target_freqs_hz, **kwarg
 def test_identify_records_decoded_ps_name_and_stops_early(_fake_identify_demodulator):
     receiver = _FakeBandscanReceiver(start_freq_hz=93_900_000)
     redis_client = _FakeRedis()
-    _fake_identify_demodulator.ps_name_queue = ["KISSFM"]
+    _fake_identify_demodulator.ps_name_queue = [("KISSFM", "WABC")]
 
     # A generous dwell budget -- if the loop were burning the whole thing
     # instead of stopping the moment a name decodes, this test would be
@@ -381,6 +393,7 @@ def test_identify_records_decoded_ps_name_and_stops_early(_fake_identify_demodul
     result = payload["results"][0]
     assert result["freq_hz"] == 93_900_000.0
     assert result["ps_name"] == "KISSFM"
+    assert result["call_sign"] == "WABC"
     assert result["rms_dbfs"] is not None
     # Stopped after the first successful decode, not the full dwell.
     assert _fake_identify_demodulator.demodulate_call_count == 1
@@ -396,10 +409,32 @@ def test_identify_records_none_and_uses_full_dwell_when_nothing_decodes(_fake_id
     payload = redis_client.last_payload()
     result = payload["results"][0]
     assert result["ps_name"] is None
+    assert result["call_sign"] is None
     assert result["freq_hz"] == 93_900_000.0
     # A weak/marginal peak that never locks is not an error -- and the loop
     # should have kept trying across more than one chunk, not given up
     # after a single read.
+    assert _fake_identify_demodulator.demodulate_call_count > 1
+
+
+def test_identify_falls_back_to_call_sign_when_ps_name_never_completes(_fake_identify_demodulator):
+    """Live-verified bug (see this function's own docstring): a station
+    can sync perfectly -- PI/call_sign resolve within the first ~1-2s --
+    while the 8-char PS marquee text is still incomplete ('', not a full
+    name) when the dwell ends, because it's assembled from several
+    separate over-the-air segments that can take longer than one dwell to
+    all arrive. call_sign must still be recorded in that case, and an
+    incomplete ps_name must never trigger the early-stop path."""
+    receiver = _FakeBandscanReceiver(start_freq_hz=93_900_000)
+    redis_client = _FakeRedis()
+    _fake_identify_demodulator.ps_name_queue = [("", "WBKS")]
+
+    _run_identify(receiver, redis_client, threading.Event(), [93_900_000.0], dwell_sec=0.05)
+
+    payload = redis_client.last_payload()
+    result = payload["results"][0]
+    assert result["ps_name"] is None
+    assert result["call_sign"] == "WBKS"
     assert _fake_identify_demodulator.demodulate_call_count > 1
 
 

@@ -831,7 +831,7 @@ sudo systemctl restart eas-station</code></pre>
                                     <button type="button" class="btn btn-sm btn-outline-warning" data-action="bandscan" data-receiver-id="${receiver.receiver_id}" title="Sweep the whole FM broadcast band (87.5-108.0 MHz) to survey what's on the air, the way a hardware FM analyzer's Bandscan does. Takes roughly 30-45 seconds -- the receiver is retuned away from its assigned frequency for the whole scan and will NOT monitor for real alerts until it finishes.">
                                         <i class="fas fa-satellite-dish"></i> <span data-bandscan-label="${receiver.receiver_id}">Bandscan</span>
                                     </button>
-                                    <button type="button" class="btn btn-sm btn-outline-info" data-action="bandscan-identify" data-receiver-id="${receiver.receiver_id}" style="display:none;" title="Retune to each detected peak long enough to attempt an RDS station-name decode (roughly 2-2.5 seconds per peak). Appears once a Bandscan has found at least one peak. The receiver still will NOT monitor for real alerts during this pass.">
+                                    <button type="button" class="btn btn-sm btn-outline-info" data-action="bandscan-identify" data-receiver-id="${receiver.receiver_id}" style="display:none;" title="Retune to each detected peak long enough to attempt an RDS station-name decode (roughly 6 seconds per peak). Appears once a Bandscan has found at least one peak. The receiver still will NOT monitor for real alerts during this pass.">
                                         <i class="fas fa-id-badge"></i> <span data-bandscan-identify-label="${receiver.receiver_id}">Identify Stations</span>
                                     </button>
                                 ` : ''}
@@ -2400,7 +2400,7 @@ sudo systemctl restart eas-station</code></pre>
     const bandscanIdentifyIntervals = {};
     const bandscanIdentifyLastPayload = {};
     const BANDSCAN_IDENTIFY_POLL_MS = 1500;
-    const BANDSCAN_IDENTIFY_DWELL_SEC = 2.5;   // must match sdr_hardware_service.py's default
+    const BANDSCAN_IDENTIFY_DWELL_SEC = 6.0;   // must match sdr_hardware_service.py's default
 
     function bandscanIdentifyFindContainer(receiverId) {
         return document.querySelector(`.bandscan-identify-container[data-bandscan-identify-for="${CSS.escape(receiverId)}"]`);
@@ -2471,14 +2471,23 @@ sudo systemctl restart eas-station</code></pre>
             level.textContent = (r.rms_dbfs !== null && r.rms_dbfs !== undefined)
                 ? `${r.rms_dbfs.toFixed(0)} dBFS` : '—';
 
+            // ps_name (the 8-char PS marquee text) needs several seconds
+            // after sync to assemble across multiple RDS groups and can
+            // still be incomplete when the dwell ends; call_sign resolves
+            // from the PI code in every synced group, so it's available
+            // much sooner and is kept as a fallback -- see
+            // _run_bandscan_identify's docstring. Prefer ps_name when
+            // it's actually complete, otherwise show the call sign rather
+            // than nothing.
             const station = document.createElement('span');
-            if (r.ps_name) {
+            const label = r.ps_name || r.call_sign;
+            if (label) {
                 station.className = 'fw-bold';
-                // RDS PS text is decoded from over-the-air broadcast data --
+                // RDS text is decoded from over-the-air broadcast data --
                 // untrusted, attacker-influenceable content. textContent
                 // (never innerHTML) keeps it inert no matter what a
                 // transmitter sends.
-                station.textContent = r.ps_name;
+                station.textContent = label;
             } else {
                 station.className = 'text-muted fst-italic';
                 station.textContent = 'No RDS decoded';
@@ -2494,7 +2503,7 @@ sudo systemctl restart eas-station</code></pre>
         if (payload.status === 'running') {
             panel.statusEl.textContent = `Identifying… ${results.length}/${total} frequencies`;
         } else if (payload.status === 'done') {
-            const found = results.filter((r) => r.ps_name).length;
+            const found = results.filter((r) => r.ps_name || r.call_sign).length;
             panel.statusEl.textContent = `Identify complete — ${found}/${results.length} station${found === 1 ? '' : 's'} decoded`;
         } else if (payload.status === 'cancelled') {
             panel.statusEl.textContent = `Identify cancelled after ${results.length} frequencies`;
