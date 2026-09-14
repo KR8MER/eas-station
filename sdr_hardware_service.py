@@ -1505,6 +1505,26 @@ def publish_samples_and_metrics():
                     if not is_running:
                         continue
 
+                    if identifier in _state.active_bandscans:
+                        # A Bandscan sweep or Identify Stations pass owns this
+                        # receiver's samples for its duration (see
+                        # _run_bandscan_sweep / _run_bandscan_identify, both
+                        # of which call receiver.get_samples() directly from
+                        # their own thread). Reading here too races the same
+                        # underlying ring buffer as that thread -- two
+                        # concurrent consumers each only see a fragmented
+                        # subset of the real stream, since (per the capture-
+                        # tap comment a few lines below) the publisher is
+                        # normally the *only* thread draining it.  A coarse
+                        # RMS level measurement tolerates that fragmentation
+                        # well enough to look fine; RDS decode does not, since
+                        # Costas/M&M lock needs an unbroken, phase-continuous
+                        # stream across many consecutive reads. Confirmed
+                        # live: Identify Stations decoded 0/9 real peaks --
+                        # including a station the persistent live monitor
+                        # decodes on every pass -- until this guard was added.
+                        continue
+
                     # Batch this iteration's IQ publish, spectrum setex, and
                     # ring-buffer hset+expire into one Redis round trip
                     # instead of up to four separate ones. None of these
