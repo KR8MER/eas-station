@@ -656,6 +656,151 @@ def _auto_gain_calibrate(
     }
 
 
+# Standard FM broadcast band. 100 kHz steps cover both the US 200 kHz
+# tuning grid and the ITU Region 1 100 kHz grid, so this one fixed sweep
+# works everywhere without a per-install configuration option.
+BANDSCAN_START_HZ = 87_500_000
+BANDSCAN_END_HZ = 108_000_000
+BANDSCAN_STEP_HZ = 100_000
+
+
+def _run_bandscan_sweep(
+    *,
+    receiver,
+    receiver_id: str,
+    redis_client,
+    cancel_event: "threading.Event",
+    settle_sec: float = 0.15,
+    measure_sec: float = 0.15,
+    start_hz: int = BANDSCAN_START_HZ,
+    end_hz: int = BANDSCAN_END_HZ,
+    step_hz: int = BANDSCAN_STEP_HZ,
+) -> None:
+    """Background-thread body for a full-band sweep.
+
+    Retunes the live receiver across [start_hz, end_hz] in step_hz
+    increments, measuring RMS level at each stop -- the same
+    settle-then-discard-a-read-then-measure idiom _auto_gain_calibrate
+    already uses for gain steps ("the first chunk read right after a
+    [state] change may still contain old-[state] samples, so drain once
+    before measuring"), applied to frequency instead. Writes incremental
+    progress to RedisChannels.BANDSCAN_PROGRESS_PREFIX + receiver_id
+    after every channel so the webapp can poll a live-filling band plot
+    instead of waiting for the whole multi-minute sweep to finish.
+
+    Runs on its own daemon thread (spawned by the bandscan_sweep command
+    handler), NOT inline in process_commands() -- a full sweep takes
+    minutes, and process_commands() is a single shared, synchronous
+    queue every other receiver's tune/restart/diagnostics commands also
+    go through; blocking it for that long would stall the whole fleet's
+    controls, not just this receiver's.
+
+    Always retunes back to the frequency the receiver was on when the
+    scan started -- on normal completion, on cancellation (cancel_event
+    set), and on any exception -- via the `finally` block below. The
+    database's assigned frequency (RadioReceiver.frequency_hz) is never
+    touched by this function; only receiver.set_frequency() is called,
+    the same raw live-retune tune_frequency uses before its own,
+    separate DB-persistence step.
+    """
+    progress_key = f"{RedisChannels.BANDSCAN_PROGRESS_PREFIX}{receiver_id}"
+    original_freq_hz = float(getattr(receiver.config, "frequency_hz", 0) or 0)
+    effective_rate = (
+        int(getattr(receiver, "_effective_sample_rate", 0) or 0)
+        or int(getattr(receiver.config, "sample_rate", 0) or 0)
+        or 250_000
+    )
+    measure_samples = max(2048, int(measure_sec * effective_rate))
+    channels = list(range(int(start_hz), int(end_hz) + 1, int(step_hz)))
+
+    results: list = []
+    status = "running"
+    started_at = time.time()
+
+    def _write_progress() -> None:
+        payload = {
+            "status": status,
+            "start_freq_hz": start_hz,
+            "end_freq_hz": end_hz,
+            "step_hz": step_hz,
+            "original_frequency_hz": original_freq_hz,
+            "results": results,
+            "started_at": started_at,
+            "updated_at": time.time(),
+        }
+        try:
+            redis_client.setex(
+                progress_key,
+                RedisChannels.BANDSCAN_PROGRESS_TTL_SECONDS,
+                json.dumps(payload),
+            )
+        except Exception as exc:
+            logger.debug("bandscan %s: progress publish failed: %s", receiver_id, exc)
+
+    logger.info(
+        "bandscan: starting sweep on %s, %d channels (%.1f-%.1f MHz @ %d kHz)",
+        receiver_id, len(channels), start_hz / 1e6, end_hz / 1e6, step_hz // 1000,
+    )
+    _write_progress()
+
+    try:
+        for freq_hz in channels:
+            if cancel_event.is_set():
+                status = "cancelled"
+                break
+            try:
+                tuned = receiver.set_frequency(float(freq_hz))
+            except Exception as exc:
+                logger.warning(
+                    "bandscan %s: retune to %d Hz failed: %s", receiver_id, freq_hz, exc,
+                )
+                tuned = False
+
+            if not tuned:
+                results.append({"freq_hz": freq_hz, "rms_dbfs": None})
+                _write_progress()
+                continue
+
+            time.sleep(max(0.0, float(settle_sec)))
+            try:
+                # Discard -- may still hold samples from the previous
+                # channel, same reason auto-gain drains once after
+                # changing gain before trusting a measurement.
+                receiver.get_samples(num_samples=measure_samples)
+            except Exception:
+                pass
+
+            stats = _measure_iq_levels(receiver, num_samples=measure_samples)
+            results.append({
+                "freq_hz": freq_hz,
+                "rms_dbfs": stats["rms_dbfs"] if stats else None,
+            })
+            _write_progress()
+        else:
+            status = "done"
+    except Exception as exc:
+        logger.error("bandscan %s: sweep failed: %s", receiver_id, exc, exc_info=True)
+        status = "error"
+    finally:
+        try:
+            if original_freq_hz > 0:
+                receiver.set_frequency(original_freq_hz)
+                logger.info(
+                    "bandscan %s: restored original frequency %.3f MHz",
+                    receiver_id, original_freq_hz / 1e6,
+                )
+        except Exception as exc:
+            logger.error(
+                "bandscan %s: failed to restore original frequency %.3f MHz: %s",
+                receiver_id, original_freq_hz / 1e6, exc, exc_info=True,
+            )
+        if status == "running":
+            status = "done"
+        _write_progress()
+        with _state.lock:
+            _state.active_bandscans.pop(receiver_id, None)
+
+
 @dataclass
 class SDRServiceState:
     """Global state for the SDR service with thread-safe access via lock."""
@@ -672,6 +817,11 @@ class SDRServiceState:
     # is ~0 immediately after the publisher thread drains it.
     prev_total_samples_written: Dict[str, int] = field(default_factory=dict)
     lock: threading.Lock = field(default_factory=threading.Lock)
+    # One cancellation Event per receiver_id with an in-flight bandscan
+    # (see _run_bandscan_sweep). Entries are removed when the scan ends,
+    # so "receiver_id in active_bandscans" also doubles as the "is a scan
+    # already running for this receiver" check.
+    active_bandscans: Dict[str, threading.Event] = field(default_factory=dict)
 
 
 _state = SDRServiceState()
@@ -2274,6 +2424,67 @@ def process_commands(redis_client, timeout: int = 2):
                             "success": False,
                             "error": str(exc),
                         }
+            elif action == "bandscan_sweep":
+                # Starts a full FM-band sweep on its own background thread
+                # (see _run_bandscan_sweep's docstring for why it can't run
+                # inline here) and returns immediately -- this command's
+                # result is just "did it start", not the scan's outcome.
+                # Progress/results are polled separately from
+                # RedisChannels.BANDSCAN_PROGRESS_PREFIX by the webapp.
+                receiver = radio_manager.get_receiver(receiver_id)
+                if not receiver:
+                    result = {
+                        "command_id": command_id,
+                        "success": False,
+                        "error": f"Receiver '{receiver_id}' not found",
+                    }
+                elif receiver_id in _state.active_bandscans:
+                    result = {
+                        "command_id": command_id,
+                        "success": False,
+                        "error": "A bandscan is already running for this receiver",
+                    }
+                else:
+                    cancel_event = threading.Event()
+                    with _state.lock:
+                        _state.active_bandscans[receiver_id] = cancel_event
+                    scan_thread = threading.Thread(
+                        target=_run_bandscan_sweep,
+                        kwargs=dict(
+                            receiver=receiver,
+                            receiver_id=receiver_id,
+                            redis_client=redis_client,
+                            cancel_event=cancel_event,
+                            settle_sec=float(command.get("settle_sec", 0.15) or 0.15),
+                            measure_sec=float(command.get("measure_sec", 0.15) or 0.15),
+                        ),
+                        name=f"Bandscan-{receiver_id}",
+                        daemon=True,
+                    )
+                    scan_thread.start()
+                    result = {
+                        "command_id": command_id,
+                        "success": True,
+                        "started": True,
+                    }
+            elif action == "bandscan_cancel":
+                # Fast and synchronous -- just flips the Event the sweep
+                # thread already polls between channels. Never blocks the
+                # shared queue since the sweep itself runs elsewhere.
+                cancel_event = _state.active_bandscans.get(receiver_id)
+                if cancel_event is None:
+                    result = {
+                        "command_id": command_id,
+                        "success": False,
+                        "error": "No bandscan is running for this receiver",
+                    }
+                else:
+                    cancel_event.set()
+                    result = {
+                        "command_id": command_id,
+                        "success": True,
+                        "cancelling": True,
+                    }
             else:
                 result = {
                     "command_id": command_id,

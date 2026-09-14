@@ -41,6 +41,7 @@ from flask import Flask
 from . import (
     deps,
     payload,
+    routes_bandscan,
     routes_devices,
     routes_diagnostics_analyze,
     routes_diagnostics_capture,
@@ -73,6 +74,7 @@ _ROUTE_MODULES = (
     routes_presets,
     routes_signal,
     routes_mpx_spectrum,
+    routes_bandscan,
     routes_monitoring,
     routes_diagnostics_status,
     routes_diagnostics_capture,

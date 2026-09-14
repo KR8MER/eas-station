@@ -7,6 +7,16 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.7.0] - 2026-09-14 - SDR Diagnostics: Bandscan (full FM-band sweep)
+
+Final item from the post-brochure FM-analyzer follow-up, and the one genuinely different from everything else in the set: every prior addition (MPX spectrum, oscilloscopes, deviation histogram, modulation power, stereo balance) is a *passive* view of whatever a receiver is already doing. Bandscan is *active* -- it retunes the receiver across the whole FM broadcast band to survey what's on the air, the way the reference hardware's own "Bandscan" view does.
+
+- **Added**: a "Bandscan" button on SDR Diagnostics (styled and risk-tiered like the existing "Restart Receiver" button) that sweeps 87.5-108.0 MHz in 100 kHz steps (206 channels, ~30-45 seconds measured live), measuring signal level at each stop and rendering a live-filling band plot. A confirmation dialog states up front that the receiver will not monitor for real alerts until the scan finishes -- this is a deliberate, disruptive action, not a passive one.
+- **Added**: `bandscan_sweep`/`bandscan_cancel` actions in `sdr_hardware_service.py`, running the sweep on its own background thread rather than inline in the shared SDR command queue -- a full sweep (minutes) would otherwise block every other receiver's tune/restart/diagnostics commands for its whole duration, unlike the existing `auto_gain` sweep's already-accepted ~90s worst case. The receiver is *always* retuned back to its assigned frequency when the scan ends, whether it completes normally, is cancelled, or hits an error -- the database's assigned frequency is never touched, only the live tuner, mirroring `tune_frequency`'s own raw retune call without its DB-persistence step.
+- **Added**: `GET/POST /api/radio/bandscan/<id>/{start,progress,cancel}` (`webapp/radio_settings/routes_bandscan.py`) -- `start` only waits for a fast "did it start" acknowledgment, not the whole sweep; the frontend polls `progress` (a transient Redis key, `RedisChannels.BANDSCAN_PROGRESS_PREFIX`) separately on its own ~1.5s cadence.
+- `tests/test_bandscan.py`: 5 new tests against the sweep loop directly -- the channel list matches the expected band/step math exactly, and the original frequency is restored in all three ways the sweep can end (normal completion, mid-sweep cancellation, mid-sweep exception).
+- Deliberately out of scope for this pass: RDS station labeling of detected peaks, audio muting during the scan (a real side effect, noted rather than silently ignored), and custom band/step configuration.
+
 ## [3.6.0] - 2026-09-13 - SDR Diagnostics: modulation power, stereo balance, deviation histogram, MPX/audio oscilloscopes
 
 Tier 1 of the post-brochure FM-analyzer follow-up: after reviewing the PIRA P275's full brochure and FM Scope software manual, five measurements were cheap enough to add in one pass because they only needed to plot or bin data the demod pipeline already computes every chunk (or one more same-cost RMS pass alongside it) -- no new capture mechanism, no new DSP concept.
