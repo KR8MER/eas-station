@@ -1982,9 +1982,22 @@ sudo systemctl restart eas-station</code></pre>
     // regardless of whether anyone is still watching.
     const bandscanActiveReceivers = {};   // receiverId -> true while polling
     const bandscanIntervals = {};
+    // Last known progress payload per receiver, kept around after a scan
+    // finishes so bandscanRebuildActive() can redraw the result instead of
+    // losing it. loadDiagnostics()'s 15s auto-refresh tears down and
+    // rebuilds every receiver card's DOM, including this container, and the
+    // freshly-rendered container always starts hidden (see the
+    // `style="display:none;"` template markup for .bandscan-container
+    // above). Without this a finished scan's result was only ever visible
+    // until the next 15s refresh silently hid it again.
+    const bandscanLastPayload = {};
     const BANDSCAN_POLL_MS = 1500;        // matches the sweep's ~1 channel/sec-ish rate
     const BANDSCAN_START_MHZ = 87.5;
     const BANDSCAN_END_MHZ = 108.0;
+    // Evenly-spaced round-MHz tick marks for the X axis -- labelling only
+    // the two band edges made it impossible to read an arbitrary peak's
+    // frequency off the plot.
+    const BANDSCAN_X_TICKS_MHZ = [87.5, 92, 96, 100, 104, 108];
 
     function bandscanFindContainer(receiverId) {
         return document.querySelector(`.bandscan-container[data-bandscan-for="${CSS.escape(receiverId)}"]`);
@@ -2018,9 +2031,27 @@ sudo systemctl restart eas-station</code></pre>
         canvas.style.background = '#04040c';
         container.appendChild(canvas);
 
+        // X-axis: several evenly-spaced round-MHz ticks rather than just the
+        // two band edges, positioned by percentage across the plot width so
+        // each one lines up with its corresponding point on the canvas.
         const axisEl = document.createElement('div');
-        axisEl.className = 'd-flex justify-content-between text-muted small mt-1';
-        axisEl.innerHTML = `<span>${BANDSCAN_START_MHZ.toFixed(1)} MHz</span><span>${BANDSCAN_END_MHZ.toFixed(1)} MHz</span>`;
+        axisEl.className = 'position-relative text-muted small mt-1';
+        axisEl.style.height = '14px';
+        const axisSpan = BANDSCAN_END_MHZ - BANDSCAN_START_MHZ;
+        BANDSCAN_X_TICKS_MHZ.forEach((mhz, idx) => {
+            const tick = document.createElement('span');
+            tick.textContent = `${mhz.toFixed(1)} MHz`;
+            tick.style.position = 'absolute';
+            tick.style.left = `${((mhz - BANDSCAN_START_MHZ) / axisSpan) * 100}%`;
+            if (idx === 0) {
+                tick.style.transform = 'translateX(0)';
+            } else if (idx === BANDSCAN_X_TICKS_MHZ.length - 1) {
+                tick.style.transform = 'translateX(-100%)';
+            } else {
+                tick.style.transform = 'translateX(-50%)';
+            }
+            axisEl.appendChild(tick);
+        });
         container.appendChild(axisEl);
 
         return { banner, canvas, ctx: canvas.getContext('2d'), statusEl };
@@ -2044,6 +2075,26 @@ sudo systemctl restart eas-station</code></pre>
         const pad = (hi - lo) * 0.1;
         lo -= pad; hi += pad;
         const scaleY = (v) => h - ((Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo)) * h;
+
+        // Y-axis: horizontal gridlines with a dBFS label at each -- without
+        // this the line was just an unscaled shape with no way to read an
+        // actual signal level off it.
+        const GRID_DIVS = 4;
+        ctx.strokeStyle = 'rgba(128,128,128,0.25)';
+        ctx.lineWidth = 1;
+        ctx.font = '10px monospace';
+        ctx.fillStyle = 'rgba(210,210,210,0.85)';
+        ctx.textBaseline = 'middle';
+        for (let i = 0; i <= GRID_DIVS; i++) {
+            const frac = i / GRID_DIVS;
+            const y = frac * h;
+            const value = hi - frac * (hi - lo);
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(w, y);
+            ctx.stroke();
+            ctx.fillText(`${value.toFixed(0)} dBFS`, 4, Math.min(h - 6, Math.max(8, y)));
+        }
 
         ctx.strokeStyle = '#39ff8f';
         ctx.lineWidth = 1.5;
@@ -2087,6 +2138,7 @@ sudo systemctl restart eas-station</code></pre>
                 panel.statusEl.textContent = 'No scan data yet…';
                 return;
             }
+            bandscanLastPayload[receiverId] = payload;
             bandscanRender(panel, payload);
             if (payload.status !== 'running') {
                 bandscanFinish(receiverId, panel.banner);
@@ -2153,18 +2205,36 @@ sudo systemctl restart eas-station</code></pre>
     }
 
     function bandscanRebuildActive() {
-        Object.keys(bandscanActiveReceivers).forEach((receiverId) => {
+        // Covers both receivers with a scan still running (resume polling
+        // against the fresh DOM) and ones whose scan already finished but
+        // whose result should stay on screen -- redrawn straight from
+        // bandscanLastPayload rather than lost when the periodic receivers
+        // refresh replaces this receiver's DOM with a freshly-rendered,
+        // hidden container.
+        const receiverIds = new Set([
+            ...Object.keys(bandscanActiveReceivers),
+            ...Object.keys(bandscanLastPayload),
+        ]);
+        receiverIds.forEach((receiverId) => {
             const container = bandscanFindContainer(receiverId);
             if (!container) {
                 if (bandscanIntervals[receiverId]) window.clearInterval(bandscanIntervals[receiverId]);
                 delete bandscanIntervals[receiverId];
                 delete bandscanActiveReceivers[receiverId];
+                delete bandscanLastPayload[receiverId];
                 return;
             }
             if (container.firstChild) return; // not clobbered by this refresh
-            bandscanFetchAndRender(receiverId);
-            const label = bandscanFindLabel(receiverId);
-            if (label) label.textContent = 'Cancel Bandscan';
+            if (bandscanActiveReceivers[receiverId]) {
+                bandscanFetchAndRender(receiverId);
+                const label = bandscanFindLabel(receiverId);
+                if (label) label.textContent = 'Cancel Bandscan';
+                return;
+            }
+            const panel = bandscanBuildPanel(container);
+            container._bandscanPanel = panel;
+            bandscanRender(panel, bandscanLastPayload[receiverId]);
+            panel.banner.style.display = 'none';
         });
     }
 

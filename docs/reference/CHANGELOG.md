@@ -7,6 +7,14 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.7.1] - 2026-09-14 - Bandscan plot: axis labels and persistent results
+
+Follow-up bug fix on the Bandscan sweep shipped in 3.7.0, reported immediately after use: the band plot had no readable Y axis and the finished result vanished almost as soon as the scan completed.
+
+- **Fixed**: the band plot now draws horizontal dBFS gridlines with value labels, and the X axis shows several evenly-spaced round-MHz ticks (87.5/92/96/100/104/108 MHz) instead of only the two band edges -- previously there was no way to read a signal level or an arbitrary peak's frequency off the plot at all.
+- **Fixed**: a finished scan's result no longer disappears within seconds. Root cause: `templates/admin/radio_diagnostics.html`'s SDR Diagnostics page fully re-renders `#receiversContainer` (and every `.bandscan-container` inside it, which the template always renders `style="display:none;"`) on its normal 15s auto-refresh; the frontend was only re-populating that container for receivers still actively polling (`bandscanActiveReceivers`), so as soon as a scan finished and polling stopped, the very next 15s refresh silently re-hid the result with nothing to redraw it. The frontend now keeps the last-known progress payload per receiver (`bandscanLastPayload`) and `bandscanRebuildActive()` redraws a finished scan's plot from it whenever the periodic refresh recreates the container, so the result stays visible until a new scan is started.
+- No backend changes; `tests/test_bandscan.py` (5 tests, unaffected) still passes.
+
 ## [3.7.0] - 2026-09-14 - SDR Diagnostics: Bandscan (full FM-band sweep)
 
 Final item from the post-brochure FM-analyzer follow-up, and the one genuinely different from everything else in the set: every prior addition (MPX spectrum, oscilloscopes, deviation histogram, modulation power, stereo balance) is a *passive* view of whatever a receiver is already doing. Bandscan is *active* -- it retunes the receiver across the whole FM broadcast band to survey what's on the air, the way the reference hardware's own "Bandscan" view does.
