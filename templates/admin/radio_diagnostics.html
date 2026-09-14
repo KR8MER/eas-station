@@ -2057,6 +2057,46 @@ sudo systemctl restart eas-station</code></pre>
         return { banner, canvas, ctx: canvas.getContext('2d'), statusEl };
     }
 
+    // Local maxima at least PEAK_MIN_PROMINENCE_DB above the estimated noise
+    // floor (25th percentile of this sweep's own levels -- robust to how
+    // loud the band happens to be on a given scan, unlike a fixed dBFS
+    // threshold), picked strongest-first and kept only when at least
+    // PEAK_MIN_PIXEL_GAP canvas pixels from every peak already kept. That
+    // stops a single station's whole skirt from getting one label per bin,
+    // and keeps labels from overlapping each other regardless of how close
+    // together two real stations are.
+    const PEAK_MIN_PROMINENCE_DB = 6;
+    const PEAK_MIN_PIXEL_GAP = 34;
+    const PEAK_MAX_COUNT = 12;
+
+    function bandscanFindPeaks(results, startHz, span, w) {
+        const valid = results.filter((r) => r.rms_dbfs !== null && r.rms_dbfs !== undefined);
+        if (valid.length < 3) return [];
+        const sortedLevels = valid.map((r) => r.rms_dbfs).sort((a, b) => a - b);
+        const noiseFloor = sortedLevels[Math.floor(sortedLevels.length * 0.25)];
+
+        const candidates = [];
+        for (let i = 1; i < valid.length - 1; i++) {
+            const prev = valid[i - 1].rms_dbfs, cur = valid[i].rms_dbfs, next = valid[i + 1].rms_dbfs;
+            if (cur >= prev && cur >= next && (cur - noiseFloor) >= PEAK_MIN_PROMINENCE_DB) {
+                candidates.push({
+                    freq_hz: valid[i].freq_hz,
+                    rms_dbfs: cur,
+                    x: ((valid[i].freq_hz - startHz) / span) * w,
+                });
+            }
+        }
+        candidates.sort((a, b) => b.rms_dbfs - a.rms_dbfs);
+
+        const kept = [];
+        for (const c of candidates) {
+            if (kept.length >= PEAK_MAX_COUNT) break;
+            if (kept.some((k) => Math.abs(k.x - c.x) < PEAK_MIN_PIXEL_GAP)) continue;
+            kept.push(c);
+        }
+        return kept;
+    }
+
     function bandscanRender(panel, payload) {
         const { canvas, ctx } = panel;
         const w = canvas.width, h = canvas.height;
@@ -2107,6 +2147,26 @@ sudo systemctl restart eas-station</code></pre>
             if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
         }
         if (started) ctx.stroke();
+
+        // Label detected peaks directly on the plot, next to the signal
+        // they belong to -- reading a station's frequency off the shared
+        // X-axis ticks (87.5/92/96/... MHz) below meant eyeballing an
+        // interpolation between two labels that were often nowhere near it.
+        const peaks = bandscanFindPeaks(results, startHz, span, w);
+        ctx.font = '10px monospace';
+        ctx.fillStyle = '#ffcc33';
+        ctx.textBaseline = 'alphabetic';
+        peaks.forEach((peak) => {
+            const y = scaleY(peak.rms_dbfs);
+            ctx.beginPath();
+            ctx.arc(peak.x, y, 2, 0, Math.PI * 2);
+            ctx.fill();
+            const label = (peak.freq_hz / 1e6).toFixed(1);
+            const textWidth = ctx.measureText(label).width;
+            const tx = Math.min(w - textWidth - 2, Math.max(2, peak.x - textWidth / 2));
+            const ty = Math.max(10, y - 6);
+            ctx.fillText(label, tx, ty);
+        });
 
         const channelCount = Math.round(span / (Number(payload.step_hz) || 100000)) + 1;
         const pct = channelCount ? Math.round((results.length / channelCount) * 100) : 0;

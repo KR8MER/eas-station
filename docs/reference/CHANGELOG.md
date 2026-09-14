@@ -7,6 +7,11 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.7.2] - 2026-09-14 - Bandscan plot: label detected peaks directly
+
+- **Added**: the band plot now labels detected signal peaks in place, right next to the signal they belong to, instead of only labelling the shared X-axis ticks -- reading a station's frequency off the axis meant eyeballing an interpolation between two ticks that were often nowhere near it. `bandscanFindPeaks()` finds local maxima at least 6 dB above the sweep's own 25th-percentile noise floor, picks the strongest first, and keeps a candidate only when it's at least 34 canvas pixels from every peak already kept (capped at 12 labels) -- so a single station's skirt doesn't get one label per bin and labels never overlap.
+- Axis ticks are unchanged and still shown for overall scale.
+
 ## [3.7.1] - 2026-09-14 - Bandscan plot: axis labels and persistent results
 
 Follow-up bug fix on the Bandscan sweep shipped in 3.7.0, reported immediately after use: the band plot had no readable Y axis and the finished result vanished almost as soon as the scan completed.
