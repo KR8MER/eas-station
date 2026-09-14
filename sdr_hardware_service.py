@@ -827,22 +827,29 @@ def _run_bandscan_identify(
     redis_client,
     cancel_event: "threading.Event",
     target_freqs_hz: list,
-    dwell_sec: float = 2.5,
+    dwell_sec: float = 6.0,
     settle_sec: float = 0.2,
 ) -> None:
     """Background-thread body for the "Identify Stations" pass.
 
     Retunes to each of ``target_freqs_hz`` in turn -- the peaks a prior
     Bandscan sweep already found -- and dwells long enough on each to
-    attempt an RDS PS (station name) decode via a purpose-built
-    FMDemodulator instance. Unlike _run_bandscan_sweep's per-channel level
-    measurement (effectively instantaneous), RDS sync needs real dwell
-    time: RBDSWorker's own comments put first-PS latency on a decent
-    signal at ~1s end-to-end, "the same time a car radio takes" -- so this
-    is deliberately a second, separate, explicit pass over a short list of
-    already-interesting frequencies, never folded into the sweep itself.
-    A weak/marginal peak simply may not lock within the dwell budget --
-    that records a None ps_name, not an error.
+    attempt an RDS decode via a purpose-built FMDemodulator instance.
+    Unlike _run_bandscan_sweep's per-channel level measurement (effectively
+    instantaneous), RDS needs real dwell time, and live-verified turned out
+    to need more of it than RBDSWorker's own docstring estimate suggested:
+    that ~1s figure is sync acquisition alone (confirmed live: ~1.8s on a
+    real strong local station). The 8-char PS marquee text (``ps_name``)
+    is assembled from 4 *separate* segments sent in different groups over
+    several more seconds after sync -- a dwell can sync perfectly and
+    still end with an incomplete PS if it runs out first, which is exactly
+    what a too-short dwell_sec produced during this feature's own live
+    testing. ``call_sign`` (derived from the PI code carried in every
+    synced group, no assembly needed) is kept as a fast, reliable fallback
+    throughout the dwell for exactly that reason -- see its own comment at
+    the point it's captured, below. A weak/marginal peak simply may not
+    sync at all within the dwell budget -- that records None for both
+    fields, not an error.
 
     Shares RedisChannels.BANDSCAN_ACTIVE_PREFIX with _run_bandscan_sweep
     (not a second flag) -- this pass retunes the same live receiver the
@@ -923,7 +930,7 @@ def _run_bandscan_identify(
                 tuned = False
 
             if not tuned:
-                results.append({"freq_hz": freq_hz, "ps_name": None, "rms_dbfs": None})
+                results.append({"freq_hz": freq_hz, "ps_name": None, "call_sign": None, "rms_dbfs": None})
                 _write_progress()
                 continue
 
@@ -947,6 +954,7 @@ def _run_bandscan_identify(
             ))
 
             ps_name = None
+            call_sign = None
             deadline = time.time() + max(0.1, float(dwell_sec))
             while time.time() < deadline and not cancel_event.is_set():
                 try:
@@ -968,9 +976,20 @@ def _run_bandscan_identify(
                     )
                     break
                 if demod_status is not None and demod_status.rbds_data is not None:
-                    # Stop the moment a name appears rather than always
-                    # burning the full dwell -- most of the time budget is
-                    # a *ceiling* for weak signals, not a fixed wait.
+                    # call_sign resolves from the PI code in block A, present
+                    # in every synced group -- available within ~1-2s of
+                    # sync (live-verified). ps_name is the 8-char PS
+                    # marquee text, assembled from 4 separate segments sent
+                    # in different 0A groups over several more seconds; a
+                    # dwell can sync perfectly and still end with '' if it
+                    # runs out before all 4 arrive. Keep the latest
+                    # call_sign as a fast, reliable fallback throughout the
+                    # dwell, but only stop early once the full PS name is
+                    # actually complete -- most of the time budget is a
+                    # *ceiling* for weak signals or a slow PS cycle, not a
+                    # fixed wait.
+                    if demod_status.rbds_data.call_sign:
+                        call_sign = demod_status.rbds_data.call_sign
                     candidate = (demod_status.rbds_data.ps_name or "").strip()
                     if candidate:
                         ps_name = candidate
@@ -979,6 +998,7 @@ def _run_bandscan_identify(
             results.append({
                 "freq_hz": freq_hz,
                 "ps_name": ps_name,
+                "call_sign": call_sign,
                 "rms_dbfs": stats["rms_dbfs"] if stats else None,
             })
             _write_progress()
@@ -2739,7 +2759,7 @@ def process_commands(redis_client, timeout: int = 2):
                             redis_client=redis_client,
                             cancel_event=cancel_event,
                             target_freqs_hz=[float(f) for f in target_freqs_hz],
-                            dwell_sec=float(command.get("dwell_sec", 2.5) or 2.5),
+                            dwell_sec=float(command.get("dwell_sec", 6.0) or 6.0),
                             settle_sec=float(command.get("settle_sec", 0.2) or 0.2),
                         ),
                         name=f"BandscanIdentify-{receiver_id}",

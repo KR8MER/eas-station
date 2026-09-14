@@ -249,7 +249,7 @@ def test_identify_progress_returns_stored_payload(bandscan_app, monkeypatch, aut
         stored = {
             "status": "done",
             "target_freqs_hz": [93_900_000],
-            "results": [{"freq_hz": 93_900_000, "ps_name": "KISSFM", "rms_dbfs": -20.0}],
+            "results": [{"freq_hz": 93_900_000, "ps_name": "KISSFM", "call_sign": "WBKS", "rms_dbfs": -20.0}],
             "started_at": 0,
             "updated_at": 0,
         }
