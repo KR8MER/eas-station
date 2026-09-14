@@ -172,6 +172,20 @@ class RedisChannels:
     BANDSCAN_ACTIVE_PREFIX = "sdr:bandscan:active:"  # + receiver_id
     BANDSCAN_ACTIVE_TTL_SECONDS = 5
 
+    # "Identify Stations": a second, explicit pass that retunes to each peak
+    # the sweep already found and dwells long enough to attempt an RDS PS
+    # (station name) decode -- see sdr_hardware_service.py's
+    # bandscan_identify action. Its own progress key, separate from
+    # BANDSCAN_PROGRESS_PREFIX above, so a still-visible sweep result isn't
+    # overwritten by an identify pass that follows it. Deliberately reuses
+    # BANDSCAN_ACTIVE_PREFIX (not a second mute flag) -- this pass retunes
+    # the same live receiver the same way the sweep does, so it needs the
+    # exact same audio-mute/dead-air-suppression behavior, and the demod
+    # worker/audio service don't need to know or care which kind of scan is
+    # responsible.
+    BANDSCAN_IDENTIFY_PROGRESS_PREFIX = "sdr:bandscan:identify:"  # + receiver_id
+    BANDSCAN_IDENTIFY_PROGRESS_TTL_SECONDS = 300
+
     # Audio streaming
     AUDIO_SAMPLES_PREFIX = "audio:samples:"  # + source_name
 

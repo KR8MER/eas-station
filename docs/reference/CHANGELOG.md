@@ -7,6 +7,17 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.9.0] - 2026-09-14 - Bandscan: Identify Stations (RDS station-name labeling of peaks)
+
+Closes the second item explicitly deferred out of Bandscan's original 3.7.0 changelog entry: "RDS station labeling of detected peaks." A peak used to only ever show its bare frequency (e.g. "93.9"); this adds a second, explicit pass that retunes to each detected peak long enough to attempt an RDS PS (station name) decode.
+
+- **Why a second pass**: RDS sync needs real dwell time -- `RBDSWorker`'s own timing puts a decent signal's first PS decode at ~1 second end-to-end ("the same time a car radio takes"), unlike the sweep's near-instant per-channel level measurement. Sweeping 206 channels in ~150ms each can never decode RDS, so this can't be folded into the sweep itself.
+- **Added**: a new "Identify Stations" button on SDR Diagnostics, shown once a sweep finishes with at least one detected peak. Its own `confirm()` states the added time (~2.5s per peak) and that the receiver still won't monitor for real alerts during it -- same risk framing as Bandscan itself.
+- **Added**: `sdr_hardware_service.py`'s `_run_bandscan_identify`, dispatched via a new `bandscan_identify` SDR-service action -- retunes to each target frequency and dwells (default 2.5s, stopping early the moment a PS name decodes) via a fresh, purpose-built `FMDemodulator` per frequency, so a stale lock from one peak can never leak into the next. Shares `_state.active_bandscans` (the sweep's own concurrency guard) and `RedisChannels.BANDSCAN_ACTIVE_PREFIX` (the audio-mute/dead-air-suppression flag shipped in 3.8.0) with the sweep -- either kind of scan blocks starting the other, and the existing Cancel button/endpoint works for both with no new code.
+- **Added**: `POST/GET /api/radio/bandscan/<id>/identify/{start,progress}` (`webapp/radio_settings/routes_bandscan.py`) -- `start` validates the submitted peak frequencies fall within the Bandscan band before dispatching; progress is its own Redis key (`BANDSCAN_IDENTIFY_PROGRESS_PREFIX`) so a still-visible sweep result is never overwritten by an identify pass that follows it.
+- Results render as a list below the chart (frequency, level, station name or "No RDS decoded") rather than on the canvas -- the peak-label collision/staggering logic tuned in 3.7.4 was sized for short frequency-only text, not an 8-character station name.
+- 24 new tests across `tests/test_bandscan.py` (early-stop-on-decode, full-dwell-on-no-decode, per-frequency demodulator isolation, frequency restore on every exit path, shared mute flag, separate progress key) and new `tests/test_bandscan_routes.py` (frequency validation, permission gate, command dispatch, progress shape) -- there was no existing route-level test file for the other bandscan endpoints either.
+
 ## [3.8.0] - 2026-09-14 - Bandscan: mute audio during the sweep
 
 Closes the "audio muting during the scan (a real side effect, noted rather than silently ignored)" item explicitly deferred out of Bandscan's original 3.7.0 changelog entry. Until now a sweep's rapid channel-hopping across the whole FM band streamed live to Icecast and the archiver -- roughly 30-45 seconds of static/noise on air for a routine diagnostic action.

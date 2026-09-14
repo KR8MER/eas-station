@@ -300,5 +300,221 @@ def test_active_bandscans_entry_is_cleared_on_completion():
     assert "rx-test" not in svc._state.active_bandscans
 
 
+# ---------------------------------------------------------------------------
+# "Identify Stations": _run_bandscan_identify -- a second, explicit pass that
+# retunes to each of a sweep's already-detected peaks and dwells long enough
+# to attempt an RDS PS (station name) decode via a purpose-built
+# FMDemodulator instance (see that function's own docstring for why this
+# can't be folded into the sweep itself).
+# ---------------------------------------------------------------------------
+
+from types import SimpleNamespace  # noqa: E402
+
+
+class _FakeIdentifyDemodulator:
+    """Stand-in for app_core.radio.demod.fm.FMDemodulator.
+
+    Returns a canned RBDSData.ps_name (or None) from every demodulate()
+    call instead of actually decoding anything, so these tests exercise
+    _run_bandscan_identify's control flow (early-stop on decode, full-dwell
+    on no decode, per-frequency isolation) without needing synthetic
+    RDS-modulated IQ or real DSP -- that's app_core/radio/demod's own test
+    coverage (tests/test_rbds_demodulation.py), not this function's job.
+    """
+
+    #: Queue of ps_name values (str or None), one per FMDemodulator
+    #: constructed, consumed in construction order -- _run_bandscan_identify
+    #: builds a fresh demodulator per target frequency, in the same order
+    #: as target_freqs_hz, so this queue's order lines up with that list.
+    #: None means "this frequency never decodes"; tests reset this before
+    #: use via the _fake_identify_demodulator fixture.
+    ps_name_queue: list = []
+    demodulate_call_count = 0
+
+    def __init__(self, config):
+        self.config = config
+        self._ps_name = type(self).ps_name_queue.pop(0) if type(self).ps_name_queue else None
+
+    def demodulate(self, iq_samples):
+        type(self).demodulate_call_count += 1
+        status = SimpleNamespace(rbds_data=SimpleNamespace(ps_name=self._ps_name))
+        return np.zeros(4, dtype=np.float32), status
+
+
+@pytest.fixture
+def _fake_identify_demodulator(monkeypatch):
+    import app_core.radio.demod.fm as fm_module
+
+    _FakeIdentifyDemodulator.ps_name_queue = []
+    _FakeIdentifyDemodulator.demodulate_call_count = 0
+    monkeypatch.setattr(fm_module, "FMDemodulator", _FakeIdentifyDemodulator)
+    return _FakeIdentifyDemodulator
+
+
+def _run_identify(receiver, redis_client, cancel_event, target_freqs_hz, **kwargs):
+    kwargs.setdefault("dwell_sec", 0.05)
+    kwargs.setdefault("settle_sec", 0.0)
+    svc._run_bandscan_identify(
+        receiver=receiver,
+        receiver_id="rx-test",
+        redis_client=redis_client,
+        cancel_event=cancel_event,
+        target_freqs_hz=target_freqs_hz,
+        **kwargs,
+    )
+
+
+def test_identify_records_decoded_ps_name_and_stops_early(_fake_identify_demodulator):
+    receiver = _FakeBandscanReceiver(start_freq_hz=93_900_000)
+    redis_client = _FakeRedis()
+    _fake_identify_demodulator.ps_name_queue = ["KISSFM"]
+
+    # A generous dwell budget -- if the loop were burning the whole thing
+    # instead of stopping the moment a name decodes, this test would be
+    # slow instead of just wrong.
+    _run_identify(receiver, redis_client, threading.Event(), [93_900_000.0], dwell_sec=2.5)
+
+    payload = redis_client.last_payload()
+    assert payload["status"] == "done"
+    assert payload["target_freqs_hz"] == [93_900_000.0]
+    assert len(payload["results"]) == 1
+    result = payload["results"][0]
+    assert result["freq_hz"] == 93_900_000.0
+    assert result["ps_name"] == "KISSFM"
+    assert result["rms_dbfs"] is not None
+    # Stopped after the first successful decode, not the full dwell.
+    assert _fake_identify_demodulator.demodulate_call_count == 1
+
+
+def test_identify_records_none_and_uses_full_dwell_when_nothing_decodes(_fake_identify_demodulator):
+    receiver = _FakeBandscanReceiver(start_freq_hz=93_900_000)
+    redis_client = _FakeRedis()
+    _fake_identify_demodulator.ps_name_queue = [None]
+
+    _run_identify(receiver, redis_client, threading.Event(), [93_900_000.0], dwell_sec=0.05)
+
+    payload = redis_client.last_payload()
+    result = payload["results"][0]
+    assert result["ps_name"] is None
+    assert result["freq_hz"] == 93_900_000.0
+    # A weak/marginal peak that never locks is not an error -- and the loop
+    # should have kept trying across more than one chunk, not given up
+    # after a single read.
+    assert _fake_identify_demodulator.demodulate_call_count > 1
+
+
+def test_identify_isolates_demodulator_state_per_frequency(_fake_identify_demodulator):
+    """A stale Costas/PLL lock from one peak must never leak into the
+    next -- verified here by two peaks getting two different, correctly
+    ordered results from one pass."""
+    receiver = _FakeBandscanReceiver(start_freq_hz=93_900_000)
+    redis_client = _FakeRedis()
+    _fake_identify_demodulator.ps_name_queue = ["FIRST", None]
+
+    _run_identify(
+        receiver, redis_client, threading.Event(),
+        [99_500_000.0, 101_300_000.0], dwell_sec=0.05,
+    )
+
+    payload = redis_client.last_payload()
+    results = payload["results"]
+    assert [r["freq_hz"] for r in results] == [99_500_000.0, 101_300_000.0]
+    assert results[0]["ps_name"] == "FIRST"
+    assert results[1]["ps_name"] is None
+
+
+def test_identify_restores_original_frequency_after_completion(_fake_identify_demodulator):
+    original = 93_900_000
+    receiver = _FakeBandscanReceiver(start_freq_hz=original)
+    redis_client = _FakeRedis()
+    _fake_identify_demodulator.ps_name_queue = ["ABC", "DEF"]
+
+    _run_identify(
+        receiver, redis_client, threading.Event(),
+        [99_500_000.0, 101_300_000.0],
+    )
+
+    assert receiver.config.frequency_hz == pytest.approx(original)
+    assert receiver.set_frequency_calls[-1] == pytest.approx(original)
+    assert redis_client.last_payload()["status"] == "done"
+
+
+def test_identify_cancellation_restores_frequency_and_marks_cancelled(_fake_identify_demodulator):
+    original = 93_900_000
+    receiver = _FakeBandscanReceiver(start_freq_hz=original)
+    redis_client = _FakeRedis()
+    cancel_event = threading.Event()
+    _fake_identify_demodulator.ps_name_queue = [None, None]
+
+    real_get_samples = receiver.get_samples
+
+    def _get_samples_then_cancel(num_samples=None):
+        result = real_get_samples(num_samples)
+        cancel_event.set()
+        return result
+
+    receiver.get_samples = _get_samples_then_cancel
+
+    _run_identify(
+        receiver, redis_client, cancel_event,
+        [99_500_000.0, 101_300_000.0], dwell_sec=5.0,
+    )
+
+    payload = redis_client.last_payload()
+    assert payload["status"] == "cancelled"
+    # Cancelled during (or right after) the first frequency -- nowhere near
+    # both target frequencies getting a full result.
+    assert 1 <= len(payload["results"]) < 2 + 1
+    assert receiver.config.frequency_hz == pytest.approx(original)
+    assert receiver.set_frequency_calls[-1] == pytest.approx(original)
+
+
+def test_identify_active_flag_present_during_pass_and_cleared_after(_fake_identify_demodulator):
+    """Shares RedisChannels.BANDSCAN_ACTIVE_PREFIX with the sweep (see that
+    key's own docstring) -- the demod worker and audio service mute/
+    suppress-dead-air off this exact flag regardless of which kind of scan
+    set it."""
+    receiver = _FakeBandscanReceiver()
+    redis_client = _FakeRedis()
+    active_key = f"{svc.RedisChannels.BANDSCAN_ACTIVE_PREFIX}rx-test"
+    _fake_identify_demodulator.ps_name_queue = ["WABC"]
+
+    _run_identify(receiver, redis_client, threading.Event(), [99_500_000.0])
+
+    assert any(key == active_key for key, _ttl, _value in redis_client.writes)
+    assert active_key in redis_client.deleted_keys
+    assert active_key not in redis_client.store
+
+
+def test_identify_writes_its_own_progress_key_not_the_sweeps(_fake_identify_demodulator):
+    receiver = _FakeBandscanReceiver()
+    redis_client = _FakeRedis()
+    _fake_identify_demodulator.ps_name_queue = ["WABC"]
+
+    _run_identify(receiver, redis_client, threading.Event(), [99_500_000.0])
+
+    identify_key = f"{svc.RedisChannels.BANDSCAN_IDENTIFY_PROGRESS_PREFIX}rx-test"
+    sweep_key = f"{svc.RedisChannels.BANDSCAN_PROGRESS_PREFIX}rx-test"
+    assert identify_key in redis_client.store
+    assert sweep_key not in redis_client.store
+
+
+def test_identify_active_bandscans_entry_is_cleared_on_completion(_fake_identify_demodulator):
+    """Shares _state.active_bandscans with the sweep (registered the same
+    way, by the bandscan_identify command handler) -- either kind of scan
+    already running for a receiver must block starting the other, and this
+    entry must always be removed when done or a receiver would be stuck
+    forever reporting 'a scan is already running'."""
+    receiver = _FakeBandscanReceiver()
+    redis_client = _FakeRedis()
+    cancel_event = threading.Event()
+    svc._state.active_bandscans["rx-test"] = cancel_event
+    _fake_identify_demodulator.ps_name_queue = ["WABC"]
+
+    _run_identify(receiver, redis_client, cancel_event, [99_500_000.0])
+
+    assert "rx-test" not in svc._state.active_bandscans
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
