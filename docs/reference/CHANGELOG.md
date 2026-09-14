@@ -7,6 +7,14 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.7.4] - 2026-09-14 - Bandscan plot: fix a suppressed close peak and Y-axis label wrapping
+
+Two more bugs reported immediately after 3.7.3 shipped, both from live use: a visually distinct peak sitting close (under ~0.5 MHz) to a taller one wasn't labelled, and the new Y-axis dBFS column wrapped its text onto two lines and overlapped the neighbouring gridline's own label.
+
+- **Fixed**: `PEAK_MIN_PIXEL_GAP` (the minimum on-screen distance between two kept peak labels) was 30px (~1.2 MHz), wide enough to suppress a real, visually distinct second peak -- its own local minimum/notch clearly separating it from its neighbour -- just because it sat under 1.2 MHz from a taller one. Lowered to 12px (~0.5 MHz), with `bandscanRender()` now staggering a label's vertical position instead of dropping it outright when two kept peaks are close enough for their text to still overlap.
+- **Fixed**: the new Y-axis column (added in 3.7.3) used the Bootstrap `small` class, which resolves against the page's rem base and was wide enough to wrap "-19 dBFS" onto two lines inside the 44px-wide column -- since each label is positioned assuming one line, the wrapped second lines overlapped the neighbouring gridline's own label into unreadable overlapping text. Switched to an explicit 10px monospace font (matching the plot's own peak-label font) with `white-space: nowrap`, and widened the column to 54px.
+- No backend changes; `tests/test_bandscan.py` unaffected.
+
 ## [3.7.3] - 2026-09-14 - Bandscan plot: fix peak detection and dBFS-label collisions
 
 Two bugs reported immediately after 3.7.2 shipped: only 2 of the ~15 visually obvious peaks in a live scan got labelled, and the leftmost peak's label was drawn on top of (and unreadable against) the Y-axis dBFS text.
