@@ -2021,6 +2021,28 @@ sudo systemctl restart eas-station</code></pre>
         statusEl.textContent = 'Starting…';
         container.appendChild(statusEl);
 
+        // Chart row: a fixed-width dBFS axis column to the left of the
+        // canvas, as its own DOM column rather than text drawn inside the
+        // canvas -- drawing it inside used to collide with both the
+        // plotted signal and the peak labels near the left edge of the
+        // band. min-width:0 on plotCol is required for the canvas's
+        // width:100% to actually shrink on a narrow (mobile) viewport
+        // instead of holding the row open to its 512px intrinsic width.
+        const chartRow = document.createElement('div');
+        chartRow.className = 'd-flex';
+        container.appendChild(chartRow);
+
+        const yAxisCol = document.createElement('div');
+        yAxisCol.className = 'position-relative text-muted small flex-shrink-0';
+        yAxisCol.style.width = '44px';
+        yAxisCol.style.height = '140px';
+        chartRow.appendChild(yAxisCol);
+
+        const plotCol = document.createElement('div');
+        plotCol.style.flex = '1 1 auto';
+        plotCol.style.minWidth = '0';
+        chartRow.appendChild(plotCol);
+
         const canvas = document.createElement('canvas');
         canvas.width = 512;
         canvas.height = 140;
@@ -2029,7 +2051,7 @@ sudo systemctl restart eas-station</code></pre>
         canvas.style.border = '1px solid rgba(128,128,128,0.3)';
         canvas.style.display = 'block';
         canvas.style.background = '#04040c';
-        container.appendChild(canvas);
+        plotCol.appendChild(canvas);
 
         // X-axis: several evenly-spaced round-MHz ticks rather than just the
         // two band edges, positioned by percentage across the plot width so
@@ -2052,39 +2074,53 @@ sudo systemctl restart eas-station</code></pre>
             }
             axisEl.appendChild(tick);
         });
-        container.appendChild(axisEl);
+        plotCol.appendChild(axisEl);
 
-        return { banner, canvas, ctx: canvas.getContext('2d'), statusEl };
+        return { banner, canvas, ctx: canvas.getContext('2d'), statusEl, yAxisCol };
     }
 
-    // Local maxima at least PEAK_MIN_PROMINENCE_DB above the estimated noise
-    // floor (25th percentile of this sweep's own levels -- robust to how
-    // loud the band happens to be on a given scan, unlike a fixed dBFS
-    // threshold), picked strongest-first and kept only when at least
-    // PEAK_MIN_PIXEL_GAP canvas pixels from every peak already kept. That
-    // stops a single station's whole skirt from getting one label per bin,
-    // and keeps labels from overlapping each other regardless of how close
-    // together two real stations are.
-    const PEAK_MIN_PROMINENCE_DB = 6;
-    const PEAK_MIN_PIXEL_GAP = 34;
-    const PEAK_MAX_COUNT = 12;
+    // Local maxima at least PEAK_MIN_PROMINENCE_DB above the lowest point in
+    // their own neighbourhood (+/- PEAK_LOCAL_WINDOW channels), picked
+    // strongest-first and kept only when at least PEAK_MIN_PIXEL_GAP canvas
+    // pixels from every peak already kept.
+    //
+    // This used to compare every bump against one *global* noise-floor
+    // number (the sweep's own 25th-percentile level). That silently hid
+    // real stations on a busy scan: a live sweep had one wide, deep fade
+    // between two strong stations dragging the whole-band 25th percentile
+    // far below the ambient level on the rest of the band, so the
+    // effective threshold ended up well above most of the other genuinely
+    // present, visually obvious bumps -- only the two loudest peaks in the
+    // whole sweep passed. Measuring prominence against each peak's own
+    // local minimum instead means a modest local bump still gets labelled
+    // even while some other stretch of the band is much louder or quieter.
+    const PEAK_MIN_PROMINENCE_DB = 3;
+    const PEAK_LOCAL_WINDOW = 10;   // channels each side (~1 MHz at the 100 kHz step)
+    const PEAK_MIN_PIXEL_GAP = 30;
+    const PEAK_MAX_COUNT = 14;
 
     function bandscanFindPeaks(results, startHz, span, w) {
         const valid = results.filter((r) => r.rms_dbfs !== null && r.rms_dbfs !== undefined);
         if (valid.length < 3) return [];
-        const sortedLevels = valid.map((r) => r.rms_dbfs).sort((a, b) => a - b);
-        const noiseFloor = sortedLevels[Math.floor(sortedLevels.length * 0.25)];
 
         const candidates = [];
         for (let i = 1; i < valid.length - 1; i++) {
             const prev = valid[i - 1].rms_dbfs, cur = valid[i].rms_dbfs, next = valid[i + 1].rms_dbfs;
-            if (cur >= prev && cur >= next && (cur - noiseFloor) >= PEAK_MIN_PROMINENCE_DB) {
-                candidates.push({
-                    freq_hz: valid[i].freq_hz,
-                    rms_dbfs: cur,
-                    x: ((valid[i].freq_hz - startHz) / span) * w,
-                });
+            if (cur < prev || cur < next) continue;
+
+            const lo = Math.max(0, i - PEAK_LOCAL_WINDOW);
+            const hi = Math.min(valid.length - 1, i + PEAK_LOCAL_WINDOW);
+            let localMin = cur;
+            for (let j = lo; j <= hi; j++) {
+                if (valid[j].rms_dbfs < localMin) localMin = valid[j].rms_dbfs;
             }
+            if ((cur - localMin) < PEAK_MIN_PROMINENCE_DB) continue;
+
+            candidates.push({
+                freq_hz: valid[i].freq_hz,
+                rms_dbfs: cur,
+                x: ((valid[i].freq_hz - startHz) / span) * w,
+            });
         }
         candidates.sort((a, b) => b.rms_dbfs - a.rms_dbfs);
 
@@ -2116,24 +2152,37 @@ sudo systemctl restart eas-station</code></pre>
         lo -= pad; hi += pad;
         const scaleY = (v) => h - ((Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo)) * h;
 
-        // Y-axis: horizontal gridlines with a dBFS label at each -- without
-        // this the line was just an unscaled shape with no way to read an
-        // actual signal level off it.
+        // Y-axis: horizontal gridlines in the canvas, with the dBFS scale
+        // itself drawn in panel.yAxisCol -- a dedicated DOM column to the
+        // left of the canvas (see bandscanBuildPanel) -- rather than as
+        // text drawn inside the plot. Text drawn inside the canvas used to
+        // collide with both the signal line and peak labels near the left
+        // edge of the band.
         const GRID_DIVS = 4;
         ctx.strokeStyle = 'rgba(128,128,128,0.25)';
         ctx.lineWidth = 1;
-        ctx.font = '10px monospace';
-        ctx.fillStyle = 'rgba(210,210,210,0.85)';
-        ctx.textBaseline = 'middle';
         for (let i = 0; i <= GRID_DIVS; i++) {
-            const frac = i / GRID_DIVS;
-            const y = frac * h;
-            const value = hi - frac * (hi - lo);
+            const y = (i / GRID_DIVS) * h;
             ctx.beginPath();
             ctx.moveTo(0, y);
             ctx.lineTo(w, y);
             ctx.stroke();
-            ctx.fillText(`${value.toFixed(0)} dBFS`, 4, Math.min(h - 6, Math.max(8, y)));
+        }
+        if (panel.yAxisCol) {
+            panel.yAxisCol.innerHTML = '';
+            for (let i = 0; i <= GRID_DIVS; i++) {
+                const frac = i / GRID_DIVS;
+                const value = hi - frac * (hi - lo);
+                const label = document.createElement('span');
+                label.textContent = `${value.toFixed(0)} dBFS`;
+                label.style.position = 'absolute';
+                label.style.right = '4px';
+                label.style.top = `${frac * 100}%`;
+                label.style.transform = i === 0 ? 'translateY(0)'
+                    : i === GRID_DIVS ? 'translateY(-100%)'
+                    : 'translateY(-50%)';
+                panel.yAxisCol.appendChild(label);
+            }
         }
 
         ctx.strokeStyle = '#39ff8f';
@@ -2164,7 +2213,7 @@ sudo systemctl restart eas-station</code></pre>
             const label = (peak.freq_hz / 1e6).toFixed(1);
             const textWidth = ctx.measureText(label).width;
             const tx = Math.min(w - textWidth - 2, Math.max(2, peak.x - textWidth / 2));
-            const ty = Math.max(10, y - 6);
+            const ty = Math.max(9, y - 6);
             ctx.fillText(label, tx, ty);
         });
 
