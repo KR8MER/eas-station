@@ -831,6 +831,9 @@ sudo systemctl restart eas-station</code></pre>
                                     <button type="button" class="btn btn-sm btn-outline-warning" data-action="bandscan" data-receiver-id="${receiver.receiver_id}" title="Sweep the whole FM broadcast band (87.5-108.0 MHz) to survey what's on the air, the way a hardware FM analyzer's Bandscan does. Takes roughly 30-45 seconds -- the receiver is retuned away from its assigned frequency for the whole scan and will NOT monitor for real alerts until it finishes.">
                                         <i class="fas fa-satellite-dish"></i> <span data-bandscan-label="${receiver.receiver_id}">Bandscan</span>
                                     </button>
+                                    <button type="button" class="btn btn-sm btn-outline-info" data-action="bandscan-identify" data-receiver-id="${receiver.receiver_id}" style="display:none;" title="Retune to each detected peak long enough to attempt an RDS station-name decode (roughly 2-2.5 seconds per peak). Appears once a Bandscan has found at least one peak. The receiver still will NOT monitor for real alerts during this pass.">
+                                        <i class="fas fa-id-badge"></i> <span data-bandscan-identify-label="${receiver.receiver_id}">Identify Stations</span>
+                                    </button>
                                 ` : ''}
                             </div>
                             ${receiver.receiver_id ? `
@@ -840,6 +843,7 @@ sudo systemctl restart eas-station</code></pre>
                                 <div class="trends-container mt-2" data-trends-for="${receiver.receiver_id}" style="display:none;"></div>
                                 <div class="diagnostic-container mt-2" data-diagnostic-for="${receiver.receiver_id}" style="display:none;"></div>
                                 <div class="bandscan-container mt-2" data-bandscan-for="${receiver.receiver_id}" style="display:none;"></div>
+                                <div class="bandscan-identify-container mt-2" data-bandscan-identify-for="${receiver.receiver_id}" style="display:none;"></div>
                             ` : ''}
                         </div>
                     </div>
@@ -2255,6 +2259,8 @@ sudo systemctl restart eas-station</code></pre>
         } else if (payload.status === 'error') {
             panel.statusEl.textContent = 'Scan failed — see server logs';
         }
+
+        return peaks;
     }
 
     async function bandscanFetchAndRender(receiverId) {
@@ -2274,9 +2280,14 @@ sudo systemctl restart eas-station</code></pre>
                 return;
             }
             bandscanLastPayload[receiverId] = payload;
-            bandscanRender(panel, payload);
+            const peaks = bandscanRender(panel, payload);
             if (payload.status !== 'running') {
                 bandscanFinish(receiverId, panel.banner);
+                bandscanIdentifyUpdateButtonVisibility(receiverId, peaks);
+            } else {
+                // Not final yet -- don't invite starting an identify pass
+                // against a peak list that's still changing.
+                bandscanIdentifyUpdateButtonVisibility(receiverId, []);
             }
         } catch (error) {
             panel.statusEl.textContent = `Fetch error: ${error.message}`;
@@ -2368,26 +2379,282 @@ sudo systemctl restart eas-station</code></pre>
             }
             const panel = bandscanBuildPanel(container);
             container._bandscanPanel = panel;
-            bandscanRender(panel, bandscanLastPayload[receiverId]);
+            const peaks = bandscanRender(panel, bandscanLastPayload[receiverId]);
             panel.banner.style.display = 'none';
+            bandscanIdentifyUpdateButtonVisibility(receiverId, peaks);
+        });
+    }
+
+    // ---- Bandscan: "Identify Stations" (RDS PS-name pass over peaks) -----
+    //
+    // A second, explicit pass over the frequencies the sweep already found
+    // interesting -- RDS sync needs real dwell time per frequency
+    // (~1-2.5s), unlike the sweep's near-instant per-channel level
+    // measurement, so it can't be folded into the sweep itself. Shares the
+    // sweep's server-side concurrency guard and its existing Cancel
+    // endpoint (sdr_hardware_service.py's _run_bandscan_identify shares
+    // _state.active_bandscans with _run_bandscan_sweep) -- there is no
+    // separate cancel button for this pass; the main Bandscan button's
+    // existing Cancel state covers both.
+    const bandscanIdentifyActiveReceivers = {};
+    const bandscanIdentifyIntervals = {};
+    const bandscanIdentifyLastPayload = {};
+    const BANDSCAN_IDENTIFY_POLL_MS = 1500;
+    const BANDSCAN_IDENTIFY_DWELL_SEC = 2.5;   // must match sdr_hardware_service.py's default
+
+    function bandscanIdentifyFindContainer(receiverId) {
+        return document.querySelector(`.bandscan-identify-container[data-bandscan-identify-for="${CSS.escape(receiverId)}"]`);
+    }
+    function bandscanIdentifyFindButton(receiverId) {
+        return document.querySelector(`button[data-action="bandscan-identify"][data-receiver-id="${CSS.escape(receiverId)}"]`);
+    }
+    function bandscanIdentifyFindLabel(receiverId) {
+        return document.querySelector(`span[data-bandscan-identify-label="${CSS.escape(receiverId)}"]`);
+    }
+
+    // Shows/hides the "Identify Stations" button based on whether the most
+    // recent sweep is finished and found at least one peak. Never touches
+    // it while an identify pass for this receiver is itself running --
+    // that state (label/disabled) is owned by bandscanIdentifyStart/Finish
+    // below.
+    function bandscanIdentifyUpdateButtonVisibility(receiverId, peaks) {
+        const btn = bandscanIdentifyFindButton(receiverId);
+        if (!btn || bandscanIdentifyActiveReceivers[receiverId]) return;
+        const eligible = Array.isArray(peaks) && peaks.length > 0 && !bandscanActiveReceivers[receiverId];
+        btn.style.display = eligible ? '' : 'none';
+    }
+
+    // Called when a new sweep starts -- the previous sweep's peaks (and any
+    // identify result against them) are now stale.
+    function bandscanIdentifyReset(receiverId) {
+        const btn = bandscanIdentifyFindButton(receiverId);
+        if (btn) btn.style.display = 'none';
+        delete bandscanIdentifyLastPayload[receiverId];
+        const container = bandscanIdentifyFindContainer(receiverId);
+        if (container) { container.innerHTML = ''; container.style.display = 'none'; }
+    }
+
+    function bandscanIdentifyBuildPanel(container) {
+        container.innerHTML = '';
+        container.style.display = '';
+
+        const statusEl = document.createElement('div');
+        statusEl.className = 'text-muted small mb-1';
+        statusEl.textContent = 'Identifying…';
+        container.appendChild(statusEl);
+
+        const list = document.createElement('ul');
+        list.className = 'list-group list-group-flush small';
+        container.appendChild(list);
+
+        return { statusEl, list };
+    }
+
+    function bandscanIdentifyRender(panel, payload) {
+        const results = Array.isArray(payload.results) ? payload.results : [];
+        panel.list.innerHTML = '';
+        if (!results.length) {
+            const empty = document.createElement('li');
+            empty.className = 'list-group-item text-muted';
+            empty.textContent = 'No results yet…';
+            panel.list.appendChild(empty);
+        }
+        results.forEach((r) => {
+            const row = document.createElement('li');
+            row.className = 'list-group-item d-flex justify-content-between align-items-center gap-2';
+
+            const freq = document.createElement('span');
+            freq.textContent = `${(r.freq_hz / 1e6).toFixed(1)} MHz`;
+
+            const level = document.createElement('span');
+            level.className = 'text-muted';
+            level.textContent = (r.rms_dbfs !== null && r.rms_dbfs !== undefined)
+                ? `${r.rms_dbfs.toFixed(0)} dBFS` : '—';
+
+            const station = document.createElement('span');
+            if (r.ps_name) {
+                station.className = 'fw-bold';
+                // RDS PS text is decoded from over-the-air broadcast data --
+                // untrusted, attacker-influenceable content. textContent
+                // (never innerHTML) keeps it inert no matter what a
+                // transmitter sends.
+                station.textContent = r.ps_name;
+            } else {
+                station.className = 'text-muted fst-italic';
+                station.textContent = 'No RDS decoded';
+            }
+
+            row.appendChild(freq);
+            row.appendChild(level);
+            row.appendChild(station);
+            panel.list.appendChild(row);
+        });
+
+        const total = Array.isArray(payload.target_freqs_hz) ? payload.target_freqs_hz.length : results.length;
+        if (payload.status === 'running') {
+            panel.statusEl.textContent = `Identifying… ${results.length}/${total} frequencies`;
+        } else if (payload.status === 'done') {
+            const found = results.filter((r) => r.ps_name).length;
+            panel.statusEl.textContent = `Identify complete — ${found}/${results.length} station${found === 1 ? '' : 's'} decoded`;
+        } else if (payload.status === 'cancelled') {
+            panel.statusEl.textContent = `Identify cancelled after ${results.length} frequencies`;
+        } else if (payload.status === 'error') {
+            panel.statusEl.textContent = 'Identify failed — see server logs';
+        }
+    }
+
+    async function bandscanIdentifyFetchAndRender(receiverId) {
+        const container = bandscanIdentifyFindContainer(receiverId);
+        if (!container) return;
+        let panel = container._bandscanIdentifyPanel;
+        if (!panel || !container.contains(panel.list)) {
+            panel = bandscanIdentifyBuildPanel(container);
+            container._bandscanIdentifyPanel = panel;
+        }
+        try {
+            const resp = await fetch(`/api/radio/bandscan/${encodeURIComponent(receiverId)}/identify/progress`, { cache: 'no-store' });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const payload = await resp.json();
+            if (payload.status === 'unavailable') {
+                panel.statusEl.textContent = 'No identify data yet…';
+                return;
+            }
+            bandscanIdentifyLastPayload[receiverId] = payload;
+            bandscanIdentifyRender(panel, payload);
+            if (payload.status !== 'running') {
+                bandscanIdentifyFinish(receiverId);
+            }
+        } catch (error) {
+            panel.statusEl.textContent = `Fetch error: ${error.message}`;
+        }
+    }
+
+    function bandscanIdentifyFinish(receiverId) {
+        delete bandscanIdentifyActiveReceivers[receiverId];
+        if (bandscanIdentifyIntervals[receiverId]) {
+            window.clearInterval(bandscanIdentifyIntervals[receiverId]);
+            delete bandscanIdentifyIntervals[receiverId];
+        }
+        const label = bandscanIdentifyFindLabel(receiverId);
+        if (label) label.textContent = 'Identify Stations';
+        const btn = bandscanIdentifyFindButton(receiverId);
+        if (btn) btn.disabled = false;
+        // The shared Bandscan/Cancel button only reflects "Cancel" while
+        // *something* (sweep or identify) is active for this receiver --
+        // reset it once this pass is the thing that just finished.
+        if (!bandscanActiveReceivers[receiverId]) {
+            const bandscanLabel = bandscanFindLabel(receiverId);
+            if (bandscanLabel) bandscanLabel.textContent = 'Bandscan';
+            const bandscanBtn = document.querySelector(`button[data-action="bandscan"][data-receiver-id="${CSS.escape(receiverId)}"]`);
+            if (bandscanBtn) { bandscanBtn.classList.remove('btn-outline-danger'); bandscanBtn.classList.add('btn-outline-warning'); }
+        }
+    }
+
+    async function bandscanIdentifyStart(receiverId) {
+        const lastSweep = bandscanLastPayload[receiverId];
+        const sweepResults = lastSweep && Array.isArray(lastSweep.results) ? lastSweep.results : [];
+        const startHz = lastSweep ? (Number(lastSweep.start_freq_hz) || (BANDSCAN_START_MHZ * 1e6)) : (BANDSCAN_START_MHZ * 1e6);
+        const endHz = lastSweep ? (Number(lastSweep.end_freq_hz) || (BANDSCAN_END_MHZ * 1e6)) : (BANDSCAN_END_MHZ * 1e6);
+        const peaks = bandscanFindPeaks(sweepResults, startHz, Math.max(1, endHz - startHz), 512);
+        if (!peaks.length) {
+            showToast && showToast('No detected peaks to identify -- run a Bandscan first.', 'warning');
+            return;
+        }
+
+        const estSec = Math.round(peaks.length * BANDSCAN_IDENTIFY_DWELL_SEC);
+        const proceed = window.confirm(
+            `This retunes the receiver to each of the ${peaks.length} detected peak(s), roughly ${estSec} seconds total, `
+            + `to attempt an RDS station-name decode. It will NOT monitor for real alerts until this finishes. Continue?`
+        );
+        if (!proceed) return;
+
+        try {
+            const resp = await fetch(`/api/radio/bandscan/${encodeURIComponent(receiverId)}/identify/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ frequencies_hz: peaks.map((p) => p.freq_hz) }),
+            });
+            const payload = await resp.json().catch(() => ({}));
+            if (!resp.ok || !payload.started) {
+                showToast && showToast(payload.error || 'Failed to start identify pass', 'danger');
+                return;
+            }
+        } catch (error) {
+            showToast && showToast(`Failed to start identify pass: ${error.message}`, 'danger');
+            return;
+        }
+
+        bandscanIdentifyActiveReceivers[receiverId] = true;
+        bandscanIdentifyFetchAndRender(receiverId);
+        if (!bandscanIdentifyIntervals[receiverId]) {
+            bandscanIdentifyIntervals[receiverId] = window.setInterval(
+                () => bandscanIdentifyFetchAndRender(receiverId), BANDSCAN_IDENTIFY_POLL_MS,
+            );
+        }
+        const label = bandscanIdentifyFindLabel(receiverId);
+        if (label) label.textContent = 'Identifying…';
+        const btn = bandscanIdentifyFindButton(receiverId);
+        if (btn) btn.disabled = true;
+        // Reflect that *something* is now running on the shared Cancel
+        // button too, exactly like a sweep does.
+        const bandscanLabel = bandscanFindLabel(receiverId);
+        if (bandscanLabel) bandscanLabel.textContent = 'Cancel Bandscan';
+        const bandscanBtn = document.querySelector(`button[data-action="bandscan"][data-receiver-id="${CSS.escape(receiverId)}"]`);
+        if (bandscanBtn) { bandscanBtn.classList.remove('btn-outline-warning'); bandscanBtn.classList.add('btn-outline-danger'); }
+    }
+
+    function bandscanIdentifyRebuildActive() {
+        const receiverIds = new Set([
+            ...Object.keys(bandscanIdentifyActiveReceivers),
+            ...Object.keys(bandscanIdentifyLastPayload),
+        ]);
+        receiverIds.forEach((receiverId) => {
+            const container = bandscanIdentifyFindContainer(receiverId);
+            if (!container) {
+                if (bandscanIdentifyIntervals[receiverId]) window.clearInterval(bandscanIdentifyIntervals[receiverId]);
+                delete bandscanIdentifyIntervals[receiverId];
+                delete bandscanIdentifyActiveReceivers[receiverId];
+                delete bandscanIdentifyLastPayload[receiverId];
+                return;
+            }
+            if (container.firstChild) return; // not clobbered by this refresh
+            if (bandscanIdentifyActiveReceivers[receiverId]) {
+                bandscanIdentifyFetchAndRender(receiverId);
+                return;
+            }
+            const panel = bandscanIdentifyBuildPanel(container);
+            container._bandscanIdentifyPanel = panel;
+            bandscanIdentifyRender(panel, bandscanIdentifyLastPayload[receiverId]);
         });
     }
 
     (() => {
         const receiversContainer = document.getElementById('receiversContainer');
         if (receiversContainer && window.MutationObserver) {
-            new MutationObserver(bandscanRebuildActive).observe(receiversContainer, { childList: true });
+            new MutationObserver(() => {
+                bandscanRebuildActive();
+                bandscanIdentifyRebuildActive();
+            }).observe(receiversContainer, { childList: true });
         }
     })();
 
     document.addEventListener('click', (ev) => {
+        const identifyBtn = ev.target.closest('button[data-action="bandscan-identify"]');
+        if (identifyBtn) {
+            const receiverId = identifyBtn.getAttribute('data-receiver-id');
+            if (receiverId && !bandscanIdentifyActiveReceivers[receiverId]) {
+                bandscanIdentifyStart(receiverId);
+            }
+            return;
+        }
         const btn = ev.target.closest('button[data-action="bandscan"]');
         if (!btn) return;
         const receiverId = btn.getAttribute('data-receiver-id');
         if (!receiverId) return;
-        if (bandscanActiveReceivers[receiverId]) {
+        if (bandscanActiveReceivers[receiverId] || bandscanIdentifyActiveReceivers[receiverId]) {
             bandscanCancel(receiverId);
         } else {
+            bandscanIdentifyReset(receiverId);
             bandscanStart(receiverId);
         }
     });
