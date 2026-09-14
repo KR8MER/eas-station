@@ -828,6 +828,9 @@ sudo systemctl restart eas-station</code></pre>
                                     <button type="button" class="btn btn-sm btn-outline-warning" data-action="restart" data-receiver-id="${receiver.receiver_id}">
                                         <i class="fas fa-sync-alt"></i> Restart Receiver
                                     </button>
+                                    <button type="button" class="btn btn-sm btn-outline-warning" data-action="bandscan" data-receiver-id="${receiver.receiver_id}" title="Sweep the whole FM broadcast band (87.5-108.0 MHz) to survey what's on the air, the way a hardware FM analyzer's Bandscan does. Takes roughly 30-45 seconds -- the receiver is retuned away from its assigned frequency for the whole scan and will NOT monitor for real alerts until it finishes.">
+                                        <i class="fas fa-satellite-dish"></i> <span data-bandscan-label="${receiver.receiver_id}">Bandscan</span>
+                                    </button>
                                 ` : ''}
                             </div>
                             ${receiver.receiver_id ? `
@@ -836,6 +839,7 @@ sudo systemctl restart eas-station</code></pre>
                                 <div class="mpx-scope-container mt-2" data-mpx-for="${receiver.receiver_id}" style="display:none;"></div>
                                 <div class="trends-container mt-2" data-trends-for="${receiver.receiver_id}" style="display:none;"></div>
                                 <div class="diagnostic-container mt-2" data-diagnostic-for="${receiver.receiver_id}" style="display:none;"></div>
+                                <div class="bandscan-container mt-2" data-bandscan-for="${receiver.receiver_id}" style="display:none;"></div>
                             ` : ''}
                         </div>
                     </div>
@@ -1962,6 +1966,224 @@ sudo systemctl restart eas-station</code></pre>
             mpxStop(receiverId);
         } else {
             mpxStart(receiverId);
+        }
+    });
+
+    // ---- Bandscan: full FM-band sweep -------------------------------------
+    //
+    // Unlike every other view on this page, this is an ACTIVE operation: it
+    // retunes the receiver away from its assigned frequency for the whole
+    // scan (roughly 30-45 seconds), so real alerts are missed on that receiver until
+    // it finishes. Deliberately the same risk tier as the existing Restart
+    // Receiver button, not gated behind any "are you sure" beyond the one
+    // confirm() dialog. The sweep itself runs server-side on its own thread
+    // (see sdr_hardware_service.py's _run_bandscan_sweep) and is NOT tied to
+    // this browser tab staying open -- it always retunes back when it ends,
+    // regardless of whether anyone is still watching.
+    const bandscanActiveReceivers = {};   // receiverId -> true while polling
+    const bandscanIntervals = {};
+    const BANDSCAN_POLL_MS = 1500;        // matches the sweep's ~1 channel/sec-ish rate
+    const BANDSCAN_START_MHZ = 87.5;
+    const BANDSCAN_END_MHZ = 108.0;
+
+    function bandscanFindContainer(receiverId) {
+        return document.querySelector(`.bandscan-container[data-bandscan-for="${CSS.escape(receiverId)}"]`);
+    }
+    function bandscanFindLabel(receiverId) {
+        return document.querySelector(`span[data-bandscan-label="${CSS.escape(receiverId)}"]`);
+    }
+
+    function bandscanBuildPanel(container) {
+        container.innerHTML = '';
+        container.style.display = '';
+
+        const banner = document.createElement('div');
+        banner.className = 'alert alert-warning py-1 px-2 mb-2 small fw-bold';
+        banner.textContent =
+            `SCANNING ${BANDSCAN_START_MHZ.toFixed(1)}-${BANDSCAN_END_MHZ.toFixed(1)} MHz — NOT MONITORING FOR ALERTS`;
+        container.appendChild(banner);
+
+        const statusEl = document.createElement('div');
+        statusEl.className = 'text-muted small mb-1';
+        statusEl.textContent = 'Starting…';
+        container.appendChild(statusEl);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 140;
+        canvas.style.width = '100%';
+        canvas.style.height = '140px';
+        canvas.style.border = '1px solid rgba(128,128,128,0.3)';
+        canvas.style.display = 'block';
+        canvas.style.background = '#04040c';
+        container.appendChild(canvas);
+
+        const axisEl = document.createElement('div');
+        axisEl.className = 'd-flex justify-content-between text-muted small mt-1';
+        axisEl.innerHTML = `<span>${BANDSCAN_START_MHZ.toFixed(1)} MHz</span><span>${BANDSCAN_END_MHZ.toFixed(1)} MHz</span>`;
+        container.appendChild(axisEl);
+
+        return { banner, canvas, ctx: canvas.getContext('2d'), statusEl };
+    }
+
+    function bandscanRender(panel, payload) {
+        const { canvas, ctx } = panel;
+        const w = canvas.width, h = canvas.height;
+        ctx.fillStyle = '#04040c';
+        ctx.fillRect(0, 0, w, h);
+
+        const results = Array.isArray(payload.results) ? payload.results : [];
+        const startHz = Number(payload.start_freq_hz) || (BANDSCAN_START_MHZ * 1e6);
+        const endHz = Number(payload.end_freq_hz) || (BANDSCAN_END_MHZ * 1e6);
+        const span = Math.max(1, endHz - startHz);
+
+        const levels = results.map((r) => r.rms_dbfs).filter((v) => v !== null && v !== undefined);
+        let lo = levels.length ? Math.min(...levels) : -80;
+        let hi = levels.length ? Math.max(...levels) : -20;
+        if (hi <= lo) { lo -= 5; hi += 5; }
+        const pad = (hi - lo) * 0.1;
+        lo -= pad; hi += pad;
+        const scaleY = (v) => h - ((Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo)) * h;
+
+        ctx.strokeStyle = '#39ff8f';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        let started = false;
+        for (const r of results) {
+            if (r.rms_dbfs === null || r.rms_dbfs === undefined) continue;
+            const x = ((r.freq_hz - startHz) / span) * w;
+            const y = scaleY(r.rms_dbfs);
+            if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
+        }
+        if (started) ctx.stroke();
+
+        const channelCount = Math.round(span / (Number(payload.step_hz) || 100000)) + 1;
+        const pct = channelCount ? Math.round((results.length / channelCount) * 100) : 0;
+
+        if (payload.status === 'running') {
+            panel.statusEl.textContent = `Scanning… ${results.length}/${channelCount} channels (${pct}%)`;
+        } else if (payload.status === 'done') {
+            panel.statusEl.textContent = `Scan complete — ${results.length} channels`;
+        } else if (payload.status === 'cancelled') {
+            panel.statusEl.textContent = `Scan cancelled after ${results.length} channels`;
+        } else if (payload.status === 'error') {
+            panel.statusEl.textContent = 'Scan failed — see server logs';
+        }
+    }
+
+    async function bandscanFetchAndRender(receiverId) {
+        const container = bandscanFindContainer(receiverId);
+        if (!container) return;
+        let panel = container._bandscanPanel;
+        if (!panel || !container.contains(panel.canvas)) {
+            panel = bandscanBuildPanel(container);
+            container._bandscanPanel = panel;
+        }
+        try {
+            const resp = await fetch(`/api/radio/bandscan/${encodeURIComponent(receiverId)}/progress`, { cache: 'no-store' });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const payload = await resp.json();
+            if (payload.status === 'unavailable') {
+                panel.statusEl.textContent = 'No scan data yet…';
+                return;
+            }
+            bandscanRender(panel, payload);
+            if (payload.status !== 'running') {
+                bandscanFinish(receiverId, panel.banner);
+            }
+        } catch (error) {
+            panel.statusEl.textContent = `Fetch error: ${error.message}`;
+        }
+    }
+
+    function bandscanFinish(receiverId, bannerEl) {
+        delete bandscanActiveReceivers[receiverId];
+        if (bandscanIntervals[receiverId]) {
+            window.clearInterval(bandscanIntervals[receiverId]);
+            delete bandscanIntervals[receiverId];
+        }
+        if (bannerEl) bannerEl.style.display = 'none';
+        const label = bandscanFindLabel(receiverId);
+        if (label) label.textContent = 'Bandscan';
+        const btn = document.querySelector(`button[data-action="bandscan"][data-receiver-id="${CSS.escape(receiverId)}"]`);
+        if (btn) btn.classList.remove('btn-outline-danger');
+        if (btn) btn.classList.add('btn-outline-warning');
+    }
+
+    async function bandscanStart(receiverId) {
+        const proceed = window.confirm(
+            `This retunes the receiver across the whole FM band (${BANDSCAN_START_MHZ.toFixed(1)}-${BANDSCAN_END_MHZ.toFixed(1)} MHz) `
+            + `for roughly 30-45 seconds. It will NOT monitor for real alerts until the scan finishes. Continue?`
+        );
+        if (!proceed) return;
+
+        try {
+            const resp = await fetch(`/api/radio/bandscan/${encodeURIComponent(receiverId)}/start`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+            });
+            const payload = await resp.json().catch(() => ({}));
+            if (!resp.ok || !payload.started) {
+                showToast && showToast(payload.error || 'Failed to start bandscan', 'danger');
+                return;
+            }
+        } catch (error) {
+            showToast && showToast(`Failed to start bandscan: ${error.message}`, 'danger');
+            return;
+        }
+
+        bandscanActiveReceivers[receiverId] = true;
+        bandscanFetchAndRender(receiverId);
+        if (!bandscanIntervals[receiverId]) {
+            bandscanIntervals[receiverId] = window.setInterval(() => bandscanFetchAndRender(receiverId), BANDSCAN_POLL_MS);
+        }
+        const label = bandscanFindLabel(receiverId);
+        if (label) label.textContent = 'Cancel Bandscan';
+        const btn = document.querySelector(`button[data-action="bandscan"][data-receiver-id="${CSS.escape(receiverId)}"]`);
+        if (btn) { btn.classList.remove('btn-outline-warning'); btn.classList.add('btn-outline-danger'); }
+    }
+
+    async function bandscanCancel(receiverId) {
+        const label = bandscanFindLabel(receiverId);
+        if (label) label.textContent = 'Cancelling…';
+        try {
+            await fetch(`/api/radio/bandscan/${encodeURIComponent(receiverId)}/cancel`, { method: 'POST' });
+        } catch (error) {
+            // The poll loop will keep reflecting real server state either way.
+        }
+    }
+
+    function bandscanRebuildActive() {
+        Object.keys(bandscanActiveReceivers).forEach((receiverId) => {
+            const container = bandscanFindContainer(receiverId);
+            if (!container) {
+                if (bandscanIntervals[receiverId]) window.clearInterval(bandscanIntervals[receiverId]);
+                delete bandscanIntervals[receiverId];
+                delete bandscanActiveReceivers[receiverId];
+                return;
+            }
+            if (container.firstChild) return; // not clobbered by this refresh
+            bandscanFetchAndRender(receiverId);
+            const label = bandscanFindLabel(receiverId);
+            if (label) label.textContent = 'Cancel Bandscan';
+        });
+    }
+
+    (() => {
+        const receiversContainer = document.getElementById('receiversContainer');
+        if (receiversContainer && window.MutationObserver) {
+            new MutationObserver(bandscanRebuildActive).observe(receiversContainer, { childList: true });
+        }
+    })();
+
+    document.addEventListener('click', (ev) => {
+        const btn = ev.target.closest('button[data-action="bandscan"]');
+        if (!btn) return;
+        const receiverId = btn.getAttribute('data-receiver-id');
+        if (!receiverId) return;
+        if (bandscanActiveReceivers[receiverId]) {
+            bandscanCancel(receiverId);
+        } else {
+            bandscanStart(receiverId);
         }
     });
 

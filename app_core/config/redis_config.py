@@ -150,6 +150,16 @@ class RedisChannels:
     MPX_SPECTRUM_PREFIX = "demod:mpx_spectrum:"  # + receiver_id
     MPX_SPECTRUM_TTL_SECONDS = 5
 
+    # Bandscan: transient progress for an in-flight (or just-finished) full
+    # FM-band sweep -- see sdr_hardware_service.py's bandscan_sweep action.
+    # Deliberately not a DB table: unlike Signal Quality history, this is
+    # throwaway state for one scan, the same "lives only as long as the
+    # TTL" treatment the RF/MPX spectrum keys already get. Refreshed after
+    # every channel measured, so the TTL only needs to outlast the gap
+    # between two per-channel writes, not the whole multi-minute sweep.
+    BANDSCAN_PROGRESS_PREFIX = "sdr:bandscan:"  # + receiver_id
+    BANDSCAN_PROGRESS_TTL_SECONDS = 300
+
     # Audio streaming
     AUDIO_SAMPLES_PREFIX = "audio:samples:"  # + source_name
 
