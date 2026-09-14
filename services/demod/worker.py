@@ -78,6 +78,14 @@ _QUEUE_MAXSIZE = 64
 #: is untouched -- that is the real signal data and must stay per-chunk.
 _STATUS_PUBLISH_INTERVAL_S = 0.2
 
+#: How long a fetched Bandscan-active flag is reused before re-checking
+#: Redis. _process_message() runs per IQ chunk (~tens of ms) and the flag
+#: only ever changes twice per scan (set at the start, cleared at the end),
+#: so a Redis round-trip on every single chunk would be pure waste -- and,
+#: unlike the status-publish throttle above, would add real latency to the
+#: audio path itself if done synchronously per chunk.
+_BANDSCAN_MUTE_CHECK_INTERVAL_S = 0.5
+
 
 class DemodWorker:
     """Owns one demodulator instance and its dedicated worker thread.
@@ -102,6 +110,10 @@ class DemodWorker:
         self._iq_sample_rate: int = 0
         self._center_frequency: int = 0
         self._last_rbds_reset_frequency: Optional[int] = None
+
+        # Cache for _is_bandscan_muted() -- see _BANDSCAN_MUTE_CHECK_INTERVAL_S.
+        self._bandscan_muted: bool = False
+        self._bandscan_muted_checked_at: float = 0.0
 
         self._queue: "queue.Queue[dict]" = queue.Queue(maxsize=_QUEUE_MAXSIZE)
         self._chunks_dropped = 0
@@ -241,7 +253,46 @@ class DemodWorker:
         if audio_samples is None or len(audio_samples) == 0:
             return
 
+        if self._is_bandscan_muted():
+            # Publish silence, not the real demodulated audio, while a
+            # Bandscan sweep is retuning this receiver across the whole FM
+            # band -- otherwise the sweep's rapid channel-hopping garbage
+            # gets demodulated and streamed live to Icecast/the archiver
+            # for the sweep's whole ~30-45s duration. The demodulator itself
+            # keeps running normally on the real (swept) IQ so its internal
+            # DSP/RBDS state isn't torn down and rebuilt around the mute.
+            audio_samples = np.zeros_like(audio_samples)
+
         self._publish(audio_samples, status)
+
+    def _is_bandscan_muted(self) -> bool:
+        """Is a Bandscan sweep currently retuning this receiver?
+
+        See RedisChannels.BANDSCAN_ACTIVE_PREFIX's docstring. Cached (see
+        _BANDSCAN_MUTE_CHECK_INTERVAL_S) rather than checked fresh on every
+        chunk -- a synchronous Redis round-trip per ~32ms audio chunk would
+        add real, avoidable latency to the audio path for a flag that only
+        changes twice per scan.
+        """
+        now = time.time()
+        if now - self._bandscan_muted_checked_at < _BANDSCAN_MUTE_CHECK_INTERVAL_S:
+            return self._bandscan_muted
+
+        self._bandscan_muted_checked_at = now
+        if self._redis_client is None:
+            self._bandscan_muted = False
+            return False
+
+        from app_core.config.redis_config import RedisChannels
+        try:
+            key = f"{RedisChannels.BANDSCAN_ACTIVE_PREFIX}{self.receiver_id}"
+            self._bandscan_muted = bool(self._redis_client.exists(key))
+        except Exception as exc:
+            logger.debug(
+                "demod worker %s: bandscan-mute check failed: %s", self.receiver_id, exc,
+            )
+            self._bandscan_muted = False
+        return self._bandscan_muted
 
     def _create_demodulator(self) -> None:
         if self._demodulator is not None and hasattr(self._demodulator, "stop"):

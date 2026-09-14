@@ -160,6 +160,18 @@ class RedisChannels:
     BANDSCAN_PROGRESS_PREFIX = "sdr:bandscan:"  # + receiver_id
     BANDSCAN_PROGRESS_TTL_SECONDS = 300
 
+    # Lightweight marker: is a bandscan currently sweeping this receiver?
+    # Separate from BANDSCAN_PROGRESS_PREFIX above because that key's JSON
+    # payload grows every channel and is far too heavy to poll on every
+    # audio chunk (~tens of ms); this is a plain presence check the demod
+    # worker and audio service use to mute/suppress-dead-air for the
+    # receiver's audio for the sweep's duration. Refreshed every channel by
+    # the sweep and explicitly deleted in its `finally` block; the short
+    # TTL is just a backstop so a crashed sweep thread can't strand the
+    # receiver muted indefinitely.
+    BANDSCAN_ACTIVE_PREFIX = "sdr:bandscan:active:"  # + receiver_id
+    BANDSCAN_ACTIVE_TTL_SECONDS = 5
+
     # Audio streaming
     AUDIO_SAMPLES_PREFIX = "audio:samples:"  # + source_name
 

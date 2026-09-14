@@ -79,17 +79,34 @@ class _FakeBandscanReceiver:
 
 
 class _FakeRedis:
-    """Records every setex call so tests can inspect the final progress
-    payload without a real Redis instance."""
+    """Records every setex/delete call so tests can inspect the final
+    progress payload and the bandscan-active mute flag without a real
+    Redis instance."""
 
     def __init__(self):
         self.writes: list = []
+        self.store: dict = {}
+        self.deleted_keys: list = []
 
     def setex(self, key, ttl, value):
         self.writes.append((key, ttl, json.loads(value)))
+        self.store[key] = value
+
+    def delete(self, key):
+        self.deleted_keys.append(key)
+        self.store.pop(key, None)
+
+    def exists(self, key):
+        return 1 if key in self.store else 0
 
     def last_payload(self):
-        return self.writes[-1][2] if self.writes else None
+        # The progress payload is always the last setex call each time
+        # _write_progress() runs -- see its own comment on why the
+        # active-flag write happens first.
+        for key, _ttl, value in reversed(self.writes):
+            if isinstance(value, dict):
+                return value
+        return None
 
 
 @pytest.fixture(autouse=True)
@@ -206,6 +223,63 @@ def test_exception_mid_sweep_restores_frequency_and_marks_error():
     assert payload["status"] == "error"
     assert receiver.config.frequency_hz == pytest.approx(original)
     assert receiver.set_frequency_calls[-1] == pytest.approx(original)
+
+
+def test_active_flag_present_during_sweep_and_cleared_after_completion():
+    """The demod worker/audio service check RedisChannels.BANDSCAN_ACTIVE_PREFIX
+    to mute audio and suppress dead-air alarms for the sweep's duration --
+    this must be set while the sweep runs and explicitly cleared (not just
+    left to expire on its own TTL) once it finishes."""
+    receiver = _FakeBandscanReceiver(start_freq_hz=93_900_000)
+    redis_client = _FakeRedis()
+    active_key = f"{svc.RedisChannels.BANDSCAN_ACTIVE_PREFIX}rx-test"
+
+    _run(
+        receiver, redis_client, threading.Event(),
+        start_hz=100_000_000, end_hz=100_300_000, step_hz=100_000,
+    )
+
+    # Was set at least once while the sweep ran...
+    assert any(key == active_key for key, _ttl, _value in redis_client.writes)
+    # ...and explicitly cleared (not just left for the TTL) once done.
+    assert active_key in redis_client.deleted_keys
+    assert active_key not in redis_client.store
+
+
+def test_active_flag_cleared_after_cancellation():
+    receiver = _FakeBandscanReceiver(start_freq_hz=93_900_000)
+    redis_client = _FakeRedis()
+    cancel_event = threading.Event()
+    active_key = f"{svc.RedisChannels.BANDSCAN_ACTIVE_PREFIX}rx-test"
+
+    real_get_samples = receiver.get_samples
+
+    def _get_samples_then_cancel(num_samples=None):
+        result = real_get_samples(num_samples)
+        cancel_event.set()
+        return result
+
+    receiver.get_samples = _get_samples_then_cancel
+
+    _run(
+        receiver, redis_client, cancel_event,
+        start_hz=100_000_000, end_hz=108_000_000, step_hz=100_000,
+    )
+
+    assert active_key not in redis_client.store
+
+
+def test_active_flag_cleared_after_error():
+    receiver = _FakeBandscanReceiver(start_freq_hz=93_900_000, fail_get_samples_at_call=2)
+    redis_client = _FakeRedis()
+    active_key = f"{svc.RedisChannels.BANDSCAN_ACTIVE_PREFIX}rx-test"
+
+    _run(
+        receiver, redis_client, threading.Event(),
+        start_hz=100_000_000, end_hz=100_300_000, step_hz=100_000,
+    )
+
+    assert active_key not in redis_client.store
 
 
 def test_active_bandscans_entry_is_cleared_on_completion():

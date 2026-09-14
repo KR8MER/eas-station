@@ -163,6 +163,67 @@ class TestRedisSdrAdapter(unittest.TestCase):
         second = adapter._get_remote_status()
         self.assertIs(second, first)  # last-known, not None
 
+    def test_dead_air_suppressed_true_while_bandscan_active(self):
+        """A Bandscan sweep mutes this receiver's audio to real digital
+        silence for its ~30-45s duration (services/demod/worker.py mutes at
+        the source) -- _dead_air_suppressed() must report True so
+        AudioSourceAdapter._update_metrics() (app_core/audio/ingest.py)
+        skips feeding that deliberate silence to the dead-air detector,
+        which would otherwise cross its duration threshold and raise a
+        false alarm for a routine, operator-initiated diagnostic scan."""
+        adapter = self._make_adapter()
+        mock_redis = MagicMock()
+        mock_redis.exists.return_value = 1
+        adapter._redis_client = mock_redis
+
+        self.assertTrue(adapter._dead_air_suppressed())
+        mock_redis.exists.assert_called_with('sdr:bandscan:active:test-receiver')
+
+    def test_dead_air_not_suppressed_when_no_bandscan_active(self):
+        adapter = self._make_adapter()
+        mock_redis = MagicMock()
+        mock_redis.exists.return_value = 0
+        adapter._redis_client = mock_redis
+
+        self.assertFalse(adapter._dead_air_suppressed())
+
+    def test_dead_air_suppressed_caches_within_ttl(self):
+        """Checked on every _update_metrics() call (~10 Hz) -- must not
+        round-trip Redis every single time, same rationale as
+        _get_remote_status()'s own cache."""
+        from app_core.audio.redis_sdr_adapter import _BANDSCAN_MUTE_CACHE_TTL_S
+
+        adapter = self._make_adapter()
+        mock_redis = MagicMock()
+        mock_redis.exists.return_value = 1
+        adapter._redis_client = mock_redis
+
+        first = adapter._dead_air_suppressed()
+        second = adapter._dead_air_suppressed()
+
+        self.assertTrue(first)
+        self.assertTrue(second)
+        self.assertEqual(mock_redis.exists.call_count, 1)
+
+        # Force the cache stale -- the next call must re-check Redis.
+        adapter._bandscan_muted_cache_at -= (_BANDSCAN_MUTE_CACHE_TTL_S + 1.0)
+        mock_redis.exists.return_value = 0
+        third = adapter._dead_air_suppressed()
+
+        self.assertFalse(third)
+        self.assertEqual(mock_redis.exists.call_count, 2)
+
+    def test_dead_air_suppressed_fails_safe_on_redis_error(self):
+        """A Redis hiccup while checking this flag must not be read as
+        'suppress dead-air detection' -- fail toward the safer default
+        (alarms stay live) rather than silently disabling monitoring."""
+        adapter = self._make_adapter()
+        mock_redis = MagicMock()
+        mock_redis.exists.side_effect = RuntimeError("connection lost")
+        adapter._redis_client = mock_redis
+
+        self.assertFalse(adapter._dead_air_suppressed())
+
     def test_subscriber_loop_unpacks_binary_audio_envelope(self):
         """The subscriber thread no longer parses JSON or calls a
         demodulator -- it unpacks the binary envelope published by
