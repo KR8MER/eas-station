@@ -7,6 +7,15 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.9.1] - 2026-09-14 - Fix Identify Stations decoding zero RDS (ring-buffer race)
+
+Live-tested against real hardware immediately after 3.9.0 shipped, at the user's prompt: Identify Stations decoded 0 of 9 real detected peaks -- including a station (93.9 MHz) the persistent live monitoring receiver decodes as "KISS" on every pass. This was a genuine functional bug, not bad luck.
+
+- **Root cause**: `_run_bandscan_identify` (and `_run_bandscan_sweep`, and `_auto_gain_calibrate` before it) call `receiver.get_samples()` directly from their own thread, same as `publish_samples_and_metrics()`'s own live publisher thread does continuously for every running receiver. Both threads read from the same underlying ring buffer -- per that function's own existing comment, the publisher is normally the *only* thread draining it, and a second concurrent consumer fragments the stream between them. A coarse RMS level measurement (what the sweep and auto-gain need) tolerates that fine; RDS decode does not -- `RBDSWorker`'s Costas/M&M loops need an unbroken, phase-continuous stream across many consecutive reads to ever reach lock, so every one of the 9 peaks silently failed to decode.
+- **Fixed**: `publish_samples_and_metrics()` now skips reading (and publishing telemetry for) a receiver for the duration of any Bandscan sweep or Identify Stations pass against it (`identifier in _state.active_bandscans`), leaving the scan thread as the sole consumer of that receiver's samples for its duration -- consistent with, not a regression from, that receiver already being retuned away, muted, and dead-air-suppressed during the same window.
+- Re-verified live after the fix (see commit/PR for the before/after real-hardware results).
+- No test added for `publish_samples_and_metrics()` itself -- it has no existing test harness (an infinite `while _state.running` loop against live threading/hardware state) and this specific bug class (a cross-thread hardware race) is exactly the kind a mock cannot catch; live testing is what caught it, and is the right tool for verifying the fix too.
+
 ## [3.9.0] - 2026-09-14 - Bandscan: Identify Stations (RDS station-name labeling of peaks)
 
 Closes the second item explicitly deferred out of Bandscan's original 3.7.0 changelog entry: "RDS station labeling of detected peaks." A peak used to only ever show its bare frequency (e.g. "93.9"); this adds a second, explicit pass that retunes to each detected peak long enough to attempt an RDS PS (station name) decode.
