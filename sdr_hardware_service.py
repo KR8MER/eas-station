@@ -704,6 +704,7 @@ def _run_bandscan_sweep(
     separate DB-persistence step.
     """
     progress_key = f"{RedisChannels.BANDSCAN_PROGRESS_PREFIX}{receiver_id}"
+    active_key = f"{RedisChannels.BANDSCAN_ACTIVE_PREFIX}{receiver_id}"
     original_freq_hz = float(getattr(receiver.config, "frequency_hz", 0) or 0)
     effective_rate = (
         int(getattr(receiver, "_effective_sample_rate", 0) or 0)
@@ -728,6 +729,17 @@ def _run_bandscan_sweep(
             "started_at": started_at,
             "updated_at": time.time(),
         }
+        # Refreshed alongside progress so the demod worker's/audio service's
+        # short-TTL'd mute flag (see RedisChannels.BANDSCAN_ACTIVE_PREFIX)
+        # never lapses mid-sweep just because a channel measurement took
+        # slightly longer than the TTL. Written before the progress payload
+        # below (not after) so the progress write stays the last Redis call
+        # this function makes each time -- tests and any other caller that
+        # wants "the current progress" read the most recent write.
+        try:
+            redis_client.setex(active_key, RedisChannels.BANDSCAN_ACTIVE_TTL_SECONDS, "1")
+        except Exception as exc:
+            logger.debug("bandscan %s: active-flag publish failed: %s", receiver_id, exc)
         try:
             redis_client.setex(
                 progress_key,
@@ -797,6 +809,13 @@ def _run_bandscan_sweep(
         if status == "running":
             status = "done"
         _write_progress()
+        # Explicit delete rather than just letting the short TTL lapse --
+        # unmutes the receiver's audio the moment the sweep is actually
+        # done instead of up to BANDSCAN_ACTIVE_TTL_SECONDS late.
+        try:
+            redis_client.delete(active_key)
+        except Exception as exc:
+            logger.debug("bandscan %s: active-flag cleanup failed: %s", receiver_id, exc)
         with _state.lock:
             _state.active_bandscans.pop(receiver_id, None)
 

@@ -7,6 +7,15 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.8.0] - 2026-09-14 - Bandscan: mute audio during the sweep
+
+Closes the "audio muting during the scan (a real side effect, noted rather than silently ignored)" item explicitly deferred out of Bandscan's original 3.7.0 changelog entry. Until now a sweep's rapid channel-hopping across the whole FM band streamed live to Icecast and the archiver -- roughly 30-45 seconds of static/noise on air for a routine diagnostic action.
+
+- **Added**: `RedisChannels.BANDSCAN_ACTIVE_PREFIX` (`app_core/config/redis_config.py`) -- a lightweight, short-TTL'd presence marker, separate from the existing (heavier, growing-JSON) `BANDSCAN_PROGRESS_PREFIX` key, set and refreshed every channel by `sdr_hardware_service.py`'s `_run_bandscan_sweep` and explicitly deleted (not just left to expire) once the sweep ends, however it ends.
+- **Added**: `services/demod/worker.py`'s `DemodWorker` now checks this flag (cached ~0.5s to avoid a Redis round-trip on every ~32ms audio chunk) and publishes silence instead of the real demodulated audio for the sweep's duration -- the demodulator itself keeps running normally on the real swept IQ so its internal DSP/RBDS state isn't torn down and rebuilt around the mute.
+- **Added**: a `_dead_air_suppressed()` hook on `AudioSourceAdapter` (`app_core/audio/ingest.py`, default `False`), overridden by `RedisSDRSourceAdapter` to check the same flag. Without this, the deliberate silence fed by the mute above would itself cross the dead-air monitor's duration threshold and raise a false alarm (tower light/buzzer) for a routine, operator-initiated diagnostic scan -- `app_core/audio/silence.py`'s `SilenceMonitor.process()` call is skipped (not reset) while suppressed, so a real outage that was already accruing before the scan resumes counting from where it left off once the scan ends.
+- 14 new tests across `tests/test_bandscan.py`, `tests/test_demod_service.py`, `tests/test_redis_audio_pipeline.py`, and `tests/test_audio_ingest.py` -- the active flag is set while running and explicitly cleared on every sweep exit path (completion/cancellation/error); published audio is verified as real vs. all-zero silence depending on the flag; the mute check is cached, not per-chunk; the dead-air hook is verified suppressed/not-suppressed/fail-safe-on-Redis-error, cached, and actually skips `SilenceMonitor.process()` when suppressed.
+
 ## [3.7.4] - 2026-09-14 - Bandscan plot: fix a suppressed close peak and Y-axis label wrapping
 
 Two more bugs reported immediately after 3.7.3 shipped, both from live use: a visually distinct peak sitting close (under ~0.5 MHz) to a taller one wasn't labelled, and the new Y-axis dBFS column wrapped its text onto two lines and overlapped the neighbouring gridline's own label.

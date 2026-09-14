@@ -66,6 +66,13 @@ logger = logging.getLogger(__name__)
 #: almost always, identical to what was fetched a moment ago.
 _STATUS_CACHE_TTL_S = 0.25
 
+#: How long a fetched Bandscan-active flag is reused before re-checking
+#: Redis. Same rationale as _STATUS_CACHE_TTL_S -- _dead_air_suppressed()
+#: runs roughly once per _update_metrics() call (~10 Hz), and this flag only
+#: ever changes twice per scan (set once at the start, cleared once at the
+#: end), so a sub-second cache costs nothing in responsiveness.
+_BANDSCAN_MUTE_CACHE_TTL_S = 0.5
+
 
 def _unpack_audio_envelope(payload: bytes) -> "tuple[int, int, np.ndarray]":
     """Inverse of ``services.demod.worker._pack_audio_envelope``.
@@ -116,6 +123,9 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
         # Cache for _get_remote_status() -- see _STATUS_CACHE_TTL_S.
         self._status_cache: Optional[Any] = None
         self._status_cache_at: float = 0.0
+        # Cache for _dead_air_suppressed() -- see _BANDSCAN_MUTE_CACHE_TTL_S.
+        self._bandscan_muted_cache: bool = False
+        self._bandscan_muted_cache_at: float = 0.0
 
     def _start_capture(self) -> None:
         """Start Redis subscription to the demod service's audio channel."""
@@ -314,6 +324,41 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
         except Exception as exc:
             logger.debug(f"Failed to fetch demod status for {self._receiver_id}: {exc}")
             return self._status_cache
+
+    def _dead_air_suppressed(self) -> bool:
+        """True while this receiver is mid-Bandscan sweep.
+
+        A sweep retunes the receiver across the whole FM band for ~30-45s
+        (see sdr_hardware_service.py's _run_bandscan_sweep) and the demod
+        worker mutes its published audio to actual digital silence for that
+        whole window (services/demod/worker.py's _process_message) rather
+        than streaming the garbled channel-hopping noise live. Without this
+        override that deliberate silence would itself cross the dead-air
+        detector's duration threshold and raise a false alarm for a
+        routine, operator-initiated diagnostic scan -- see the base class's
+        _dead_air_suppressed() docstring.
+
+        Cached briefly (see _BANDSCAN_MUTE_CACHE_TTL_S) for the same reason
+        _get_remote_status() is: this is checked on every _update_metrics()
+        call, far more often than the flag can actually change.
+        """
+        now = time.monotonic()
+        if (now - self._bandscan_muted_cache_at) < _BANDSCAN_MUTE_CACHE_TTL_S:
+            return self._bandscan_muted_cache
+
+        self._bandscan_muted_cache_at = now
+        if self._redis_client is None or not self._receiver_id:
+            self._bandscan_muted_cache = False
+            return False
+
+        try:
+            from app_core.config.redis_config import RedisChannels
+            key = f"{RedisChannels.BANDSCAN_ACTIVE_PREFIX}{self._receiver_id}"
+            self._bandscan_muted_cache = bool(self._redis_client.exists(key))
+        except Exception as exc:
+            logger.debug(f"Bandscan-mute check failed for {self._receiver_id}: {exc}")
+            self._bandscan_muted_cache = False
+        return self._bandscan_muted_cache
 
     def _stop_capture(self) -> None:
         """Stop Redis subscription."""

@@ -113,6 +113,12 @@ class TestDemodWorker(unittest.TestCase):
 
     def setUp(self):
         self.redis_client = MagicMock()
+        # An unconfigured MagicMock().exists(...) call returns a truthy
+        # MagicMock, which _is_bandscan_muted() would read as "a bandscan
+        # is active" -- silently muting every test's published audio to
+        # zeros. Explicitly default to "no bandscan running" so these
+        # tests exercise the normal (unmuted) path unless a test opts in.
+        self.redis_client.exists.return_value = 0
         self.receiver_config = _FakeReceiverConfig(
             modulation_type="FM", stereo_enabled=False, enable_rbds=False,
         )
@@ -174,6 +180,78 @@ class TestDemodWorker(unittest.TestCase):
         setex_keys = [call.args[0] for call in self.redis_client.setex.call_args_list]
         self.assertIn("demod:status:test-rx", setex_keys)
         self.assertIn("demod:mpx_spectrum:test-rx", setex_keys)
+
+    def _submit_one_chunk_and_wait(self, worker, *, sample_rate=250000, freq=93900000):
+        num_samples = int(sample_rate * 0.02)
+        t = np.arange(num_samples) / sample_rate
+        iq = np.exp(2j * np.pi * 1000 * t).astype(np.complex64)
+        worker.submit_message(_encode_iq_message(iq, sample_rate, freq))
+
+        import time
+        deadline = time.monotonic() + 3.0
+        prev_processed = worker.get_stats()["chunks_processed"]
+        while worker.get_stats()["chunks_processed"] == prev_processed and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+    def _decode_last_published_audio(self):
+        from services.demod.worker import unpack_audio_envelope
+
+        audio_calls = [
+            call for call in self.redis_client.publish.call_args_list
+            if call.args[0] == "demod:audio:test-rx"
+        ]
+        self.assertTrue(audio_calls, "no audio published on demod:audio:test-rx")
+        payload_b64 = audio_calls[-1].args[1]
+        envelope = base64.b64decode(payload_b64)
+        _rate, _freq, audio = unpack_audio_envelope(envelope)
+        return audio
+
+    def test_audio_muted_to_silence_while_bandscan_active(self):
+        """A Bandscan sweep retunes this receiver across the whole FM band
+        for ~30-45s (sdr_hardware_service.py's _run_bandscan_sweep); nothing
+        should stream the resulting channel-hopping garbage live. The worker
+        checks RedisChannels.BANDSCAN_ACTIVE_PREFIX + receiver_id and
+        publishes silence instead of the real demodulated audio while it's
+        set."""
+        self.redis_client.exists.return_value = 1  # bandscan active
+        worker = self._make_worker()
+
+        self._submit_one_chunk_and_wait(worker)
+
+        audio = self._decode_last_published_audio()
+        self.assertTrue(len(audio) > 0)
+        np.testing.assert_array_equal(audio, np.zeros_like(audio))
+
+        # The exact key checked, not just any exists() call.
+        checked_keys = [call.args[0] for call in self.redis_client.exists.call_args_list]
+        self.assertIn("sdr:bandscan:active:test-rx", checked_keys)
+
+    def test_audio_not_muted_when_no_bandscan_active(self):
+        """Baseline: with no bandscan flag set (the default -- see setUp),
+        real demodulated audio is published, not silence."""
+        worker = self._make_worker()
+
+        self._submit_one_chunk_and_wait(worker)
+
+        audio = self._decode_last_published_audio()
+        self.assertTrue(len(audio) > 0)
+        self.assertTrue(np.any(audio != 0), "expected real audio, got all-zero silence")
+
+    def test_bandscan_mute_check_is_cached_not_checked_per_chunk(self):
+        """A synchronous Redis round-trip on every ~32ms audio chunk would
+        add real latency to the audio path -- _is_bandscan_muted() must
+        cache its answer across a burst of chunks arriving faster than
+        _BANDSCAN_MUTE_CHECK_INTERVAL_S."""
+        self.redis_client.exists.return_value = 0
+        worker = self._make_worker()
+
+        for _ in range(5):
+            self._submit_one_chunk_and_wait(worker)
+
+        # 5 chunks processed well within the cache interval must not mean
+        # 5 separate exists() calls.
+        self.assertEqual(worker.get_stats()["chunks_processed"], 5)
+        self.assertLessEqual(self.redis_client.exists.call_count, 2)
 
     def test_status_publish_is_throttled_across_rapid_chunks(self):
         """py-spy profiling on a live, CPU-contended box found the per-chunk
