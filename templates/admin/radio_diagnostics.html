@@ -2033,9 +2033,17 @@ sudo systemctl restart eas-station</code></pre>
         container.appendChild(chartRow);
 
         const yAxisCol = document.createElement('div');
-        yAxisCol.className = 'position-relative text-muted small flex-shrink-0';
-        yAxisCol.style.width = '44px';
+        yAxisCol.className = 'position-relative text-muted flex-shrink-0';
+        // Explicit small monospace font, not the Bootstrap "small" class --
+        // that resolves against the page's rem base and was wide enough to
+        // wrap "-19 dBFS" onto two lines inside a 44px column, and since
+        // each label is absolutely positioned assuming one line, the
+        // wrapped second lines overlapped the neighbouring gridline's own
+        // label into unreadable overlapping text.
+        yAxisCol.style.width = '54px';
         yAxisCol.style.height = '140px';
+        yAxisCol.style.fontSize = '10px';
+        yAxisCol.style.fontFamily = 'monospace';
         chartRow.appendChild(yAxisCol);
 
         const plotCol = document.createElement('div');
@@ -2096,8 +2104,17 @@ sudo systemctl restart eas-station</code></pre>
     // even while some other stretch of the band is much louder or quieter.
     const PEAK_MIN_PROMINENCE_DB = 3;
     const PEAK_LOCAL_WINDOW = 10;   // channels each side (~1 MHz at the 100 kHz step)
-    const PEAK_MIN_PIXEL_GAP = 30;
-    const PEAK_MAX_COUNT = 14;
+    // 30px (~1.2 MHz at this canvas's ~25px/MHz) was wide enough to
+    // suppress a real, visually distinct second peak (its own local
+    // minimum/notch clearly separating it from its neighbour) just because
+    // it sat under 1.2 MHz from a taller one. 12px (~0.5 MHz) still merges
+    // a single station's immediate shoulder bins (typically within a
+    // couple hundred kHz) but no longer swallows a genuinely separate
+    // nearby station -- bandscanRender() staggers the label position
+    // instead when two kept peaks are close enough for their text to
+    // overlap.
+    const PEAK_MIN_PIXEL_GAP = 12;
+    const PEAK_MAX_COUNT = 16;
 
     function bandscanFindPeaks(results, startHz, span, w) {
         const valid = results.filter((r) => r.rms_dbfs !== null && r.rms_dbfs !== undefined);
@@ -2178,6 +2195,7 @@ sudo systemctl restart eas-station</code></pre>
                 label.style.position = 'absolute';
                 label.style.right = '4px';
                 label.style.top = `${frac * 100}%`;
+                label.style.whiteSpace = 'nowrap';
                 label.style.transform = i === 0 ? 'translateY(0)'
                     : i === GRID_DIVS ? 'translateY(-100%)'
                     : 'translateY(-50%)';
@@ -2201,10 +2219,16 @@ sudo systemctl restart eas-station</code></pre>
         // they belong to -- reading a station's frequency off the shared
         // X-axis ticks (87.5/92/96/... MHz) below meant eyeballing an
         // interpolation between two labels that were often nowhere near it.
-        const peaks = bandscanFindPeaks(results, startHz, span, w);
+        const peaks = bandscanFindPeaks(results, startHz, span, w).sort((a, b) => a.x - b.x);
         ctx.font = '10px monospace';
         ctx.fillStyle = '#ffcc33';
         ctx.textBaseline = 'alphabetic';
+        // Two real peaks can sit close enough together (see
+        // PEAK_MIN_PIXEL_GAP above) that their labels would otherwise print
+        // on top of each other -- stagger the closer one upward instead of
+        // letting either collide or dropping one.
+        let lastLabelRight = -Infinity;
+        let stagger = false;
         peaks.forEach((peak) => {
             const y = scaleY(peak.rms_dbfs);
             ctx.beginPath();
@@ -2213,8 +2237,10 @@ sudo systemctl restart eas-station</code></pre>
             const label = (peak.freq_hz / 1e6).toFixed(1);
             const textWidth = ctx.measureText(label).width;
             const tx = Math.min(w - textWidth - 2, Math.max(2, peak.x - textWidth / 2));
-            const ty = Math.max(9, y - 6);
+            stagger = tx < lastLabelRight + 2 ? !stagger : false;
+            const ty = Math.max(9, y - 6 - (stagger ? 10 : 0));
             ctx.fillText(label, tx, ty);
+            lastLabelRight = tx + textWidth;
         });
 
         const channelCount = Math.round(span / (Number(payload.step_hz) || 100000)) + 1;
