@@ -7,6 +7,14 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.7.3] - 2026-09-14 - Bandscan plot: fix peak detection and dBFS-label collisions
+
+Two bugs reported immediately after 3.7.2 shipped: only 2 of the ~15 visually obvious peaks in a live scan got labelled, and the leftmost peak's label was drawn on top of (and unreadable against) the Y-axis dBFS text.
+
+- **Fixed peak detection**: `bandscanFindPeaks()` used to compare every bump against one *global* noise-floor number (the sweep's own 25th-percentile level). On a live scan a single wide, deep fade between two strong stations dragged that whole-band percentile far below the ambient level on the rest of the band, so the effective threshold ended up above most of the other genuinely-present bumps -- only the two loudest peaks in the whole sweep qualified. Prominence is now measured against each peak's own local minimum (+/- 10 channels, ~1 MHz), so a modest local bump is still labelled even while some other stretch of the band is much louder or quieter.
+- **Fixed the Y-axis/peak-label collision**: the dBFS scale is no longer drawn as text inside the canvas at all (where it could sit under the plotted line or a peak's own label). It now renders in a dedicated column beside the canvas (`panel.yAxisCol`), matching how the X-axis ticks already sit outside the plot below it.
+- No backend changes; `tests/test_bandscan.py` unaffected.
+
 ## [3.7.2] - 2026-09-14 - Bandscan plot: label detected peaks directly
 
 - **Added**: the band plot now labels detected signal peaks in place, right next to the signal they belong to, instead of only labelling the shared X-axis ticks -- reading a station's frequency off the axis meant eyeballing an interpolation between two ticks that were often nowhere near it. `bandscanFindPeaks()` finds local maxima at least 6 dB above the sweep's own 25th-percentile noise floor, picks the strongest first, and keeps a candidate only when it's at least 34 canvas pixels from every peak already kept (capped at 12 labels) -- so a single station's skirt doesn't get one label per bin and labels never overlap.
