@@ -13,53 +13,113 @@
                     <div class="alert alert-primary d-flex align-items-start" role="alert">
                         <i class="fas fa-broadcast-tower fa-lg me-3 mt-1 flex-shrink-0"></i>
                         <div>
-                            EAS Station™ sends SMS messages exclusively for <strong>emergency alert notifications</strong>.
-                            A phone number only receives messages after opting in &mdash; either by confirming a texted
-                            code at <a href="{{ url_for('sms_optin_page') }}">/sms-opt-in</a>, or by being added by the
-                            system administrator with that individual's documented prior consent. See Section 2 below
-                            for both paths. <strong>This is not a marketing or promotional messaging service.</strong>
+                            <strong>EAS Station, LLC</strong> sends SMS messages only to people who have signed
+                            themselves up on this website and confirmed a code texted to their own phone. Messages
+                            are alert notifications about the subscription you signed up for.
+                            <strong>This is not a marketing or promotional messaging service</strong>, and numbers are
+                            never purchased, rented, or added from any outside list.
+                        </div>
+                    </div>
+
+                    <!-- The single, publicly reachable Call-to-Action. A carrier or Twilio
+                         reviewer verifying this campaign's message flow lands here first;
+                         keep this link unauthenticated and above the fold. See Section 2. -->
+                    <div class="card border-primary mb-4">
+                        <div class="card-body text-center py-4">
+                            <h2 class="h5 mb-2">Sign up for SMS alerts</h2>
+                            <p class="text-muted small mb-3">
+                                Opt-in is self-serve and takes about a minute. No account or login is required.
+                            </p>
+                            <a href="{{ url_for('sms_optin_page') }}" class="btn btn-primary btn-lg">
+                                <i class="fas fa-mobile-screen-button me-1"></i> Go to the SMS sign-up form
+                            </a>
+                            <p class="text-muted small mb-0 mt-3">
+                                Public sign-up URL:
+                                <code>{{ url_for('sms_optin_page', _external=True) }}</code>
+                            </p>
                         </div>
                     </div>
 
                     <!-- ── 1. Program Description ─────────────────────────────────── -->
                     <section class="mb-4">
                         <h2 class="h4 text-primary">1. Program Description</h2>
-                        <p>EAS Station™ is a self-hosted Emergency Alert System (EAS) research and monitoring platform
-                           operated by a licensed amateur radio operator. When SMS notifications are enabled by the
-                           system administrator, EAS Station™ sends text message alerts to pre-configured recipients
-                           whenever an EAS alert is received and broadcast by the system. Messages contain the
-                           emergency event code, alert headline, affected area identifiers, and timestamp.</p>
-                        <p>SMS messaging is powered by <strong>Twilio</strong> using a toll-free or long-code
-                           phone number provisioned by the system operator.</p>
-                        <p><strong>Use case:</strong> Emergency public-safety alert notifications only. No marketing,
-                           promotional, or non-emergency messages are sent through this program.</p>
+                        <p><strong>Who sends the messages.</strong> Messages are sent by
+                           <strong>EAS Station, LLC</strong> (doing business as EAS Station™), a private technology
+                           company that builds Emergency Alert System (EAS) monitoring and decoding software.
+                           EAS Station, LLC is <em>not</em> a government agency, a first-responder organization, or a
+                           public-safety answering point, and does not represent itself as one. It operates this
+                           messaging program on its own behalf, for its own subscribers.</p>
+                        <p><strong>Who receives them.</strong> Only individuals who personally submitted their own
+                           mobile number on this website and then confirmed a one-time code texted to that number.
+                           There is no other way onto the list &mdash; see Section 2.</p>
+                        <p><strong>Why they receive them.</strong> Subscribers asked to be notified when this
+                           EAS Station™ instance decodes and logs an EAS alert for the area it monitors. Each message
+                           carries the event code, alert headline, affected area identifiers, and a timestamp, so a
+                           subscriber learns of an alert their monitoring station picked up without watching the
+                           dashboard. Delivery is by <strong>Twilio</strong> over a long-code or toll-free number.</p>
+
+                        <div class="border-start border-4 border-primary ps-3 py-1 my-3">
+                            <p class="fw-semibold mb-1">A2P 10DLC campaign classification</p>
+                            <p class="small mb-1">This program is registered under a <strong>Standard</strong> A2P 10DLC
+                               use case. EAS Station, LLC does <strong>not</strong> claim the carrier
+                               <em>Emergency</em> special use case, which is reserved for qualifying first-responder
+                               agencies and public emergency-response organizations registering on their own behalf.</p>
+                            <p class="small mb-0">The word "emergency" describes the <em>subject matter</em> of the
+                               alerts this software decodes. It does not describe the sender's status, and no claim of
+                               public-safety authority is made or implied. Messages sent through this program are
+                               informational notifications to consumers who subscribed to them &mdash; they are not
+                               official government warnings and must not be relied on as a substitute for official
+                               warnings from the National Weather Service, IPAWS, or local authorities.</p>
+                        </div>
+
+                        <p class="mb-0">No marketing, promotional, affiliate, or non-subscription messages are ever sent
+                           through this program.</p>
                     </section>
 
                     <!-- ── 2. Opt-In / Consent Disclosure ────────────────────────── -->
                     <section class="mb-4">
-                        <h2 class="h4 text-primary">2. Opt-In / Consent Disclosure</h2>
-                        <p>EAS Station™ supports two ways a phone number is added to the recipient list:</p>
-                        <p class="fw-semibold mb-1">1. Self-serve double opt-in (preferred):</p>
-                        <ul>
-                            <li>A public page at <a href="{{ url_for('sms_optin_page') }}">/sms-opt-in</a> lets
-                                someone enter their own phone number and review the consent language below.</li>
-                            <li>They confirm by entering a one-time code texted to that number &mdash; proving
-                                they actually control it &mdash; before it's added to the live recipient list.</li>
-                            <li>Every confirmed sign-up is permanently recorded: the exact consent text shown, the
-                                submitter's IP address, and the confirmation timestamp.</li>
-                        </ul>
-                        <p class="fw-semibold mb-1">2. Administrator-added (for recipients who can't use the
-                           self-serve page themselves):</p>
-                        <ul>
-                            <li>The system administrator adds recipient phone numbers directly to the EAS Station™
-                                admin panel under <strong>Settings &rsaquo; SMS Notifications</strong>.</li>
-                            <li>Only individuals who have provided <strong>explicit prior written consent</strong>
-                                to the system operator may be added as SMS recipients.</li>
-                            <li>Adding a phone number constitutes the operator's attestation that the individual
-                                has consented to receive EAS alert SMS messages from this program.</li>
-                            <li>Consent must be obtained and documented <strong>before</strong> any messages are
-                                sent.</li>
-                        </ul>
+                        <h2 class="h4 text-primary">2. Message Flow &amp; Call to Action</h2>
+                        <p>There is exactly <strong>one</strong> way a phone number joins this program: the person who
+                           owns the number enters it themselves on the public web form and then proves they control it
+                           by confirming a texted code. Every step below happens on this website, with no login,
+                           paywall, or account required at any point.</p>
+
+                        <p class="fw-semibold mb-1">Step-by-step opt-in workflow</p>
+                        <ol>
+                            <li>The visitor opens
+                                <a href="{{ url_for('sms_optin_page') }}"><code>{{ url_for('sms_optin_page', _external=True) }}</code></a>,
+                                reachable from the footer of every page on this site and from the button above.</li>
+                            <li>The form asks for a mobile number in international format and, optionally, a name.
+                                Nothing is pre-filled.</li>
+                            <li>Directly beneath the number field is a consent checkbox, <strong>unchecked by
+                                default</strong>, whose label is the verbatim disclosure quoted below. The form cannot
+                                be submitted until the visitor actively checks it &mdash; consent is never bundled into
+                                another action, and there is no pre-selected or implied consent anywhere in the flow.</li>
+                            <li>Immediately under the form, the page links to the
+                                <a href="{{ url_for('terms_page') }}">Terms of Use</a>, the
+                                <a href="{{ url_for('privacy_page') }}">Privacy Policy</a>, and this page.</li>
+                            <li>On submit, a 6-digit one-time code is texted to the number supplied. The number is
+                                <strong>not</strong> added to the recipient list at this point.</li>
+                            <li>The visitor enters that code back into the form. Only when the code is confirmed &mdash;
+                                proving the person holding the handset is the person who asked for the messages &mdash;
+                                is the number added to the live recipient list.</li>
+                            <li>The sign-up is then recorded permanently: the exact consent text displayed, the
+                                submitter's IP address, and the submission and confirmation timestamps. The operator
+                                can produce this record for any number on request.</li>
+                        </ol>
+
+                        <p class="text-muted small">There is no keyword, short-code, paper form, point-of-sale,
+                           voice-IVR, or over-the-phone opt-in path for this program, and no number is ever imported
+                           from a purchased, rented, partner, or affiliate list. The web form above is the program's
+                           only Call to Action.</p>
+
+                        <p class="text-muted small mb-0">EAS Station™ is also self-hosted software, and its admin panel
+                           does let an operator of a <em>separate</em> deployment enter a recipient number directly
+                           where they hold signed written consent for it. That facility is not used as an opt-in path
+                           for this messaging program, and no number has entered this program's recipient list that
+                           way. Operators of other deployments are bound by the
+                           <a href="{{ url_for('terms_page') }}">Terms of Use</a> and register their own campaigns
+                           separately.</p>
 
                         <!-- Consent disclosure block that Twilio reviewers inspect. Rendered
                              from the same CONSENT_TEXT constant shown next to the checkbox on
@@ -68,8 +128,8 @@
                              sees and agrees to. -->
                         <div class="border rounded p-3 bg-light mt-3">
                             <p class="fw-semibold mb-2">
-                                Consent Disclosure Language (shown to recipients on
-                                <a href="{{ url_for('sms_optin_page') }}">/sms-opt-in</a>):
+                                Consent disclosure shown next to the (unchecked) checkbox on
+                                <a href="{{ url_for('sms_optin_page') }}">/sms-opt-in</a>:
                             </p>
                             <blockquote class="blockquote mb-0 small">
                                 <p class="mb-0">{{ optin_consent_text }}</p>
@@ -103,10 +163,10 @@
                         <p>Messages follow this format (actual content varies per alert):</p>
                         <div class="bg-dark text-white rounded p-3 font-monospace small mb-3">
                             EAS ALERT: TOR<br>
-                            Tornado Warning for Your County<br>
-                            Areas: 039999<br>
-                            2026-03-12T14:00:00<br>
-                            - EAS Station™<br>
+                            Tornado Warning for Hardin County<br>
+                            Areas: 039065<br>
+                            2026-09-14T14:02:00<br>
+                            - EAS Station<br>
                             Reply STOP to stop msgs
                         </div>
                         <p class="text-muted small">All messages include an opt-out reminder
@@ -178,6 +238,16 @@
                            EAS Station™ database on the operator's infrastructure. Numbers are shared with
                            <strong>Twilio, Inc.</strong> solely for the purpose of delivering SMS messages.
                            Twilio's privacy policy applies to their processing of this data.</p>
+                        <div class="border rounded p-3 bg-light mb-3">
+                            <p class="fw-semibold mb-0">No mobile information will be sold or shared with third
+                               parties or affiliates for marketing or promotional purposes. Text-messaging
+                               originator opt-in data and consent will not be shared with any third parties.</p>
+                        </div>
+                        <p>Delivery through Twilio is the sole exception, and Twilio acts only as a service provider
+                           processing the number to deliver the messages you asked for. Subscriber numbers are never
+                           sold, rented, or licensed to anyone. To have your number and its consent record removed,
+                           reply <strong>STOP</strong> or email
+                           <a href="mailto:support@easstation.com">support@easstation.com</a>.</p>
                         <p>The EAS Station™ project maintainers do not have access to phone numbers stored in
                            any operator's deployment. See the full
                            <a href="{{ url_for('privacy_page') }}">Privacy Policy</a> for complete data

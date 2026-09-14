@@ -115,10 +115,24 @@
                         <div class="alert alert-warning py-2 mb-3 small">
                             <i class="fas fa-triangle-exclamation me-1"></i>
                             <strong>Consent required:</strong> Only add numbers from individuals who have
-                            given explicit prior consent to receive EAS alert SMS messages from this system.
+                            given explicit prior <strong>written</strong> consent to receive EAS alert SMS messages
+                            from this system. <strong>Verbal consent is not sufficient</strong> &mdash; carriers
+                            reject A2P 10DLC campaigns whose Call to Action cannot be inspected, and "users are
+                            asked verbally" is a documented rejection cause (Twilio error 30909).
                             Recipients can opt out at any time by replying <strong>STOP</strong>.
                             Message and data rates may apply. Message frequency varies with alert volume.
                             See the <a href="/sms-compliance" target="_blank">SMS Messaging Policy</a> for full disclosures.
+                        </div>
+
+                        <div class="alert alert-danger py-2 mb-3 small">
+                            <i class="fas fa-file-circle-exclamation me-1"></i>
+                            <strong>Numbers typed here are not covered by a registered campaign's Call to Action.</strong>
+                            A carrier reviewer can only verify consent they can reach on the open web. If you have
+                            registered (or intend to register) an A2P 10DLC campaign for this deployment, send people
+                            to the public sign-up page below instead &mdash; it captures the consent text, IP address
+                            and confirmation timestamp that a reviewer will ask for. Keep this box for numbers you can
+                            independently produce signed written consent for.
+                            See <a href="/docs/compliance/A2P_10DLC_REGISTRATION" target="_blank">A2P 10DLC registration</a>.
                         </div>
 
                         <div class="alert alert-info py-2 mb-3 small">

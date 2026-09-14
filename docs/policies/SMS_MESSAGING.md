@@ -1,6 +1,6 @@
 # SMS Messaging Policy
 
-**Last updated:** March 12, 2026
+**Last updated:** September 14, 2026
 
 This policy applies to the SMS notification feature of EAS Station™. It describes how
 text messages are sent, who receives them, and how recipients can opt out.
@@ -9,14 +9,34 @@ text messages are sent, who receives them, and how recipients can opt out.
 
 ## Program Description
 
-EAS Station™ is a self-hosted Emergency Alert System (EAS) research and monitoring
-platform. When SMS notifications are enabled by the system administrator, EAS Station™
-sends text message alerts to pre-configured recipients whenever an EAS alert is received
-and broadcast by the system.
+**Who sends the messages.** Messages are sent by **EAS Station, LLC** (d/b/a EAS Station™), a
+private technology company that builds Emergency Alert System (EAS) monitoring and decoding
+software. EAS Station, LLC is *not* a government agency, first-responder organization, or
+public-safety answering point, and does not represent itself as one.
 
-Messages are sent via **Twilio** using a toll-free or long-code phone number provisioned
-by the system operator. This is **not** a public subscription service — recipients are
-added exclusively by the system administrator.
+**Who receives them.** People who entered their own mobile number on the public sign-up form at
+`/sms-opt-in` and then confirmed a one-time code texted to that number.
+
+**Why they receive them.** They asked to be notified when the EAS Station™ instance they signed
+up with decodes and logs an EAS alert for the area it monitors. Each message carries the event
+code, headline, affected area identifiers, and a timestamp.
+
+Messages are sent via **Twilio** using a toll-free or long-code phone number provisioned by the
+system operator.
+
+### A2P 10DLC use case
+
+This program registers under a **Standard** A2P 10DLC use case. It does **not** claim the carrier
+*Emergency* special use case, which is reserved for qualifying first responders and public
+emergency-response organizations registering on their own behalf — a private company providing
+emergency-related technology does not qualify, even when its messages concern emergencies.
+
+"Emergency" here describes the *subject matter* of the alerts the software decodes, not the
+sender's status. Messages are informational notifications to consumers who subscribed to them;
+they are not official government warnings and are not a substitute for NWS, IPAWS, or local
+authority warnings. See
+[A2P 10DLC Registration](../compliance/A2P_10DLC_REGISTRATION.md) for the campaign
+submission packet.
 
 ---
 
@@ -44,19 +64,24 @@ phone number.
 > frequency varies. Message and data rates may apply. Reply STOP to opt out
 > at any time, HELP for help. See the Terms of Use and Privacy Policy."*
 
-**2. Administrator-added (legacy / non-self-serve cases).** The system
+**2. Administrator-added (not a registrable opt-in path).** The system
 administrator may still add recipient phone numbers directly in the admin
 panel under **Settings → SMS Notifications → SMS Recipients**, for situations
 where the recipient cannot use the self-serve page themselves. In that
 case:
 
 - Only individuals who have provided **explicit prior written consent** may be added.
+  **Verbal consent is not sufficient.**
 - Adding a number constitutes the operator's attestation that the individual has
-  consented to receive EAS alert SMS messages from this system.
+  consented to receive EAS alert SMS messages from this system, and that the operator can
+  produce that written consent on request.
 - Consent must be obtained and documented **before** any messages are sent.
-- Operators submitting a carrier/Twilio campaign for review should prefer
-  the self-serve flow above wherever possible — it produces verifiable
-  evidence this method cannot.
+- **Never submit this path as a campaign Call to Action.** A carrier reviewer can only verify
+  consent they can reach on the open web; describing the CTA as "users will be asked verbally"
+  is a documented rejection cause (Twilio errors 30909 / 30917). Submit the `/sms-opt-in` URL
+  from method 1 instead.
+- The EAS Station, LLC messaging program does not use this path at all — its recipient list is
+  populated exclusively through the self-serve flow above.
 
 ---
 
@@ -69,7 +94,7 @@ EAS ALERT: [Event Code]
 [Alert Headline]
 Areas: [Location Codes]
 [Timestamp]
-- EAS Station™
+- EAS Station
 Reply STOP to stop msgs
 ```
 
@@ -141,7 +166,15 @@ Phone numbers added to the EAS Station™ SMS recipient list are:
 
 - Stored in the local EAS Station™ database on the **operator's** infrastructure.
 - Transmitted to **Twilio, Inc.** solely for the purpose of delivering SMS messages.
-- Not accessible by the EAS Station™ project maintainers.
+- Not accessible by the EAS Station™ project maintainers (for deployments they do not operate).
+
+> **No mobile information will be sold or shared with third parties or affiliates for marketing
+> or promotional purposes. Text-messaging originator opt-in data and consent will not be shared
+> with any third parties.**
+
+Delivery through Twilio is the sole exception; Twilio acts only as a service provider processing
+the number to deliver the requested messages. To have a number and its consent record removed,
+reply `STOP` or email **support@easstation.com**.
 
 See the [Privacy Policy](PRIVACY_POLICY.md) for complete data handling details.
 Twilio's privacy policy is at [twilio.com/en-us/legal/privacy](https://www.twilio.com/en-us/legal/privacy).
