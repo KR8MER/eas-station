@@ -19,7 +19,9 @@ Repository: https://github.com/KR8MER/eas-station
 
 """Tests for IcecastStreamer buffer configuration improvements."""
 
+import queue
 import sys
+import threading
 import time
 from pathlib import Path
 from unittest import mock
@@ -183,6 +185,164 @@ def test_buffer_empty_throttling():
     assert should_log, "Should log error if more than 30 seconds have passed"
     
     print("✓ Buffer empty throttling test passed")
+
+
+def test_buffer_health_check_reflects_pre_pop_depth(caplog):
+    """The feed loop must not report a false "buffer running low"/"completely
+    empty" warning when the audio source is keeping up normally.
+
+    Regression for a bug where `buffer_level = len(buffer)` was read *after*
+    `buffer.popleft()` in the same iteration -- since one chunk is read and
+    one chunk is popped per iteration, that always measured 0-1 regardless of
+    real buffer health, so the warning fired on effectively every mount, every
+    throttle window (visible in production journals as ~120 "Icecast buffer
+    running low ... 0/600 chunks" warnings per hour, per stream, continuously).
+    Measuring depth before the pop reflects the actual banked cushion.
+    """
+    config = IcecastConfig(
+        server='localhost',
+        port=8000,
+        password='test',
+        mount='test',
+        name='Test Stream',
+        description='Testing buffer health accounting',
+    )
+
+    class _DummySource:
+        metrics = mock.MagicMock(metadata={})
+
+    streamer = IcecastStreamer(config, _DummySource())
+
+    # Steady, ample supply -- the source never actually starves, so a
+    # healthy feed loop should never trip the low-buffer warning.
+    streamer._audio_queue = queue.Queue()
+    for _ in range(400):
+        streamer._audio_queue.put(np.zeros(1024, dtype=np.float32))
+
+    mock_process = mock.MagicMock()
+    mock_process.poll.return_value = None  # "running"
+    mock_process.stdin = mock.MagicMock()
+    streamer._ffmpeg_process = mock_process
+    streamer._stop_event.clear()
+    # Normally set by start(), which this test bypasses to drive _feed_loop
+    # directly against a fake queue instead of a real broadcast subscription.
+    streamer._last_eas_inject_seq = 0
+
+    with caplog.at_level("WARNING", logger="app_core.audio.icecast_output"):
+        thread = threading.Thread(target=streamer._feed_loop, daemon=True)
+        thread.start()
+        time.sleep(0.5)
+        streamer._stop_event.set()
+        thread.join(timeout=5)
+
+    assert not thread.is_alive(), "feed loop did not stop"
+    bad_warnings = [
+        r.message for r in caplog.records
+        if "buffer running low" in r.message or "completely empty" in r.message
+    ]
+    assert bad_warnings == [], (
+        f"Feed loop reported buffer starvation with a steady audio supply: {bad_warnings}"
+    )
+
+
+class _TrackedDeque(deque):
+    """A deque that records its own length after every append/popleft, so a
+    test can see the exact sequence of buffer depths a feed loop produced."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.history = []
+
+    def append(self, item):
+        super().append(item)
+        self.history.append(len(self))
+
+    def popleft(self):
+        item = super().popleft()
+        self.history.append(len(self))
+        return item
+
+
+def test_buffer_recovers_after_a_stall_once_source_catches_up():
+    """A source that stalls (read timeouts) and then delivers a backlog burst
+    must let the local jitter buffer recover, not remain stuck at the
+    post-stall depth forever.
+
+    Regression for a related but distinct bug from the pre-pop-depth fix
+    above: the feed loop pops at most one chunk to FFmpeg per iteration
+    *and* appends at most one chunk per iteration (one `_get_audio_from_subscription`
+    call), so a normal iteration nets zero change in buffer depth and a
+    timed-out read nets -1 -- there was no code path that could ever net
+    positive. That makes the buffer a one-way ratchet: every stall drains it
+    by exactly the chunks lost, permanently, since even a source that catches
+    up afterward could only refill it one chunk per loop iteration, matched
+    chunk-for-chunk by that same iteration's single pop. Confirmed live in
+    production: two internet-relay mounts ratcheted down in discrete steps
+    (150 -> 149 -> 147 -> 146) over hours and never recovered.
+
+    The fix opportunistically drains any further chunks already queued
+    (non-blocking) right after a successful read, so a post-stall backlog
+    burst can add many chunks in one iteration while still only popping one --
+    letting the buffer actually climb back up.
+    """
+    config = IcecastConfig(
+        server='localhost',
+        port=8000,
+        password='test',
+        mount='test',
+        name='Test Stream',
+        description='Testing buffer recovery after a stall',
+    )
+
+    class _DummySource:
+        metrics = mock.MagicMock(metadata={})
+
+    streamer = IcecastStreamer(config, _DummySource())
+
+    # Bypass real prebuffering: seed a tracked deque directly at a realistic
+    # starting depth (matches the real prebuffer target of 150/600) so every
+    # append/pop the feed loop performs afterward is recorded in order.
+    tracked_buffer = _TrackedDeque(maxlen=600)
+    for _ in range(150):
+        tracked_buffer.append(b"\x00" * 10)
+    tracked_buffer.history.clear()  # only care about _feed_loop's own effect
+
+    with mock.patch.object(streamer, "_prebuffer_audio", return_value=tracked_buffer):
+        with mock.patch.object(streamer, "_get_chunk_timeout", return_value=0.01):
+            streamer._audio_queue = queue.Queue()  # empty: every read stalls
+            mock_process = mock.MagicMock()
+            mock_process.poll.return_value = None
+            mock_process.stdin = mock.MagicMock()
+            streamer._ffmpeg_process = mock_process
+            streamer._stop_event.clear()
+            streamer._last_eas_inject_seq = 0
+
+            thread = threading.Thread(target=streamer._feed_loop, daemon=True)
+            thread.start()
+
+            # Let it stall and drain for a bit.
+            time.sleep(0.3)
+            depth_after_stall = len(tracked_buffer)
+            assert depth_after_stall < 150, (
+                "expected the stall to drain the buffer below its starting depth"
+            )
+
+            # Now the source catches up: a backlog burst arrives all at once.
+            for _ in range(300):
+                streamer._audio_queue.put(np.zeros(1024, dtype=np.float32))
+
+            time.sleep(0.3)
+            streamer._stop_event.set()
+            thread.join(timeout=5)
+
+    assert not thread.is_alive(), "feed loop did not stop"
+
+    lowest_during_stall = min(tracked_buffer.history[: tracked_buffer.history.index(depth_after_stall) + 1])
+    final_depth = tracked_buffer.history[-1]
+    assert final_depth > lowest_during_stall + 20, (
+        f"buffer did not recover after the burst: lowest={lowest_during_stall}, "
+        f"final={final_depth}, history_tail={tracked_buffer.history[-10:]}"
+    )
 
 
 if __name__ == '__main__':
