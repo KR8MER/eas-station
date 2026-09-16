@@ -165,6 +165,7 @@ def publish_display_state(redis_client, screen_manager) -> None:
                     elif led_render:
                         lines = led_render.get("lines") or []
                         color = led_render.get("color", "AMBER")
+                        font = led_render.get("font", "FONT_7x9")
                         state["led"]["color"] = color
                         state["led"]["current_message"] = {
                             "lines": [
@@ -172,7 +173,7 @@ def publish_display_state(redis_client, screen_manager) -> None:
                                 for ln in lines
                             ]
                         }
-                        preview = render_led_preview(lines, color)
+                        preview = render_led_preview(lines, color, font=font)
                     else:
                         preview = render_led_preview(["", "EAS STATION READY", "", ""], "AMBER")
                     if preview:

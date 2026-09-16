@@ -95,6 +95,39 @@ def test_led_preview_handles_empty_input():
     _assert_png(uri)
 
 
+def test_led_preview_font_size_actually_changes_the_render():
+    """Regression: render_led_preview() used to render every Alpha ``Font``
+    selection at the same fixed dot size, so a larger font produced a
+    pixel-identical preview to a smaller one -- the editor's font dropdown
+    had no visible effect. The size should now scale with the declared font.
+    """
+    small = _assert_png(pr.render_led_preview(["HELLO"], "AMBER", font="FONT_5x7"))
+    large = _assert_png(pr.render_led_preview(["HELLO"], "AMBER", font="FONT_32x16"))
+    assert large.width > small.width
+    assert large.height > small.height
+
+
+def test_led_preview_per_line_font_and_colour_override():
+    """Per-line dicts may override the message-level font/colour (already
+    supported by scripts.screen_renderer.render_led_screen()); the preview
+    must actually honour that instead of silently discarding it."""
+    uri = pr.render_led_preview(
+        [
+            {"text": "BIG", "font": "FONT_32x16", "color": "RED"},
+            {"text": "small", "font": "FONT_5x7", "color": "GREEN"},
+        ],
+        "AMBER",
+    )
+    _assert_png(uri)
+
+
+def test_led_preview_unknown_font_falls_back_to_base_scale():
+    # A font name with no parseable WxH must not raise and should render at
+    # the base (1x) scale rather than crashing the dot-scale regex parse.
+    uri = pr.render_led_preview(["HELLO"], "AMBER", font="NOT_A_REAL_FONT")
+    _assert_png(uri)
+
+
 def test_vfd_preview_from_commands():
     commands = [
         {"type": "clear"},

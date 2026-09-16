@@ -50,18 +50,32 @@ const ScreenEditor = (function() {
     };
 
     // Display dimensions by type. LED has two unrelated canvases: legacy
-    // text mode has no real per-pixel addressing at all (it's 4 lines of
-    // character-cell text; x/y here is purely an authoring convenience --
-    // only line order round-trips, see buildTemplateData()), so it keeps
-    // a virtual 80x32 grid. Graphics mode is the sign's real 160x16
-    // Picture File (Dots) canvas -- pixel-accurate, matches
-    // Alpha9120CController.MAX_DOTS_COLS/MAX_DOTS_ROWS.
+    // text mode has no real per-pixel addressing at all (it's up to 4 lines
+    // of character-cell text; x/y here is purely an authoring convenience
+    // for vertical ordering -- elements are sorted by Y and their text
+    // concatenated into the sign's `lines` list, see buildTemplateData())
+    // so its canvas is sized dynamically from the selected Alpha font (see
+    // ledTextCanvasDims()) instead of a fixed grid. Graphics mode is the
+    // sign's real 160x16 Picture File (Dots) canvas -- pixel-accurate,
+    // matches Alpha9120CController.MAX_DOTS_COLS/MAX_DOTS_ROWS.
     const DISPLAY_DIMS = {
         oled: { width: 128, height: 64 },
         vfd: { width: 140, height: 32 },
-        led: { width: 80, height: 32 },
         'led-graphics': { width: 160, height: 16 }
     };
+
+    const LED_TEXT_COLS = 20;
+    const LED_TEXT_ROWS = 4;
+
+    // Legacy LED text mode's canvas grows with the selected font instead of
+    // a fixed size -- an honest signal that e.g. four rows of FONT_32x16
+    // wouldn't fit a compact sign, matching the same variable-height
+    // approach scripts/led_preview_render.py's render_led_preview() uses
+    // for the server-side "pixel-accurate" modal preview.
+    function ledTextCanvasDims() {
+        const cell = ledFontCellSize(document.getElementById('led-font')?.value || 'FONT_7x9');
+        return { width: LED_TEXT_COLS * cell.w, height: LED_TEXT_ROWS * cell.h };
+    }
 
     // Which DISPLAY_DIMS/palette key applies right now.
     function paletteKey() {
@@ -70,6 +84,7 @@ const ScreenEditor = (function() {
     }
 
     function currentDisplayDims() {
+        if (paletteKey() === 'led') return ledTextCanvasDims();
         return DISPLAY_DIMS[paletteKey()];
     }
 
@@ -109,6 +124,90 @@ const ScreenEditor = (function() {
     const LED_SPEEDS = ['SPEED_1', 'SPEED_2', 'SPEED_3', 'SPEED_4', 'SPEED_5'];
     const LED_FONTS = ['FONT_5x7', 'FONT_6x7', 'FONT_7x9', 'FONT_8x7', 'FONT_7x11',
         'FONT_15x7', 'FONT_19x7', 'FONT_7x13', 'FONT_16x9', 'FONT_32x16'];
+
+    // Compact 5x7 dot-matrix glyph set, mirrored from
+    // scripts/dotmatrix_preview_font.py (that module is the canonical
+    // source, shared server-side by the LED and VFD preview renderers).
+    // Kept as a client-side copy so the live editing canvas can redraw on
+    // every keystroke/drag without a network round trip; if you add a
+    // glyph, add it in both places.
+    const LED_GLYPH_5x7 = {
+        ' ': ['00000', '00000', '00000', '00000', '00000', '00000', '00000'],
+        'A': ['01110', '10001', '10001', '11111', '10001', '10001', '10001'],
+        'B': ['11110', '10001', '11110', '10001', '10001', '10001', '11110'],
+        'C': ['01110', '10001', '10000', '10000', '10000', '10001', '01110'],
+        'D': ['11110', '10001', '10001', '10001', '10001', '10001', '11110'],
+        'E': ['11111', '10000', '11110', '10000', '10000', '10000', '11111'],
+        'F': ['11111', '10000', '11110', '10000', '10000', '10000', '10000'],
+        'G': ['01110', '10001', '10000', '10111', '10001', '10001', '01111'],
+        'H': ['10001', '10001', '10001', '11111', '10001', '10001', '10001'],
+        'I': ['01110', '00100', '00100', '00100', '00100', '00100', '01110'],
+        'J': ['00111', '00010', '00010', '00010', '00010', '10010', '01100'],
+        'K': ['10001', '10010', '10100', '11000', '10100', '10010', '10001'],
+        'L': ['10000', '10000', '10000', '10000', '10000', '10000', '11111'],
+        'M': ['10001', '11011', '10101', '10101', '10001', '10001', '10001'],
+        'N': ['10001', '11001', '10101', '10011', '10001', '10001', '10001'],
+        'O': ['01110', '10001', '10001', '10001', '10001', '10001', '01110'],
+        'P': ['11110', '10001', '10001', '11110', '10000', '10000', '10000'],
+        'Q': ['01110', '10001', '10001', '10001', '10101', '10010', '01101'],
+        'R': ['11110', '10001', '10001', '11110', '10100', '10010', '10001'],
+        'S': ['01111', '10000', '10000', '01110', '00001', '00001', '11110'],
+        'T': ['11111', '00100', '00100', '00100', '00100', '00100', '00100'],
+        'U': ['10001', '10001', '10001', '10001', '10001', '10001', '01110'],
+        'V': ['10001', '10001', '10001', '10001', '10001', '01010', '00100'],
+        'W': ['10001', '10001', '10001', '10101', '10101', '11011', '10001'],
+        'X': ['10001', '10001', '01010', '00100', '01010', '10001', '10001'],
+        'Y': ['10001', '10001', '01010', '00100', '00100', '00100', '00100'],
+        'Z': ['11111', '00001', '00010', '00100', '01000', '10000', '11111'],
+        '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'],
+        '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'],
+        '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'],
+        '3': ['11111', '00010', '00100', '00010', '00001', '10001', '01110'],
+        '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'],
+        '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'],
+        '6': ['00110', '01000', '10000', '11110', '10001', '10001', '01110'],
+        '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'],
+        '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'],
+        '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'],
+        ':': ['00000', '00100', '00100', '00000', '00100', '00100', '00000'],
+        '/': ['00001', '00001', '00010', '00100', '01000', '10000', '10000'],
+        '-': ['00000', '00000', '00000', '11111', '00000', '00000', '00000'],
+        '.': ['00000', '00000', '00000', '00000', '00000', '01100', '01100'],
+        ',': ['00000', '00000', '00000', '00000', '01100', '00100', '01000'],
+        '!': ['00100', '00100', '00100', '00100', '00100', '00000', '00100'],
+        '?': ['01110', '10001', '00001', '00010', '00100', '00000', '00100'],
+        '%': ['11001', '11010', '00010', '00100', '01000', '01011', '10011'],
+        '*': ['00000', '00100', '10101', '01110', '10101', '00100', '00000'],
+        '#': ['01010', '01010', '11111', '01010', '11111', '01010', '01010'],
+        '+': ['00000', '00100', '00100', '11111', '00100', '00100', '00000'],
+        "'": ['00100', '00100', '01000', '00000', '00000', '00000', '00000'],
+        '"': ['01010', '01010', '01010', '00000', '00000', '00000', '00000'],
+        '(': ['00010', '00100', '01000', '01000', '01000', '00100', '00010'],
+        ')': ['01000', '00100', '00010', '00010', '00010', '00100', '01000']
+    };
+
+    function ledGlyph(ch) {
+        return LED_GLYPH_5x7[ch.toUpperCase()] || LED_GLYPH_5x7[ch] || LED_GLYPH_5x7[' '];
+    }
+
+    // Best-effort dot-scale factor for an Alpha Font enum name (e.g.
+    // FONT_7x9 -> scale the base 5x7 glyph up to approximate a 7-wide,
+    // 9-tall cell). Mirrors scripts/led_preview_render.py's
+    // _font_dot_scale() -- see that function's docstring for the caveat
+    // this approximates the declared name, not verified sign firmware
+    // glyph data (docs/reference/protocols/ALPHA_M_PROTOCOL.md §3.2).
+    function ledFontDotScale(fontName) {
+        const m = /(\d+)\s*x\s*(\d+)/i.exec(fontName || '');
+        if (!m) return { sx: 1, sy: 1 };
+        const targetW = parseInt(m[1], 10);
+        const targetH = parseInt(m[2], 10);
+        return { sx: Math.max(1, Math.round(targetW / 5)), sy: Math.max(1, Math.round(targetH / 7)) };
+    }
+
+    function ledFontCellSize(fontName) {
+        const { sx, sy } = ledFontDotScale(fontName);
+        return { sx, sy, w: 5 * sx + sx, h: 7 * sy + sy };
+    }
 
     // Built-in vector icons shared by all three display engines (mirrors
     // app_core/oled.py's _ICON_RENDERERS -- the single glyph set OLED, VFD
@@ -288,6 +387,61 @@ const ScreenEditor = (function() {
         return state.displayType === 'oled' ? FONT_OPTIONS : VFD_LED_FONT_OPTIONS;
     }
 
+    // M-Protocol colour name -> lit-dot hex. Mirrors
+    // scripts/led_preview_render.py's _LED_COLORS so the live canvas glows
+    // the same colour the server-rendered "pixel-accurate" preview modal
+    // (showPreview()) shows. Effects that aren't a single solid colour fall
+    // back to amber, the sign's default -- same convention as that module.
+    const LED_COLOR_HEX = {
+        RED: '#ff2828', GREEN: '#32ff50', AMBER: '#ffb000', DIM_RED: '#961c1c',
+        DIM_GREEN: '#249638', BROWN: '#96601c', ORANGE: '#ff6e00', YELLOW: '#ffe628',
+        RAINBOW_1: '#ffb000', RAINBOW_2: '#ffb000', COLOR_MIX: '#ffb000', AUTO_COLOR: '#ffb000'
+    };
+
+    function ledActiveColorHex() {
+        const name = (document.getElementById('led-color')?.value || 'AMBER').toUpperCase();
+        return LED_COLOR_HEX[name] || LED_COLOR_HEX.AMBER;
+    }
+
+    // Legacy LED text mode's dot-matrix renderer: draws `text` as glowing
+    // round LEDs using the shared 5x7 glyph set, scaled to the message's
+    // selected Alpha font -- unlike the generic small/medium/large canvas
+    // text TYPES.text.draw() uses for OLED/VFD/LED-graphics, this actually
+    // changes size with the font dropdown (see docs/reference/protocols/
+    // ALPHA_M_PROTOCOL.md's WYSIWYG audit for why that used to be a no-op).
+    function drawLedDotText(text, x, y, colorHex) {
+        const cell = ledFontCellSize(document.getElementById('led-font')?.value || 'FONT_7x9');
+        const w = ctx.canvas.width, h = ctx.canvas.height;
+        ctx.fillStyle = colorHex;
+        let cx = x;
+        for (const ch of String(text)) {
+            const glyph = ledGlyph(ch);
+            for (let ry = 0; ry < 7; ry++) {
+                const row = glyph[ry];
+                for (let rx = 0; rx < 5; rx++) {
+                    if (row[rx] !== '1') continue;
+                    for (let dy = 0; dy < cell.sy; dy++) {
+                        const py = y + ry * cell.sy + dy;
+                        if (py < 0 || py >= h) continue;
+                        for (let dx = 0; dx < cell.sx; dx++) {
+                            const px = cx + rx * cell.sx + dx;
+                            if (px < 0 || px >= w) continue;
+                            ctx.beginPath();
+                            ctx.arc(px + 0.5, py + 0.5, 0.42, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    }
+                }
+            }
+            cx += cell.w;
+        }
+        return { width: cx - x, height: cell.h };
+    }
+
+    function isLedLegacyTextMode() {
+        return state.displayType === 'led' && !state.ledGraphicsMode;
+    }
+
     // ------------------------------------------------------------------
     // Element type registry
     //   create()        -> default props (id added by caller)
@@ -317,6 +471,10 @@ const ScreenEditor = (function() {
                 { key: 'allowEmpty', label: 'Allow Empty', kind: 'checkbox' }
             ],
             draw(el) {
+                if (isLedLegacyTextMode()) {
+                    drawLedDotText(previewText(el.text || ''), el.x, el.y, ledActiveColorHex());
+                    return;
+                }
                 const fontSize = FONT_SIZES[el.font] || 11;
                 ctx.font = `${fontSize}px monospace`;
                 ctx.textBaseline = 'top';
@@ -335,6 +493,11 @@ const ScreenEditor = (function() {
                 ctx.fillText(txt, x, el.y);
             },
             bounds(el) {
+                if (isLedLegacyTextMode()) {
+                    const cell = ledFontCellSize(document.getElementById('led-font')?.value || 'FONT_7x9');
+                    const w = Math.max(cell.w, String(el.text || '').length * cell.w);
+                    return { x: el.x, y: el.y, w, h: cell.h };
+                }
                 const fontSize = FONT_SIZES[el.font] || 11;
                 ctx.font = `${fontSize}px monospace`;
                 const w = Math.max(10, ctx.measureText(previewText(el.text || '')).width);
@@ -963,9 +1126,18 @@ const ScreenEditor = (function() {
             markDirty();
         });
 
-        // LED sign option selects just mark the screen dirty; values are read on save
+        // LED sign option selects mark the screen dirty; values are read on
+        // save. Font and colour also drive the live dot-matrix canvas (see
+        // drawLedDotText()/ledActiveColorHex()), so those two additionally
+        // resize/redraw it immediately instead of waiting for the next
+        // unrelated edit to happen to repaint.
         ['led-color', 'led-mode', 'led-speed', 'led-font'].forEach(id => {
-            document.getElementById(id)?.addEventListener('change', markDirty);
+            document.getElementById(id)?.addEventListener('change', function() {
+                markDirty();
+                if (!isLedLegacyTextMode()) return;
+                if (id === 'led-font') updateCanvasDimensions();
+                render();
+            });
         });
 
         document.getElementById('led-message-type')?.addEventListener('change', function() {
@@ -1140,7 +1312,19 @@ const ScreenEditor = (function() {
     function addElement(type) {
         const def = TYPES[type];
         if (!def) return;
+        if (isLedLegacyTextMode() && state.elements.filter(e => e.type === 'text').length >= LED_TEXT_ROWS) {
+            toast(`The sign supports at most ${LED_TEXT_ROWS} lines`, 'error');
+            return;
+        }
         const element = { id: Date.now(), ...def.create() };
+        if (isLedLegacyTextMode()) {
+            // Stagger new lines below existing ones so they don't pile up
+            // at (0,0) -- and so the very next save's Y-sort keeps them in
+            // the order they were added, matching what's already visible.
+            const cell = ledFontCellSize(document.getElementById('led-font')?.value || 'FONT_7x9');
+            const maxY = state.elements.reduce((m, e) => Math.max(m, e.y || 0), -cell.h);
+            element.y = maxY + cell.h;
+        }
         state.elements.push(element);
         selectElement(element.id);
         updateLayers();
@@ -1180,9 +1364,19 @@ const ScreenEditor = (function() {
         document.getElementById('element-props-panel').style.display = 'none';
     }
 
+    // In legacy LED text mode, buildTemplateData() only ever sends
+    // `{text: e.text}` per line -- font/align/maxWidth/wrap/invert/
+    // allowEmpty are OLED/VFD graphics-canvas concepts with no equivalent
+    // in the sign's fixed 4-line character mode, and showing them let an
+    // operator "set" something on a line that silently did nothing on real
+    // hardware. X/Y stay: dragging still reorders lines top-to-bottom (see
+    // buildTemplateData()'s Y-sort).
+    const LED_LEGACY_TEXT_INERT_FIELDS = new Set(['font', 'align', 'maxWidth', 'wrap', 'invert', 'allowEmpty']);
+
     function buildFieldsHtml(def, element) {
         let html = '<div class="fields-grid">';
         def.fields.forEach(f => {
+            if (element.type === 'text' && isLedLegacyTextMode() && LED_LEGACY_TEXT_INERT_FIELDS.has(f.key)) return;
             const val = element[f.key];
             const colClass = f.col === 6 ? 'fg-6' : 'fg-12';
             html += `<div class="form-group ${colClass}">`;
@@ -1365,6 +1559,15 @@ const ScreenEditor = (function() {
         state.elements.forEach(element => {
             try { typeDef(element).draw(element); } catch (err) { /* ignore bad element */ }
         });
+        // Ambient glow around the lit dots, matching the ember-behind-glass
+        // look of the server-rendered "pixel-accurate" preview modal
+        // (scripts/led_preview_render.py's round-dot-plus-glow rasterizer).
+        // A single CSS filter on the canvas element is effectively free
+        // (GPU-composited once per repaint) versus per-dot canvas shadows,
+        // which would be too slow across thousands of individual LED dots.
+        canvas.style.filter = isLedLegacyTextMode()
+            ? `drop-shadow(0 0 2px ${ledActiveColorHex()}) drop-shadow(0 0 5px ${ledActiveColorHex()}88)`
+            : '';
         updateOverlays();
     }
 
@@ -1772,9 +1975,18 @@ const ScreenEditor = (function() {
             }
 
             // Legacy: character-based, emit a `lines` array consumed by
-            // render_led_screen(), plus screen-level sign options.
+            // render_led_screen(), plus screen-level sign options. Sorted
+            // by Y so the order lines appear top-to-bottom on the canvas is
+            // the order they're actually sent in -- previously this used
+            // raw element-insertion order, which silently diverged from
+            // the visual layout the moment a line was dragged past another.
+            // render_led_screen() truncates to 4 lines server-side too, but
+            // slicing here keeps the editor honest about what will survive.
             const lines = state.elements
                 .filter(e => e.type === 'text')
+                .slice()
+                .sort((a, b) => a.y - b.y)
+                .slice(0, LED_TEXT_ROWS)
                 .map(e => ({ text: e.text }));
             return {
                 lines,
@@ -1818,6 +2030,23 @@ const ScreenEditor = (function() {
         state.displayType = screenData.display_type || 'oled';
         const td = screenData.template_data || {};
         state.ledGraphicsMode = state.displayType === 'led' && Array.isArray(td.elements);
+
+        // LED sign options -- set BEFORE updateCanvasDimensions() and the
+        // lines-staggering below, both of which read the led-font dropdown
+        // to size things. Setting it later (as this used to) left the
+        // canvas sized for whatever font was previously selected until the
+        // operator happened to touch the dropdown themselves.
+        if (state.displayType === 'led') {
+            const setSel = (id, value) => {
+                const sel = document.getElementById(id);
+                if (sel && value) sel.value = value;
+            };
+            setSel('led-color', td.color);
+            setSel('led-mode', td.mode);
+            setSel('led-speed', td.speed);
+            setSel('led-font', td.font);
+        }
+
         updateCanvasDimensions();
         updateDisplayPanels();
         rebuildPalette();
@@ -1827,7 +2056,9 @@ const ScreenEditor = (function() {
         } else if (Array.isArray(td.lines) && td.lines.length) {
             // Legacy lines format -> text elements, staggered vertically when
             // a line has no explicit y so they don't pile up at (0,0).
-            const lineHeight = state.displayType === 'led' ? 8 : 13;
+            const lineHeight = state.displayType === 'led'
+                ? ledFontCellSize(td.font || 'FONT_7x9').h
+                : 13;
             state.elements = td.lines.map((line, index) => {
                 const t = typeof line === 'string' ? { text: line } : line;
                 const el = { id: Date.now() + index, ...TYPES.text.fromTemplate(t) };
@@ -1848,18 +2079,6 @@ const ScreenEditor = (function() {
             document.getElementById('scroll-fps-value').textContent = td.scroll_fps || 60;
             document.getElementById('scroll-speed-group').style.display = 'block';
             document.getElementById('scroll-fps-group').style.display = 'block';
-        }
-
-        // LED sign options
-        if (state.displayType === 'led') {
-            const setSel = (id, value) => {
-                const sel = document.getElementById(id);
-                if (sel && value) sel.value = value;
-            };
-            setSel('led-color', td.color);
-            setSel('led-mode', td.mode);
-            setSel('led-speed', td.speed);
-            setSel('led-font', td.font);
         }
 
         if (screenData.data_sources) {
