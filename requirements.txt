@@ -105,7 +105,7 @@ numpy==2.5.3  # Required for SoapySDR sample processing
 pyserial==3.5  # Serial communication for VFD display and GPS HAT
 
 # Zigbee coordinator support (CC2652P and other Z-Stack based coordinators)
-zigpy>=2.1.0        # Core Zigbee protocol stack
+zigpy>=2.2.0        # Core Zigbee protocol stack
 # Note: bumping past zigpy 0.x renamed ControllerApplication.permit_joining()
 # to .permit() -- fixed in services/zigbee/controller.py, the only file in
 # this codebase that touches the zigpy application API directly. Verified
