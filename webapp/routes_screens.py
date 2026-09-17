@@ -389,7 +389,11 @@ def register(app: Flask, logger) -> None:
                     image = render_led_elements_preview(rendered.get("elements"), rendered.get("color", "AMBER"))
                 else:
                     lines = rendered.get("lines") or []
-                    image = render_led_preview(lines, rendered.get("color", "AMBER"))
+                    image = render_led_preview(
+                        lines,
+                        rendered.get("color", "AMBER"),
+                        font=rendered.get("font", "FONT_7x9"),
+                    )
 
             return jsonify({"rendered": rendered, "image": image})
 

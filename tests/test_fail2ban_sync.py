@@ -136,3 +136,110 @@ def test_background_cycle_noop_when_ssh_protection_disabled(app_with_tables, mon
         assert IPFilter.query.filter_by(
             filter_type=IPFilterType.BLOCKLIST.value, is_active=True
         ).count() == 0
+
+
+class _FakeRedis:
+    """Minimal SETNX-capable fake standing in for the real Redis client."""
+
+    def __init__(self):
+        self.store = {}
+
+    def set(self, key, value, nx=False, ex=None):
+        if nx and key in self.store:
+            return False
+        self.store[key] = value
+        return True
+
+    def get(self, key):
+        return self.store.get(key)
+
+    def expire(self, key, ttl):
+        return key in self.store
+
+    def eval(self, script, numkeys, *keys_and_args):
+        # Only the renew-lock script is ever run against this fake; emulate
+        # its atomic get-then-expire semantics directly rather than parsing
+        # Lua.
+        key, value, ttl = keys_and_args
+        if self.store.get(key) == value:
+            return self.expire(key, ttl)
+        return 0
+
+
+def _install_fake_redis(monkeypatch):
+    # Patch the already-imported module object directly rather than via
+    # monkeypatch's dotted-string form: when the whole test suite collects
+    # every test module first, something ahead of this file in that
+    # collection leaves the `app_core` package's `extensions` submodule
+    # attribute unresolvable by pytest's string-based dotted-path lookup
+    # (AttributeError: 'module' object at app_core.extensions has no
+    # attribute 'extensions'), even though `app_core.extensions` imports
+    # fine directly. Importing the module object ourselves sidesteps that
+    # resolution entirely.
+    import app_core.extensions as extensions_module
+
+    client = _FakeRedis()
+    monkeypatch.setattr(extensions_module, "get_redis_client", lambda: client)
+    return client
+
+
+def test_leader_lock_only_one_worker_wins(app_with_tables, monkeypatch):
+    """Two scheduler instances (simulating two Gunicorn workers) racing for the
+    same cycle: only the one that wins the Redis SETNX runs; the other skips.
+
+    Regression for the production symptom where every Gunicorn worker ran its
+    own independent copy of this loop -- each worker imports this module and
+    starts its own thread, so an N-worker deployment fired N `fail2ban-client`
+    subprocess bursts every cycle instead of one, visible in journals as
+    clusters of sudo calls every ~15-20s instead of once per
+    SYNC_INTERVAL_SECONDS.
+    """
+    app, _ = app_with_tables
+    from app_core.fail2ban_sync import Fail2banSyncScheduler
+
+    _install_fake_redis(monkeypatch)
+
+    worker_a = Fail2banSyncScheduler(app)
+    worker_b = Fail2banSyncScheduler(app)
+
+    assert worker_a._acquire_or_renew_leader_lock() is True
+    assert worker_b._acquire_or_renew_leader_lock() is False
+    # The leader keeps winning on subsequent cycles (lease renewal), the
+    # non-leader keeps losing.
+    assert worker_a._acquire_or_renew_leader_lock() is True
+    assert worker_b._acquire_or_renew_leader_lock() is False
+
+
+def test_leader_lock_takeover_after_lease_expiry(app_with_tables, monkeypatch):
+    """If the leader's lease has expired (e.g. it crashed), another worker can
+    take over -- the lock is a renewable lease, not a permanent one-shot claim."""
+    app, _ = app_with_tables
+    from app_core.fail2ban_sync import Fail2banSyncScheduler, _LEADER_LOCK_KEY
+
+    client = _install_fake_redis(monkeypatch)
+
+    worker_a = Fail2banSyncScheduler(app)
+    worker_b = Fail2banSyncScheduler(app)
+
+    assert worker_a._acquire_or_renew_leader_lock() is True
+    # Simulate the lease expiring (Redis would drop the key on TTL).
+    del client.store[_LEADER_LOCK_KEY]
+
+    assert worker_b._acquire_or_renew_leader_lock() is True
+    assert worker_a._acquire_or_renew_leader_lock() is False
+
+
+def test_leader_lock_falls_back_to_true_when_redis_unreachable(app_with_tables, monkeypatch):
+    """A Redis outage must not silently stop the sync entirely -- fall back to
+    the historical best-effort-from-every-worker behaviour instead."""
+    app, _ = app_with_tables
+    import app_core.extensions as extensions_module
+    from app_core.fail2ban_sync import Fail2banSyncScheduler
+
+    def _broken_redis():
+        raise ConnectionError("redis unreachable")
+
+    monkeypatch.setattr(extensions_module, "get_redis_client", _broken_redis)
+
+    worker = Fail2banSyncScheduler(app)
+    assert worker._acquire_or_renew_leader_lock() is True

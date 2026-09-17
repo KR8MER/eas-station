@@ -94,19 +94,51 @@ def glyph(ch: str) -> List[str]:
 
 def blit_text(grid: List[List[int]], x: int, y: int, text: str) -> None:
     """Stamp ``text`` into a 0/1 pixel ``grid`` at top-left pixel (x, y)."""
+    blit_text_scaled(grid, x, y, text)
+
+
+def cell_size(scale_x: int = 1, scale_y: int = 1) -> "tuple[int, int]":
+    """Cell dimensions (px) for text blitted at the given dot-scale factor."""
+    scale_x = max(1, int(scale_x))
+    scale_y = max(1, int(scale_y))
+    return 5 * scale_x + scale_x, 7 * scale_y + scale_y
+
+
+def blit_text_scaled(
+    grid: List[List[int]], x: int, y: int, text: str, scale_x: int = 1, scale_y: int = 1
+) -> "tuple[int, int]":
+    """Like ``blit_text``, but replicates each dot of the base 5x7 glyph into
+    a ``scale_x`` x ``scale_y`` block, approximating a larger/smaller LED
+    font from the same glyph shapes. Returns the (width, height) of one
+    character cell at this scale, i.e. what ``blit_text``'s fixed
+    ``CELL_W``/``CELL_H`` are for scale (1, 1).
+
+    This is a best-effort size approximation, not the sign firmware's actual
+    glyph bitmaps -- see docs/reference/protocols/ALPHA_M_PROTOCOL.md §3.2,
+    which found some Alpha ``Font`` enum names don't match what byte they
+    really select on the wire. It's the best available signal without
+    hardware to bench-test against.
+    """
+    scale_x = max(1, int(scale_x))
+    scale_y = max(1, int(scale_y))
     h = len(grid)
     w = len(grid[0]) if h else 0
+    cw, ch_ = cell_size(scale_x, scale_y)
     cx = x
     for ch in str(text):
         g = glyph(ch)
         for ry in range(7):
             row = g[ry]
-            py = y + ry
-            if py < 0 or py >= h:
-                continue
             for rx in range(5):
-                if row[rx] == '1':
-                    px = cx + rx
-                    if 0 <= px < w:
-                        grid[py][px] = 1
-        cx += CELL_W
+                if row[rx] != '1':
+                    continue
+                for dy in range(scale_y):
+                    py = y + ry * scale_y + dy
+                    if py < 0 or py >= h:
+                        continue
+                    for dx in range(scale_x):
+                        px = cx + rx * scale_x + dx
+                        if 0 <= px < w:
+                            grid[py][px] = 1
+        cx += cw
+    return cw, ch_

@@ -44,7 +44,9 @@ protection is not in use.
 """
 
 import logging
+import os
 import threading
+import uuid
 from typing import Optional
 
 from app_core.extensions import db
@@ -57,6 +59,30 @@ logger = logging.getLogger(__name__)
 # protection is enabled, so a short interval is inexpensive.
 SYNC_INTERVAL_SECONDS = 60
 STARTUP_DELAY_SECONDS = 30
+
+# Cross-worker leader lock, same Redis-SETNX pattern used by
+# app_core/rwt_scheduler.py: this module is imported by every Gunicorn
+# worker, so without a lock an N-worker deployment runs N independent
+# copies of this loop, each on its own 60s cycle offset by that worker's
+# startup time. In production this was visible as clusters of
+# `fail2ban-client status` sudo calls firing every ~15-20s (once per
+# worker's cycle) instead of once every SYNC_INTERVAL_SECONDS. The lock
+# is a renewable lease (TTL = 3x the sync interval) rather than a one-shot
+# claim, so if the leader worker dies or is recycled, another worker takes
+# over on its next tick instead of leaving the sync permanently orphaned.
+_LEADER_LOCK_KEY = "fail2ban_sync:leader"
+
+# Atomically renews the lock's TTL only if we still hold it. A plain
+# get()-then-expire() pair has a check-then-act race: the key can expire and
+# be claimed by another worker between the two calls, letting the renewing
+# worker wrongly believe it is still leader.
+_RENEW_LOCK_SCRIPT = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('expire', KEYS[1], ARGV[2])
+else
+    return 0
+end
+"""
 
 
 def run_sync_cycle() -> dict:
@@ -112,6 +138,7 @@ class Fail2banSyncScheduler:
         self._startup_delay = max(int(startup_delay_seconds), 0)
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
+        self._worker_id = f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
 
     @property
     def is_running(self) -> bool:
@@ -143,18 +170,41 @@ class Fail2banSyncScheduler:
         with self._app.app_context():
             return run_sync_cycle()
 
+    def _acquire_or_renew_leader_lock(self) -> bool:
+        """True if this worker process should run this cycle.
+
+        Falls back to True (best-effort fire from every worker, the
+        historical behaviour) if Redis is unreachable, rather than block
+        the sync entirely on a Redis outage.
+        """
+        try:
+            from app_core.extensions import get_redis_client
+            redis_client = get_redis_client()
+            ttl = self._interval * 3
+            if redis_client.set(_LEADER_LOCK_KEY, self._worker_id, nx=True, ex=ttl):
+                return True
+            return bool(redis_client.eval(_RENEW_LOCK_SCRIPT, 1, _LEADER_LOCK_KEY, self._worker_id, ttl))
+        except Exception as exc:
+            logger.warning(
+                "Could not acquire fail2ban-sync leader lock (Redis unreachable?): %s "
+                "— proceeding without cross-worker deduplication",
+                exc,
+            )
+            return True
+
     def _run(self) -> None:
         if self._stop_event.wait(self._startup_delay):
             return
         while not self._stop_event.is_set():
-            try:
-                self.run_now()
-            except Exception as exc:  # pragma: no cover - defensive logging
-                logger.error("fail2ban sync cycle failed: %s", exc, exc_info=True)
+            if self._acquire_or_renew_leader_lock():
                 try:
-                    db.session.rollback()
-                except Exception:
-                    pass
+                    self.run_now()
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    logger.error("fail2ban sync cycle failed: %s", exc, exc_info=True)
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
             self._stop_event.wait(self._interval)
 
 

@@ -413,6 +413,38 @@ class TestAudioSourceAdapter:
         assert adapter.config == config
         assert adapter.status == AudioSourceStatus.STOPPED
 
+    def test_dead_air_suppressed_default_false(self):
+        """Base class default: dead-air monitoring is never suppressed
+        unless an adapter (e.g. RedisSDRSourceAdapter mid-Bandscan sweep)
+        explicitly overrides it."""
+        adapter = DummyCaptureAdapter("dead-air-default")
+        assert adapter._dead_air_suppressed() is False
+
+    def test_update_metrics_feeds_silence_monitor_when_not_suppressed(self):
+        adapter = DummyCaptureAdapter("dead-air-normal")
+        adapter._silence_monitor.process = Mock(wraps=adapter._silence_monitor.process)
+        chunk = np.zeros(256, dtype=np.float32)
+
+        adapter._update_metrics(chunk)
+
+        adapter._silence_monitor.process.assert_called_once()
+
+    def test_update_metrics_skips_silence_monitor_when_suppressed(self):
+        """A source reporting _dead_air_suppressed()=True (e.g. an SDR
+        receiver mid-Bandscan sweep, muted to real digital silence for the
+        duration) must not feed that deliberate silence into the debounced
+        dead-air detector -- doing so would otherwise cross its duration
+        threshold and raise a false alarm for a routine, operator-initiated
+        diagnostic action."""
+        adapter = DummyCaptureAdapter("dead-air-suppressed")
+        adapter._dead_air_suppressed = lambda: True
+        adapter._silence_monitor.process = Mock(wraps=adapter._silence_monitor.process)
+        chunk = np.zeros(256, dtype=np.float32)
+
+        adapter._update_metrics(chunk)
+
+        adapter._silence_monitor.process.assert_not_called()
+
     def test_unsupported_source_type(self):
         """create_audio_source() must reject source_type='sdr' unconditionally.
 

@@ -626,15 +626,26 @@ class AudioSourceAdapter(ABC):
         # levels were measured from, because the spectral axis needs the
         # waveform -- a level alone cannot tell programme audio from the
         # full-scale hiss an SDR emits when its station goes off the air.
-        try:
-            self._silence_monitor.process(
-                samples_for_metrics if len(audio_chunk) > 0 else None,
-                rms_db if np.isfinite(rms_db) else -120.0,
-            )
-        except Exception as exc:
-            logger.debug(
-                "Dead-air monitor failed for %s: %s", self.config.name, exc
-            )
+        #
+        # Skipped entirely while _dead_air_suppressed() is true (e.g. an SDR
+        # receiver mid-Bandscan sweep, which mutes its own audio to actual
+        # digital silence for the duration -- see RedisSDRSourceAdapter's
+        # override). Feeding that deliberate silence to the detector would
+        # otherwise cross its duration threshold and raise a false dead-air
+        # alarm for a routine, operator-initiated diagnostic scan. Skipping
+        # the call freezes the debounce timer rather than resetting it, so
+        # a real outage that was already accruing before the scan resumes
+        # counting from where it left off once the scan ends.
+        if not self._dead_air_suppressed():
+            try:
+                self._silence_monitor.process(
+                    samples_for_metrics if len(audio_chunk) > 0 else None,
+                    rms_db if np.isfinite(rms_db) else -120.0,
+                )
+            except Exception as exc:
+                logger.debug(
+                    "Dead-air monitor failed for %s: %s", self.config.name, exc
+                )
 
         # Update metrics
         # Use broadcast queue utilization instead of legacy queue for accurate streaming health
@@ -653,6 +664,16 @@ class AudioSourceAdapter(ABC):
         )
 
         self._last_metrics_update = current_time
+
+    def _dead_air_suppressed(self) -> bool:
+        """Should the dead-air monitor ignore silence right now?
+
+        Default: never. Overridden by adapters that can be deliberately,
+        transiently silenced by something outside this class's control
+        (see RedisSDRSourceAdapter, muted for the duration of a Bandscan
+        sweep) so that expected silence never gets misread as an outage.
+        """
+        return False
 
     def is_quarantined(self) -> bool:
         """Return True if this source is in restart cooldown after repeated failures."""

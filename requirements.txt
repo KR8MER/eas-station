@@ -160,6 +160,16 @@ pyproj==3.7.2  # CRS reprojection from shapefile .prj to WGS84 (optional, gracef
 # covers its dependencies but not the package itself) -- expect a ~5-6
 # minute from-source build the first time, one-time cost.
 arm_pyart==2.2.5  # NEXRAD Archive II decode; RadarMapDisplay.plot_ppi_map renders each gate's true polar footprint, no interpolation (PyPI name; imports as `pyart`)
+# arm_pyart requires fsspec and s3fs but only loosely (fsspec>=2021.11.0),
+# and neither is otherwise pinned here. Older s3fs releases hard-pin an
+# exact matching fsspec version (e.g. s3fs==2025.3.1 requires
+# fsspec==2025.3.1.*), so pip's resolver can wander into an old,
+# mutually-incompatible s3fs/fsspec pair while resolving an unrelated
+# bump elsewhere in this file and fail with "ResolutionImpossible" --
+# seen when a routine boto3 patch bump alone was enough to trigger it.
+# Pinned to the versions already verified working together in production.
+fsspec==2026.7.0
+s3fs==2026.7.0
 boto3==1.43.92  # Unencrypted, anonymous read access to NOAA's public Level II archive on AWS Open Data (no credentials needed)
 cartopy==0.25.0  # Geographic (Web Mercator) projection for plot_ppi_map, matching the OSM basemap tiles it composites onto
 cmweather==0.3.2  # Registers the 'NWSRef' reflectivity colormap (the standard ~15-band NWS scale most radar apps use, not a hand-rolled ramp)

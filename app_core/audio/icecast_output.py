@@ -637,6 +637,24 @@ class IcecastStreamer:
                     pcm_bytes = self._samples_to_pcm_bytes(samples)
                     buffer.append(pcm_bytes)
                     self._consecutive_empty_reads = 0  # Reset counter on successful read
+
+                    # Opportunistically drain any further chunks already
+                    # waiting in the queue (non-blocking) before falling
+                    # through to the single popleft()+write below. Without
+                    # this, the loop's fixed one-read/one-write-per-iteration
+                    # shape makes the buffer a one-way ratchet: a read
+                    # timeout costs it exactly one chunk, permanently, since
+                    # a normal iteration can never bank more than the single
+                    # chunk it immediately hands to FFmpeg -- so a source
+                    # that stalls and later catches up (a burst of chunks
+                    # already queued) could never recover the depth the
+                    # stall cost it. Draining that burst here, capped at the
+                    # deque's own maxlen, lets it recover.
+                    while len(buffer) < buffer.maxlen:
+                        extra = self._get_audio_from_subscription(timeout=0)
+                        if extra is None:
+                            break
+                        buffer.append(self._samples_to_pcm_bytes(extra))
                 else:
                     # Track consecutive empty reads to diagnose source issues
                     self._consecutive_empty_reads += 1
@@ -654,11 +672,19 @@ class IcecastStreamer:
 
                 # Feed FFmpeg from buffer with proper error handling
                 if buffer and self._ffmpeg_process and self._ffmpeg_process.stdin:
+                    # Snapshot depth before popleft(): this is the cushion of
+                    # audio actually banked ahead of playout. Reading len(buffer)
+                    # after the pop below always saw 0-1 (whatever this same
+                    # iteration just appended, minus the chunk it just wrote),
+                    # since read and write happen once per iteration in lockstep
+                    # -- that made the low-buffer/empty-buffer warnings below
+                    # fire constantly on every mount regardless of real health.
+                    buffer_level = len(buffer)
                     try:
                         chunk = buffer.popleft()
                         self._ffmpeg_process.stdin.write(chunk)
                         self._bytes_sent += len(chunk)
-                        
+
                         # Only flush periodically, not every write (reduces pipe pressure)
                         # Track chunks written instead of bytes for efficiency
                         if not hasattr(self, '_chunks_written'):
@@ -666,7 +692,7 @@ class IcecastStreamer:
                         self._chunks_written += 1
                         if self._chunks_written % 16 == 0:  # Flush every 16 chunks (~800ms of audio)
                             self._ffmpeg_process.stdin.flush()
-                        
+
                         wrote_chunk = True
                     except (BrokenPipeError, OSError) as pipe_err:
                         # Don't log as error here - will be caught below and trigger restart
@@ -676,7 +702,6 @@ class IcecastStreamer:
                         raise  # Re-raise to trigger restart logic below
 
                     # Monitor buffer health
-                    buffer_level = len(buffer)
                     if buffer_level < buffer_low_watermark:
                         now_warn = time.time()
                         if now_warn - self._last_buffer_warning > 30.0:

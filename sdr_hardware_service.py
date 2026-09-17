@@ -704,6 +704,7 @@ def _run_bandscan_sweep(
     separate DB-persistence step.
     """
     progress_key = f"{RedisChannels.BANDSCAN_PROGRESS_PREFIX}{receiver_id}"
+    active_key = f"{RedisChannels.BANDSCAN_ACTIVE_PREFIX}{receiver_id}"
     original_freq_hz = float(getattr(receiver.config, "frequency_hz", 0) or 0)
     effective_rate = (
         int(getattr(receiver, "_effective_sample_rate", 0) or 0)
@@ -728,6 +729,17 @@ def _run_bandscan_sweep(
             "started_at": started_at,
             "updated_at": time.time(),
         }
+        # Refreshed alongside progress so the demod worker's/audio service's
+        # short-TTL'd mute flag (see RedisChannels.BANDSCAN_ACTIVE_PREFIX)
+        # never lapses mid-sweep just because a channel measurement took
+        # slightly longer than the TTL. Written before the progress payload
+        # below (not after) so the progress write stays the last Redis call
+        # this function makes each time -- tests and any other caller that
+        # wants "the current progress" read the most recent write.
+        try:
+            redis_client.setex(active_key, RedisChannels.BANDSCAN_ACTIVE_TTL_SECONDS, "1")
+        except Exception as exc:
+            logger.debug("bandscan %s: active-flag publish failed: %s", receiver_id, exc)
         try:
             redis_client.setex(
                 progress_key,
@@ -797,6 +809,224 @@ def _run_bandscan_sweep(
         if status == "running":
             status = "done"
         _write_progress()
+        # Explicit delete rather than just letting the short TTL lapse --
+        # unmutes the receiver's audio the moment the sweep is actually
+        # done instead of up to BANDSCAN_ACTIVE_TTL_SECONDS late.
+        try:
+            redis_client.delete(active_key)
+        except Exception as exc:
+            logger.debug("bandscan %s: active-flag cleanup failed: %s", receiver_id, exc)
+        with _state.lock:
+            _state.active_bandscans.pop(receiver_id, None)
+
+
+def _run_bandscan_identify(
+    *,
+    receiver,
+    receiver_id: str,
+    redis_client,
+    cancel_event: "threading.Event",
+    target_freqs_hz: list,
+    dwell_sec: float = 6.0,
+    settle_sec: float = 0.2,
+) -> None:
+    """Background-thread body for the "Identify Stations" pass.
+
+    Retunes to each of ``target_freqs_hz`` in turn -- the peaks a prior
+    Bandscan sweep already found -- and dwells long enough on each to
+    attempt an RDS decode via a purpose-built FMDemodulator instance.
+    Unlike _run_bandscan_sweep's per-channel level measurement (effectively
+    instantaneous), RDS needs real dwell time, and live-verified turned out
+    to need more of it than RBDSWorker's own docstring estimate suggested:
+    that ~1s figure is sync acquisition alone (confirmed live: ~1.8s on a
+    real strong local station). The 8-char PS marquee text (``ps_name``)
+    is assembled from 4 *separate* segments sent in different groups over
+    several more seconds after sync -- a dwell can sync perfectly and
+    still end with an incomplete PS if it runs out first, which is exactly
+    what a too-short dwell_sec produced during this feature's own live
+    testing. ``call_sign`` (derived from the PI code carried in every
+    synced group, no assembly needed) is kept as a fast, reliable fallback
+    throughout the dwell for exactly that reason -- see its own comment at
+    the point it's captured, below. A weak/marginal peak simply may not
+    sync at all within the dwell budget -- that records None for both
+    fields, not an error.
+
+    Shares RedisChannels.BANDSCAN_ACTIVE_PREFIX with _run_bandscan_sweep
+    (not a second flag) -- this pass retunes the same live receiver the
+    same way, so it needs the identical audio-mute/dead-air-suppression
+    behavior, and the demod worker/audio service don't need to know or
+    care which kind of scan is responsible. Progress is written to its own
+    RedisChannels.BANDSCAN_IDENTIFY_PROGRESS_PREFIX key so a still-visible
+    sweep result isn't overwritten by an identify pass that follows it.
+
+    Always retunes back to the frequency the receiver was on when this
+    pass started -- on normal completion, cancellation, or any exception
+    -- via the `finally` block, the identical guarantee
+    _run_bandscan_sweep gives. The database's assigned frequency is never
+    touched.
+    """
+    from app_core.radio.demod.fm import FMDemodulator
+    from app_core.radio.demod.types import DemodulatorConfig
+
+    progress_key = f"{RedisChannels.BANDSCAN_IDENTIFY_PROGRESS_PREFIX}{receiver_id}"
+    active_key = f"{RedisChannels.BANDSCAN_ACTIVE_PREFIX}{receiver_id}"
+    original_freq_hz = float(getattr(receiver.config, "frequency_hz", 0) or 0)
+    effective_rate = (
+        int(getattr(receiver, "_effective_sample_rate", 0) or 0)
+        or int(getattr(receiver.config, "sample_rate", 0) or 0)
+        or 250_000
+    )
+    # ~20ms chunks, matching services/demod/worker.py's own live cadence --
+    # RBDSWorker's Costas/M&M state carries across calls, so feeding it
+    # realistically-sized chunks rather than one giant read matters for
+    # behaving like the live decode path this reuses.
+    chunk_samples = max(2048, int(0.02 * effective_rate))
+
+    results: list = []
+    status = "running"
+    started_at = time.time()
+
+    def _write_progress() -> None:
+        payload = {
+            "status": status,
+            "target_freqs_hz": target_freqs_hz,
+            "results": results,
+            "started_at": started_at,
+            "updated_at": time.time(),
+        }
+        # Refreshed alongside progress, exactly like _run_bandscan_sweep --
+        # see that function's own comment on why this write happens before
+        # (not after) the progress payload write below.
+        try:
+            redis_client.setex(active_key, RedisChannels.BANDSCAN_ACTIVE_TTL_SECONDS, "1")
+        except Exception as exc:
+            logger.debug("bandscan-identify %s: active-flag publish failed: %s", receiver_id, exc)
+        try:
+            redis_client.setex(
+                progress_key,
+                RedisChannels.BANDSCAN_IDENTIFY_PROGRESS_TTL_SECONDS,
+                json.dumps(payload),
+            )
+        except Exception as exc:
+            logger.debug("bandscan-identify %s: progress publish failed: %s", receiver_id, exc)
+
+    logger.info(
+        "bandscan-identify: starting on %s, %d target frequencies",
+        receiver_id, len(target_freqs_hz),
+    )
+    _write_progress()
+
+    try:
+        for freq_hz in target_freqs_hz:
+            if cancel_event.is_set():
+                status = "cancelled"
+                break
+            try:
+                tuned = receiver.set_frequency(float(freq_hz))
+            except Exception as exc:
+                logger.warning(
+                    "bandscan-identify %s: retune to %d Hz failed: %s", receiver_id, freq_hz, exc,
+                )
+                tuned = False
+
+            if not tuned:
+                results.append({"freq_hz": freq_hz, "ps_name": None, "call_sign": None, "rms_dbfs": None})
+                _write_progress()
+                continue
+
+            time.sleep(max(0.0, float(settle_sec)))
+            try:
+                # Discard -- may still hold samples from the previous
+                # frequency, same drain-before-trusting idiom the sweep
+                # and auto-gain both already use.
+                receiver.get_samples(num_samples=chunk_samples)
+            except Exception:
+                pass
+
+            stats = _measure_iq_levels(receiver, num_samples=chunk_samples)
+
+            # A fresh demodulator per frequency -- a stale Costas/PLL lock
+            # from the previous peak must never leak into this one.
+            demodulator = FMDemodulator(DemodulatorConfig(
+                modulation_type="FM",
+                sample_rate=effective_rate,
+                enable_rbds=True,
+            ))
+
+            ps_name = None
+            call_sign = None
+            deadline = time.time() + max(0.1, float(dwell_sec))
+            while time.time() < deadline and not cancel_event.is_set():
+                try:
+                    chunk = receiver.get_samples(num_samples=chunk_samples)
+                except Exception as exc:
+                    logger.debug(
+                        "bandscan-identify %s: sample read failed at %d Hz: %s",
+                        receiver_id, freq_hz, exc,
+                    )
+                    break
+                if chunk is None or len(chunk) == 0:
+                    continue
+                try:
+                    _audio, demod_status = demodulator.demodulate(chunk)
+                except Exception as exc:
+                    logger.debug(
+                        "bandscan-identify %s: demodulate failed at %d Hz: %s",
+                        receiver_id, freq_hz, exc,
+                    )
+                    break
+                if demod_status is not None and demod_status.rbds_data is not None:
+                    # call_sign resolves from the PI code in block A, present
+                    # in every synced group -- available within ~1-2s of
+                    # sync (live-verified). ps_name is the 8-char PS
+                    # marquee text, assembled from 4 separate segments sent
+                    # in different 0A groups over several more seconds; a
+                    # dwell can sync perfectly and still end with '' if it
+                    # runs out before all 4 arrive. Keep the latest
+                    # call_sign as a fast, reliable fallback throughout the
+                    # dwell, but only stop early once the full PS name is
+                    # actually complete -- most of the time budget is a
+                    # *ceiling* for weak signals or a slow PS cycle, not a
+                    # fixed wait.
+                    if demod_status.rbds_data.call_sign:
+                        call_sign = demod_status.rbds_data.call_sign
+                    candidate = (demod_status.rbds_data.ps_name or "").strip()
+                    if candidate:
+                        ps_name = candidate
+                        break
+
+            results.append({
+                "freq_hz": freq_hz,
+                "ps_name": ps_name,
+                "call_sign": call_sign,
+                "rms_dbfs": stats["rms_dbfs"] if stats else None,
+            })
+            _write_progress()
+        else:
+            status = "done"
+    except Exception as exc:
+        logger.error("bandscan-identify %s: pass failed: %s", receiver_id, exc, exc_info=True)
+        status = "error"
+    finally:
+        try:
+            if original_freq_hz > 0:
+                receiver.set_frequency(original_freq_hz)
+                logger.info(
+                    "bandscan-identify %s: restored original frequency %.3f MHz",
+                    receiver_id, original_freq_hz / 1e6,
+                )
+        except Exception as exc:
+            logger.error(
+                "bandscan-identify %s: failed to restore original frequency %.3f MHz: %s",
+                receiver_id, original_freq_hz / 1e6, exc, exc_info=True,
+            )
+        if status == "running":
+            status = "done"
+        _write_progress()
+        try:
+            redis_client.delete(active_key)
+        except Exception as exc:
+            logger.debug("bandscan-identify %s: active-flag cleanup failed: %s", receiver_id, exc)
         with _state.lock:
             _state.active_bandscans.pop(receiver_id, None)
 
@@ -1293,6 +1523,26 @@ def publish_samples_and_metrics():
                     # Check if receiver is running
                     is_running = receiver._running.is_set() if hasattr(receiver, '_running') else False
                     if not is_running:
+                        continue
+
+                    if identifier in _state.active_bandscans:
+                        # A Bandscan sweep or Identify Stations pass owns this
+                        # receiver's samples for its duration (see
+                        # _run_bandscan_sweep / _run_bandscan_identify, both
+                        # of which call receiver.get_samples() directly from
+                        # their own thread). Reading here too races the same
+                        # underlying ring buffer as that thread -- two
+                        # concurrent consumers each only see a fragmented
+                        # subset of the real stream, since (per the capture-
+                        # tap comment a few lines below) the publisher is
+                        # normally the *only* thread draining it.  A coarse
+                        # RMS level measurement tolerates that fragmentation
+                        # well enough to look fine; RDS decode does not, since
+                        # Costas/M&M lock needs an unbroken, phase-continuous
+                        # stream across many consecutive reads. Confirmed
+                        # live: Identify Stations decoded 0/9 real peaks --
+                        # including a station the persistent live monitor
+                        # decodes on every pass -- until this guard was added.
                         continue
 
                     # Batch this iteration's IQ publish, spectrum setex, and
@@ -2462,6 +2712,60 @@ def process_commands(redis_client, timeout: int = 2):
                         daemon=True,
                     )
                     scan_thread.start()
+                    result = {
+                        "command_id": command_id,
+                        "success": True,
+                        "started": True,
+                    }
+            elif action == "bandscan_identify":
+                # "Identify Stations": a second, explicit pass over the
+                # peaks a prior sweep already found, retuning to each long
+                # enough to attempt an RDS PS decode (see
+                # _run_bandscan_identify's docstring for why this can't be
+                # folded into the sweep itself). Same "did it start, not
+                # the outcome" contract as bandscan_sweep, and shares its
+                # active_bandscans concurrency guard -- either kind of scan
+                # already running for this receiver blocks starting the
+                # other.
+                receiver = radio_manager.get_receiver(receiver_id)
+                target_freqs_hz = command.get("target_freqs_hz") or []
+                if not receiver:
+                    result = {
+                        "command_id": command_id,
+                        "success": False,
+                        "error": f"Receiver '{receiver_id}' not found",
+                    }
+                elif not target_freqs_hz:
+                    result = {
+                        "command_id": command_id,
+                        "success": False,
+                        "error": "target_freqs_hz is required",
+                    }
+                elif receiver_id in _state.active_bandscans:
+                    result = {
+                        "command_id": command_id,
+                        "success": False,
+                        "error": "A bandscan is already running for this receiver",
+                    }
+                else:
+                    cancel_event = threading.Event()
+                    with _state.lock:
+                        _state.active_bandscans[receiver_id] = cancel_event
+                    identify_thread = threading.Thread(
+                        target=_run_bandscan_identify,
+                        kwargs=dict(
+                            receiver=receiver,
+                            receiver_id=receiver_id,
+                            redis_client=redis_client,
+                            cancel_event=cancel_event,
+                            target_freqs_hz=[float(f) for f in target_freqs_hz],
+                            dwell_sec=float(command.get("dwell_sec", 6.0) or 6.0),
+                            settle_sec=float(command.get("settle_sec", 0.2) or 0.2),
+                        ),
+                        name=f"BandscanIdentify-{receiver_id}",
+                        daemon=True,
+                    )
+                    identify_thread.start()
                     result = {
                         "command_id": command_id,
                         "success": True,
