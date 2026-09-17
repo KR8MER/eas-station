@@ -301,11 +301,15 @@
                 </div>
                 <div class="card-body">
                     {# message_text is TTS narration derived from the decoded/CAP alert
-                       text, which can originate from an external feed -- escape before
-                       inserting the deliberately-safe <br> so `| safe` never re-exposes
-                       raw HTML/script from that source. #}
+                       text, which can originate from an external feed -- the nl2br filter
+                       escapes it and inserts the <br> in one step. Do NOT inline this as
+                       `| e | replace('\n', '<br>') | safe`: Jinja's |replace filter chained
+                       onto an already-escaped Markup value routes to Markup.replace(),
+                       which re-escapes the <br> itself, so it renders as literal visible
+                       text instead of a line break. See
+                       webapp/template_helpers.py::_nl2br_filter. #}
                     {% if summary_data.message_text %}
-                    <p class="alert-content mb-3">{{ summary_data.message_text | e | replace('\n', '<br>') | safe }}</p>
+                    <p class="alert-content mb-3">{{ summary_data.message_text | nl2br }}</p>
                     {% endif %}
                     <dl class="row mb-0">
                         {% if summary_data.headline %}
