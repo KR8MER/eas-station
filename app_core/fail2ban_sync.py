@@ -72,6 +72,18 @@ STARTUP_DELAY_SECONDS = 30
 # over on its next tick instead of leaving the sync permanently orphaned.
 _LEADER_LOCK_KEY = "fail2ban_sync:leader"
 
+# Atomically renews the lock's TTL only if we still hold it. A plain
+# get()-then-expire() pair has a check-then-act race: the key can expire and
+# be claimed by another worker between the two calls, letting the renewing
+# worker wrongly believe it is still leader.
+_RENEW_LOCK_SCRIPT = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('expire', KEYS[1], ARGV[2])
+else
+    return 0
+end
+"""
+
 
 def run_sync_cycle() -> dict:
     """Run one fail2ban sync cycle. Must be called inside a Flask app context.
@@ -171,11 +183,7 @@ class Fail2banSyncScheduler:
             ttl = self._interval * 3
             if redis_client.set(_LEADER_LOCK_KEY, self._worker_id, nx=True, ex=ttl):
                 return True
-            holder = redis_client.get(_LEADER_LOCK_KEY)
-            if holder == self._worker_id:
-                redis_client.expire(_LEADER_LOCK_KEY, ttl)
-                return True
-            return False
+            return bool(redis_client.eval(_RENEW_LOCK_SCRIPT, 1, _LEADER_LOCK_KEY, self._worker_id, ttl))
         except Exception as exc:
             logger.warning(
                 "Could not acquire fail2ban-sync leader lock (Redis unreachable?): %s "

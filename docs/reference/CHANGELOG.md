@@ -7,6 +7,13 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.10.1] - 2026-09-16 - Fix missing LED degree glyph and a fail2ban leader-lock race
+
+A code review of the two preceding commits (the Icecast/fail2ban leader-lock fix and the LED screen editor WYSIWYG fix) turned up two follow-on bugs.
+
+- **Fixed a missing `°` glyph in the LED screen editor's client-side font table**: `LED_GLYPH_5x7` in `static/js/screen-editor.js` omitted the degree symbol that `scripts/dotmatrix_preview_font.py`'s server-side `FONT_5x7` defines, so a legacy LED text line containing `°` (e.g. a temperature message) rendered as a blank space on the live editing canvas while the "pixel-accurate" preview modal rendered the real glyph -- the exact WYSIWYG mismatch the prior commit set out to fix, reintroduced for one character.
+- **Fixed a non-atomic leader-lock renewal race** in `app_core/fail2ban_sync.py`: `_acquire_or_renew_leader_lock()` renewed its Redis lease with a separate `get()` then `expire()` call, so the lock key could expire and be claimed by another worker in the gap between the two, letting the renewing worker wrongly believe it still held leadership and briefly run `fail2ban-client`/`systemctl` alongside the new leader in the same cycle. Renewal now uses a small atomic Lua script (`_RENEW_LOCK_SCRIPT`, run via `EVAL`) that checks ownership and extends the TTL in one round-trip.
+
 ## [3.10.0] - 2026-09-16 - LED screen editor: honest WYSIWYG for the Alpha font/colour selection
 
 An audit of the Alpha M-protocol driver and its "WYSIWYG" screen editor (prompted by suspicion the editor was sloppy even though the protocol driver itself checked out as solid and well-tested) found the editor's live canvas and the "pixel-accurate" preview modal both rendered every Alpha `Font` selection at the same fixed size -- picking a larger font changed nothing an operator could see. Tracing it further turned up a second, related class of bug: the legacy 4-line LED text mode reused the same free-form draggable-element canvas as OLED/VFD, which let an operator set several per-element fields (font size, alignment, invert, etc.) that were silently discarded and had zero effect on the real 4-line sign message, and building the saved message used raw element-insertion order rather than the order lines actually appeared top-to-bottom on the canvas.

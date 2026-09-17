@@ -156,6 +156,15 @@ class _FakeRedis:
     def expire(self, key, ttl):
         return key in self.store
 
+    def eval(self, script, numkeys, *keys_and_args):
+        # Only the renew-lock script is ever run against this fake; emulate
+        # its atomic get-then-expire semantics directly rather than parsing
+        # Lua.
+        key, value, ttl = keys_and_args
+        if self.store.get(key) == value:
+            return self.expire(key, ttl)
+        return 0
+
 
 def _install_fake_redis(monkeypatch):
     # Patch the already-imported module object directly rather than via
