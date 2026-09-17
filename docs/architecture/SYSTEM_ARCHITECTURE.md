@@ -712,8 +712,6 @@ erDiagram
     CAPAlert ||--o{ EASMessage : "generates"
     Boundary ||--o{ Intersection : "affected_by"
     RadioReceiver ||--o{ RadioReceiverStatus : "has"
-    AudioSourceMetrics ||--|| AudioHealthStatus : "health_of"
-    AudioAlert }o--|| AudioSourceMetrics : "triggered_by"
     LEDMessage }o--|| CAPAlert : "displays"
 
     CAPAlert {

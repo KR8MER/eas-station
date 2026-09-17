@@ -179,7 +179,6 @@ erDiagram
     Boundary ||--o{ Intersection : intersects
     CAPAlert ||--o{ EASMessage : generates
     RadioReceiver ||--o{ RadioReceiverStatus : reports
-    AudioSource ||--o{ AudioSourceMetrics : captures
     DisplayScreen ||--o{ ScreenRotation : rotates
     AdminUser ||--o{ AuditLog : creates
 
