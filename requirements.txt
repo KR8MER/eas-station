@@ -170,7 +170,18 @@ arm_pyart==2.2.5  # NEXRAD Archive II decode; RadarMapDisplay.plot_ppi_map rende
 # Pinned to the versions already verified working together in production.
 fsspec==2026.7.0
 s3fs==2026.7.0
-boto3==1.43.92  # Unencrypted, anonymous read access to NOAA's public Level II archive on AWS Open Data (no credentials needed)
+# s3fs's own dependency, aiobotocore, lags boto3/botocore releases -- its
+# newest release (3.9.1) caps botocore at <1.43.76, while a boto3 bump
+# past 1.43.75 forces a botocore floor aiobotocore can't satisfy yet
+# ("ResolutionImpossible", the same failure mode as the fsspec/s3fs pin
+# above, one dependency layer deeper). Pinning all three explicitly keeps
+# the resolver from wandering into that gap. Bump boto3/botocore past
+# 1.43.75 only once a newer aiobotocore release raises this ceiling --
+# check https://pypi.org/pypi/aiobotocore/json for its current botocore
+# upper bound first.
+aiobotocore==3.9.1
+botocore==1.43.75
+boto3==1.43.75  # Unencrypted, anonymous read access to NOAA's public Level II archive on AWS Open Data (no credentials needed)
 cartopy==0.25.0  # Geographic (Web Mercator) projection for plot_ppi_map, matching the OSM basemap tiles it composites onto
 cmweather==0.3.2  # Registers the 'NWSRef' reflectivity colormap (the standard ~15-band NWS scale most radar apps use, not a hand-rolled ramp)
 matplotlib==3.11.1  # plot_ppi_map's rendering backend (Agg, headless) -- pcolormesh draws each gate's true polar footprint
