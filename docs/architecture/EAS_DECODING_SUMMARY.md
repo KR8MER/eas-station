@@ -227,7 +227,7 @@ graph TB
    - Based on multimon-ng algorithm
    - <200ms detection latency
 
-2. **ContinuousEASMonitor** (`eas_monitor.py`)
+2. **EASMonitor** (`eas_monitor.py`)
    - Coordinates audio sources
    - Manages decoder lifecycle
    - Handles alert callbacks
@@ -257,7 +257,7 @@ graph TB
 2. **Raspberry Pi 4/5 recommended** - Pi 3 adequate
 3. **<5% CPU for EAS decoding** - plenty of headroom
 4. **<200ms alert detection** - meets commercial standards
-5. **Monitor status at** `/eas-monitor-status`
+5. **Monitor status at** `/admin/eas_decoder_monitor` (page) or `/api/eas-monitor/status` (JSON)
 
 ### If You're Running Old Version
 
@@ -376,11 +376,17 @@ A 4th-order Butterworth bandpass filter (1200–2500 Hz) is now applied **before
 any demodulation** in both decoders.  This rejects out-of-band noise and closely
 matches the `SoftwareBandpass(1822.9 Hz, Q=3)` used by EAS-Tools.
 
-- **File decoder** (`eas_decode.py`): `_apply_bandpass_filter()` applied once
-  per file in `_decode_at_sample_rate()`.
+- **File decoder** (`eas_decode.py`): applied once per file in
+  `_decode_at_sample_rate()`.
 - **Streaming decoder** (`streaming_same_decoder.py`): Stateful scipy `sosfilt`
   with persisted `zi` (initial conditions) applied at the start of every
   `process_samples()` call.  Filter state is never lost between chunks.
+
+  (This filter, along with ENDEC detection and burst-timing below, was
+  originally implemented as private functions inside `eas_decode.py` itself;
+  see "Architectural Consolidation" below for where it actually lives now —
+  `apply_bandpass_filter()` in `app_utils/eas_demod.py`, shared by both
+  decoders.)
 
 ### 2. Numpy Vectorization (File Decoder)
 
@@ -403,9 +409,9 @@ inter-burst gap timing:
 | DASDEC / SAGE / NWS | ~1000 ms | `ENDEC_MODE_DEFAULT` |
 | Unknown / insufficient data | — | `ENDEC_MODE_UNKNOWN` |
 
-Logic lives in `app_utils/eas_decode.py` (`_detect_endec_mode`,
-`_compute_burst_timing_gaps_ms`) and is **shared** by both decoders to avoid
-duplication.
+Logic now lives in `app_utils/eas_demod.py` (`detect_endec_mode()`,
+`compute_burst_timing_gaps_ms()` — see "Architectural Consolidation" below)
+and is **shared** by both decoders to avoid duplication.
 
 ### 4. Burst Timing Tracking
 
@@ -484,4 +490,4 @@ streaming decoder.
 **Document Version**: 1.1
 **Updated**: 2026-03-13
 **Status**: Current system correct ✅ — improvements applied to both decoders
-**Action Required**: None urgent; see Architectural Debt section for planned consolidation
+**Action Required**: None — the consolidation planned above has landed (see "Architectural Consolidation" section)

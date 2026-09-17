@@ -18,6 +18,8 @@ All frontend libraries are vendored locally under `static/vendor/` (no CDN depen
 | Chart.js (v3) + datalabels + matrix + date-fns adapter | 3.x | `static/vendor/chartjs/` | Dashboards & analytics charts |
 | jsPDF | 4.2.1 | `static/vendor/jspdf/jspdf.umd.min.js` | Client-side PDF generation (Statistics dashboard report) |
 | html2canvas | 1.4.1 | `static/vendor/jspdf/html2canvas.min.js` | DOM → canvas snapshots for PDF sections that aren't `<canvas>` |
+| Socket.IO client | latest stable | `static/vendor/socketio/socket.io.min.js` | Loaded once in `base.html` for the site-wide WebSocket connection — never re-load it from a CDN or a page-local copy |
+| Three.js | latest stable | `static/vendor/three/three.min.js` | 3D GPS sky-plot rendering on the GPS Dashboard |
 
 > When adding a new vendored frontend library, also update this table, the [About page](https://github.com/KR8MER/eas-station/blob/main/templates/about.html) Software Stack section, and the project [README](https://github.com/KR8MER/eas-station/blob/main/README.md) so the dependency is discoverable.
 
@@ -35,6 +37,7 @@ All frontend libraries are vendored locally under `static/vendor/` (no CDN depen
 - [File Upload](#file-upload)
 
 ### Display Components
+- [Page Headers](#page-headers)
 - [Cards](#cards)
 - [Tables](#tables)
 - [Badges & Labels](#badges-labels)
@@ -346,6 +349,55 @@ Standard text input with validation states.
 ---
 
 ## Display Components
+
+### Page Headers
+
+The canonical header every page must use — never hand-roll a `.page-header`
+div in a page template. Set the `header_*` variables, then include the
+partial (it inherits the calling template's context):
+
+```jinja
+{% set header_icon = 'fas fa-bell' %}
+{% set header_title = 'Alert History' %}
+{% set header_subtitle = 'View and manage emergency alerts from all sources' %}
+{% set header_actions %}
+    <a href="/" class="btn btn-outline-light">
+        <i class="fas fa-gauge-high me-1"></i>Dashboard
+    </a>
+{% endset %}
+{% include 'components/page_header.html' %}
+```
+
+**Parameters:**
+- `header_title` — page title (required)
+- `header_subtitle` — one-line description under the title (optional)
+- `header_icon` — Font Awesome classes for the icon tile (optional)
+- `header_actions` — pre-rendered HTML for the action button group, built as
+  a capture block (optional; emitted with `|safe`, so only ever pass trusted
+  markup, never raw user input)
+- `header_variant` — set to `'gradient'` for the vibrant multi-color
+  `.page-header-gradient` treatment (optional)
+
+Styling lives in `static/css/styles.css` under "Standard Page Header"; the
+partial (`templates/components/page_header.html`) only supplies markup.
+
+A separate gradient **hero banner** (`templates/partials/hero.html`) exists
+for landing-style pages (About, Attribution, Support) that want a title,
+lead copy, an optional centered logo, and a row of pill chips instead of the
+standard header's icon-tile-plus-actions layout:
+
+```jinja
+{% with
+    hero_title='Alert History',
+    hero_lead='Every decoded alert, with the paper trail.',
+    hero_chips=[
+        {'icon': 'fas fa-broadcast-tower', 'label': 'Live'},
+        {'icon': 'fas fa-database', 'label': 'Audited'},
+    ]
+%}
+    {% include 'partials/hero.html' %}
+{% endwith %}
+```
 
 ### Cards
 

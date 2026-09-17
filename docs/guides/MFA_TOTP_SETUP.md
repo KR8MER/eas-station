@@ -163,6 +163,6 @@ The MFA challenge session expires after 5 minutes. Return to `/login` and authen
 ## Security Notes
 
 - TOTP secrets are stored in the database; ensure the database is protected with a strong password and access controls.
-- Backup codes are stored as bcrypt hashes — even with database access, plaintext codes cannot be recovered.
+- Backup codes are stored as peppered scrypt hashes (`werkzeug.security.generate_password_hash`, the same scheme used for account passwords) — even with database access, plaintext codes cannot be recovered.
 - Audit log entries are created for all MFA events: enrollment, successful verification, failed attempts, and backup code usage.
 - Review MFA-related audit events at **Admin → Audit Logs**.

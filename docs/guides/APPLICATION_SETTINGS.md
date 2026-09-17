@@ -44,11 +44,29 @@ When you save a new backup directory, EAS Station™ tries to create it right aw
 
 Both fields are optional. Leave them blank to use the built-in defaults. Useful for identifying the station (e.g. "Putnam County EAS Monitor").
 
+### Project Honeypot (http:BL)
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| **Enabled** | Check login-attempt IPs against Project Honeypot's http:BL reputation service | Off |
+| **Access Key** | Your Project Honeypot API access key (write-only — the saved value is never redisplayed; leave blank on save to keep the existing key) | *(unset)* |
+
+Saved through the same form/`update` endpoint as the settings above.
+
+### Data Retention
+
+Automated pruning of aged records, configured separately via a JSON API
+(`GET`/`PUT /admin/application/retention`) rather than the main settings form.
+Each data category has its own configurable retention age; a value of `0`
+disables pruning for that category. A background `RetentionScheduler` thread
+runs the sweep on a periodic schedule. See `app_core/retention.py` for the
+full set of prunable categories.
+
 ### Password Policy
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| **Minimum Length** | Required password length (1–128 characters) | 8 |
+| **Minimum Length** | Required password length (1–128 characters) | 15 |
 | **Require Uppercase** | At least one uppercase letter | Off |
 | **Require Lowercase** | At least one lowercase letter | Off |
 | **Require Digits** | At least one number | Off |
@@ -69,7 +87,7 @@ Some settings must still live in your `.env` file because they are needed before
 - `CACHE_TYPE` — Cache backend type
 - `FLASK_ENV` / `FLASK_DEBUG` — Flask startup mode
 
-Manage these through **Settings → Environment** (`/settings/environment`) or by editing `.env` directly.
+Manage these through **Settings → Environment** (`/admin/environment`) or by editing `.env` directly.
 
 ---
 
@@ -80,6 +98,7 @@ Manage these through **Settings → Environment** (`/settings/environment`) or b
 | `GET` | `/admin/application/` | `system.configure` | Render the settings page |
 | `POST` | `/admin/application/update` | `system.configure` | Save settings (form fields); returns JSON |
 | `GET` | `/admin/application/status` | `system.view_config` | Current settings as JSON |
+| `GET`/`PUT` | `/admin/application/retention` | `system.configure` | Read/update data-retention policies (JSON API) |
 
 The `/status` endpoint returns `{"success": true, "settings": {...}}`, or HTTP 404 if no settings row has been created yet.
 

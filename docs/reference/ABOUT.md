@@ -42,22 +42,22 @@ The application combines open-source tooling and optional cloud integrations. Ve
 
 ### Application Framework
 - Python 3.13 runtime (compatible with current Debian/Raspberry Pi OS SoapySDR bindings)
-- Flask 3.1.2 web framework
-- Werkzeug 3.1.4 WSGI utilities
+- Flask 3.1.3 web framework
+- Werkzeug 3.1.8 WSGI utilities
 - Flask-SQLAlchemy 3.1.1 ORM integration
-- SQLAlchemy 2.0.45 ORM core
-- Gunicorn production WSGI server
+- SQLAlchemy 2.0.52 ORM core
+- Gunicorn 26.2.0 production WSGI server
 
 ### Data and Spatial Layer
 - PostgreSQL 17 with the PostGIS extension (external service)
-- GeoAlchemy2 0.18.1 for spatial ORM bindings
-- psycopg2-binary 2.9.11 PostgreSQL driver
+- GeoAlchemy2 0.20.0 for spatial ORM bindings
+- psycopg2-binary 2.9.13 PostgreSQL driver
 
 ### System and Utilities
-- requests 2.32.5 for CAP feed retrieval and IPAWS integration
-- pytz 2025.2 timezone utilities
-- psutil 7.1.3 system health and receiver monitoring
-- python-dotenv 1.2.1 configuration loading
+- requests 2.34.2 for CAP feed retrieval and IPAWS integration
+- pytz 2026.3.post1 timezone utilities
+- psutil 7.2.2 system health and receiver monitoring
+- python-dotenv 1.2.3 configuration loading
 - cryptography — Ed25519 signing and SHA-256 hashing backing the tamper-evident `audit_logs` chain (see `app_core/auth/audit.py::AuditLogger.verify_chain`)
 
 ### Front-End Tooling

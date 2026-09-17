@@ -40,7 +40,7 @@ If you contribute on behalf of an organization, ensure you have the necessary au
    - `templates/partials/tech_stack_badges.html` — the live page footer badge strip (single source of truth, included by `templates/base.html`).
    - `README.md` — the curated badge block at the top **and** the exhaustive `## 📚 Attributions & Open-Source Credits` table further down.
 
-   The drift guard `tests/test_tech_stack_badges.py` enforces that a curated subset of versioned shields matches the version pinned in `requirements.txt`, and that system-level dependencies (chrony, gpsd, FFmpeg, eSpeak NG, Icecast, Nginx, Docker, …) remain attributed in both places. Do not inline the badge list back into `base.html`; the partial is the single source of truth.
+   The drift guard `tests/test_tech_stack_badges.py` enforces that a curated subset of versioned shields matches the version pinned in `requirements.txt`, and that system-level dependencies (PostgreSQL, PostGIS, Redis, Nginx, systemd, Icecast, chrony/gpsd, FFmpeg, eSpeak NG, …) remain attributed in both places. EAS Station is deployed bare-metal, not in containers — don't add a Docker attribution row. Do not inline the badge list back into `base.html`; the partial is the single source of truth.
 6. **Run the test suite or targeted regression checks** (alert ingest, SAME generation, GPIO control, audio playout) before opening a pull request so reviewers know nothing critical regressed.
 7. **Submit a pull request** describing the change, its motivation, and any verification steps performed.
 

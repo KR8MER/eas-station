@@ -40,21 +40,39 @@ python tools/create_backup.py --output-dir /var/backups/eas-station --label conf
 
 ## Backup Storage Location
 
-By default, backups are stored at `/var/backups/eas-station/`. Each backup is a directory named `backup-YYYY-MM-DDTHH-MM-SS/`.
+By default, backups are stored at `/var/backups/eas-station/`. Each backup is a directory named `backup-YYYYMMDD-HHMMSS/`.
 
-Override the location via the `BACKUP_DIR` environment variable in `.env`:
-
-```
-BACKUP_DIR=/mnt/nas/eas-station-backups
-```
+Change the location from **Admin → Application Settings** (the "Backup Directory"
+field) — see [Application Settings](APPLICATION_SETTINGS.md). That setting is
+pushed into the running Flask config immediately, no restart needed, and is
+the source both the web UI and the automatic scheduler (below) use. A
+`BACKUP_DIR` environment variable in `.env` still works as the bootstrap
+default before any database setting has been saved.
 
 ---
 
 ## Scheduling Automatic Backups
 
-EAS Station™ does not include a built-in scheduler for backups. Use a cron job or systemd timer to automate them.
+EAS Station™ has a **built-in automatic-backup scheduler**
+(`app_core/backup_scheduler.py`), disabled by default. Configure it from
+**Admin → Backups → Auto-Backup**, or via the API:
 
-**Daily backup via cron (runs as the `eas-station` user):**
+```bash
+# Enable, run every 24 hours
+curl -X POST https://your-eas-station.example.com/api/backups/auto-backup/config \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true, "interval_hours": 24}'
+
+# Trigger an out-of-band run immediately
+curl -X POST https://your-eas-station.example.com/api/backups/auto-backup/trigger
+```
+
+The scheduler also prunes old automatic backups and records a verification
+run after each one. If you'd rather drive backups externally instead (e.g.
+from a different host), a cron job calling `tools/create_backup.py` still
+works exactly as shown above.
+
+**Daily backup via cron (runs as the `eas-station` user) — alternative to the built-in scheduler:**
 
 ```bash
 sudo crontab -u eas-station -e
@@ -95,7 +113,7 @@ Before relying on a backup for restore, verify its integrity:
 
 ```bash
 curl -H "X-API-Key: <key>" \
-     https://your-eas-station.example.com/api/backups/validate/backup-2025-02-20T02-00-00
+     https://your-eas-station.example.com/api/backups/validate/backup-20250220-020000
 ```
 
 Response:
@@ -136,20 +154,31 @@ Response:
 ```bash
 # Full restore
 python tools/restore_backup.py \
-  --backup-dir /var/backups/eas-station/backup-2025-02-20T02-00-00 \
+  --backup-dir /var/backups/eas-station/backup-20250220-020000 \
   --force
 
 # Database only
 python tools/restore_backup.py \
-  --backup-dir /var/backups/eas-station/backup-2025-02-20T02-00-00 \
+  --backup-dir /var/backups/eas-station/backup-20250220-020000 \
   --database-only \
   --force
 
 # Skip media (faster)
 python tools/restore_backup.py \
-  --backup-dir /var/backups/eas-station/backup-2025-02-20T02-00-00 \
+  --backup-dir /var/backups/eas-station/backup-20250220-020000 \
   --skip-media \
   --force
+
+# Skip database (restore config/media only)
+python tools/restore_backup.py \
+  --backup-dir /var/backups/eas-station/backup-20250220-020000 \
+  --skip-database \
+  --force
+
+# Validate a backup without restoring anything
+python tools/restore_backup.py \
+  --backup-dir /var/backups/eas-station/backup-20250220-020000 \
+  --dry-run
 ```
 
 After a command-line restore, run database migrations to ensure the schema is current:
@@ -201,8 +230,8 @@ Via the API:
 
 ```bash
 curl -H "X-API-Key: <key>" \
-     -o backup-2025-02-20.tar.gz \
-     https://your-eas-station.example.com/api/backups/download/backup-2025-02-20T02-00-00
+     -o backup-20250220.tar.gz \
+     https://your-eas-station.example.com/api/backups/download/backup-20250220-020000
 ```
 
 ---

@@ -156,14 +156,19 @@ Waveshare → Device
 
 ### EAS Station™ Configuration
 
-```bash
-# For Alpha LED Sign
-LED_SIGN_IP=192.168.8.122
-LED_SIGN_PORT=10001
+These settings are stored in the database and configured through the web
+UI on **Admin → Hardware Settings** — not through `.env`/environment
+variables (legacy `LED_*`/`VFD_*` env vars are only imported once, during
+the initial migration, and are not read at runtime afterward):
 
-# For VFD Display
-VFD_PORT=socket://192.168.8.122:10001
-VFD_BAUDRATE=38400
+```
+# For Alpha LED Sign (Admin → Hardware Settings → LED Sign)
+IP Address: 192.168.8.122
+Port: 10001
+
+# For VFD Display (Admin → Hardware Settings → VFD)
+Port: socket://192.168.8.122:10001
+Baud Rate: 38400
 ```
 
 ---
@@ -242,14 +247,19 @@ Enable RFC2217: Yes (optional, for compatibility)
 
 ### EAS Station™ Configuration
 
-```bash
-# For Alpha LED Sign
-LED_SIGN_IP=192.168.8.122
-LED_SIGN_PORT=10001
+These settings are stored in the database and configured through the web
+UI on **Admin → Hardware Settings** — not through `.env`/environment
+variables (legacy `LED_*`/`VFD_*` env vars are only imported once, during
+the initial migration, and are not read at runtime afterward):
 
-# For VFD Display
-VFD_PORT=socket://192.168.8.122:10001
-VFD_BAUDRATE=38400
+```
+# For Alpha LED Sign (Admin → Hardware Settings → LED Sign)
+IP Address: 192.168.8.122
+Port: 10001
+
+# For VFD Display (Admin → Hardware Settings → VFD)
+Port: socket://192.168.8.122:10001
+Baud Rate: 38400
 ```
 
 ---
@@ -340,14 +350,19 @@ Force Transmit: 100 ms
 
 ### EAS Station™ Configuration
 
-```bash
-# For Alpha LED Sign
-LED_SIGN_IP=192.168.8.122
-LED_SIGN_PORT=10001
+These settings are stored in the database and configured through the web
+UI on **Admin → Hardware Settings** — not through `.env`/environment
+variables (legacy `LED_*`/`VFD_*` env vars are only imported once, during
+the initial migration, and are not read at runtime afterward):
 
-# For VFD Display
-VFD_PORT=socket://192.168.8.122:10001
-VFD_BAUDRATE=38400
+```
+# For Alpha LED Sign (Admin → Hardware Settings → LED Sign)
+IP Address: 192.168.8.122
+Port: 10001
+
+# For VFD Display (Admin → Hardware Settings → VFD)
+Port: socket://192.168.8.122:10001
+Baud Rate: 38400
 ```
 
 ---
@@ -425,14 +440,19 @@ Rx Delay: 100 ms
 
 ### EAS Station™ Configuration
 
-```bash
-# For Alpha LED Sign
-LED_SIGN_IP=192.168.8.122
-LED_SIGN_PORT=10001
+These settings are stored in the database and configured through the web
+UI on **Admin → Hardware Settings** — not through `.env`/environment
+variables (legacy `LED_*`/`VFD_*` env vars are only imported once, during
+the initial migration, and are not read at runtime afterward):
 
-# For VFD Display
-VFD_PORT=socket://192.168.8.122:10001
-VFD_BAUDRATE=38400
+```
+# For Alpha LED Sign (Admin → Hardware Settings → LED Sign)
+IP Address: 192.168.8.122
+Port: 10001
+
+# For VFD Display (Admin → Hardware Settings → VFD)
+Port: socket://192.168.8.122:10001
+Baud Rate: 38400
 ```
 
 ---
@@ -487,36 +507,30 @@ Telnet: Disable
 
 ## EAS Station™ Configuration
 
+These settings are database-backed (`hardware_settings` table) and
+configured entirely through the web UI. Legacy `LED_*`/`VFD_*` environment
+variables are only imported once during the initial migration and are not
+read at runtime afterward — editing `.env` after initial setup has no
+effect.
+
 ### For LED Signs (Alpha, BetaBrite, etc.)
 
 **Via Web UI:**
-1. Settings → Environment Variables → LED Display
-2. LED Sign IP Address: `192.168.8.122`
-3. LED Sign Port: `10001`
-4. Save and Restart Hardware Service
-
-**Via .env file:**
-```bash
-LED_SIGN_ENABLED=true
-LED_SIGN_IP=192.168.8.122
-LED_SIGN_PORT=10001
-LED_DEFAULT_TEXT=PUTNAM COUNTY,EMERGENCY MGMT,NO ALERTS,SYSTEM READY
-```
+1. **Admin → Hardware Settings → LED Sign**
+2. Enable **LED Sign**
+3. IP Address: `192.168.8.122`
+4. Port: `10001`
+5. Default Text: `PUTNAM COUNTY,EMERGENCY MGMT,NO ALERTS,SYSTEM READY`
+6. Save Settings, then restart the hardware service
 
 ### For VFD Displays (Noritake, etc.)
 
 **Via Web UI:**
-1. Settings → Environment Variables → VFD Display
-2. Connection: `socket://192.168.8.122:10001`
-3. Baud Rate: `38400`
-4. Save and Restart Hardware Service
-
-**Via .env file:**
-```bash
-VFD_DISPLAY_ENABLED=true
-VFD_PORT=socket://192.168.8.122:10001
-VFD_BAUDRATE=38400
-```
+1. **Admin → Hardware Settings → VFD**
+2. Enable **VFD Display**
+3. Port: `socket://192.168.8.122:10001`
+4. Baud Rate: `38400`
+5. Save Settings, then restart the hardware service
 
 ---
 
@@ -568,12 +582,13 @@ Port: 10001
 ### Test 5: EAS Station™ Logs
 
 ```bash
-# Check hardware service logs
-sudo journalctl -u eas-station-hardware.target -n 50
+# LED sign and VFD are both managed by the displays service
+sudo journalctl -u eas-station-displays.service -n 50
 
-# Look for:
-# ✅ "Connected to Alpha LED sign at 192.168.8.122:10001"
-# ✅ "Connected to Noritake VFD on socket://192.168.8.122:10001"
+# Look for a VFD connection log like:
+# "Connected to Noritake VFD on socket://192.168.8.122:10001 at 38400 baud"
+# The LED sign controller does not currently log a matching "connected"
+# message — absence of an error on save is the signal there.
 ```
 
 ---
@@ -673,14 +688,16 @@ Advanced:
 
 ### EAS Station™ Settings Summary
 
-```bash
+Configured on **Admin → Hardware Settings** (database-backed, not `.env`):
+
+```
 # LED Sign
-LED_SIGN_IP=192.168.8.122
-LED_SIGN_PORT=10001
+IP Address: 192.168.8.122
+Port: 10001
 
 # VFD Display
-VFD_PORT=socket://192.168.8.122:10001
-VFD_BAUDRATE=38400
+Port: socket://192.168.8.122:10001
+Baud Rate: 38400
 ```
 
 ---

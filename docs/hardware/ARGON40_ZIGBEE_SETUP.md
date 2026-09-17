@@ -177,7 +177,7 @@ channel that avoids Wi-Fi overlap reduces interference:
 |---------------|-----------|---------------|
 | 11 | 2405 MHz | Wi-Fi ch 1 — avoid |
 | 15 | 2425 MHz | Between ch 1 and 6 — good |
-| 20 | 2450 MHz | Wi-Fi ch 6 — avoid |
+| 20 | 2450 MHz | Between ch 6 and 11 — good |
 | 25 | 2475 MHz | Near Wi-Fi ch 11 — use with care |
 | 26 | 2480 MHz | Wi-Fi ch 11 — avoid |
 

@@ -515,88 +515,15 @@ If you need to report an issue or ask for help, collect this information:
 
 ### Automated Collection Script
 
-Save this as `collect_sdr_diagnostics.sh`:
+The repository already ships a working collector — `scripts/collect_sdr_diagnostics.sh`
+(357 lines: host info, USB devices, SDR enumeration, service status and logs,
+the `radio_receivers`/`audio_source_configs` database rows, and a Redis
+connection test). Run it from the install directory:
 
 ```bash
-#!/bin/bash
-# SDR Diagnostic Information Collection Script
-
-OUTPUT_FILE="sdr_diagnostics_$(date +%Y%m%d_%H%M%S).txt"
-
-echo "Collecting SDR diagnostic information..."
-echo "Output will be saved to: $OUTPUT_FILE"
-echo ""
-
-{
-  echo "============================================"
-  echo "EAS Station™ SDR Diagnostics"
-  echo "Date: $(date)"
-  echo "============================================"
-  echo ""
-  
-  echo "### HOST SYSTEM INFO ###"
-  echo "Hostname: $(hostname)"
-  echo "OS: $(uname -a)"
-  echo ""
-  
-  echo "### USB DEVICES ###"
-  lsusb
-  echo ""
-  
-  echo "### SDR DEVICE ENUMERATION ###"
-  SoapySDRUtil --find
-  echo ""
-  
-  echo "### SERVICE STATUS ###"
-  systemctl list-units 'eas-station-*' --no-pager
-  echo ""
-  
-  echo "### SDR SERVICE LOGS (last 50 lines) ###"
-  journalctl -u eas-station-sdr -n 50 --no-pager
-  echo ""
-  
-  echo "### AUDIO SERVICE LOGS (last 50 lines) ###"
-  journalctl -u eas-station-audio -n 50 --no-pager
-  echo ""
-  
-  echo "### DATABASE: RADIO RECEIVERS ###"
-    SELECT 
-      id, identifier, driver, frequency_hz, 
-      sample_rate, gain, modulation_type, 
-      audio_output, enabled, auto_start 
-    FROM radio_receivers;
-  " 2>&1 || echo "Failed to query database"
-  echo ""
-  
-  echo "### DATABASE: AUDIO SOURCES ###"
-    SELECT id, name, source_type, config_params, enabled, auto_start 
-    FROM audio_source_configs;
-  " 2>&1 || echo "Failed to query database"
-  echo ""
-  
-  echo "### REDIS CONNECTION TEST ###"
-  echo ""
-  
-  echo "### SDR DIAGNOSTICS SCRIPT ###"
-  echo ""
-  
-  echo "============================================"
-  echo "Diagnostic collection complete"
-  echo "============================================"
-  
-} | tee "$OUTPUT_FILE"
-
-echo ""
-echo "✓ Diagnostics saved to: $OUTPUT_FILE"
-echo ""
-echo "Please provide this file when reporting SDR issues."
-```
-
-Make it executable and run:
-
-```bash
-chmod +x collect_sdr_diagnostics.sh
-./collect_sdr_diagnostics.sh
+bash scripts/collect_sdr_diagnostics.sh
+# or write to a specific path:
+bash scripts/collect_sdr_diagnostics.sh /path/to/output.txt
 ```
 
 ### Manual Collection

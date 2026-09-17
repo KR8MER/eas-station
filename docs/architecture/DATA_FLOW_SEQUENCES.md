@@ -34,11 +34,9 @@ This sequence shows the complete path of a CAP alert from external sources throu
 ```mermaid
 sequenceDiagram
     participant NOAA as NOAA/IPAWS<br>CAP Feed
-    participant Poller as CAP Poller<br>cap_poller.py
-    participant Parser as XML Parser<br>parse_cap_xml()
-    participant AlertMgr as Alert Manager<br>alerts.py
+    participant Poller as CAPPoller<br>cap_poller.py<br>(parse_cap_alert, save_cap_alert<br>-- both methods on this class)
     participant DB as PostgreSQL<br>+ PostGIS
-    participant Spatial as Spatial Engine<br>boundaries.py
+    participant Spatial as Spatial helpers<br>alerts.py<br>(assign_alert_geometry,<br>calculate_alert_intersections)
     participant WebUI as Web UI<br>Dashboard
 
     Note over Poller: Polling interval triggered
@@ -46,36 +44,32 @@ sequenceDiagram
     Poller->>NOAA: HTTP GET CAP feed
     NOAA-->>Poller: CAP XML document
 
-    Poller->>Parser: Parse CAP XML
-    Parser->>Parser: Validate schema
-    Parser->>Parser: Extract alert data
-    Parser->>Parser: Parse geometry (polygon/circle/SAME)
+    Poller->>Poller: parse_cap_alert() -- lxml/ElementTree
+    Poller->>Poller: Extract alert data
+    Poller->>Poller: Parse geometry (polygon/circle/SAME)
 
     alt Invalid XML or Schema
-        Parser-->>Poller: Validation error
         Poller->>Poller: Log error, skip alert
     else Valid CAP
-        Parser-->>Poller: Parsed alert data
-
-        Poller->>AlertMgr: save_cap_alert(alert_data)
-        AlertMgr->>AlertMgr: Check duplicate by identifier
+        Poller->>Poller: save_cap_alert(alert_data)
+        Poller->>Poller: Check duplicate by identifier
 
         alt Duplicate found
-            AlertMgr->>AlertMgr: Compare msgType priority
-            Note right of AlertMgr: CANCEL > UPDATE > ALERT
+            Poller->>Poller: Compare msgType priority
+            Note right of Poller: CANCEL > UPDATE > ALERT
 
             alt Lower priority
-                AlertMgr-->>Poller: Skip (duplicate)
+                Poller->>Poller: Skip (duplicate)
             else Higher priority
-                AlertMgr->>DB: UPDATE cap_alerts SET...
-                DB-->>AlertMgr: Updated
+                Poller->>DB: UPDATE cap_alerts SET...
+                DB-->>Poller: Updated
             end
         else New alert
-            AlertMgr->>DB: INSERT INTO cap_alerts
-            DB-->>AlertMgr: alert_id
+            Poller->>DB: INSERT INTO cap_alerts
+            DB-->>Poller: alert_id
 
             alt Has geometry
-                AlertMgr->>Spatial: process_geometry(alert_id, geom)
+                Poller->>Spatial: assign_alert_geometry(alert, geometry_data)
                 Spatial->>Spatial: ST_SetSRID(geom, 4326)
                 Spatial->>Spatial: ST_IsValid(geom)
 
@@ -83,6 +77,7 @@ sequenceDiagram
                     Spatial->>Spatial: ST_MakeValid(geom)
                 end
 
+                Poller->>Spatial: calculate_alert_intersections(alert)
                 Spatial->>DB: ST_Intersects query
                 Note right of Spatial: Find intersecting boundaries
                 DB-->>Spatial: Intersection results
@@ -92,11 +87,10 @@ sequenceDiagram
                     Spatial->>DB: INSERT INTO intersections
                 end
 
-                Spatial-->>AlertMgr: Spatial processing complete
+                Spatial-->>Poller: Spatial processing complete
             end
 
-            AlertMgr->>DB: UPDATE alert status = 'processed'
-            AlertMgr-->>Poller: Alert saved successfully
+            Poller->>DB: UPDATE alert status = 'processed'
         end
     end
 
@@ -115,7 +109,7 @@ sequenceDiagram
 3. **Geometry → Intersection records** (ST_Intersects, area calculation)
 4. **Alert data → Database record** (CAPAlert model)
 
-**Files:** `poller/cap_poller.py:2166`, `app_core/alerts.py`, `app_core/boundaries.py`
+**Files:** `poller/cap_poller.py` (`CAPPoller.parse_cap_alert`, `CAPPoller.save_cap_alert`), `app_core/alerts.py` (`assign_alert_geometry`, `calculate_alert_intersections`)
 
 ---
 
@@ -221,16 +215,18 @@ sequenceDiagram
 This sequence shows how audio data from multiple sources flows through adapters in the **separated architecture** where SDR hardware is isolated.
 
 **Key Components:**
-- `sdr_hardware_service.py` - Exclusive SDR hardware access (separate systemd service)
-- `eas_monitoring_service.py` - Audio processing + EAS monitoring (separate systemd service)
-- `app_core/audio/redis_sdr_adapter.py` - Redis SDR subscriber
+- `sdr_hardware_service.py` - Exclusive SDR hardware access (`eas-station-sdr.service`)
+- `services/demod/` - FM/AM demodulation, split into its own process (`eas-station-demod.service`)
+- `eas_monitoring_service.py` - Audio processing + EAS monitoring (`eas-station-audio.service`)
+- `app_core/audio/redis_sdr_adapter.py` - `RedisSDRSourceAdapter`, subscribes to the demod service's output
 - `app_core/audio/sources.py` - Other source adapters
 - `app_core/audio/ingest.py` - AudioIngestController
 
 ```mermaid
 sequenceDiagram
-    participant SDR_HW as sdr-hardware-service<br>(USB access)
-    participant Redis as Redis Pub/Sub<br>sdr:samples:{id}
+    participant SDR_HW as eas-station-sdr<br>(USB access)
+    participant Redis as Redis Pub/Sub
+    participant Demod as eas-station-demod<br>services/demod
     participant RedisAdapter as RedisSDRSourceAdapter<br>redis_sdr_adapter.py
     participant Streams as HTTP/Icecast Streams<br>(LP1, LP2, SP1)
     participant StreamAdapter as StreamSourceAdapter<br>sources.py
@@ -240,7 +236,7 @@ sequenceDiagram
 
     Note over SDR_HW,EAS_Mon: Separated Architecture - NO shared hardware access
 
-    par SDR Hardware Service (separate systemd service)
+    par SDR Hardware Service
         SDR_HW->>SDR_HW: RadioManager.start_all()
         loop For each receiver (LP1, LP2, SP1)
             SDR_HW->>SDR_HW: Receiver.get_samples() → IQ samples
@@ -249,16 +245,22 @@ sequenceDiagram
             SDR_HW->>Redis: PUBLISH sdr:samples:LP2 {iq_data}
             SDR_HW->>Redis: PUBLISH sdr:samples:SP1 {iq_data}
         end
+    and Demod Service (separate systemd service)
+        Redis-->>Demod: SUBSCRIBE sdr:samples:<id>
+        loop For each receiver
+            Demod->>Demod: Decompress + decode IQ
+            Demod->>Demod: Demodulate IQ → Audio (FM/AM), RBDS decode
+            Demod->>Redis: PUBLISH demod:audio:<id> {pcm}
+            Demod->>Redis: SET demod:status:<id> {stereo lock, RBDS, ...}
+        end
     and EAS Monitoring Service (separate systemd service)
-        Note over RedisAdapter: Subscribes to Redis channels
-        RedisAdapter->>Redis: SUBSCRIBE sdr:samples:LP1
-        RedisAdapter->>Redis: SUBSCRIBE sdr:samples:LP2
-        RedisAdapter->>Redis: SUBSCRIBE sdr:samples:SP3
-        
-        loop Receive IQ samples via Redis
-            Redis-->>RedisAdapter: IQ samples (compressed)
-            RedisAdapter->>RedisAdapter: Decompress + decode
-            RedisAdapter->>RedisAdapter: Demodulate IQ → Audio (FM/AM)
+        Note over RedisAdapter: Subscribes to the demod service's output
+        RedisAdapter->>Redis: SUBSCRIBE demod:audio:LP1
+        RedisAdapter->>Redis: SUBSCRIBE demod:audio:LP2
+        RedisAdapter->>Redis: SUBSCRIBE demod:audio:SP1
+
+        loop Receive demodulated audio via Redis
+            Redis-->>RedisAdapter: PCM audio chunks
             RedisAdapter->>Controller: Audio PCM chunks
         end
     and HTTP Stream Sources
@@ -280,12 +282,13 @@ sequenceDiagram
     Note over EAS_Mon: ALL sources monitored simultaneously (not just highest priority)
 ```
 
-**Critical Architecture Changes (v2.16.0):**
+**Critical Architecture Changes (v2.16.0, demod split later):**
 
-1. **SDR Hardware Separation**: 
-   - SDR hardware access ONLY in `sdr-hardware-service.py` (separate systemd service with USB access)
-   - No RadioManager in `eas-monitoring-service.py`
-   - Communication via Redis pub/sub: `sdr:samples:{receiver_id}`
+1. **SDR Hardware Separation**:
+   - SDR hardware access ONLY in `sdr_hardware_service.py` (`eas-station-sdr.service`, USB access)
+   - FM/AM demodulation later split out into its own `eas-station-demod.service` (`services/demod/`), so a demodulation crash can't take Icecast output down with it
+   - `eas-station-audio.service` (`eas_monitoring_service.py`) receives already-demodulated PCM audio, not raw IQ
+   - Communication via Redis pub/sub: `sdr:samples:{receiver_id}` (raw IQ) → `demod:audio:{receiver_id}` / `demod:status:{receiver_id}` (demodulated audio + decoder status)
 
 2. **Per-Source EAS Monitoring**:
    - Each source has its own BroadcastQueue
@@ -294,15 +297,16 @@ sequenceDiagram
    - Fixed bug where only highest-priority source was monitored
 
 3. **Data Transformations:**
-   - **IQ samples (SDR)**: Complex → Demodulated PCM (FM/AM/NFM)
+   - **IQ samples (SDR)**: Complex → Demodulated PCM (FM/AM/NFM), performed in the demod service
    - **HTTP streams**: Compressed (MP3/AAC) → PCM
    - **All sources**: Variable rate → Configured rate (16-48 kHz)
    - **PCM samples → dB levels**: Peak/RMS for metering
    - **Audio chunks → Per-source queues**: Independent broadcast queues
 
 **Service Files:**
-- `sdr_hardware_service.py` - SDR hardware operations (was: sdr_service.py)
-- `eas_monitoring_service.py` - Audio processing + EAS monitoring (was: audio_service.py)
+- `sdr_hardware_service.py` - SDR hardware operations (`eas-station-sdr.service`)
+- `services/demod/` - FM/AM demodulation (`eas-station-demod.service`)
+- `eas_monitoring_service.py` - Audio processing + EAS monitoring (`eas-station-audio.service`)
 - `app_core/audio/redis_sdr_adapter.py` - Redis IQ sample subscriber
 - `app_core/audio/ingest.py` - Audio controller with per-source queues
 
@@ -418,7 +422,7 @@ sequenceDiagram
 3. **PCM samples → WAV file** (File writing)
 4. **Capture metadata → Database record** (Status recording)
 
-**Files:** `app_utils/eas.py:1076`, `app_core/radio/manager.py:233`, `app_core/radio/drivers.py:408`
+**Files:** `app_utils/eas.py`, `app_core/radio/manager.py:233`, `app_core/radio/drivers.py:408`
 
 ---
 
@@ -542,7 +546,7 @@ sequenceDiagram
 5. **Audio segments → Complete WAV file** (Audio concatenation)
 6. **WAV file → Database record** (Metadata persistence)
 
-**Files:** `app_utils/eas.py:1076`, `app_utils/eas_fsk.py`, `app_utils/eas_tts.py`
+**Files:** `app_utils/eas.py`, `app_utils/eas_fsk.py`, `app_utils/eas_tts.py`
 
 ---
 
@@ -718,6 +722,7 @@ sequenceDiagram
     participant Dedup as Cross-Source<br>Dedup Engine
     participant DB as Database<br>PostgreSQL
     participant Broadcaster as EAS Broadcaster<br>eas.py
+    participant AudioSvc as eas-station-audio<br>(owns Icecast injection)
     participant GPIO as GPIO Controller
     participant TX as Transmitter
 
@@ -762,7 +767,7 @@ sequenceDiagram
         AutoFwd->>Broadcaster: EASBroadcaster.handle_alert(alert, payload)
 
         Broadcaster->>Broadcaster: build_same_header()
-        Note right of Broadcaster: Substitutes station originator<br>(replaces original with configured)
+        Note right of Broadcaster: ECIG §3.4.1.1: uses the CAP alert's own<br>EAS-ORG parameter if present;<br>station config is only a fallback
 
         Broadcaster->>Broadcaster: Generate FSK + attention tone
         Broadcaster->>Broadcaster: Generate TTS narration
@@ -772,15 +777,28 @@ sequenceDiagram
         Broadcaster->>DB: INSERT INTO eas_messages
         DB-->>Broadcaster: message_id
 
-        Broadcaster->>GPIO: Activate relay (key transmitter)
+        Broadcaster->>GPIO: Activate relay (key transmitter, via Redis marker)
         GPIO->>TX: PTT active
-        Broadcaster->>Broadcaster: Play audio file
+        Broadcaster->>Broadcaster: Play audio file (local, if configured)
+
+        alt Controller registered in this process<br/>(eas_stream_injector.has_controller)
+            Broadcaster->>Broadcaster: inject_eas_audio() direct in-process call
+        else No controller (running as eas-station-poller)
+            Broadcaster->>AudioSvc: AudioCommandPublisher.inject_raw_eas_audio()<br/>over Redis
+            AudioSvc-->>Broadcaster: injected (or failure)
+        end
+        Broadcaster->>DB: UPDATE eas_messages SET<br/>metadata_payload.icecast_injected
+
         Broadcaster->>GPIO: Deactivate relay (unkey)
         GPIO->>TX: PTT inactive
 
         Broadcaster-->>AutoFwd: {same_triggered: true, ...}
         AutoFwd->>DB: UPDATE cap_alerts SET eas_forwarded=true
         AutoFwd-->>Poller: Forwarded successfully
+
+        opt Icecast injection failed
+            Note over Poller,DB: CAPPoller.retry_failed_icecast_injections()<br/>re-sends via inject_eas_audio(message_id) over Redis,<br/>once per poll cycle, up to 3 attempts
+        end
     end
 
     Note over OTA,TX: Path 2: OTA (Over-the-Air) Alert → Automatic Broadcast
@@ -812,10 +830,11 @@ sequenceDiagram
 
             AutoFwd->>Broadcaster: EASBroadcaster.handle_alert(alert_obj, payload)
 
-            Note right of Broadcaster: Same broadcast pipeline as CAP path
+            Note right of Broadcaster: Same broadcast pipeline as CAP path --<br/>this path runs inside eas-station-audio itself,<br/>so the controller is always registered and<br/>inject_eas_audio() is called directly in-process
 
             Broadcaster->>GPIO: Key transmitter
             Broadcaster->>Broadcaster: Play audio
+            Broadcaster->>Broadcaster: inject_eas_audio() direct in-process call
             Broadcaster->>GPIO: Unkey transmitter
             Broadcaster-->>AutoFwd: {same_triggered: true}
             AutoFwd-->>Monitor: Forwarded successfully
@@ -835,12 +854,14 @@ sequenceDiagram
 | Within-source OTA | Over-the-air | 10-minute window on `raw_same_header` in `received_eas_alerts` |
 | Cross-source broadcast | All | 15-minute window checking `eas_messages` + `manual_eas_activations` by event code + overlapping FIPS codes |
 
-**Originator Substitution:**
-- Original alert originator (e.g., `WXR` from NWS, `PEP` from FEMA) is replaced with the station's configured originator
-- Station originator set in the database (`eas_settings.originator`) via the Broadcast admin tab
-- Substitution occurs in `build_same_header()` at `app_utils/eas.py:647`
+**Originator Resolution (ECIG §3.4.1.1):**
+- The incoming CAP alert's own `EAS-ORG` parameter (e.g., `WXR` from NWS, `PEP` from FEMA) is used when present and a recognised value
+- The station's configured originator (`eas_settings.originator`, set via the Broadcast admin tab) is only a fallback for alerts that don't specify one — it does not override a valid source originator
+- Resolved in `build_same_header()` in `app_utils/eas.py`
 
-**Files:** `app_core/audio/auto_forward.py`, `poller/cap_poller.py:2412`, `app_core/audio/alert_forwarding.py`, `app_utils/eas.py:1535`
+**Cross-process Icecast injection:** `EASBroadcaster.handle_alert()` pushes generated audio into the live Icecast air-chain via `app_core/audio/eas_stream_injector.py`, whose registered controller only exists inside `eas-station-audio.service`. When `handle_alert()` runs elsewhere — every CAP/IPAWS auto-forward (`eas-station-poller.service`) and every gated-alert release from the web UI (`eas-station-web.service`) — it falls back to `app_core/audio/redis_commands.py`'s `AudioCommandPublisher.inject_raw_eas_audio()` over Redis, asking `eas-station-audio` to perform the injection. A failed injection is recorded on the `EASMessage` row and retried by `CAPPoller.retry_failed_icecast_injections()` (up to 3 attempts, once per poll cycle).
+
+**Files:** `app_core/audio/auto_forward.py`, `poller/cap_poller.py`, `app_core/audio/alert_forwarding.py`, `app_utils/eas.py` (`EASBroadcaster.handle_alert`), `app_core/audio/eas_stream_injector.py`, `app_core/audio/redis_commands.py`
 
 ---
 

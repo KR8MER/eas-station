@@ -136,35 +136,33 @@ EAS Station™ is a **professional, enterprise-grade** emergency alert managemen
 
 ### Page Header (MANDATORY)
 
-**Every page MUST start with this:**
+**Every page MUST start with this — never hand-roll the markup below.** As of the
+2026-08-01 standardization pass, `templates/components/page_header.html` is the
+single canonical header component; a hand-rolled `<div class="page-header">` is
+what this section used to recommend and is now the anti-pattern:
 
-```html
-<div class="page-header">
-    <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <div>
-                <h1 class="page-title mb-0">
-                    <i class="fas fa-icon-name me-2"></i>Page Title
-                </h1>
-                <p class="page-subtitle mb-0">Brief page description</p>
-            </div>
-            <div class="page-header-actions">
-                <button class="btn btn-success">
-                    <i class="fas fa-plus me-1"></i>Primary Action
-                </button>
-                <a href="#" class="btn btn-outline-light">
-                    <i class="fas fa-cog me-1"></i>Secondary
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
+```jinja
+{% set header_icon = 'fas fa-icon-name' %}
+{% set header_title = 'Page Title' %}
+{% set header_subtitle = 'Brief page description' %}
+{% set header_actions %}
+    <button class="btn btn-success">
+        <i class="fas fa-plus me-1"></i>Primary Action
+    </button>
+    <a href="#" class="btn btn-outline-light">
+        <i class="fas fa-cog me-1"></i>Secondary
+    </a>
+{% endset %}
+{% include 'components/page_header.html' %}
 ```
+
+A hero-style landing page (About, Attribution, Support) uses
+`{% include 'partials/hero.html' %}` instead — see that file for its slots.
 
 **Rules:**
 - Page title must have an icon with `me-2` spacing
 - Subtitle is optional but recommended
-- Actions go in `page-header-actions`
+- Actions go in `header_actions`
 - Primary actions use solid buttons
 - Secondary actions use `btn-outline-light`
 
@@ -545,9 +543,9 @@ Before committing any page changes:
 
 ## 📚 Reference Files
 
-1. **Live Style Guide**: `/style_guide` route (view in browser)
-2. **Component Templates**: `templates/partials/`
-3. **CSS Variables**: `static/css/styles.css` (lines 1-150)
+1. **Live Style Guide**: `/style-guide` route (view in browser)
+2. **Component Templates**: `templates/components/` (page/section headers, navbar, badges, etc.); hero-page layout is `templates/partials/hero.html`
+3. **CSS Variables**: `static/css/styles.css` (`:root` block near the top of the file)
 
 ---
 
@@ -569,6 +567,7 @@ If the answer to any is "no", it needs revision.
 
 ## 📝 Version History
 
+- **2026-08-01**: Page Header section corrected — `templates/components/page_header.html` (`header_icon`/`header_title`/`header_subtitle`/`header_actions`) replaced the hand-rolled `<div class="page-header">` markup this doc previously prescribed as mandatory; hero-style pages use `templates/partials/hero.html`.
 - **v3.0** (December 2025): Professional design system overhaul
 - **v2.0** (November 2025): Theme improvements and gradients
 - **v1.0** (October 2025): Initial design system

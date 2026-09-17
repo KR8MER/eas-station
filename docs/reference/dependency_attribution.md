@@ -64,7 +64,8 @@ licenses at the time of writing; consult each project for authoritative terms.
 | **pyproj** | CRS reprojection from shapefile `.prj` to WGS84 | MIT |
 | **geoip2** / **maxminddb** | Country-level visitor geolocation (Traffic Analytics) | Apache-2.0 / MIT |
 | **Py-ART** (`arm_pyart`) | NEXRAD Level II radar decode + geographic PPI rendering for the weather-alert radar overlay (`app_utils/image_export/radar_level2.py`) | BSD-3-Clause |
-| **boto3** | Anonymous read access to NOAA's public Level II archive on AWS Open Data | Apache-2.0 |
+| **boto3** / **botocore** | Anonymous read access to NOAA's public Level II archive on AWS Open Data | Apache-2.0 |
+| **fsspec** / **s3fs** / **aiobotocore** | `arm_pyart`'s filesystem/S3 access layer for the Level II archive; pinned explicitly to keep pip's resolver from wandering into a version combination `aiobotocore` doesn't yet support (see `requirements.txt`) | BSD-3-Clause / BSD-3-Clause / Apache-2.0 |
 | **Cartopy** | Web Mercator projection for the radar overlay, matching the basemap tiles (OpenStreetMap or CARTO) it composites onto | BSD-3-Clause |
 | **cmweather** | Registers the `NWSRef`/`NWSVel` reflectivity/velocity colormaps (the standard NWS scales) used to color the radar overlay | MIT |
 | **Matplotlib** | Rendering backend (headless Agg) for the radar overlay's geographic PPI plot | Matplotlib License (BSD-style) |
@@ -78,7 +79,6 @@ licenses at the time of writing; consult each project for authoritative terms.
 | **certifi** | CA bundle for SSL verification (required for IPAWS) | MPL-2.0 |
 | **feedparser** | RSS/Atom parsing for the LED sign ticker | BSD-2-Clause |
 | **lxml** | Fast C-based XML parser for CAP processing | BSD-3-Clause |
-| **BeautifulSoup4** | XML/HTML parsing for CAP messages | MIT |
 | **orjson** / **ujson** | Fast JSON parsers | Apache-2.0 / MIT / BSD |
 | **PyYAML** | YAML parsing | MIT |
 | **python-dateutil** / **pytz** | Datetime parsing & timezones | Apache-2.0 / MIT |

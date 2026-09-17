@@ -354,16 +354,16 @@ sudo netstat -tlnp | grep :80
    sudo systemctl disable apache2
    ```
 
-2. **Use different port mapping:**
-   ```yaml
-   ports:
-     - "0.0.0.0:8080:80"  # Use port 8080 for IPv4 clients
-     - "[::]:8080:80"     # Use port 8080 for IPv6 clients
-     - "0.0.0.0:8443:443" # Use port 8443 for IPv4 clients
-     - "[::]:8443:443"    # Use port 8443 for IPv6 clients
+2. **Change nginx's listen ports** in `/etc/nginx/sites-available/eas-station`:
+   ```nginx
+   listen 8080;
+   listen 8443 ssl http2;
    ```
 
-   ⚠️ **Note:** Let's Encrypt requires port 80 for validation
+   ⚠️ **Note:** Let's Encrypt requires port 80 to be reachable for ACME
+   validation — moving nginx off port 80 means you'll need another way to
+   satisfy that challenge (DNS-01 validation, or a temporary port-80
+   listener during renewal).
 
 ---
 
@@ -371,7 +371,7 @@ sudo netstat -tlnp | grep :80
 
 ### Custom nginx Configuration
 
-The nginx configuration for bare-metal deployments is located at `/etc/nginx/sites-available/eas-station` (symlinked from `config/nginx-eas-station.conf`). To customize:
+The nginx configuration for bare-metal deployments is located at `/etc/nginx/sites-available/eas-station` (deployed as a copy of `config/nginx-eas-station.conf` — `update.sh` re-copies it on every run, so edit the repo source and re-run `update.sh`, or copy your changes back, rather than hand-editing only the deployed file). To customize:
 
 1. Edit the configuration file:
    ```bash
@@ -534,7 +534,7 @@ sudo nginx -t && sudo systemctl reload nginx
 ## Security Best Practices
 
 1. **Always use production certificates** for public deployments
-2. **Keep certbot updated** - Done automatically with `certbot/certbot:latest`
+2. **Keep certbot updated** - `sudo apt-get update && sudo apt-get upgrade certbot` (this is a bare-metal package install, not a container)
 3. **Monitor expiration** - certbot sends emails 30/14/7 days before expiration
 4. **Protect private keys** - Never commit certificate files to git
 5. **Use strong ciphers** - Default configuration uses Mozilla Intermediate

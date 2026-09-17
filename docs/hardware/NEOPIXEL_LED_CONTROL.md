@@ -52,7 +52,7 @@ The Raspberry Pi's GPIO outputs 3.3V logic while WS2812B LEDs expect 5V data sig
 8. Click **Save Settings**.
 9. Restart the hardware service:
    ```bash
-   sudo systemctl restart eas-station-hardware
+   sudo systemctl restart eas-station-hardware.target
    ```
 
 ### Configuration Fields
@@ -61,27 +61,30 @@ The Raspberry Pi's GPIO outputs 3.3V logic while WS2812B LEDs expect 5V data sig
 |---------|----------|---------|-------------|
 | Enabled | `neopixel_enabled` | `false` | Enable NeoPixel support |
 | GPIO pin | `neopixel_gpio_pin` | `18` | BCM pin number |
-| LED count | `neopixel_num_pixels` | `30` | Number of LEDs in strip |
+| LED count | `neopixel_num_pixels` | `1` | Number of LEDs in strip — set to your actual strip length |
+| LED order | `neopixel_led_order` | `GRB` | Byte order of the strip: `GRB`, `RGB`, `GRBW`, or `RGBW` — set via a dropdown in the web UI, not an environment variable |
 | Brightness | `neopixel_brightness` | `128` | Global brightness (0–255) |
+| Standby color | `neopixel_standby_color` | `(0, 10, 0)` — dim green | Shown when no alert is active |
+| Alert color | `neopixel_alert_color` | `(255, 0, 0)` — red | Shown during an active EAS alert |
 | Flash on alert | `neopixel_flash_on_alert` | `true` | Flash strip during EAS alerts |
 | Flash interval | `neopixel_flash_interval_ms` | `500` | Flash period in milliseconds |
 
+All fields live on the **Admin → Hardware Settings → NeoPixel** tab; there is no
+`.env` equivalent for any of them.
+
 ---
 
-## Alert Color Mapping
+## Alert Colors
 
-When `Flash on Alert` is enabled, the LED strip displays colors based on alert severity:
+There is one configurable **standby color** (shown when idle, default dim
+green) and one configurable **alert color** (shown during an active EAS
+broadcast, default red) — set as color pickers on the NeoPixel settings tab.
+The strip does not currently map different colors to different alert
+severities; every active alert uses the same configured alert color.
 
-| Severity | Color | Description |
-|----------|-------|-------------|
-| Extreme | Red (full brightness) | Life-threatening emergency |
-| Severe | Orange | Significant threat |
-| Moderate | Yellow | Moderate hazard |
-| Minor | Blue | Minor hazard |
-| Test (RWT/RMT) | Green | Weekly/monthly test |
-| Unknown | White | Unclassified event |
-
-During a broadcast, the strip flashes at the configured interval. After the broadcast completes, the strip returns to its idle state (off, or a dim indicator color).
+When `Flash on Alert` is enabled, the strip flashes between the alert color
+and off at the configured interval for the duration of the broadcast. After
+the broadcast completes, the strip returns to its standby color.
 
 ---
 
@@ -91,6 +94,11 @@ NeoPixel control requires the `rpi_ws281x` (also known as `rpi-ws281x-python`) l
 
 ### Installing the Library
 
+`rpi-ws281x` is already declared in `requirements.txt` (ARM builds only) and
+installed automatically by `install.sh` / `update.sh` on Raspberry Pi
+hardware. Only install it manually if you're troubleshooting a missing
+import outside that normal flow:
+
 ```bash
 source /opt/eas-station/venv/bin/activate
 pip install rpi_ws281x
@@ -98,7 +106,15 @@ pip install rpi_ws281x
 
 ### Permissions
 
-The `rpi_ws281x` library requires access to `/dev/mem` for DMA-based LED control. The `eas-station-hardware` service must run as root or with the `CAP_SYS_RAWIO` capability.
+`eas-station-gpio.service` runs as the unprivileged `eas-station` user (not
+root), and does not request `CAP_SYS_RAWIO` or any other capability. GPIO
+access goes through `/dev/gpiomem`, which on Raspberry Pi OS is owned by the
+`gpio` group — the service user needs to be a member of it:
+
+```bash
+sudo usermod -a -G gpio eas-station
+sudo systemctl restart eas-station-hardware.target
+```
 
 Check the service user:
 
@@ -106,15 +122,18 @@ Check the service user:
 grep User /opt/eas-station/systemd/eas-station-gpio.service
 ```
 
-If the service does not run as root, add the capability or add `AmbientCapabilities=CAP_SYS_RAWIO` to the service unit file.
-
 ---
 
 ## Testing the LED Strip
 
-From the VFD/hardware control dashboard at `/admin/hardware`, click **Test NeoPixel Strip** to cycle through all alert colors. This verifies that wiring and software are working without waiting for a live alert.
+There is no dedicated "test strip" action for NeoPixel today. To confirm
+wiring and software are working without waiting for a live alert:
 
-From the running system you can also drive the strip directly through the GPIO service — see the **Test NeoPixel Strip** action on `/admin/hardware`, or call `/api/gpio/neopixel/test` from an authenticated session.
+- Save the NeoPixel settings on **Admin → Hardware Settings** — the strip
+  should immediately switch to the configured standby color.
+- Trigger a Required Weekly Test (RWT) broadcast (**Broadcast → Weekly
+  Tests → Run Test Now**) and confirm the strip switches to the alert color
+  and flashes for the duration.
 
 ---
 
@@ -124,18 +143,18 @@ From the running system you can also drive the strip directly through the GPIO s
 
 1. Verify power supply is connected and providing 5V.
 2. Confirm GPIO pin number matches physical wiring (BCM numbering, not board numbering).
-3. Check that `eas-station-hardware` is running:
+3. Check that `eas-station-hardware.target` is running:
    ```bash
-   sudo systemctl status eas-station-hardware
+   sudo systemctl status eas-station-hardware.target
    ```
 4. Look for errors in the hardware log:
    ```bash
-   journalctl -u eas-station-hardware -f
+   journalctl -u eas-station-gpio.service -f
    ```
 
-### "Can't open /dev/mem" error
+### "Can't open /dev/gpiomem" error
 
-The service needs elevated permissions. Run the hardware service as root or grant the `CAP_SYS_RAWIO` capability.
+The service user needs to be in the `gpio` group — see [Permissions](#permissions) above. Running as root also works but is not required or recommended.
 
 ### First LED lights but rest do not
 
@@ -145,11 +164,10 @@ The service needs elevated permissions. Run the hardware service as root or gran
 
 ### Colors look wrong (e.g., green and red are swapped)
 
-Some LED strips use GRB color order instead of RGB. Adjust the color order in the hardware settings:
-
-```
-NEOPIXEL_COLOR_ORDER=GRB
-```
+Some LED strips use a different byte order than the default. Change the
+**LED Order** dropdown on **Admin → Hardware Settings → NeoPixel** to match
+your strip (`GRB` — most WS2812B — `RGB`, `GRBW`, or `RGBW` for SK6812
+RGBW strips), then save and restart the hardware service.
 
 ### LEDs flicker randomly
 

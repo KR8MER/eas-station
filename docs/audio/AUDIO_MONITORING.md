@@ -28,9 +28,24 @@ The Audio Monitoring feature allows users to listen to live audio from configure
 
 ## Architecture
 
-### Backend (`webapp/admin/audio_ingest.py`)
+### Backend
 
-#### New Endpoint: `/api/audio/stream/<source_name>`
+`/api/audio/sources` and `/api/audio/waveform/<source_name>` are served by the
+main web app, from the `webapp/admin/audio_ingest/` package (split from a
+single `audio_ingest.py` file — see `docs/development/LARGE_FILE_REFACTOR_PLAN.md`
+Phase 3a; `routes_sources.py` and `routes_devices.py` respectively).
+
+**`/api/audio/stream/<source_name>` is served directly by the audio service,
+not the web app.** nginx proxies that path straight to
+`eas_monitoring_service.py`'s own embedded Flask server on port 5002
+(`stream_app`, `AUDIO_STREAMING_PORT` env var) — see
+`config/nginx-eas-station.conf`'s `location /api/audio/stream/` block. The
+identically-named route in `webapp/admin/audio_ingest/routes_devices.py` is a
+deliberately-unreachable stub that returns `503` with a diagnostic message if
+it's ever hit directly; seeing that response means nginx isn't routing the
+request correctly, or the app is being accessed without going through nginx.
+
+#### `/api/audio/stream/<source_name>`
 
 **Purpose**: Stream live audio in WAV format
 
@@ -38,18 +53,22 @@ The Audio Monitoring feature allows users to listen to live audio from configure
 1. Accepts source name as URL parameter
 2. Validates source exists and is running
 3. Generates WAV header with proper format info
-4. Continuously pulls audio chunks from source queue
-5. Converts float32 audio to int16 PCM
+4. Continuously pulls audio chunks from the source's `BroadcastQueue` (a
+   dedicated subscription, so the web stream never competes with Icecast or
+   the EAS monitor for chunks)
+5. Converts float32 audio to int16 PCM at the source's **native** sample rate
+   (no resampling, to avoid pitch/speed drift)
 6. Yields PCM data as streaming response
-7. Auto-terminates after ~2 minutes to prevent resource exhaustion
+7. Runs until the client disconnects — there is no fixed duration cap
 
 **Stream Format**:
 - **Container**: WAV (RIFF)
 - **Codec**: PCM (uncompressed)
 - **Bit depth**: 16-bit
-- **Sample rate**: Matches source (typically 44.1kHz)
-- **Channels**: Matches source (typically mono)
-- **Duration**: ~2 minutes max per stream session
+- **Sample rate**: Matches source's native rate (detected from the stream if
+  auto-detection applies, not assumed to be 44.1 kHz)
+- **Channels**: Mono (down-mixed if the source is stereo)
+- **Duration**: Unbounded — streams until the client disconnects
 
 **Technical Details**:
 ```python
@@ -179,12 +198,10 @@ To have sources auto-start on application boot:
 ## Technical Limitations
 
 ### Stream Duration
-Streams automatically terminate after ~2 minutes (6000 chunks at 20ms per chunk). This prevents:
-- Memory leaks from abandoned connections
-- Resource exhaustion from stale streams
-- Bandwidth waste from forgotten tabs
-
-**To continue listening**: Simply click Play again
+Streams run until the client disconnects (browser tab closed, player stopped,
+or the network connection drops) — there is no fixed time limit. The server
+unsubscribes from the source's broadcast queue as soon as the client
+disconnects, so an abandoned tab does not leak a subscription indefinitely.
 
 ### Browser Compatibility
 - **Chrome/Edge**: Full support
@@ -274,7 +291,9 @@ Streams automatically terminate after ~2 minutes (6000 chunks at 20ms per chunk)
 ```
 
 ### GET `/api/audio/stream/<source_name>`
-**Description**: Stream live audio in WAV format
+**Description**: Stream live audio in WAV format. Served directly by the audio
+service (port 5002) via an nginx proxy — not by the main web app; see
+"Architecture" above.
 **Parameters**:
 - `source_name` (path) - Name of audio source
 **Response**: Binary WAV stream
@@ -378,4 +397,4 @@ For issues or questions about audio monitoring:
 
 ---
 
-**Last Updated**: November 7, 2025
+**Last Updated**: 2026-09-17

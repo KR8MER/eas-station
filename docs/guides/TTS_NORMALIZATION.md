@@ -110,6 +110,8 @@ TTS engines consistently mispronounce.
 | `FEMA` | F.E.M.A. |
 | `NOAA` | N.O.A.A. |
 | `IPAWS` | I.P.A.W.S. |
+| `EAS-ORG` | E.A.S. originator |
+| `EAS-STN-ID` | E.A.S. station ID |
 
 #### Event Codes
 
@@ -152,9 +154,13 @@ preposition throughout the text.
 
 #### Facility Abbreviations
 
+Military/civil facility abbreviations in NWS city lists.
+
 | Token | Expansion |
 |-------|-----------|
-| `AFD` | Air Force Depot |
+| `AFB` | Air Force Base |
+| `ARB` | Air Reserve Base |
+| `AFD` | Air Force Base |
 
 ---
 

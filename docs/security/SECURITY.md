@@ -31,7 +31,7 @@ After pulling the latest changes, apply the security migration:
 
 ### 2. Initialize Default Roles
 
-Initialize the three default roles (admin, operator, viewer) and their permissions:
+Initialize the four default roles (admin, operator, local_authority, viewer) and their permissions:
 
 ```bash
 curl -X POST http://localhost:5000/security/init-roles \
@@ -74,7 +74,7 @@ curl -X PUT http://localhost:5000/security/users/1/role \
 
 ### Default Roles
 
-EAS Station™ provides three predefined roles:
+EAS Station™ provides four predefined roles:
 
 #### 1. **Admin** (Full Access)
 - All system permissions
@@ -91,7 +91,14 @@ EAS Station™ provides three predefined roles:
 - Log viewing and export
 - **Cannot**: Manage users, modify system configuration, delete data
 
-#### 3. **Viewer** (Read-Only)
+#### 3. **Local Authority** (Delegated EAS Origination)
+- Generate and broadcast EAS messages via the Broadcast Builder, restricted
+  to an assigned station identifier/originator code and an authorized set of
+  FIPS and event codes — see [Local Authority EAS Access](../guides/LOCAL_AUTHORITIES.md)
+- **Cannot**: Manage users, modify system configuration, broadcast outside
+  its authorized scope
+
+#### 4. **Viewer** (Read-Only)
 - View alerts, logs, and system status
 - Export logs
 - **Cannot**: Create/delete data, broadcast EAS, control GPIO, manage users
@@ -365,6 +372,7 @@ management: [Audit Log Integrity](AUDIT_LOG_INTEGRITY.md).
 - `gpio.activated` / `gpio.deactivated`
 - `alert.deleted` / `log.exported` / `log.deleted`
 - `audit.chain.verified` (tamper-evidence verification run)
+- `receiver.configured`
 
 **Security Events:**
 - `security.permission_denied`
@@ -761,7 +769,7 @@ Features:
 **Auto-ban Triggers**:
 1. **Malicious Input** (24 hours): SQL/command injection attempt
 2. **Brute Force** (24 hours): 5 failed login attempts
-3. **Flooding** (1 hour): >10 attempts per minute
+3. **Flooding** (1 hour): 10+ attempts per minute
 
 ### 5. Security Logging
 
@@ -788,7 +796,8 @@ Features:
 Comprehensive audit trail of all security events including:
 - Login successes/failures
 - MFA events
-- IP filter changes
+- IP filter deletion/toggle (recorded under the generic `config.updated`
+  action; adding a filter is not currently logged)
 - Permission denials
 
 ### 7. Credential Encryption at Rest

@@ -161,4 +161,4 @@ The code automatically:
 - smartctl output parsing: `app_utils/system/smart_fields.py`
 - NVMe detection: `app_utils/system/disks.py:_detect_device_type()`
 - Health page route: `webapp/public/pages.py:/system_health`
-- Health template: `webapp/templates/system_health.html`
+- Health template: `templates/system_health.html`

@@ -172,13 +172,13 @@ The **Statistics** tab on the dashboard provides a quick summary:
 
 ## Data Retention
 
-Analytics metric snapshots are retained based on their aggregation period:
-
-| Period | Default retention |
-|--------|------------------|
-| Hourly | 30 days |
-| Daily | 365 days |
-| Weekly | 5 years |
+**Analytics metric snapshots (`MetricSnapshot` rows — `alert_volume`,
+`alert_severity`, `alert_events`) are retained indefinitely.** There is no
+automatic pruning job for this table in the current codebase, unlike the
+system-health sampler (30-day default, pruned hourly) or the web-traffic
+recorder (90-day default) — don't confuse those retention windows with
+alert-analytics data. If storage becomes a concern, prune old
+`MetricSnapshot` rows manually.
 
 Raw alert records in the `cap_alerts` table are retained indefinitely until manually cleaned. Use **Admin → Maintenance → Cleanup** to purge old records.
 

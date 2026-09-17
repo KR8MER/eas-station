@@ -62,29 +62,24 @@ alerts = resp.json()
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/alerts/active` | Active (non-expired) alerts |
-| `GET` | `/api/alerts/history` | Alert history with filters |
-| `GET` | `/api/alerts/<id>` | Single alert detail |
-| `GET` | `/api/alerts/stats` | Alert count and severity statistics |
+| `GET` | `/api/alerts` | Alert list, with filters |
+| `GET` | `/api/alerts/historical` | Historical alert search |
+| `GET` | `/alerts/<id>` | Single alert detail (note: no `/api` prefix — this route lives on a different blueprint) |
 
-**Query parameters for `/api/alerts/history`:**
-
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `days` | Lookback window (default: 7) | `?days=30` |
-| `severity` | Filter by severity | `?severity=Extreme` |
-| `event` | Filter by event code | `?event=TOR` |
-| `limit` | Max results (default: 100) | `?limit=50` |
+There is no dedicated alert-statistics endpoint; use the analytics endpoints below
+or the `/analytics` dashboard for aggregate counts.
 
 ### System Health
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/health` | Overall system health summary |
-| `GET` | `/api/health/services` | Per-service status |
-| `GET` | `/api/health/audio` | Audio pipeline health |
-| `GET` | `/api/health/sdr` | SDR receiver status |
-| `GET` | `/api/health/database` | Database connectivity |
+| `GET` | `/api/health/system` | Host/system-level health |
+| `GET` | `/api/health/audio-service` | Audio-service pipeline health |
+| `GET` | `/api/health/redis` | Redis connectivity |
+| `GET` | `/api/health/icecast` | Icecast streaming health |
+| `GET` | `/api/health/resources` | CPU/memory/disk resource usage |
+| `GET` | `/api/health/ntp` | Time-sync (NTP/chrony) status |
 
 ### Analytics
 
@@ -98,8 +93,11 @@ alerts = resp.json()
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/eas/messages` | Recent EAS messages |
-| `GET` | `/api/eas/messages/<id>` | EAS message detail + audio URL |
+| `GET` | `/eas/messages` | Recent EAS messages |
+| `DELETE` | `/eas/messages/<id>` | Delete an EAS message |
+| `POST` | `/eas/messages/<id>/resend` | Re-inject a stored message's audio onto the air chain |
+| `GET` | `/eas_messages/<id>/audio` | Audio blob for a message |
+| `GET` | `/eas_messages/<id>/summary` | Message summary JSON |
 
 ### Backups (Admin role required)
 
