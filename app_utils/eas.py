@@ -4100,16 +4100,78 @@ class EASBroadcaster:
             # IcecastStreamer drains those chunks to FFmpeg in real time.
             # Previously injection happened AFTER _play_audio_or_bytes()
             # returned, meaning Icecast listeners missed the entire alert.
+            _injection_attempted = False
+            _injected_ok = False
             try:
-                from app_core.audio.eas_stream_injector import inject_eas_audio
+                from app_core.audio.eas_stream_injector import inject_eas_audio, has_controller
                 _wav_data = audio_bytes
                 if _wav_data is None and audio_path and os.path.exists(audio_path):
                     with open(audio_path, 'rb') as _f:
                         _wav_data = _f.read()
                 if _wav_data:
-                    inject_eas_audio(_wav_data)
+                    _injection_attempted = True
+                    if has_controller():
+                        _injected_ok = bool(inject_eas_audio(_wav_data))
+                    else:
+                        # This process has no AudioIngestController of its
+                        # own -- eas_stream_injector's module-level
+                        # _controller is only registered inside
+                        # eas-station-audio.service (eas_monitoring_service.py
+                        # calls set_controller() once at startup). A direct
+                        # inject_eas_audio() call here silently no-ops: it
+                        # returns False and logs at debug level, so every
+                        # CAP/IPAWS auto-forward (cap_poller.py -- the main
+                        # ingest path, the gated-alert auto-release timer,
+                        # and the forwarding catch-up sweep, all running as
+                        # eas-station-poller.service) and every operator
+                        # "Approve" on a held/gated alert (pending_alerts.py,
+                        # running as eas-station-web.service) recorded a
+                        # broadcast in the database and logged "Auto-
+                        # forwarded ... to air chain" while no audio ever
+                        # reached Icecast or local playback. Ask the audio
+                        # service -- the process that owns the controller and
+                        # the running IcecastStreamer threads -- to do the
+                        # injection instead, over the same Redis command
+                        # channel the Manual Send path already uses for this
+                        # exact reason (AudioCommandPublisher.inject_raw_eas_audio,
+                        # webapp/eas/workflow.py).
+                        from app_core.audio.redis_commands import get_audio_command_publisher
+                        _inj_resp = get_audio_command_publisher().inject_raw_eas_audio(_wav_data)
+                        _injected_ok = bool(_inj_resp.get('success'))
+                        if not _injected_ok:
+                            self.logger.error(
+                                "EAS stream injection via Redis failed -- alert audio "
+                                "was NOT delivered to Icecast: %s",
+                                _inj_resp.get('message', 'unknown error'),
+                            )
             except Exception as _inj_exc:
                 self.logger.warning("EAS stream injection failed (non-fatal): %s", _inj_exc)
+
+            # Record the outcome on the already-committed row so a transient
+            # failure (audio-service down, Redis unreachable at exactly this
+            # moment) is a fact cap_poller.py's retry_failed_icecast_injections()
+            # sweep can find and re-send -- via the same resend command the
+            # EASMessage detail page's manual "Resend" button uses -- instead
+            # of a broadcast being permanently logged as "forwarded" while no
+            # listener ever heard it.  Not written when nothing was ever
+            # attempted (no audio bytes at all): that is a different,
+            # unrelated failure already surfaced via the "reason" result key.
+            if _injection_attempted:
+                try:
+                    _meta = dict(record.metadata_payload or {})
+                    _meta['icecast_injected'] = _injected_ok
+                    record.metadata_payload = _meta
+                    self.db_session.add(record)
+                    self.db_session.commit()
+                except Exception as _meta_exc:
+                    self.logger.debug(
+                        "Could not persist Icecast injection outcome metadata "
+                        "for EASMessage id=%s: %s", getattr(record, 'id', None), _meta_exc,
+                    )
+                    try:
+                        self.db_session.rollback()
+                    except Exception:
+                        pass
 
             # audio_bytes contains the complete broadcast sequence:
             # SAME header (3x) → attention tone → TTS narration → EOM.
