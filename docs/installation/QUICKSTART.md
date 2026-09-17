@@ -2,11 +2,10 @@
 
 Get EAS Station™ running on bare metal in 15 minutes!
 
-## Choose Your Installation Method
+## Installing
 
-### 🚀 Fast: Interactive Install on Existing System
-
-Already have Debian/Ubuntu/Raspberry Pi OS? Start here!
+Already have Debian/Ubuntu/Raspberry Pi OS? Start here — this is the only
+supported installation method; there is no separate bootable-ISO build.
 
 ```bash
 # 1. Clone and run interactive installer (takes 10-15 minutes)
@@ -35,21 +34,6 @@ sudo bash install.sh
 - ✓ **Input validation** - helpful error messages and defaults
 - ✓ **Secure by default** - auto-generates passwords and keys
 - ✓ **Optional reconfiguration** - use `sudo eas-config` anytime
-
-### 💿 Clean: Bootable ISO Image
-
-Want a dedicated system? Build an ISO!
-
-```bash
-# 1. Build ISO (takes 30-60 minutes)
-cd eas-station/bare-metal
-sudo bash scripts/build-iso.sh
-
-# 2. Burn to USB
-sudo dd if=eas-station-*.iso of=/dev/sdX bs=4M status=progress
-
-# 3. Boot and follow setup wizard
-```
 
 ## Post-Installation
 

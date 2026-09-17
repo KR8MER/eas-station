@@ -405,6 +405,70 @@ In addition to the professional SVG diagrams above, the following documentation 
 
 ---
 
+### SDR Service Architecture (Mermaid)
+
+**File:** [docs/../architecture/SDR_SERVICE_ARCHITECTURE.md](../architecture/SDR_SERVICE_ARCHITECTURE.md)
+
+**Contains:**
+- SDR buffer chain architecture diagram (device → adapter → per-consumer queues)
+
+### EAS Monitor V3 Architecture (Mermaid)
+
+**File:** [docs/../architecture/EAS_MONITOR_V3_ARCHITECTURE.md](../architecture/EAS_MONITOR_V3_ARCHITECTURE.md)
+
+**Contains:**
+- Previous (V2, multi-monitor) vs. current (V3, unified) SAME decoder architecture
+
+### VTEC Event Linking (Mermaid)
+
+**File:** [docs/../reference/VTEC_EVENT_LINKING.md](VTEC_EVENT_LINKING.md)
+
+**Contains:**
+- CAP ingest flow (`cap_poller.py`) that extracts and links VTEC identity
+- Database schema for VTEC-linked alert chains
+- Alert-detail page sibling lookup flow
+- VTEC action code gating for automatic rebroadcast (`auto_forward.py`)
+- A full multi-alert lifecycle example (issue → update → cancel)
+
+### Protocol Reference Diagrams (Mermaid)
+
+**Files:** [docs/../reference/protocols/README.md](protocols/README.md),
+[MDC1200.md](protocols/MDC1200.md), [SAME.md](protocols/SAME.md),
+[SAGE_ENDEC.md](protocols/SAGE_ENDEC.md)
+
+**Contains:**
+- On-air pre/post-alert signaling timeline (`README.md`)
+- MDC1200 signaling sequence and encode/decode flow (`MDC1200.md`)
+- SAME/EAS header and burst structure diagrams (`SAME.md`)
+- Sage ENDEC command/status protocol flow (`SAGE_ENDEC.md`)
+
+**Use Cases:**
+- Implementing or debugging a pre/post-alert signaling protocol
+- Cross-referencing this station's signaling output against the standards it targets
+
+### GPIO Relay Wiring (Mermaid)
+
+**File:** [docs/../hardware/GPIO_GUIDE.md](../hardware/GPIO_GUIDE.md)
+
+**Contains:**
+- Relay-in-transmit-path wiring diagram (PTT switch replacement/augmentation)
+
+### Audit Log Integrity (Mermaid)
+
+**File:** [docs/../security/AUDIT_LOG_INTEGRITY.md](../security/AUDIT_LOG_INTEGRITY.md)
+
+**Contains:**
+- Hash-chain verification flow for the tamper-evident audit ledger
+
+### Local Authority EAS Access (Mermaid)
+
+**File:** [docs/../guides/LOCAL_AUTHORITIES.md](../guides/LOCAL_AUTHORITIES.md)
+
+**Contains:**
+- Originator-override flow for a delegated local authority's Broadcast Builder alerts
+
+---
+
 ## 📖 Usage Guidelines
 
 ### Viewing Diagrams
@@ -465,6 +529,6 @@ When adding new diagrams:
 
 ---
 
-**Last Updated:** 2026-03-27
-**Diagram Count:** 9 professional SVG diagrams + 84 embedded Mermaid diagrams across 13 documentation files
-**Total Documentation Coverage:** Complete system from hardware to software, including security architecture, analytics pipeline, display system, EAS decoding, notifications, EAS test signal pipeline, alert geometry and coverage calculation, and detailed data processing flows
+**Last Updated:** 2026-09-17
+**Diagram Count:** 9 professional SVG diagrams + 103 embedded Mermaid diagrams across 20 documentation files
+**Total Documentation Coverage:** Complete system from hardware to software, including security architecture, analytics pipeline, display system, EAS decoding, notifications, EAS test signal pipeline, alert geometry and coverage calculation, VTEC event linking, protocol references (MDC1200, SAME, Sage ENDEC), GPIO wiring, audit log integrity, local authority delegation, and detailed data processing flows

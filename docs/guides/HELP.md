@@ -12,8 +12,8 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 
 ## Getting Started
 1. **Review the About document:** The [About page](../reference/ABOUT.md) covers system goals, core services, and the complete software stack.
-3. **Install EAS Station™:** Follow the [Installation Quick Start](../installation/QUICKSTART.md) and [Installation Details](../installation/INSTALLATION_DETAILS.md) for a bare-metal deployment on Debian/Ubuntu with PostgreSQL + PostGIS and Redis.
-4. **Launch the stack:**
+2. **Install EAS Station™:** Follow the [Installation Quick Start](../installation/QUICKSTART.md) and [Installation Details](../installation/INSTALLATION_DETAILS.md) for a bare-metal deployment on Debian/Ubuntu with PostgreSQL + PostGIS and Redis.
+3. **Launch the stack:** `sudo systemctl start eas-station.target` (see [Reference Commands](#reference-commands) below).
 
 ## Routine Operations
 ### Accessing the Dashboard
@@ -60,7 +60,7 @@ Page sections, top to bottom:
 > empty. This page is only needed for manual reloads, partial-state imports, or diagnostics.
 
 ### Managing Receivers
-- Visit **Settings → Radio Receivers** (`/settings/radio`) to add, edit, or remove SDR hardware profiles stored in the `RadioReceiver` table.
+- Visit **Settings → Radio Receivers** (`/admin/radio`) to add, edit, or remove SDR hardware profiles stored in the `RadioReceiver` table.
 - Toggle **Auto Start** or **Enabled** to control which receivers the radio manager spins up during poller runs.
 - Use the action menu to request synchronized IQ/PCM captures; captured files are surfaced alongside status updates in the compliance dashboard.
 
@@ -74,8 +74,8 @@ Page sections, top to bottom:
 
 ## Troubleshooting
 ### Application Will Not Start
-- Confirm the PostgreSQL/PostGIS database container is running and reachable.
-- Verify environment variables in `.env` match the external database credentials and host.
+- Confirm the PostgreSQL/PostGIS service is running and reachable: `sudo systemctl status postgresql`.
+- Verify environment variables in `/opt/eas-station/.env` match the database credentials and host.
 
 ### Spatial Queries Failing
 - Ensure the PostGIS extension is enabled on the database (`CREATE EXTENSION postgis;`).

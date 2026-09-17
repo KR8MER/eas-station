@@ -18,14 +18,15 @@ graph TB
 
     subgraph EASServices["EAS Station™ Services"]
         subgraph AppLayer["Application Layer"]
-            APP[app<br/>Flask Web UI<br/>Port 5000]
-            NOAA_POLL[noaa-poller<br/>CAP Polling]
-            IPAWS_POLL[ipaws-poller<br/>CAP Polling]
+            APP[eas-station-web<br/>Flask Web UI + Gunicorn]
+            POLLER[eas-station-poller<br/>Unified NOAA + IPAWS<br/>CAP Polling]
         end
 
         subgraph HardwareLayer["Hardware Services"]
-            SDR[sdr-service<br/>SDR + Audio<br/>USB Access]
-            HW[hardware.target<br/>5 subsystems<br/>Ports 5101–5105]
+            SDR[eas-station-sdr<br/>SoapySDR Capture<br/>USB Access]
+            DEMOD[eas-station-demod<br/>FM/AM Demodulation]
+            AUDIO[eas-station-audio<br/>SAME Decode + EAS Monitor<br/>+ Icecast Streaming]
+            HW[eas-station-hardware.target<br/>network/zigbee/gps/displays/gpio<br/>Ports 5101–5105]
         end
 
         subgraph Infrastructure["Infrastructure"]
@@ -51,30 +52,34 @@ graph TB
     end
 
     %% Data flows
-    NOAA --> NOAA_POLL
-    IPAWS --> IPAWS_POLL
-    NOAA_POLL --> DB
-    IPAWS_POLL --> DB
+    NOAA --> POLLER
+    IPAWS --> POLLER
+    POLLER --> DB
     RF --> SDR_DEV --> SDR
-    
+
     APP --> DB
     APP --> REDIS
     SDR --> REDIS
-    SDR --> ICECAST
+    SDR --> DEMOD --> REDIS
+    DEMOD --> AUDIO
+    AUDIO --> REDIS
+    AUDIO --> ICECAST
     HW --> REDIS
-    
+
     SDR --> SDR_DEV
     HW --> GPIO --> TX
     HW --> OLED
     HW --> LED
     HW --> VFD_DEV
-    
+
     NGINX --> APP
     BROWSER --> NGINX
     ICECAST --> STREAM
 
     style APP fill:#d4edda
     style SDR fill:#e1f5ff
+    style DEMOD fill:#e1f5ff
+    style AUDIO fill:#e1f5ff
     style HW fill:#fff3e0
     style DB fill:#fff3cd
     style REDIS fill:#f8d7da
@@ -84,11 +89,12 @@ graph TB
 
 | Service | Hardware Access | Purpose |
 |---------|----------------|---------|
-| **app** | None (read-only /dev for SMART) | Web UI, API, configuration |
-| **noaa-poller** | None | NOAA CAP XML feed polling |
-| **ipaws-poller** | None | FEMA IPAWS feed polling |
-| **sdr-service** | USB (`/dev/bus/usb`) | SDR capture, audio processing, SAME decoding |
-| **hardware-service** | GPIO, I2C (`/dev/gpiomem`, `/dev/i2c-1`) | Relay control, displays (OLED/VFD/LED) |
+| **eas-station-web** | None (read-only /dev for SMART) | Web UI, API, configuration (Gunicorn) |
+| **eas-station-poller** | None | Unified NOAA + IPAWS CAP feed polling (`poller/cap_poller.py --continuous`) — a single process alternates both feeds, not two separate services |
+| **eas-station-sdr** | USB (`/dev/bus/usb`) | SoapySDR capture (`sdr_hardware_service.py`) |
+| **eas-station-demod** | None | FM/AM demodulation (`services.demod`), reads raw samples from `eas-station-sdr` over Redis |
+| **eas-station-audio** | None | SAME FSK decode, EAS monitor, Icecast streaming, and the audio-forwarding pipeline (`eas_monitoring_service.py`) |
+| **eas-station-hardware.target** | GPIO, I2C (`/dev/gpiomem`, `/dev/i2c-1`) | Bundles 5 per-subsystem services — `eas-station-network`, `-zigbee`, `-gps`, `-displays`, `-gpio` (ports 5101–5105) — relay control and displays (OLED/VFD/LED) |
 
 ---
 
@@ -96,7 +102,7 @@ graph TB
 
 ```mermaid
 flowchart TD
-    A[CAP Sources<br/>NOAA + IPAWS] -->|HTTP Polling<br/>noaa-poller<br/>ipaws-poller| B[Ingestion Pipeline]
+    A[CAP Sources<br/>NOAA + IPAWS] -->|HTTP Polling<br/>eas-station-poller<br/>unified, single service| B[Ingestion Pipeline]
     B -->|app_core/alerts.py| C[Persistence Layer]
     C -->|PostgreSQL 17<br/>+ PostGIS 3.5| D[(Database<br/>alerts, boundaries<br/>receivers, configs)]
     C -->|app_core/location.py<br/>app_core/boundaries.py| E[Spatial Intelligence]
@@ -104,11 +110,11 @@ flowchart TD
     B -->|auto_forward.py<br/>Automatic forwarding| G
     F -->|Manual activation<br/>Scheduled RWT| G[EAS Workflow]
     G -->|app_utils/eas.py<br/>app_utils/eas_fsk.py| H[SAME Generator]
-    H -->|hardware-service<br/>GPIO Control| I[Broadcast Output]
+    H -->|eas-station-gpio<br/>GPIO Control| I[Broadcast Output]
     
     subgraph Verification["Verification Loop"]
-        J[sdr-service<br/>RF Capture]
-        K[streaming_same_decoder.py<br/>Real-time Decode]
+        J[eas-station-sdr +<br/>eas-station-demod<br/>RF Capture]
+        K[streaming_same_decoder.py<br/>Real-time Decode<br/>eas-station-audio]
         L[Compliance Dashboard]
     end
     
@@ -130,50 +136,47 @@ Each node references an actual module, package, or service in the repository so 
 
 ### 1. Ingestion & Validation
 
-The CAP polling system runs as two separate systemd services for fault isolation:
+The CAP polling system runs as a single unified `eas-station-poller.service`, alternating both feeds each cycle (not two separate services):
 
 ```mermaid
 sequenceDiagram
     participant NOAA as NOAA Weather API
-    participant NP as noaa-poller
     participant IPAWS as FEMA IPAWS
-    participant IP as ipaws-poller
+    participant P as eas-station-poller<br/>(cap_poller.py --continuous)
     participant DB as PostgreSQL + PostGIS
     participant REDIS as Redis
 
     loop Every poll interval (default 120s)
-        NP->>NOAA: GET /alerts (CAP XML)
-        NOAA-->>NP: CAP 1.2 Feed
-        NP->>NP: Parse & Validate XML
-        NP->>NP: Extract geometry (polygon/circle/SAME)
-        NP->>DB: Check duplicate (CAP identifier)
+        P->>NOAA: GET /alerts (CAP XML)
+        NOAA-->>P: CAP 1.2 Feed
+        P->>P: Parse & Validate XML
+        P->>P: Extract geometry (polygon/circle/SAME)
+        P->>DB: Check duplicate (CAP identifier)
         alt New Alert
-            NP->>DB: INSERT cap_alerts
-            NP->>DB: Calculate spatial intersections
-            NP->>REDIS: Publish alert notification
+            P->>DB: INSERT cap_alerts
+            P->>DB: Calculate spatial intersections
+            P->>REDIS: Publish alert notification
         end
-    end
 
-    loop Every poll interval (default 120s)
-        IP->>IPAWS: GET /recent/{timestamp}
-        IPAWS-->>IP: CAP 1.2 Feed
-        IP->>IP: Parse & Validate XML
-        IP->>DB: Store alerts + intersections
+        P->>IPAWS: GET /recent/{timestamp}
+        IPAWS-->>P: CAP 1.2 Feed
+        P->>P: Parse & Validate XML
+        P->>DB: Store alerts + intersections
     end
 ```
 
 - **Pollers (`poller/cap_poller.py`)** fetch CAP 1.2 feeds from NOAA Weather Service and FEMA IPAWS on configurable intervals (default 120 seconds, configured at Settings → Poller and persisted in `poller_settings.poll_interval_sec`)
 - **Schema Enforcement** validates XML against CAP schema and normalises polygons, circles, and SAME location codes
 - **Deduplication (`app_core/alerts.py`)** compares CAP identifiers, message types, and sent timestamps
-- **Configuration** for runtime settings (polling, EAS broadcast, notifications, application logging) lives in dedicated database tables editable from the admin UI; only boot-time infrastructure (`SECRET_KEY`, `DATABASE_URL`, hostnames, paths) is read from the persistent `/app-config/.env` file
-- **Combined feed-loss alarm** (`app_core/system_health.py`): the two pollers are tracked *independently* — each poller's last-success timestamp is compared against `poller_settings.feed_stall_threshold_sec` — precisely because they run as separate services and can fail independently. A live NOAA feed must never mask a dead IPAWS feed (or vice versa), so the Alert Feeds card on `/system_health` surfaces both staleness values, and the compliance alert only fires when *both* feeds have stalled past the threshold. This is a liveness check on top of the per-message deduplication above, not a replacement for it.
+- **Configuration** for runtime settings (polling, EAS broadcast, notifications, application logging) lives in dedicated database tables editable from the admin UI; only boot-time infrastructure (`SECRET_KEY`, `DATABASE_URL`, hostnames, paths) is read from the persistent `/opt/eas-station/.env` file
+- **Combined feed-loss alarm** (`app_core/system_health.py`): the two feeds are tracked *independently* within the single unified poller process — each feed's own last-success timestamp is compared against `poller_settings.feed_stall_threshold_sec`, since a working NOAA fetch says nothing about whether the separate IPAWS fetch is also succeeding. A live NOAA feed must never mask a dead IPAWS feed (or vice versa), so the Alert Feeds card on `/system_health` surfaces both staleness values, and the compliance alert only fires when *both* feeds have stalled past the threshold. This is a liveness check on top of the per-message deduplication above, not a replacement for it.
 
 ### 2. Persistence & Spatial Context
 
 ```mermaid
 erDiagram
-    CAPAlert ||--o{ AlertIntersection : has
-    Boundary ||--o{ AlertIntersection : intersects
+    CAPAlert ||--o{ Intersection : has
+    Boundary ||--o{ Intersection : intersects
     CAPAlert ||--o{ EASMessage : generates
     RadioReceiver ||--o{ RadioReceiverStatus : reports
     AudioSource ||--o{ AudioSourceMetrics : captures
@@ -182,19 +185,18 @@ erDiagram
 
     CAPAlert {
         int id PK
-        string cap_identifier UK
-        string event_code
+        string identifier UK
+        string event
         string severity
         timestamp sent
         timestamp expires
-        geometry polygon
-        string same_codes
+        geometry geom
+        json raw_json
     }
 
     Boundary {
         int id PK
         string name
-        string fips_code
         string type
         geometry geom
     }
@@ -243,7 +245,7 @@ flowchart TD
     AUTO_FWD --> SAME
     CONFIG --> SAME[Generate SAME Header<br/>app_utils/eas.py]
 
-    SAME --> ORIGINATOR[Substitute Station Originator<br/>replaces source originator]
+    SAME --> ORIGINATOR[Resolve Originator<br/>CAP EAS-ORG param if present,<br/>else station config]
     ORIGINATOR --> FSK[FSK Encode @ 520.83 baud<br/>app_utils/eas_fsk.py]
     FSK --> TONE[Generate Attention Tone<br/>853 Hz + 960 Hz]
 
@@ -253,14 +255,24 @@ flowchart TD
     NARRATE --> EOM[Generate EOM x3<br/>NNNN]
 
     EOM --> AUDIO[Build Complete Audio<br/>Header x3 + Tone + Voice + EOM x3]
-    AUDIO --> STORE[(Store WAV File)]
+    AUDIO --> STORE[(Store WAV File<br/>+ EASMessage row)]
 
     STORE --> GPIO{GPIO Configured?}
-    GPIO -->|Yes| KEY[hardware-service<br/>Key Transmitter]
+    GPIO -->|Yes| KEY[eas-station-gpio<br/>Key Transmitter<br/>via Redis broadcast-state marker]
     GPIO -->|No| PLAY
-    KEY --> PLAY[Play Audio]
+    KEY --> PLAY[Play Audio<br/>local player, if configured]
     PLAY --> UNKEY[Unkey Transmitter]
+
+    STORE --> CTRL{Controller registered<br/>in this process?<br/>eas_stream_injector.has_controller}
+    CTRL -->|Yes -- running inside<br/>eas-station-audio.service| DIRECT[inject_eas_audio<br/>direct in-process call]
+    CTRL -->|No -- running inside<br/>eas-station-poller/-web| REDISCMD[AudioCommandPublisher<br/>.inject_raw_eas_audio<br/>over Redis]
+    REDISCMD --> AUDIOSVC[eas-station-audio<br/>picks up command,<br/>injects into Icecast]
+    DIRECT --> ICECAST_OUT[Icecast air-chain]
+    AUDIOSVC --> ICECAST_OUT
+
     UNKEY --> LOG[Log to Database<br/>eas_forwarded = true]
+    ICECAST_OUT -->|Failed| RETRY[(EASMessage.metadata_payload<br/>icecast_injected = false)]
+    RETRY -->|CAPPoller.retry_failed_icecast_injections<br/>every poll cycle, up to 3 attempts| REDISCMD
 
     style CAP_IN fill:#3b82f6,color:#fff
     style OTA_IN fill:#3b82f6,color:#fff
@@ -269,6 +281,7 @@ flowchart TD
     style STORE fill:#10b981,color:#fff
     style KEY fill:#f59e0b,color:#000
     style SKIP fill:#ef4444,color:#fff
+    style RETRY fill:#ef4444,color:#fff
 ```
 
 **Automatic Forwarding (v2.52.0+):**
@@ -276,7 +289,8 @@ flowchart TD
 - **OTA alerts** (`app_core/audio/alert_forwarding.py`) — when a FIPS-matched OTA alert is received, calls `auto_forward_ota_alert()` through the same broadcast pipeline
 - **Gated-alerts hold-off timer (v2.158.0+, optional)** — when enabled, alerts that are not Immediate urgency / Extreme severity are held in a `gated_alerts` queue instead of broadcasting immediately; an operator can approve them early or cancel them, or a background scheduler auto-releases them once the configured hold-off timer expires. See `docs/guides/GATED_ALERTS.md`.
 - **Cross-source deduplication** (`app_core/audio/auto_forward.py`) — checks `eas_messages` and `manual_eas_activations` tables within a 15-minute window for same event code + overlapping FIPS codes to prevent duplicate broadcasts when the same alert arrives via IPAWS + NOAA + OTA
-- **Originator substitution** — the original alert's originator is replaced with the station's configured originator in `build_same_header()` (`app_utils/eas.py:647`)
+- **Originator resolution** (ECIG §3.4.1.1) — `build_same_header()` (`app_utils/eas.py`, ~line 1417) uses the incoming CAP alert's own `EAS-ORG` parameter when present and a recognised value; the station's configured originator (`eas_settings.originator`) is only a fallback for alerts that don't specify one, not an override of the source
+- **Cross-process Icecast injection (v3.10.3+)** — `EASBroadcaster.handle_alert()` (`app_utils/eas.py`) pushes the generated audio into the live Icecast air-chain via `app_core/audio/eas_stream_injector.py`. That module's `_controller` is only registered inside `eas-station-audio.service`, so `handle_alert()` checks `has_controller()` first: when true (a live OTA relay decoded inside the audio service) it calls `inject_eas_audio()` directly, in-process; when false (every CAP/IPAWS auto-forward from `eas-station-poller.service`, and every gated-alert "Approve" from `eas-station-web.service`) it instead publishes `AudioCommandPublisher.inject_raw_eas_audio()` over Redis, asking `eas-station-audio` — the process that actually owns the running `IcecastStreamer` threads — to perform the injection. The outcome is recorded on the `EASMessage` row (`metadata_payload['icecast_injected']`); `CAPPoller.retry_failed_icecast_injections()` re-sends a failed injection (up to 3 attempts, once per poll cycle) via the same resend command the manual "Resend" button uses, so a transient failure (the audio service briefly down) doesn't silently and permanently lose the broadcast.
 
 **ECIG V1.0 compliance gates** (applied by `auto_forward_cap_alert` in order; first failure short-circuits with a `reason` citing the spec section):
 
@@ -297,7 +311,7 @@ Audio / text rendering also follows the guide: `_fetch_embedded_audio` enforces 
 **Manual Path:**
 - **Workflow UI (`webapp/eas/`)** guides operators through alert selection and SAME header preview
 - **SAME Generator (`app_utils/eas.py`, `app_utils/eas_fsk.py`)** creates FCC-compliant 520⅔ baud FSK audio
-- **Hardware Integration** via isolated `hardware-service` systemd service for GPIO relay control
+- **Hardware Integration** via the isolated `eas-station-gpio` service (part of `eas-station-hardware.target`) for GPIO relay control
 
 **Aborting a broadcast in progress:** every playback path — RWT (`app_core/rwt_scheduler.py::_drive_rwt_airchain()`), manual "Send" (`webapp/eas/workflow.py`), resend (`scripts/resend_eas_broadcast.py`), and live/forwarded alerts (`app_utils.eas.EASBroadcaster`) — launches its player through `app_utils/eas.py::play_broadcast_audio()` (a thin wrapper around `_run_command()`, which the live/forwarded path calls directly since it lives in the same module). That single chokepoint publishes the playback subprocess's PID to Redis (`eas:broadcast_pid`) for the duration of the call, clearing it on completion, and — critically — also publishes the isolated EOM tone-burst WAV for whatever's currently playing (`eas:broadcast_eom_wav`, base64-encoded since the Redis client decodes every value as UTF-8 and raw audio bytes are not valid UTF-8).
 
@@ -307,52 +321,62 @@ Audio / text rendering also follows the guide: `_fetch_embedded_audio` enforces 
 
 ### 5. Audio Processing & SDR Monitoring
 
-The `sdr-service` systemd service handles all SDR hardware and audio processing:
+SDR hardware capture, FM/AM demodulation, and SAME decode/Icecast streaming are three separate systemd services (split apart so a demodulation crash can't take Icecast output down with it):
 
 ```mermaid
 flowchart LR
-    subgraph sdr-service["sdr-service (systemd)"]
+    subgraph sdr_svc["eas-station-sdr\n(sdr_hardware_service.py)"]
         SDR[SoapySDR<br/>Drivers]
-        DEMOD[FM Demodulator<br/>demodulation.py]
+    end
+
+    subgraph demod_svc["eas-station-demod\n(services.demod)"]
+        DEMOD[FM/AM Demodulator]
+    end
+
+    subgraph audio_svc["eas-station-audio\n(eas_monitoring_service.py)"]
         DECODE[Streaming SAME<br/>Decoder]
         ICEOUT[Icecast Output<br/>Streaming]
     end
-    
+
     subgraph Hardware["USB Hardware"]
         RTL[RTL-SDR]
         AIR[Airspy]
     end
-    
+
     RTL --> SDR
     AIR --> SDR
-    SDR -->|IQ Samples| DEMOD
-    DEMOD -->|PCM Audio| DECODE
-    DEMOD -->|PCM Audio| ICEOUT
+    SDR -->|IQ Samples via Redis| DEMOD
+    DEMOD -->|PCM Audio via Redis| DECODE
+    DEMOD -->|PCM Audio via Redis| ICEOUT
     DECODE -->|Alerts| REDIS[(Redis)]
     ICEOUT --> ICECAST[Icecast Server]
-    
-    style sdr-service fill:#e1f5ff
+
+    style sdr_svc fill:#e1f5ff
+    style demod_svc fill:#e1f5ff
+    style audio_svc fill:#e1f5ff
 ```
 
 - **Real-Time Streaming Decoder (`app_core/audio/streaming_same_decoder.py`)** — <200ms latency, <5% CPU
 - **Audio Source Manager (`app_core/audio/source_manager.py`)** — multi-source with automatic failover
-- **Icecast Integration** streams demodulated audio for remote monitoring
+- **Icecast Integration** streams demodulated audio for remote monitoring, and is also the injection point for generated EAS broadcast audio (see the Cross-process Icecast injection note above)
 
 ### 6. Verification & Compliance
 
 ```mermaid
 sequenceDiagram
     participant TX as Transmitter
-    participant SDR as sdr-service
-    participant DECODE as Streaming Decoder
+    participant SDR as eas-station-sdr
+    participant DEMOD as eas-station-demod
+    participant DECODE as Streaming Decoder<br/>(eas-station-audio)
     participant DB as Database
     participant UI as Compliance Dashboard
 
     TX->>TX: Broadcast EAS
     TX-->>SDR: RF Signal (162.x MHz)
     SDR->>SDR: Capture IQ samples
-    SDR->>SDR: FM Demodulate
-    SDR->>DECODE: PCM audio stream
+    SDR->>DEMOD: IQ samples via Redis
+    DEMOD->>DEMOD: FM Demodulate
+    DEMOD->>DECODE: PCM audio via Redis
     
     DECODE->>DECODE: Detect SAME preamble
     DECODE->>DECODE: FSK decode header
@@ -416,5 +440,5 @@ Refer back to this document whenever you need a grounded explanation of what hap
 
 ---
 
-**Last Updated:** 2025-12-16
+**Last Updated:** 2026-09-17
 **Related Documents:** [System Architecture](SYSTEM_ARCHITECTURE.md), [Data Flow Sequences](DATA_FLOW_SEQUENCES.md), [Diagrams Index](../reference/DIAGRAMS.md)

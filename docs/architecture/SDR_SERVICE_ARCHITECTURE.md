@@ -455,18 +455,21 @@ ring_buffer = int(2_500_000 * 1.0)    # 2,500,000 samples
 
 ### CPU Affinity
 
-For multi-core systems, consider pinning threads:
-```yaml
-sdr-service:
-  cpuset: "0,1"  # Use cores 0 and 1
+This is a bare-metal systemd deployment, not a container — pin CPUs via the unit's drop-in override rather than a compose file:
+```ini
+# /etc/systemd/system/eas-station-sdr.service.d/override.conf
+[Service]
+CPUAffinity=0 1
 ```
+Apply with `systemctl daemon-reload && systemctl restart eas-station-sdr`.
 
 ### Memory
 
-```yaml
-sdr-service:
-  shm_size: '512mb'  # Increase for higher sample rates
-  mem_limit: 1g       # Limit total memory
+Likewise, use `MemoryMax=` in a unit override instead of a container memory limit:
+```ini
+# /etc/systemd/system/eas-station-sdr.service.d/override.conf
+[Service]
+MemoryMax=1G
 ```
 
 ## Icecast Streaming Architecture

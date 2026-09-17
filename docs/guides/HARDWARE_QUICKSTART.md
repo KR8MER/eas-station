@@ -17,32 +17,43 @@ Hardware settings are stored in the database — environment variables / `.env` 
 
 1. Navigate to **Settings → Hardware Settings** (`/admin/hardware`)
 2. Open the **GPIO** tab
-3. Set **Enable GPIO Control** to `true`
-4. Configure your GPIO pins:
-   - **Primary GPIO Pin**: `17` (BCM pin for main transmitter)
-   - **Additional GPIO Pins**: Leave empty unless you have multiple relays
-5. Click **Save Changes**
-6. Click **Restart Now** when prompted
+3. Check **Enable GPIO Control**
+4. Click **Save Changes**, then **Restart Now** when prompted
 
-### GPIO Pin Reference
+Individual pins are **not** configured on this tab — it only has the
+enable/disable switch (and an OLED-reserved-pins warning, if OLED is on).
+Assigning behaviors to specific pins happens on a separate page:
 
-**BCM Pin Numbering** (Not Physical Pin Numbers):
-- Pin 17 (BCM) = Physical Pin 11 (default for transmitter)
-- Pin 27 (BCM) = Physical Pin 13 (backup transmitter)
-- Pin 22 (BCM) = Physical Pin 15 (relay control)
+### Assign Pin Behaviors
 
-**Example Configuration for Multiple Pins:**
-```
-27:Backup_TX:true,22:Warning_Light:true,23:Relay_1:false
-```
+1. Click **GPIO Pin Map** on the GPIO tab, or go directly to
+   `/admin/gpio/pin-map`.
+2. This shows a visual Raspberry Pi 40-pin header. For each pin you want to
+   use, pick one **behavior** from a set of radio buttons — e.g. **Transmitter
+   PTT** (keys the transmitter for the full broadcast), **Audio Mute**,
+   **Duration of Alert**, **Playout**, **Flash**, **Five Seconds**,
+   **Incoming Alert**, **Forwarding Alert**, or **Gate Pending** — or leave it
+   as **None** to disable it. A pin can also be set to input mode with its
+   own action (e.g. trigger a manual test) instead of output/relay mode.
+3. Active-high/low and other per-pin details are shown next to each pin
+   once it has a behavior assigned.
+4. Save from that page. Changes to the pin map do not require a service
+   restart the way toggling **Enable GPIO Control** does.
 
-Format: `PIN:NAME:ACTIVE_HIGH` (comma-separated)
+**BCM Pin Numbering** (Not Physical Pin Numbers) — a few commonly used pins:
+- Pin 17 (BCM) = Physical Pin 11 (a common choice for the main transmitter)
+- Pin 27 (BCM) = Physical Pin 13
+- Pin 22 (BCM) = Physical Pin 15
+
+No pin has a behavior assigned out of the box — pick and assign these
+yourself on the Pin Map page.
 
 ### Verify GPIO is Working
 
-1. Go to **Settings → Hardware → GPIO & Relays**
-2. Test individual pins
-3. Check **Logs → Hardware Service** for initialization messages
+1. Go to **Settings → Hardware Settings → GPIO** and use the **Control
+   Panel** (`/admin/gpio`) or **Statistics** (`/admin/gpio/statistics`) links
+   to test individual pins.
+2. Check **Logs → Hardware Service** for initialization messages.
 
 ## OLED Display Configuration
 
@@ -214,6 +225,7 @@ fetch('/api/environment/restart-services', {
 - `web` - Web interface only
 - `poller` - Alert polling service
 - `sdr` - SDR radio service
+- `demod` - Demodulation service
 - `audio` - Audio monitoring service
 
 ## Troubleshooting
@@ -230,9 +242,12 @@ fetch('/api/environment/restart-services', {
 5. ✅ Restart hardware service
 
 **Check Logs:**
-- "GPIO controller disabled (GPIO_ENABLED=false)" → Enable in settings
-- "No GPIO pins configured" → Add EAS_GPIO_PIN
+- "No GPIO pins configured (configure in Admin > Hardware Settings)" → Add a pin in the GPIO tab
 - "Failed to add GPIO pin X" → Check pin number/permissions
+
+(GPIO is enabled/disabled and pin-configured entirely through **Admin →
+Hardware Settings** now — there is no `.env`/environment-variable path for
+this, matching this guide's own note above.)
 
 ### OLED Not Working
 
@@ -316,7 +331,7 @@ All values below are managed in **Settings → Hardware Settings** and stored in
 | Setting | Default |
 |---------|---------|
 | GPIO enabled | `false` |
-| Primary GPIO pin | `17` (BCM) |
+| GPIO pin map | *(empty — no pins configured out of the box; `17` (BCM) is a typical first pin, not a shipped default)* |
 | OLED enabled | `false` |
 | OLED I2C bus / address | `1` / `0x3C` |
 | Screen auto-start | `true` |

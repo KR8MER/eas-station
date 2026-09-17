@@ -124,8 +124,9 @@ configured through the admin UI, not `.env`:
 - **Poll interval, CAP timeout, NOAA user-agent, IPAWS feed URLs, lookback hours** —
   Settings → **Poller** (`/admin/poller`, persisted in the `poller_settings` table).
 - **County, state, FIPS codes, NWS zone codes** —
-  Settings → **Location** and Settings → **Alert Filtering**
-  (`/admin/location_settings` and `/admin/alert_filtering`).
+  Settings → **Location & Alert Filtering** (`/admin/location-settings`; the
+  page's own GET/PUT and GET/POST JSON APIs are `/admin/location_settings`
+  and `/admin/alert_filtering`, not separately navigable pages).
 
 After saving, restart the poller so it picks up the new values:
 

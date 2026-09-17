@@ -188,10 +188,10 @@ flowchart TD
     A[Navigate to Settings → Radio Receivers] --> B[Click 'Run Diagnostics']
     B --> C{Diagnostics Pass?}
     C -->|No| D[See Troubleshooting]
-    C -->|Yes| E[Click 'Discover Devices']
+    C -->|Yes| E[Click 'Discover USB Devices']
     E --> F[Click 'Add This Device']
     F --> G[Choose Preset]
-    G --> H[NOAA Weather Radio RTL-SDR<br/>or<br/>NOAA Weather Radio Airspy]
+    G --> H[NOAA Weather Radio RTL-SDR Direct<br/>or<br/>NOAA Weather Radio Airspy Direct]
     H --> I[Update frequency for your area]
     I --> J[Save Receiver]
     J --> K{Status = Locked?}
@@ -217,7 +217,7 @@ If diagnostics fail → [Troubleshooting](#troubleshooting)
 
 ### 3. Discover and Add Device
 
-1. Click **Discover Devices**
+1. Click **Discover USB Devices**
 2. Review detected SDRs
 3. Click **Add This Device** on your SDR
 4. Form pre-fills with device info
@@ -226,8 +226,8 @@ If diagnostics fail → [Troubleshooting](#troubleshooting)
 
 1. Click **Use Preset**
 2. Choose:
-   - **NOAA Weather Radio (RTL-SDR)** - For RTL-SDR dongles
-   - **NOAA Weather Radio (Airspy)** - For Airspy receivers
+   - **NOAA Weather Radio (RTL-SDR Direct)** - For RTL-SDR dongles
+   - **NOAA Weather Radio (Airspy Direct)** - For Airspy receivers
 3. Click **Use This Preset**
 
 ### 5. Set Your Local Frequency

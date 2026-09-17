@@ -74,40 +74,49 @@ Configure the PostgreSQL connection.
 
 | Option | Variable | Description |
 |--------|----------|-------------|
-| Database Host | `DATABASE_HOST` | Hostname or IP of PostgreSQL server |
-| Database Port | `DATABASE_PORT` | Port (default: 5432) |
-| Database Name | `DATABASE_NAME` | Name of the EAS Station™ database |
-| Database Username | `DATABASE_USER` | PostgreSQL user |
-| Database Password | `DATABASE_PASSWORD` | PostgreSQL password (input is masked) |
-| Test Connection | — | Validates the entered credentials |
+| Change Database Host | `POSTGRES_HOST` | Hostname or IP of PostgreSQL server |
+| Change Database Port | `POSTGRES_PORT` | Port (current value shown, not defaulted to 5432 in the prompt) |
+| Change Database Name | `POSTGRES_DB` | Name of the EAS Station™ database |
+| Change Database User | `POSTGRES_USER` | PostgreSQL user |
+| Change Database Password | `POSTGRES_PASSWORD` | PostgreSQL password (input is masked) |
+
+**There is no "Test Connection" option** — each change just writes the value
+and reminds you a service restart may be needed; nothing validates
+connectivity from within `eas-config`.
 
 ---
 
 ### 3. Alert Sources
 
-Configure where EAS Station™ fetches CAP alerts from.
+Toggles and the shared poll interval for the two CAP feed sources. **There is
+no feed-URL field here** — the actual feed URLs are configured elsewhere (see
+[IPAWS Feed Integration](ipaws_feed_integration.md)'s `/admin/poller` page);
+this menu only flips feeds on/off and sets timing.
 
 | Option | Variable | Description |
 |--------|----------|-------------|
-| NOAA Weather API URL | `NOAA_FEED_URL` | NOAA CAP atom feed URL |
-| IPAWS Feed | `IPAWS_FEED_URL` | FEMA IPAWS CAP feed URL |
-| Custom Feed URL | `CUSTOM_FEED_URL` | Additional CAP source |
-| Poll Interval | `POLL_INTERVAL` | Seconds between feed polls (default: 60) |
+| Toggle NOAA Weather Alerts | `NOAA_ALERTS_ENABLED` | Enable/disable the NOAA CAP feed |
+| Toggle IPAWS Integration | `IPAWS_ENABLED` | Enable/disable the FEMA IPAWS feed |
+| Configure NOAA Poll Interval | `CAP_POLL_INTERVAL` | Seconds between feed polls (default: **300**) |
+| Configure IPAWS Settings | — | Informational only — points you at `IPAWS_URL` / `IPAWS_API_KEY` in `.env` for manual editing; no inline field |
 
 ---
 
 ### 4. Audio Settings
 
-Configure audio inputs, Icecast streaming, and EAS broadcast parameters.
+Only two of the four options actually edit a value here; the other two are
+informational pointers to the web UI / manual `.env` editing.
 
 | Option | Variable | Description |
 |--------|----------|-------------|
-| Icecast Server Host | `ICECAST_HOST` | Icecast server hostname |
-| Icecast Source Password | `ICECAST_SOURCE_PASSWORD` | Icecast source password |
-| EAS Audio Output Device | `AUDIO_OUTPUT_DEVICE` | ALSA output device name |
-| Audio Input Device | `AUDIO_INPUT_DEVICE` | ALSA input for monitoring |
-| TTS Engine | `TTS_ENGINE` | `pyttsx3` or `azure` |
-| Azure TTS Region | `AZURE_SPEECH_REGION` | Azure region for TTS (if using Azure) |
+| Toggle Icecast Streaming | `ICECAST_ENABLED` | Enable/disable Icecast output |
+| Configure Icecast Port | `ICECAST_PORT` | Icecast server port |
+| Configure Receivers | — | Informational only — points to the web UI (`Settings → Radio`) and `/opt/eas-station/config/`; no inline field |
+| Configure Broadcast Settings | — | Informational only — names `BROADCAST_ENABLED` / `BROADCAST_VOLUME` / `AUDIO_OUTPUT_DEVICE` as things to edit manually in `.env`; no inline field |
+
+Receivers, TTS provider/region, Icecast host/source-password, and the ALSA
+input device are all configured through the **web UI** (Settings → Radio /
+Settings → TTS / Settings → Icecast), not through `eas-config`.
 
 ---
 
@@ -122,14 +131,15 @@ Hardware settings (GPIO, relays, OLED, LED signs, VFD, NeoPixel, Zigbee) are con
 
 ### 6. Network Settings
 
-Configure firewall and remote access.
-
 | Option | Description |
 |--------|-------------|
-| Configure UFW Firewall | Open/close ports for web UI, Icecast, and SSH |
-| Enable Tailscale | Install and configure Tailscale VPN |
-| Set Static IP | Configure a static IP for the primary network interface |
-| View Open Ports | Display current ufw status |
+| Change Web Interface Port | Sets the port the web UI listens on |
+| View Firewall Status | Read-only — runs `ufw status numbered` |
+| Configure Remote Access | Informational only — lists the default open ports (22/80/443/8000) and suggests `ufw allow PORT/tcp` manually; does not open ports itself |
+
+**There is no Tailscale toggle or static-IP option in `eas-config`.** For
+Tailscale, see [Tailscale Setup](TAILSCALE_SETUP.md); for opening firewall
+ports, run `ufw` directly or use the web UI's own firewall admin page.
 
 ---
 
@@ -137,11 +147,13 @@ Configure firewall and remote access.
 
 | Option | Variable | Description |
 |--------|----------|-------------|
-| Log Level | `LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-| Max Log Size | `LOG_MAX_BYTES` | Log rotation size threshold |
-| Redis Host | `REDIS_URL` | Redis connection URL |
-| Secret Key | `SECRET_KEY` | Flask session secret (auto-generates if blank) |
-| Debug Mode | `FLASK_DEBUG` | Enable Flask debug mode (development only) |
+| Change Log Level | `LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
+| Toggle Debug Mode | `DEBUG` | Enable/disable debug mode |
+| Performance Tuning | — | Informational only — names `WORKER_PROCESSES` / `MAX_CONNECTIONS` / `CACHE_SIZE` / `POOL_SIZE` as things to edit manually in `.env`; no inline field |
+| View System Logs | — | Lists the 5 most recently modified files under `/var/log/eas-station/*.log` and suggests `tail -f` |
+
+There is no `LOG_MAX_BYTES`, `REDIS_URL`, or `SECRET_KEY` field anywhere in
+this menu — those aren't configurable through `eas-config`.
 
 ---
 

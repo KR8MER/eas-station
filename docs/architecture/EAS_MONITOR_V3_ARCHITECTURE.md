@@ -563,9 +563,9 @@ If needed, rollback is simple:
 
 ### Code Files
 
-- Implementation: `/app_core/audio/eas_monitor_v3.py`
+- Implementation: `/app_core/audio/eas_monitor_v3.py` (`UnifiedEASMonitorService`, `SourceWatcher`, `HealthTracker`)
 - Integration: `/eas_monitoring_service.py`
-- Legacy: `/app_core/audio/eas_monitor.py` (V2, kept for reference)
+- Shared alert utilities: `/app_core/audio/eas_monitor.py` — **not legacy V2 code**; `MultiMonitorManager` itself is gone from the tree (only referenced in comments as historical context, still findable in git history for rollback). This module is actively imported by the current V3 service for `create_fips_filtering_callback()`, alert storage (`_store_received_alert`), and related helpers — it was repurposed rather than retired.
 
 ### Version History
 

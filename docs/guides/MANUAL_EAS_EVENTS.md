@@ -164,37 +164,45 @@ This concludes this test of the Emergency Alert System.
 
 ## Command-Line: manual_eas_event.py
 
-For scripted or automated manual broadcasts, use the command-line tool:
+This is **not** a from-scratch synthetic-alert builder — it triggers a real
+manual broadcast from an existing **CAP XML message** (a file or STDIN), the
+same `EASBroadcaster.handle_alert()` pipeline the Broadcast Builder and
+auto-forward paths use. Its FIPS/event flags are a **safety allowlist**, not
+alert content: they authorize which of the CAP file's own FIPS/event codes
+are permitted to actually trigger a broadcast, they don't set arbitrary
+values.
 
 ```bash
 python scripts/manual_eas_event.py --help
 ```
 
-**Basic example — Required Weekly Test:**
+**Basic example — replay a saved CAP alert, authorizing two counties:**
 
 ```bash
 python scripts/manual_eas_event.py \
-  --originator EAS \
-  --event RWT \
-  --fips 039137,039057 \
-  --duration 0100 \
-  --callsign "WXYZ/EAS" \
-  --message "This is a test of the Emergency Alert System. This is only a test."
+  --fips 039137 --fips 039057 \
+  path/to/alert.cap.xml
+```
+
+**Reading from STDIN** (omit the file argument):
+
+```bash
+cat path/to/alert.cap.xml | python scripts/manual_eas_event.py --event RWT
 ```
 
 **Options:**
 
-| Flag | Description |
+| Argument | Description |
 |------|-------------|
-| `--originator` | EAS originator code (EAS, CIV, WXR, PEP) |
-| `--event` | EAS event code (TOR, RWT, SVR, etc.) |
-| `--fips` | Comma-separated SAME/FIPS codes |
-| `--duration` | Duration in HHMM format (e.g., 0100 = 1 hour) |
-| `--callsign` | Station callsign in LLLLLLLL format |
-| `--message` | Voice message text (TTS) |
-| `--no-attention` | Skip the attention tone |
-| `--no-voice` | Skip the voice message |
-| `--dry-run` | Build the audio package without broadcasting |
+| `cap_file` (positional, optional) | Path to the CAP XML file. Reads from STDIN when omitted. |
+| `--fips CODE` | Additional FIPS/SAME code to authorize for this broadcast (repeatable: `--fips A --fips B`). Use `ALL` to authorize every FIPS code in the file. |
+| `--event CODE` | Additional SAME event code to authorize for this broadcast (repeatable). |
+| `--dry-run` | Validate the CAP file and authorization without storing data or broadcasting audio. |
+
+The FIPS/event allowlists can also be set via the `EAS_MANUAL_FIPS_CODES` /
+`EAS_MANUAL_EVENT_CODES` environment variables (comma-separated), which are
+combined with whatever `--fips`/`--event` flags are passed on the command
+line.
 
 ---
 
@@ -219,7 +227,7 @@ Every executed broadcast (manual or automatic) is stored in the **EAS Messages**
 - **Admin → EAS Messages** — list all broadcasts with timestamps and header details
 - **Alert Verification** (`/admin/alert-verification`) — upload captured audio for SAME decode and comparison
 
-Audio files are stored in the media directory (`EAS_AUDIO_DIR`) and linked to the message record.
+Audio files are stored in the media directory (`EAS_OUTPUT_DIR`) and linked to the message record.
 
 ---
 

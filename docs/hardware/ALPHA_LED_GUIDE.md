@@ -1,6 +1,8 @@
 # Alpha LED Sign Comprehensive Guide
 
-> **Note (May 2026):** The runtime LED control surface is the generic `/led_control` page and the `/api/led/*` endpoints exposed by `webapp/routes_led.py` (e.g. `/api/led/send_message`, `/api/led/brightness`, `/api/led/clear`, `/api/led/status`, `/api/led/test`). The Alpha-specific dashboard and `/api/alpha/*` endpoints documented below in §3 and §4 describe a planned protocol-aware surface that has not yet been wired up — they remain in this guide as a reference for the M-Protocol features the underlying controller supports. Treat anything in those sections as forward-looking until the routes appear in `webapp/routes_led.py`.
+> **Note (verified against code):** The runtime LED control surface is the generic `/led_control` page and the `/api/led/*` endpoints exposed by `webapp/routes_led.py` (e.g. `/api/led/send_message`, `/api/led/brightness`, `/api/led/clear`, `/api/led/status`, `/api/led/test`). The Alpha-specific dashboard (`/alpha-sign`) and every `/api/alpha/*` endpoint documented in **§2's "Dashboard Sections" and "API Endpoints" subsections below** describe a planned web surface that has never been wired up — no such route exists anywhere in `webapp/`. Treat that material as forward-looking.
+>
+> **This does not apply to §3–§6.** `scripts/led_sign_controller.py`'s `Alpha9120CController` class is real and fully implements every method those sections reference (`read_serial_number()`, `set_time_and_date()`, `set_speaker()`, `set_brightness()`, `read_text_file()`, etc.), as are the three test scripts (`scripts/test_alpha_diagnostics.py`, `test_alpha_timedate.py`, `test_alpha_advanced.py`). A developer can use all of that today via direct Python import or the CLI test scripts — there is just no web dashboard or REST API in front of it yet.
 
 ## 1. Overview
 

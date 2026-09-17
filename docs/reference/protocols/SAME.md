@@ -255,7 +255,7 @@ into `EASAudioGenerator.build_files`:
 
 | Source | Trigger | Where |
 |---|---|---|
-| **CAP (IPAWS, NWS)** | poller pulls a CAP-XML alert and the event code matches the forwarded set | `app_core/cap_poller.py` → `app_utils/alert_sources.py` |
+| **CAP (IPAWS, NWS)** | poller pulls a CAP-XML alert and the event code matches the forwarded set | `poller/cap_poller.py` → `app_utils/alert_sources.py` |
 | **OTA EAS relay** | live demodulator decodes a header from a monitored receiver | `app_utils/eas_demod.py` → `app_utils/eas_detection.py` |
 | **Manual** | operator authors and submits a broadcast | `app_utils/eas.py` `build_manual_components` |
 | **RWT/RMT scheduled** | required-weekly-test scheduler fires | `app_core/rwt_scheduler.py` |

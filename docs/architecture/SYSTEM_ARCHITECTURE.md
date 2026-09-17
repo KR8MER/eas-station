@@ -43,14 +43,15 @@ graph TB
 
     subgraph "EAS Station™ Services"
         subgraph "Application Layer"
-            APP[app<br>Flask Web UI<br>Port 5000]
-            NOAA_POLL[noaa-poller<br>CAP Polling]
-            IPAWS_POLL[ipaws-poller<br>CAP Polling]
+            APP[eas-station-web<br>Flask Web UI<br>Gunicorn]
+            POLLER[eas-station-poller<br>Unified NOAA + IPAWS<br>CAP Polling]
         end
 
         subgraph "Hardware Services"
-            SDR_SVC[sdr-service<br>SDR + Audio<br>USB Access]
-            HW_SVC[hardware.target<br>5 subsystems<br>Ports 5101–5105]
+            SDR_SVC[eas-station-sdr<br>SDR Capture<br>USB Access]
+            DEMOD_SVC[eas-station-demod<br>FM/AM Demod]
+            AUDIO_SVC[eas-station-audio<br>SAME Decode + Icecast]
+            HW_SVC[eas-station-hardware.target<br>5 subsystems<br>Ports 5101–5105]
         end
 
         subgraph "Infrastructure"
@@ -76,30 +77,34 @@ graph TB
     end
 
     %% Data flows
-    NOAA --> NOAA_POLL
-    IPAWS --> IPAWS_POLL
-    NOAA_POLL --> DB
-    IPAWS_POLL --> DB
+    NOAA --> POLLER
+    IPAWS --> POLLER
+    POLLER --> DB
     RF --> SDR_DEV --> SDR_SVC
-    
+
     APP --> DB
     APP --> REDIS
     SDR_SVC --> REDIS
-    SDR_SVC --> ICECAST
+    SDR_SVC --> DEMOD_SVC --> REDIS
+    DEMOD_SVC --> AUDIO_SVC
+    AUDIO_SVC --> REDIS
+    AUDIO_SVC --> ICECAST
     HW_SVC --> REDIS
-    
+
     SDR_SVC --> SDR_DEV
     HW_SVC --> GPIO --> TX
     HW_SVC --> OLED
     HW_SVC --> LED
     HW_SVC --> VFD
-    
+
     NGINX --> APP
     BROWSER --> NGINX
     ICECAST --> STREAM
 
     style APP fill:#d4edda
     style SDR_SVC fill:#e1f5ff
+    style DEMOD_SVC fill:#e1f5ff
+    style AUDIO_SVC fill:#e1f5ff
     style HW_SVC fill:#fff3e0
     style DB fill:#fff3cd
     style REDIS fill:#f8d7da
@@ -109,14 +114,15 @@ graph TB
 
 | Service | Hardware Access | Purpose | Config Source |
 |---------|----------------|---------|---------------|
-| **app** | None | Web UI, API, configuration | `/app-config/.env` |
-| **noaa-poller** | None | NOAA CAP XML polling | `/app-config/.env` |
-| **ipaws-poller** | None | FEMA IPAWS polling | `/app-config/.env` |
-| **sdr-service** | USB (`/dev/bus/usb`) | SDR capture, audio processing, SAME decoding | `/app-config/.env` |
-| **hardware-service** | GPIO, I2C | Relay control, displays (OLED/VFD/LED) | `/app-config/.env` |
-| **nginx** | None | HTTPS termination, reverse proxy | Environment vars |
-| **redis** | None | Cache, inter-service communication | Volume-based |
-| **icecast** | None | Audio streaming | `/app-config/.env` |
+| **eas-station-web** | None | Web UI, API, configuration (Gunicorn) | `/opt/eas-station/.env` |
+| **eas-station-poller** | None | Unified NOAA + IPAWS CAP polling — one process, not two | `/opt/eas-station/.env` |
+| **eas-station-sdr** | USB (`/dev/bus/usb`) | SoapySDR capture | `/opt/eas-station/.env` |
+| **eas-station-demod** | None | FM/AM demodulation, reads raw IQ from `eas-station-sdr` over Redis | `/opt/eas-station/.env` |
+| **eas-station-audio** | None | SAME decode, EAS monitor, Icecast streaming | `/opt/eas-station/.env` |
+| **eas-station-hardware.target** | GPIO, I2C | Bundles `-network`/`-zigbee`/`-gps`/`-displays`/`-gpio`: relay control, displays (OLED/VFD/LED) | `/opt/eas-station/.env` |
+| **nginx** | None | HTTPS termination, reverse proxy | System config |
+| **redis** | None | Cache, inter-service communication | System config |
+| **icecast** | None | Audio streaming | `/opt/eas-station/.env` |
 
 ### System Layers
 
@@ -171,8 +177,7 @@ graph LR
     end
 
     subgraph "Background Services"
-        CAP_POLL[poller/cap_poller.py<br>NOAA Poller]
-        IPAWS_POLL[poller/ipaws_poller.py<br>IPAWS Poller]
+        CAP_POLL[poller/cap_poller.py<br>Unified NOAA + IPAWS Poller<br>CAPPoller class]
     end
 
     %% Dependencies
@@ -191,7 +196,6 @@ graph LR
     ROUTES --> EAS_UTIL
     CAP_POLL --> ALERTS
     CAP_POLL --> AUTO_FWD
-    IPAWS_POLL --> ALERTS
     AUDIO_SOURCES --> AUDIO_INGEST
     AUDIO_METER --> AUDIO_INGEST
     RADIO_DRV --> RADIO_MGR
@@ -928,7 +932,7 @@ graph TB
     end
 
     subgraph "Shared Storage"
-        VOL_CONFIG["/app-config/.env<br>Configuration"]
+        VOL_CONFIG["/opt/eas-station/.env<br>Configuration"]
         VOL_DATA[PostgreSQL Data]
         VOL_REDIS[Redis Data]
         VOL_CERTS[SSL Certificates]

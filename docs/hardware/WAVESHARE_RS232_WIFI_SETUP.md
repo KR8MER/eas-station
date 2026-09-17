@@ -77,30 +77,28 @@ Configure the UART settings to match your VFD display:
 
 ## EAS Station™ Configuration
 
-### Method 1: Web Interface (Recommended)
+### Web Interface (only supported method)
 
-1. Navigate to **Settings → Environment Variables**
-2. Scroll to **VFD Display** section
-3. Set **Connection** field to: `socket://192.168.8.122:10001`
-4. Set **Baud Rate** to: `38400` (your VFD's actual baud rate)
-5. Click **Save Changes**
-6. Click **Restart Services** → Select **Hardware Service**
-7. Monitor the Hardware Service logs to verify connection
+VFD settings live in the database (`hardware_settings` table), configured
+through the web UI — **not** through `.env`/environment variables. Legacy
+`VFD_PORT`/`VFD_BAUDRATE` environment variables are only imported once
+during the initial migration and are not read at runtime afterward, so
+editing `.env` after initial setup has no effect.
 
-### Method 2: Environment File
-
-Edit `/opt/eas-station/.env` (or your `.env` file):
-
-```bash
-# VFD Display Configuration - Network via Waveshare
-VFD_PORT=socket://192.168.8.122:10001
-VFD_BAUDRATE=38400
-```
-
-Then restart the hardware service:
-```bash
-sudo systemctl restart eas-station-hardware.target
-```
+1. Navigate to **Admin → Hardware Settings → VFD**
+2. Set the **Port** field to: `socket://192.168.8.122:10001`
+   (the field accepts either a local device path like `/dev/ttyUSB0` or a
+   `socket://HOST:PORT` network address)
+3. Set **Baud Rate** to: `38400` (your VFD's actual baud rate)
+4. Click **Save Settings**
+5. Restart the hardware service:
+   ```bash
+   sudo systemctl restart eas-station-hardware.target
+   ```
+6. Monitor the displays service logs to verify connection:
+   ```bash
+   sudo journalctl -u eas-station-displays.service -f
+   ```
 
 ## Testing the Connection
 
@@ -174,7 +172,7 @@ sock.close()
 1. **Baud rate mismatch**: 
    - Waveshare adapter: Usually 9600
    - VFD device: Check your model (typically 38400)
-   - Set `VFD_BAUDRATE` in EAS Station™ to match VFD device
+   - Set **Baud Rate** on **Admin → Hardware Settings → VFD** to match the VFD device
 2. **Check wiring**: TX/RX might be swapped
 3. **Verify data format**: 8N1 (8 data bits, No parity, 1 stop bit)
 
@@ -186,7 +184,7 @@ sock.close()
 1. Check VFD power supply
 2. Verify TX/RX wiring connections
 3. Test with PuTTY first to isolate EAS Station™ vs. adapter issues
-4. Check Hardware Service logs: `sudo journalctl -u eas-station-hardware.target -f`
+4. Check displays service logs: `sudo journalctl -u eas-station-displays.service -f`
 5. Verify VFD brightness settings (might be set too dim)
 
 ### EAS Station™ Can't Connect
@@ -198,7 +196,7 @@ sock.close()
 2. Verify port is open: `nc -z -v 192.168.8.122 10001`
 3. Check firewall on EAS Station™ host
 4. Restart hardware service: Via web UI or `sudo systemctl restart eas-station-hardware.target`
-5. Verify `VFD_PORT` format: Must start with `socket://`
+5. Verify the **Port** field on **Admin → Hardware Settings → VFD** starts with `socket://`
 
 ### Multiple Connection Attempts
 
@@ -216,10 +214,11 @@ sock.close()
 The Waveshare adapter supports two independent serial ports. To use the second port:
 
 1. Enable Socket B in adapter settings (port 18899)
-2. In EAS Station™, configure second device:
-   ```bash
-   LED_PORT=socket://192.168.8.122:18899
-   ```
+2. In EAS Station™, configure the second device on **Admin → Hardware
+   Settings → LED Sign** — unlike VFD's single combined `socket://HOST:PORT`
+   field, the LED sign uses two separate fields:
+   - **IP Address**: `192.168.8.122`
+   - **Port**: `18899`
 
 ### Password Protection
 
@@ -251,8 +250,12 @@ The basic Waveshare adapter doesn't support SSL/TLS. For encrypted connections:
 ### EAS Station™ Serial Support
 
 - **Direct Serial**: `/dev/ttyUSB0`, `/dev/ttyACM0`, etc.
-- **Network Serial**: `socket://HOST:PORT`
-- **RFC2217**: `rfc2217://HOST:PORT` (telnet-based serial)
+- **Network Serial**: `socket://HOST:PORT` — the only network URL scheme the
+  VFD connection code (`scripts/vfd_controller.py`) actually recognizes.
+  `rfc2217://` is not special-cased and falls through to a plain
+  `serial.Serial()` call, which does not understand URL schemes, so it is
+  **not currently supported** despite being a scheme pyserial itself knows
+  about generically.
 
 ### Supported Devices
 

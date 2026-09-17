@@ -1,13 +1,19 @@
 # One-Click System Upgrade
 
-**Admin → Operations** (`/admin/operations`, requires the `system.configure`
-permission) has a **System Upgrade** card that runs the same upgrade
+**Admin → System Upgrade** (`/admin/system-upgrade`, requires the
+`system.configure` permission) runs the same upgrade
 [`update.sh`](https://github.com/KR8MER/eas-station/blob/main/update.sh)
 would perform from a terminal (`sudo bash update.sh`), without needing shell
 access to the station. This page documents what the button actually does —
 it previously described a Docker-based container pipeline this project does
 not use; EAS Station is deployed bare-metal via `install.sh`/`update.sh`,
 not containers.
+
+System Upgrade used to be one card on the **Admin Operations** page
+(`/admin/operations`, still there for database optimization and a quick
+backup shortcut) but was split out into its own full page — upgrading is a
+bigger, riskier operation with its own live progress/log-streaming UI than
+the routine maintenance chores that page still handles.
 
 ## What it does
 

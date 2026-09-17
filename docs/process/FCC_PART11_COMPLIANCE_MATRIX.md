@@ -30,9 +30,9 @@ two-tone Attention Signal of 853 Hz + 960 Hz; End-of-Message `NNNN` triple burst
 
 | Element | Implementation | Status |
 |---|---|---|
-| Header ASCII format & framing | `app_utils/eas_fsk.py::build_same_header`, `encode_same_bits` | ✅ |
+| Header ASCII format & framing | `app_utils/eas.py::build_same_header`, `app_utils/eas_fsk.py::encode_same_bits` | ✅ |
 | AFSK mark/space/baud constants | `app_utils/eas_fsk.py` (`SAME_MARK_FREQ`=2083⅓, `SAME_SPACE_FREQ`=1562.5, `SAME_BAUD`=3125/6) | ✅ |
-| Preamble (16× 0xAB) | `app_utils/eas_fsk.py::encode_same_preamble` | ✅ |
+| Preamble (16× 0xAB) | `app_utils/eas_fsk.py::same_preamble_bits` | ✅ |
 | Attention Signal 853+960 Hz | `app_utils/eas.py` (`_tone_freqs = (853.0, 960.0)`) | ✅ |
 | EOM `NNNN` triple burst | `app_utils/eas.py`, `app_utils/endec_feeds.py` (§11.31(c)) | ✅ |
 | Decode / off-air parity | `app_utils/eas_decode.py`, `app_utils/eas_demod.py` | ✅ |

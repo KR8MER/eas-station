@@ -85,9 +85,12 @@ existed — to rotate it. Nothing is blocked or forced.
 
 ### (2) Prompt patching
 
-✅ **In-app, one-click**: Admin → Data & Storage → Admin Operations
-(`/admin/operations`) has a working "Check for Updates" / "Run Update"
-flow (`webapp/admin/maintenance/routes_operations.py`) that checks the
+✅ **In-app, one-click**: Admin → Data & Storage → System Upgrade
+(`/admin/system-upgrade`) has a working "Start Upgrade" flow (frontend in
+`templates/admin/system_upgrade.html`, backend endpoints in
+`webapp/admin/maintenance/routes_operations.py` under `/admin/operations/upgrade*`
+— the route path is a holdover from before this UI was split into its own
+page, see `docs/roadmap/SITE_REORGANIZATION.md` Phase 2) that checks the
 configured branch/tag against upstream, then launches `update.sh` under its
 own systemd unit and streams live progress back to the browser —
 `pip install --upgrade -r requirements.txt` and `alembic upgrade head`, the
@@ -143,9 +146,9 @@ Software support doesn't complete compliance by itself. To actually meet
       accounts) — a random passphrase from a password manager, not a
       pattern-based one, since there's no automated dictionary-word check.
 - [ ] Do not reuse this station's admin password anywhere else.
-- [ ] Run the update from Admin → Admin Operations promptly whenever a
+- [ ] Run the update from Admin → System Upgrade promptly whenever a
       security-relevant release lands — watch `docs/reference/CHANGELOG.md`,
-      or use "Check for Updates" on that page.
+      or use "Check Again" on that page.
 - [ ] After upgrading to 2.214.0 or later, confirm existing stored
       credentials were actually re-encrypted (defense-in-depth, not itself
       an § 11.35(d) requirement, but directly relevant to the same threat

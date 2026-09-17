@@ -28,11 +28,17 @@ removes the *anonymous-from-the-internet* path.
 ### Pages
 
 `/` · `/about` · `/help` · `/help/version` · `/terms` · `/privacy` ·
-`/sms-compliance` · `/support` · `/version` · `/repo-stats` · `/attribution` ·
+`/sms-compliance` · `/sms-opt-in`, `/sms-opt-in/start`, `/sms-opt-in/confirm` ·
+`/support` · `/version` · `/repo-stats` · `/attribution` ·
 `/style-guide` · `/docs` and everything under `/docs/` (viewer, assets, search)
 · `/login` · `/logout` · `/mfa/verify` · `/setup…` · `/static/…` ·
 `/sitemap.xml` · `/robots.txt` · `/favicon.ico` · `/ping` · `/health` ·
 `/health/dependencies`
+
+The `/sms-opt-in*` group is the public double opt-in flow for the SMS alert
+recipient list (web form + SMS code confirmation, `webapp/public/sms_optin.py`)
+— it must stay reachable by a visitor with no account, since that is the whole
+point of it existing.
 
 **Documentation is never gated.** The `/docs` tree, the help and about pages,
 the legal pages, and `/attribution` (AGPL-3.0 and third-party licence
@@ -50,6 +56,7 @@ the developer docs link to; it is static markup with no station data.
 | `/api/health` | Liveness probe for external monitoring |
 | `/api/release-manifest` | Version shown on the public `/version` page |
 | `/api/traffic/client` | Visitor screen-resolution beacon |
+| `/api/audio/now-playing` | Redacted now-playing metadata (title/artist/album/artwork_url only — no mount/server/port/bitrate) for the public Icecast stream, meant for external players/widgets (`webapp/routes_now_playing.py`) |
 
 Non-GET methods are never public, even on these paths.
 
@@ -68,6 +75,8 @@ public hostname should serve them anonymously:
 | `/api/monitoring/radio` | Receiver/SDR state |
 | `/api/eas-monitor/status` | Decoder state |
 | `/api/audio/metrics`, `/api/audio/metrics/latest`, `/api/audio/health`, `/api/audio/sources` | Audio hardware and source configuration |
+| `/api/gps_status` | GPS fix status (lat/lon/altitude/satellites) for the GPS OLED screen — physical location, not internet-public |
+| `/api/gpio/status` | GPIO pin summary for the `vfd_gpio_status` default screen |
 
 They stay unauthenticated for local callers because
 `scripts/screen_renderer.ScreenRenderer` — used by the displays subsystem to

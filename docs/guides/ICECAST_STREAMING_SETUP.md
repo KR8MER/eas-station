@@ -60,7 +60,11 @@ EAS Station™ manages Icecast credentials and basic settings from the web inter
 sudo eas-config
 ```
 
-Select **4. Audio Settings → Icecast Configuration**.
+Select **4. Audio Settings**, then **Toggle Icecast Streaming** or **Configure
+Icecast Port**. These are the only two Icecast fields `eas-config` edits
+directly — host, source/admin passwords, and everything else in the table
+above are configured through the web UI (see
+[eas-config: Interactive Configuration Tool](EAS_CONFIG_TOOL.md#4-audio-settings)).
 
 ### Via .env (Manual)
 
@@ -79,19 +83,28 @@ Each audio source in EAS Station™ can be assigned to a separate Icecast mount 
 
 ### Default Mount Points
 
-| Mount Point | Content | Codec |
-|------------|---------|-------|
-| `/eas-live` | Live SDR demodulated audio | MP3 128kbps or OGG |
-| `/eas-broadcast` | EAS broadcast audio (active alerts only) | WAV/PCM |
+| Profile | Mount Point | Codec | Bitrate | Enabled by default |
+|---------|------------|-------|---------|---------------------|
+| `standard` | `/stream.mp3` | MP3 | 128 kbps | Yes |
+| `low-bandwidth` | `/low.mp3` | MP3, mono | 64 kbps | No |
+| `high-quality` | `/high.mp3` | MP3 | 192 kbps | No |
+
+Live SDR-demodulated monitoring audio is what these default profiles stream —
+there is no separate always-on `/eas-broadcast` mount. EAS alert audio
+reaches Icecast through a different path: the broadcast pipeline injects the
+alert's WAV directly into whichever mount is already streaming (see
+[Icecast injection](../architecture/EAS_DECODING_SUMMARY.md) for how
+`app_core/audio/eas_stream_injector.py` does this), rather than through the
+stream-profile encoder.
 
 ### Creating a New Stream Profile
 
 1. Go to **Settings → Stream Profiles → Add Profile** (`/settings/stream-profiles`).
 2. Configure:
    - **Mount Point** — URL path (e.g., `/my-stream`)
-   - **Codec** — MP3, OGG Vorbis, or PCM
-   - **Bitrate** — 64, 128, 192, or 320 kbps (for MP3)
-   - **Sample Rate** — 8000, 22050, or 44100 Hz
+   - **Codec** — MP3, OGG Vorbis, Opus, or AAC
+   - **Bitrate** — 32–320 kbps
+   - **Sample Rate** — 8000, 16000, 22050, 32000, 44100, or 48000 Hz
    - **Source** — which audio input device or SDR receiver feeds this stream
 3. Click **Save**.
 
