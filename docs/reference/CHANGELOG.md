@@ -7,6 +7,15 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.10.4] - 2026-09-17 - Fix raw HTML tags rendering as visible text on the Alert Details page
+
+Reported via a user-submitted PDF of the Alert Details page for a Van Wert County, OH Flood Warning (Database ID #1108): the Description and Instructions sections showed literal, visible text like `</p><p class="mt-2 mb-0">` and `<br>` instead of real paragraph breaks — even though the alert's `description` column, verified directly against the database, is clean plain text with real `\n\n` breaks and contains no HTML at all.
+
+### Fixed
+- **Root cause**: `templates/alert_detail.html`, `audio_detail.html`, and `manual_eas_print.html` spelled the "escape untrusted CAP text, then insert paragraph/line-break HTML" transform out inline as `{{ text | e | replace('\n\n', '</p><p ...>') | replace(...) | safe }}`. `| e` produces a Jinja/MarkupSafe `Markup` object; Jinja's `|replace` filter, given an already-`Markup` value, routes to `Markup.replace()` — which HTML-escapes its *own* replacement argument too, as part of the invariant that keeps a `Markup` value safe to pass around elsewhere. So the `<p>`/`<br>` tags each template meant to insert came out double-escaped: present in the string, but as the literal text `&lt;p ...&gt;` rather than a real tag, which a browser then displays as visible `<p ...>` text once the whole thing is marked `| safe` at the end.
+- Moved the transform into Python (`webapp/template_helpers.py`): fixed the existing, previously-unused `nl2br` filter to escape input before substituting (building the finished HTML as a plain `str`, never touching `Markup.replace()`, then wrapping the result in `Markup` exactly once at the end), and added a new `cap_paragraphs` filter for the paragraph+bullet variant used by alert descriptions/instructions. All 5 call sites across the 3 templates now use one of these two filters instead of the inline chain.
+- Added `tests/test_cap_text_html_filters.py`: unit tests for both filters (including the exact reported text) plus a structural regression test that scans every template for the `| e | ... replace(...)` shape and fails the build if it reappears.
+
 ## [3.10.3] - 2026-09-17 - Fix CAP/IPAWS auto-forwarded alerts never reaching Icecast
 
 A live Flash Flood Warning (Putnam County, OH, 2026-09-17 07:44 EDT) was auto-forwarded via IPAWS, logged "Auto-forwarded ... to air chain," and forwarded again minutes later by the forwarding catch-up sweep after `eas-station-poller` restarted mid-cycle — but a listener monitoring the stream live heard nothing either time.
