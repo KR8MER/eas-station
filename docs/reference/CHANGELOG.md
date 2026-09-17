@@ -7,6 +7,10 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.10.2] - 2026-09-17 - Pin fsspec/s3fs to stop dependency-bump PRs from failing CI
+
+A routine Dependabot boto3 patch bump (1.43.56 → 1.43.92) failed CI's dependency install step with `pip: ResolutionImpossible`, even though the bump touched nothing related to the reported conflict. Root cause: `arm_pyart` requires both `fsspec` and `s3fs`, but only loosely (`fsspec>=2021.11.0`), and neither was otherwise pinned in `requirements.txt`. Older `s3fs` releases hard-pin an exact matching `fsspec` version (e.g. `s3fs==2025.3.1` requires `fsspec==2025.3.1.*`), so pip's resolver could wander into an old, mutually-incompatible `s3fs`/`fsspec` pair while re-resolving the whole file for an unrelated bump. Pinned both to `2026.7.0`, the versions already verified working together in production, removing the ambiguity.
+
 ## [3.10.1] - 2026-09-16 - Fix missing LED degree glyph and a fail2ban leader-lock race
 
 A code review of the two preceding commits (the Icecast/fail2ban leader-lock fix and the LED screen editor WYSIWYG fix) turned up two follow-on bugs.
