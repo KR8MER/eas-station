@@ -3787,6 +3787,102 @@ class CAPPoller:
                     pass
         return evaluated
 
+    # Catch-up window/attempt cap for retry_failed_icecast_injections().
+    # EASBroadcaster.handle_alert() persists the EASMessage row before
+    # attempting Icecast injection (the DB record and GPIO/relay timing must
+    # not be undone by an injection failure), so a transient outage at
+    # exactly that moment -- eas-station-audio down, Redis unreachable --
+    # previously had no retry at all: the alert was permanently logged as
+    # "forwarded" while no listener ever heard it. Bounded to a short window
+    # and a small attempt cap so a genuinely dead audio-service doesn't turn
+    # every poll cycle into a growing, futile resend backlog.
+    ICECAST_INJECTION_RETRY_WINDOW_MINUTES = 30
+    ICECAST_INJECTION_MAX_RETRIES = 3
+
+    def retry_failed_icecast_injections(self) -> int:
+        """Re-send any recent EASMessage whose Icecast injection failed.
+
+        Uses the same resend command the EASMessage detail page's manual
+        "Resend" button uses (AudioCommandPublisher.inject_eas_audio) --
+        this re-sends the audio already generated and stored on the row, it
+        does not re-run the broadcast decision (which would just be deduped
+        against the EASMessage row that already exists).
+
+        Returns the number of messages successfully re-injected.
+        """
+        now = utc_now()
+        cutoff = now - timedelta(minutes=self.ICECAST_INJECTION_RETRY_WINDOW_MINUTES)
+        try:
+            candidates = (
+                self.db_session.query(EASMessage)
+                .filter(EASMessage.created_at >= cutoff)
+                .all()
+            )
+        except Exception as exc:
+            self.logger.warning("Icecast injection retry query failed: %s", exc)
+            try:
+                self.db_session.rollback()
+            except Exception:
+                pass
+            return 0
+
+        pending = [
+            msg for msg in candidates
+            if (msg.metadata_payload or {}).get('icecast_injected') is False
+            and (msg.metadata_payload or {}).get('icecast_injection_retries', 0)
+            < self.ICECAST_INJECTION_MAX_RETRIES
+        ]
+        if not pending:
+            return 0
+
+        from app_core.audio.redis_commands import get_audio_command_publisher
+        publisher = get_audio_command_publisher()
+
+        reinjected = 0
+        for msg in pending:
+            meta = dict(msg.metadata_payload or {})
+            attempt = int(meta.get('icecast_injection_retries', 0)) + 1
+            self.logger.warning(
+                "Retrying failed Icecast injection for EASMessage id=%s (attempt %d/%d)",
+                msg.id, attempt, self.ICECAST_INJECTION_MAX_RETRIES,
+            )
+            try:
+                resp = publisher.inject_eas_audio(msg.id)
+            except Exception as exc:
+                resp = {'success': False, 'message': str(exc)}
+
+            meta['icecast_injection_retries'] = attempt
+            if resp.get('success'):
+                meta['icecast_injected'] = True
+                meta.pop('icecast_injection_error', None)
+                reinjected += 1
+                self.logger.info(
+                    "Icecast injection retry succeeded for EASMessage id=%s", msg.id,
+                )
+            else:
+                meta['icecast_injection_error'] = resp.get('message', 'unknown error')
+                if attempt >= self.ICECAST_INJECTION_MAX_RETRIES:
+                    self.log_system_event(
+                        'ERROR',
+                        f"EASMessage id={msg.id} audio never reached Icecast after "
+                        f"{attempt} attempt(s) -- alert "
+                        f"{msg.alert_identifier or msg.same_header} aired with no "
+                        "audible broadcast",
+                        {'message_id': msg.id, 'same_header': msg.same_header},
+                    )
+            msg.metadata_payload = meta
+            self.db_session.add(msg)
+
+        try:
+            self.db_session.commit()
+        except Exception as exc:
+            self.logger.error("Failed to persist Icecast injection retry results: %s", exc)
+            try:
+                self.db_session.rollback()
+            except Exception:
+                pass
+        return reinjected
+
     # Catch-up window for retry_missing_intersections(). Bounded so a large
     # historical backlog (e.g. right after a bulk import) doesn't turn every
     # poll cycle into a full-table scan; older gaps are still reachable via
@@ -4534,6 +4630,13 @@ class CAPPoller:
                 self.retry_unevaluated_forwards()
             except Exception as exc:
                 self.logger.error(f"Forwarding catch-up sweep failed: {exc}")
+
+            # Catch-up: re-send any recent broadcast whose Icecast injection
+            # failed (e.g. eas-station-audio was down at that moment).
+            try:
+                self.retry_failed_icecast_injections()
+            except Exception as exc:
+                self.logger.error(f"Icecast injection retry sweep failed: {exc}")
 
             # Catch-up: retry boundary-intersection calculation for any
             # recent alert whose attempt at ingest silently failed.

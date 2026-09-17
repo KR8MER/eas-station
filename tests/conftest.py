@@ -101,6 +101,64 @@ def test_logs_dir(project_root: Path) -> Path:
 # Function-level fixtures
 # ============================================================================
 
+@pytest.fixture(autouse=True)
+def _isolate_eas_stream_injection(monkeypatch):
+    """Never let a test reach the real, live audio-command Redis channel.
+
+    Incident (2026-09-17): a broader test run exercising
+    EASBroadcaster.handle_alert() (app_utils/eas.py) without mocking its
+    injector fallback caused the REAL, live eas-station-audio.service on
+    this box to receive and execute 7 real inject_raw_eas_audio commands,
+    each one pushing a short synthetic test WAV into the live Icecast
+    broadcast queues -- audibly, on a live listener's stream. The
+    REDIS_DB=15 isolation set up above (see its comment re: a prior
+    GPIO-relay incident) did NOT protect this -- Redis PUBLISH/SUBSCRIBE
+    are global across logical databases regardless of which DB a client
+    has SELECTed; only key-value commands (GET/SET, e.g. the
+    eas:broadcast_active marker) are scoped by REDIS_DB. Any test that
+    calls handle_alert() (directly, or via auto_forward_cap_alert() /
+    auto_forward_ota_alert()) without a controller registered falls back
+    to AudioCommandPublisher.inject_raw_eas_audio() over that global
+    channel -- reachable from any Python process on this host regardless
+    of DB isolation.
+
+    Deliberately narrow: only AudioCommandPublisher is stubbed, because it
+    is the one call in this whole path that leaves the test process and
+    can reach the real, live audio service. eas_stream_injector.
+    has_controller()/inject_eas_audio() are left completely real --
+    has_controller() already safely returns False when nothing registered
+    one (the default for almost every test), and the real
+    inject_eas_audio() already safely no-ops on that (its original,
+    tested, in-process-only behavior -- see the bug this whole fix
+    started from). Stubbing those too would break tests that legitimately
+    exercise the injector's own internals against a real fake controller
+    (tests/test_eas_stream_injector_trailing_silence.py's
+    _register_fake_controller fixture) -- an earlier version of this
+    fixture did exactly that and broke them; don't repeat it.
+
+    A test that specifically exercises the Redis fallback routing
+    (tests/test_eas_broadcaster_injection_fallback.py) overrides this
+    stub within its own `with patch(...)` block, which correctly takes
+    precedence for its scope and reverts to this default afterward.
+    """
+
+    class _NullAudioCommandPublisher:
+        """Never opens a real Redis connection -- every command reports
+        success immediately, so a test that reaches this path without an
+        explicit mock still cannot reach the live audio service."""
+
+        def __getattr__(self, name):
+            def _fake(*args, **kwargs):
+                return {"success": True, "message": f"stubbed in tests: {name}"}
+            return _fake
+
+    monkeypatch.setattr(
+        "app_core.audio.redis_commands.get_audio_command_publisher",
+        lambda: _NullAudioCommandPublisher(),
+        raising=False,
+    )
+
+
 @pytest.fixture
 def temp_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for test use.

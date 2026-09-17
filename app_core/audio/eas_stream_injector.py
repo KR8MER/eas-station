@@ -69,6 +69,25 @@ def set_controller(controller) -> None:
     logger.info("EAS stream injector: controller registered (%s)", type(controller).__name__)
 
 
+def has_controller() -> bool:
+    """True if a controller is registered in *this* process.
+
+    ``inject_eas_audio()`` silently no-ops (returns ``False``, never raises)
+    when this is ``False`` -- ``_controller`` is a plain module-level global,
+    so it is only non-``None`` inside the one process that called
+    :func:`set_controller` (``eas_monitoring_service.py``, the entry point of
+    ``eas-station-audio.service``). A caller running in any other process
+    (the CAP poller, the web app, a standalone script) must not treat
+    ``inject_eas_audio()``'s return value as the only signal -- it should
+    check this first and fall back to the cross-process Redis command
+    (``AudioCommandPublisher.inject_raw_eas_audio``) instead of silently
+    dropping the audio. See ``EASBroadcaster.handle_alert()`` in
+    ``app_utils/eas.py`` for that fallback.
+    """
+    with _lock:
+        return _controller is not None
+
+
 def inject_eas_audio(wav_bytes: Optional[bytes]) -> bool:
     """Inject EAS alert audio into every active source BroadcastQueue.
 
