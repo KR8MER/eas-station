@@ -146,3 +146,11 @@ tests/test_support_smoke.py::test_support_page_renders
 tests/test_upload_too_large_handler.py::test_oversized_body_gets_app_level_413_not_nginx_default
 tests/test_upload_too_large_handler.py::test_oversized_body_on_api_path_gets_json_error
 tests/test_upload_too_large_handler.py::test_body_under_the_limit_does_not_trigger_413
+
+# tests/test_security_headers.py (2) — Same app_client/JSONB root cause as
+# test_support_smoke.py above. Verified manually with live curl requests
+# against a running deployment instead (found the bug this file guards --
+# duplicate Strict-Transport-Security headers from app.py and nginx both
+# setting it -- this exact way).
+tests/test_security_headers.py::test_flask_does_not_set_headers_nginx_owns
+tests/test_security_headers.py::test_flask_still_sets_content_security_policy

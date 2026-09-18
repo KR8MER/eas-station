@@ -7,6 +7,12 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.18.3] - 2026-09-18 - Fix: duplicate security headers silently disabled HSTS enforcement
+
+### Fixed
+- **`Strict-Transport-Security`, `X-Frame-Options`, `X-Content-Type-Options`, and `X-XSS-Protection` were set in both `app.py` (Flask's `after_request` hook) and `config/nginx-eas-station.conf` (`add_header ... always;`), with nginx's `add_header` unaware of and not deduplicating against whatever the proxied Flask response already set.** Confirmed live via `curl -I` against the running deployment: the HTTPS response carried two separate `strict-transport-security` header fields with *different* `max-age` values (63072000 from Flask, 31536000 from nginx). Per RFC 6797 §8.1, a browser that receives more than one `Strict-Transport-Security` header field is required to ignore all of them — so despite looking configured in two places, HSTS was not actually being enforced by any compliant browser. Removed the four duplicated headers from `app.py`; nginx — the actual TLS-terminating edge — is now the single source of truth for all of them. `Content-Security-Policy` stays in `app.py` since nginx never set it and its value is dynamic (depends on the configured Icecast origin, resolved per-request).
+- Regression test (`tests/test_security_headers.py`) added to `tests/known_failures.txt` as a documented xfail, matching the existing `test_support_smoke.py`/`test_upload_too_large_handler.py` entries: the `app_client` fixture forces `DATABASE_URL` to sqlite unconditionally, and any real request through it hits `db.create_all()` against a JSONB column sqlite can't compile. Verified manually with live `curl` instead, the same way those existing entries document doing.
+
 ## [3.18.2] - 2026-09-18 - Fix: missing dead-air around the pre/post MDC1200 chime burst
 
 ### Fixed
