@@ -26,7 +26,7 @@ from sqlalchemy import func
 
 from app_core.cache import cache
 from app_core.extensions import db
-from app_core.models import Boundary, USCountyBoundary
+from app_core.models import Boundary, Intersection, USCountyBoundary
 from app_core.boundaries import (
     get_boundary_color,
     get_boundary_display_label,
@@ -41,7 +41,23 @@ from .blueprint import api_bp
 @api_bp.route('/api/boundaries')
 @cache.cached(timeout=300, query_string=True, key_prefix='boundaries_list')
 def get_boundaries():
-    """Get all boundaries as GeoJSON"""
+    """Get boundaries as GeoJSON.
+
+    Query:
+        type (str, optional): Boundary type to filter to (county, fire, ems, ...).
+        search (str, optional): Case-insensitive substring match on boundary name.
+        alert_id (int, optional): Restrict results to boundaries with a computed
+            Intersection row for this CAP alert, instead of every configured
+            boundary of the requested type. Used by the alert detail map so its
+            "Affected Boundaries" layers match the alert's own intersection data
+            (the same data the sidebar's per-service-type counts come from)
+            rather than showing every boundary of a type county-wide.
+        page (int, optional): 1-indexed page number. Default 1.
+        per_page (int, optional): Page size, clamped to [1, 5000]. Default 1000.
+
+    Returns:
+        200 with a GeoJSON FeatureCollection.
+    """
     try:
         # Validate pagination parameters
         page = request.args.get('page', 1, type=int)
@@ -50,6 +66,7 @@ def get_boundaries():
         per_page = min(max(per_page, 1), 5000)  # Clamp between 1 and 5000
         boundary_type = request.args.get('type')
         search = request.args.get('search')
+        alert_id = request.args.get('alert_id', type=int)
 
         query = db.session.query(
             Boundary.id,
@@ -58,6 +75,11 @@ def get_boundaries():
             Boundary.description,
             func.ST_AsGeoJSON(Boundary.geom).label('geometry'),
         )
+
+        if alert_id:
+            query = query.join(
+                Intersection, Intersection.boundary_id == Boundary.id
+            ).filter(Intersection.cap_alert_id == alert_id)
 
         if boundary_type:
             normalized_type = normalize_boundary_type(boundary_type)
@@ -92,8 +114,11 @@ def get_boundaries():
         # When no county-type Boundary records have been uploaded, serve the
         # configured county from the bundled us_county_boundaries (Census TIGER)
         # table so the map always shows the correct county outline without
-        # requiring a manual GeoJSON upload.
-        if not features and boundary_type and normalize_boundary_type(boundary_type) == 'county':
+        # requiring a manual GeoJSON upload. Skipped for an alert_id-scoped
+        # request: an empty result there legitimately means this alert has no
+        # county-type intersection row, not that county boundaries are
+        # unconfigured, and falling back would silently ignore the scoping.
+        if not features and not alert_id and boundary_type and normalize_boundary_type(boundary_type) == 'county':
             try:
                 from app_core.location import get_location_settings
                 from app_core.county_boundaries import get_county_count, same_codes_to_geoids
