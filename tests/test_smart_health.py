@@ -67,7 +67,7 @@ class TestExecutionFailureIsNotReportedAsPassed:
             '"severity": "error"}]}, "device": {"name": "/dev/sda"}}'
         )
         with patch("shutil.which", return_value="/usr/sbin/smartctl"), patch(
-            "app_utils.system.smart.subprocess.run",
+            "app_utils.system.smart_query.subprocess.run",
             return_value=_proc(2, stdout),
         ):
             result = _collect_smart_health(_LOGGER, [_device()])
@@ -80,7 +80,7 @@ class TestExecutionFailureIsNotReportedAsPassed:
     def test_device_open_failed_without_messages_gets_generic_error(self):
         stdout = '{"json_format_version": [1, 0], "smartctl": {}, "device": {"name": "/dev/sda"}}'
         with patch("shutil.which", return_value="/usr/sbin/smartctl"), patch(
-            "app_utils.system.smart.subprocess.run",
+            "app_utils.system.smart_query.subprocess.run",
             return_value=_proc(2, stdout),
         ):
             result = _collect_smart_health(_LOGGER, [_device()])
@@ -94,7 +94,7 @@ class TestExecutionFailureIsNotReportedAsPassed:
         # bit 1 (device open failed) -- neither should ever infer "passed".
         stdout = '{"smartctl": {"messages": [{"string": "bad flag", "severity": "error"}]}}'
         with patch("shutil.which", return_value="/usr/sbin/smartctl"), patch(
-            "app_utils.system.smart.subprocess.run",
+            "app_utils.system.smart_query.subprocess.run",
             return_value=_proc(1, stdout),
         ):
             result = _collect_smart_health(_LOGGER, [_device()])
@@ -106,7 +106,7 @@ class TestExecutionFailureIsNotReportedAsPassed:
             '{"smartctl": {"messages": [{"string": "specific reason", "severity": "error"}]}}'
         )
         with patch("shutil.which", return_value="/usr/sbin/smartctl"), patch(
-            "app_utils.system.smart.subprocess.run",
+            "app_utils.system.smart_query.subprocess.run",
             return_value=_proc(2, stdout, stderr="generic sudo warning"),
         ):
             result = _collect_smart_health(_LOGGER, [_device()])
@@ -123,7 +123,7 @@ class TestRealHealthInferenceStillWorks:
     def test_no_problem_bits_set_reports_passed(self):
         stdout = '{"ata_smart_attributes": {"table": []}}'
         with patch("shutil.which", return_value="/usr/sbin/smartctl"), patch(
-            "app_utils.system.smart.subprocess.run",
+            "app_utils.system.smart_query.subprocess.run",
             return_value=_proc(0, stdout),
         ):
             result = _collect_smart_health(_LOGGER, [_device()])
@@ -135,7 +135,7 @@ class TestRealHealthInferenceStillWorks:
         # Bit 3 (0x08) set, bits 0-2 clear.
         stdout = '{"ata_smart_attributes": {"table": []}}'
         with patch("shutil.which", return_value="/usr/sbin/smartctl"), patch(
-            "app_utils.system.smart.subprocess.run",
+            "app_utils.system.smart_query.subprocess.run",
             return_value=_proc(0x08, stdout),
         ):
             result = _collect_smart_health(_LOGGER, [_device()])
@@ -145,7 +145,7 @@ class TestRealHealthInferenceStillWorks:
     def test_nvme_critical_warning_nonzero_reports_failed(self):
         stdout = '{"nvme_smart_health_information_log": {"critical_warning": 1}}'
         with patch("shutil.which", return_value="/usr/sbin/smartctl"), patch(
-            "app_utils.system.smart.subprocess.run",
+            "app_utils.system.smart_query.subprocess.run",
             return_value=_proc(0, stdout),
         ):
             result = _collect_smart_health(_LOGGER, [_device("nvme0n1", transport="nvme")])
@@ -155,7 +155,7 @@ class TestRealHealthInferenceStillWorks:
     def test_nvme_critical_warning_zero_reports_passed(self):
         stdout = '{"nvme_smart_health_information_log": {"critical_warning": 0}}'
         with patch("shutil.which", return_value="/usr/sbin/smartctl"), patch(
-            "app_utils.system.smart.subprocess.run",
+            "app_utils.system.smart_query.subprocess.run",
             return_value=_proc(0, stdout),
         ):
             result = _collect_smart_health(_LOGGER, [_device("nvme0n1", transport="nvme")])

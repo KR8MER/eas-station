@@ -7,6 +7,15 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.12.0] - 2026-09-18 - Refactor: split app_utils/system/smart.py (Large File Refactor Plan, Phase 4a-ii)
+
+Companion to the same phase's `snapshot.py` split. `_collect_smart_health` was one 425-line function: locate smartctl, then for each device build a query command, run it, validate/parse its JSON output, infer an overall health status from the exit code when smartctl's own verdict is absent, and populate ~35 result fields from the report.
+
+### Changed
+- Extracted the per-concern pieces into their own modules: `smart_command.py` (locating smartctl, building its command line), `smart_query.py` (running smartctl, validating/parsing its output), `smart_status.py` (the exit-code health-inference fallback), `smart_attributes.py` (identity fields, SMART attributes, NVMe extended fields). `smart.py` is now 191 lines of per-device orchestration.
+- `_collect_smart_health`'s public signature and return shape are unchanged; still resolves from `app_utils.system` and is used unchanged by `webapp/admin/api/routes_smart.py` and `scripts/diagnose_smart.sh`.
+- Added `tests/test_smart_health_package.py`: 24 characterization tests written and run green against the pre-refactor function first, covering smartctl discovery, every subprocess/output-validation failure mode, and field-extraction wiring (the existing `tests/test_smart_health.py` already covered the exit-code status inference in depth and needed only its `subprocess.run`/`os.path` patch targets retargeted to the modules that now call them). An 18-mutation sweep confirmed the suite is discriminating, including a follow-up test added directly against the newly-extracted `_build_smartctl_command()` for a branch (`-n standby` for ATA/SAT device types) that `_detect_device_type()` currently never actually produces, so the full `_collect_smart_health()` path can't reach it end to end.
+
 ## [3.11.0] - 2026-09-18 - Refactor: split app_utils/system/snapshot.py (Large File Refactor Plan, Phase 4a-ii)
 
 Pure-motion follow-up to Phase 4a (`docs/development/LARGE_FILE_REFACTOR_PLAN.md`). `build_system_health_snapshot` was one 480-line function collecting CPU, memory, disk, network, process-table, load-average and database figures inline before computing an overall status — the one piece of `app_utils/system/` Phase 4a left over the 400-line guidance.
