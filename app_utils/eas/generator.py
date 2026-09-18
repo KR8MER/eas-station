@@ -151,6 +151,7 @@ class EASAudioGenerator:
             mdc1200_target_unit_id=mdc1200_target_unit_id,
         )
         if pre_chime_samples:
+            samples.extend(_generate_silence(1.0, self.sample_rate))
             samples.extend(pre_chime_samples)
             samples.extend(_generate_silence(1.0, self.sample_rate))
 
@@ -376,10 +377,17 @@ class EASAudioGenerator:
         if post_chime_samples:
             samples.extend(_generate_silence(POST_ALERT_SIGNAL_GAP_SECONDS, self.sample_rate))
             samples.extend(post_chime_samples)
-        # No unconditional trailing silence tail here: the composite audio
-        # ends at the true end of content (EOM, or post-chime when
-        # configured). The 1-second post-broadcast relay hold is a
-        # program-level GPIO timing concern, not audio content -- see
+            # Trailing gap after the post-chime/MDC1200 burst itself, mirroring
+            # the leading gap before the pre-chime burst above. Without this,
+            # a receiver's squelch/decoder tail (or a repeater's own MDC1200
+            # handling) has no dead-air margin after the burst before whatever
+            # comes next -- reported as "still not getting the second of dead
+            # air ... after the mdc1200 after the EOM."
+            samples.extend(_generate_silence(POST_ALERT_SIGNAL_GAP_SECONDS, self.sample_rate))
+        # No unconditional trailing silence tail when NO post-chime is
+        # configured: the composite audio ends at the true end of content
+        # (EOM). The 1-second post-broadcast relay hold is a program-level
+        # GPIO timing concern, not audio content -- see
         # BROADCAST_LEAD_OUT_SECONDS and EASBroadcaster.handle_alert().
         # Baking it into the audio would freeze it into every stored/
         # archived/resent copy (including Icecast listeners and FCC-report
@@ -743,6 +751,7 @@ class EASAudioGenerator:
         if norm_lead_announcement:
             composite_samples.extend(norm_lead_announcement)
         if pre_chime_samples_list:
+            composite_samples.extend(chime_separator)
             composite_samples.extend(pre_chime_samples_list)
             composite_samples.extend(chime_separator)
         # No unconditional lead-in silence here when no pre-chime is
@@ -768,6 +777,10 @@ class EASAudioGenerator:
         if post_chime_samples_list:
             composite_samples.extend(_generate_silence(POST_ALERT_SIGNAL_GAP_SECONDS, self.sample_rate))
             composite_samples.extend(post_chime_samples_list)
+            # Trailing gap after the post-chime/MDC1200 burst itself, mirroring
+            # the leading gap before the pre-chime burst above -- see the
+            # matching comment in build_files().
+            composite_samples.extend(_generate_silence(POST_ALERT_SIGNAL_GAP_SECONDS, self.sample_rate))
         # No unconditional trailing silence tail here when no post-chime is
         # configured: the 1-second relay hold past end-of-message is a
         # program-level GPIO timing concern (BROADCAST_LEAD_OUT_SECONDS),

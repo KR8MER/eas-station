@@ -7,6 +7,11 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.18.2] - 2026-09-18 - Fix: missing dead-air around the pre/post MDC1200 chime burst
+
+### Fixed
+- **The 1-second dead-air gap that should bracket the pre-alert and post-alert chime/MDC1200 burst was only present on the inner side, not the outer side.** `EASAudioGenerator.build_files()` and `.build_manual_components()` (`app_utils/eas/generator.py`) both play an optional chime — which can be an MDC1200 selective-calling packet when `pre_alert_chime`/`post_alert_chime` is set to `mdc1200` — immediately before the first SAME header burst and immediately after the EOM sequence. The gap *between* that chime and the header/EOM it brackets already existed; the gap *before* the pre-chime burst (composite audio started the MDC1200 packet at sample 0) and *after* the post-chime burst (composite audio stopped dead at the end of the packet, no trailing silence at all) did not. Reported as "still not getting the second of dead air before the MDC1200 preceding the header... [and] the 1 second of dead air after the mdc1200 after the EOM." Added the missing leading and trailing 1-second silence in both methods, only when a chime is actually configured (unchanged, still zero added silence, when `pre_alert_chime`/`post_alert_chime` is `none`).
+
 ## [3.18.1] - 2026-09-18 - Fix: alert detail map and per-service coverage percentages weren't actually alert-scoped
 
 Two related bugs found from a user report ("the affected boundaries... is confusing and doesn't work the way it should" / "the percentages... make no sense") against a live alert detail page.
