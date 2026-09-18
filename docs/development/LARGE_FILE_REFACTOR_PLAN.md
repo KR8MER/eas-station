@@ -1212,13 +1212,12 @@ logger` is safe. Check which kind you have before copying either pattern —
 the fan-out is unnecessary machinery when nothing rebinds, and a by-value
 import is silently wrong when something does.
 
-**`routes_obtain_execute.py` is 449 lines — over, and left that way.**
+**`routes_obtain_execute.py` was 449 lines — over, at the time.**
 `obtain_certificate_execute` is a single 387-line `try` block. Module-level
 splitting cannot shrink one function; that needs collaborators extracted from
 the body, which is behavioural and needs the behaviour pinned first. Doing
 that on a module with *zero* existing coverage is its own piece of work.
-Tracked as **Phase 3e-ii**. The size test names it as a known exception and
-fails if another module silently joins it.
+Tracked as **Phase 3e-ii**, landed 2026-09-18 — see below.
 
 **Zero coverage is worth stating before the move, not after.** Ground rule 5
 says to run the tests that cover the file and name them in the commit message;
@@ -1231,6 +1230,68 @@ difference is `register_certbot_routes`, retyped into the package `__init__`,
 whose docstring lost the trailing whitespace on one blank line. URL map
 unchanged at **549 rules, 0 differences**, 14 certbot endpoints intact, and all
 four `CERTBOT_*` paths resolve to their pre-split values.
+
+### 3e-ii. `obtain_certificate_execute` → `obtain_validation.py` + `obtain_methods.py` ✅
+
+The last known-exception module in the whole 400-line audit. Unlike the
+module-level splits above, `obtain_certificate_execute` was one 387-line
+`try` block — a **dispatch**, in the 3b-ii sense: pre-flight validation and
+prerequisite checks shared by every request, then exactly one of three
+near-identical certbot invocations (`standalone`, `nginx`, `webroot`) runs
+per request, each shelling out to certbot and (for two of the three) nginx.
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `obtain_validation.py` | 108 | `_validate_obtain_request` (enabled/domain/email/pattern/method checks), `_check_certbot_installed` |
+| `obtain_methods.py` | 341 | `_obtain_standalone`, `_obtain_nginx`, `_obtain_webroot` |
+
+`routes_obtain_execute.py`: 454 → **99** lines — parse the request, validate,
+clear stale locks, check certbot is installed, handle a staging→production
+cert switch, then dispatch through a `{'standalone': ..., 'nginx': ...,
+'webroot': ...}` lookup table. No known exceptions remain in the certbot
+package's size guard.
+
+**Zero coverage, same as 3e itself.** `tests/test_certbot_obtain_execute.py`
+(28 tests) is the module's first-ever test, written and run green against
+the pre-refactor handler before anything moved. The permission decorator is
+bypassed via `__wrapped__` (Phase 3h's technique) rather than standing up an
+authenticated Flask test client, since this file is about the handler's own
+control flow, not the auth layer.
+
+**The retargeting trap, avoided by not needing it.** `subprocess.run` and
+`time.sleep` are the true I/O boundary and are patched **globally**
+(`patch("subprocess.run", ...)`), the same reasoning as `psutil` in 4a-ii:
+both are shared singleton modules, so a global patch reaches every module
+that calls them regardless of which one ends up owning the call after a
+split. That sidesteps the retarget entirely for those two — but the
+higher-level collaborators (`_check_nginx_status`,
+`_install_certificate_internal`, `_explain_certbot_failure`,
+`_ensure_webroot_directory`) are ordinary functions imported *by value*,
+so those patches still had to move from `routes_obtain_execute` to
+`obtain_methods` once the method bodies did.
+
+**A mutation sweep (20 mutations) caught 18 on the first pass; the other two
+were the same shape of isolation gap 4a-ii hit, not missing coverage.**
+
+1. The standalone port-in-use test asserted `"already in use" in
+   body["error"]` against a mocked raw error message that already *contained*
+   "already in use" verbatim — so the assertion passed whether or not the
+   augmentation branch that adds "Another process may be using it" actually
+   ran. Fixed by asserting on text only the augmented wrapper adds.
+2. The webroot method's own "Permission denied" augmentation branch (as
+   opposed to its sibling "No such file or directory" branch, which *was*
+   tested) had no test at all. Added
+   `test_webroot_method_augments_permission_error`.
+
+**No `__file__` hazard** — neither new module resolves a path relative to
+its own depth; both new modules sit at the same directory depth as their
+siblings, so `paths.py`'s existing `CERTBOT_*` constants are unaffected.
+
+**Verification.** All 28 new tests and the existing 10-test
+`test_certbot_package.py` suite pass unchanged (the latter's size-guard test
+was updated to drop `routes_obtain_execute.py` from `known_exceptions`, per
+its own comment: "if the exception ever gets fixed, this test should stop
+excusing it"). `grep -n "__file__"` across both new modules is empty.
 
 ### 3f. `webapp/admin/maintenance.py` → `webapp/admin/maintenance/` ✅
 
@@ -1669,6 +1730,7 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-08-08 | 2.148.0 | Phase 3e (`webapp/admin/certbot.py`, 1946 → 14 modules + a 105-line `__init__`). 22/23 AST matches, URL map 549 rules / 0 differences. Carried both `__file__` hazards at once: `CERTBOT_BASE_DIR` would have silently moved the whole certbot tree to `webapp/certbot_data`, and per-module loggers would have renamed every log record. The module had **zero** test coverage beforehand; the split added 11 tests, three guards mutation-checked. `routes_obtain_execute.py` (449) is left over the cap as Phase 3e-ii — it is one 387-line `try` block. |
 | 2026-09-18 | 3.11.0 | Phase 4a-ii (`app_utils/system/snapshot.py`, 480 → 158 lines + 7 new collector modules + an extended `network.py`). `build_system_health_snapshot` was already a sequence of independent CPU/memory/disk/network/process/load-average/database figures, so the seam was cutting each to its own `_collect_*` function. Verified by 18 characterization tests written and run green against the pre-refactor function first, then a 14-mutation sweep — which caught 12 mutations immediately and found two of the *test's own* isolation gaps (a conflated CPU+DB critical-status assertion, and a disk-permission-error test that couldn't distinguish "correctly skipped" from "silently fell back to `/`"). `smart.py` (429) is the one Phase 4a-ii file left. |
 | 2026-09-18 | 3.12.0 | Phase 4a-ii cont. (`app_utils/system/smart.py`, 425 → 191 lines + 4 new modules: `smart_command.py`, `smart_query.py`, `smart_status.py`, `smart_attributes.py`). Unlike `snapshot.py`, this is one per-device *pipeline* (build command → run → validate/parse → infer status → populate fields), so the modules are stages, not independent collectors — the 3b-ii `alerts()` shape. Existing coverage (`tests/test_smart_health.py`) only exercised the status-inference fallback in depth; added `tests/test_smart_health_package.py` (24 tests) for the rest. An 18-mutation sweep caught 16 immediately; the other two were an untested bit0 exit-code branch and an `-n standby` command flag that `_detect_device_type()` currently never actually triggers, so it got a direct unit test against the newly-extracted `_build_smartctl_command()` instead. 23 `subprocess.run`/`os.path` patch sites across both test files would have silently degraded to no-ops had the retarget (to `smart_query.py`/`smart_command.py`) been missed — caught on the same pass as the extraction. **Phase 4a-ii complete** — every module in `app_utils/system/` is within the 400-line guidance. |
+| 2026-09-18 | 3.13.0 | Phase 3e-ii (`webapp/admin/certbot/routes_obtain_execute.py`, 454 → 99 lines + `obtain_validation.py` + `obtain_methods.py`). The last known-exception module in the size audit, and — like 3e itself — had **zero** test coverage beforehand; added `tests/test_certbot_obtain_execute.py` (28 tests), the module's first ever. `subprocess.run`/`time.sleep` are patched globally (both shared singleton modules, the 4a-ii `psutil` reasoning), sidestepping the retarget trap for those two; the higher-level collaborators still had to move from `routes_obtain_execute` to `obtain_methods`. A 20-mutation sweep caught 18 immediately; the other two were the same *isolation-gap* shape 4a-ii hit — an assertion that matched raw pre-augmentation text as readily as the augmented message, and a missing test for webroot's own permission-denied augmentation branch (its sibling "No such file or directory" branch was tested; this one wasn't). **No known exceptions remain in `webapp/admin/certbot/`.** |
 
 ## Next up
 
@@ -1692,15 +1754,17 @@ Check which shape a file is before planning it. 3d/3e/3f were ordinary
 top-level definitions and went quickly; 3b, 3c and 3h were single enormous
 `register()` functions and needed the closure mapped first.
 
-**Phase 3e-ii — `routes_obtain_execute.py` (449).** The one module 3e left
-over the cap. `obtain_certificate_execute` is a single 387-line `try` block,
-so it needs collaborators extracted from the body rather than module-level
-splitting. It shells out to certbot and nginx, so a characterization harness
-has to fake both; build that first. Same technique as 2e / 3a-ii / 3b-ii.
+**Phase 3e-ii is complete**, landed 2026-09-18: `routes_obtain_execute.py`
+(454 → 99 + `obtain_validation.py` + `obtain_methods.py`). No known
+exceptions remain in `webapp/admin/certbot/`.
 
 **Phase 4a-ii is complete**, both landed 2026-09-18: `snapshot.py` (480 → 158
 + 7 new modules) and `smart.py` (425 → 191 + 4 new modules). Every module in
 `app_utils/system/` is now within the 400-line guidance.
+
+**Phase 3 and Phase 4a-ii are now both fully complete** (bar `app.py`, 3g,
+deliberately deferred). The only work left outside Phase 5 (frontend, not
+started) is Phase 4's two largest remaining files.
 
 **Phase 4 (`poller/cap_poller.py`, 3996 — the largest Python module in the
 tree, and `app_utils/eas.py`, 3848)** is the highest-risk work in this plan:

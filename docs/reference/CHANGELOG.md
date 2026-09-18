@@ -7,6 +7,16 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.13.0] - 2026-09-18 - Refactor: split webapp/admin/certbot/routes_obtain_execute.py (Large File Refactor Plan, Phase 3e-ii)
+
+`obtain_certificate_execute` was one 387-line `try` block — the one module Phase 3e left over the 400-line guidance, and with **zero** test coverage beforehand.
+
+### Changed
+- Extracted pre-flight validation into `obtain_validation.py` (`_validate_obtain_request`, `_check_certbot_installed`) and the three certbot methods (standalone, nginx plugin, webroot) into `obtain_methods.py`. `routes_obtain_execute.py` is now 99 lines: parse the request, validate, check prerequisites, handle a staging→production cert switch, and dispatch to one method via a small lookup table.
+- The route's public behavior, URL, and response shapes are unchanged.
+- Added `tests/test_certbot_obtain_execute.py`: 28 characterization tests written and run green against the pre-refactor handler first (the module's first-ever test coverage), reaching the handler through `__wrapped__` to bypass the permission decorator rather than standing up a full authenticated test client. A 20-mutation sweep across all three new/changed files confirmed the suite is discriminating — all caught after two isolation fixes (an assertion that matched raw pre-augmentation error text as readily as the augmented message, and a missing test for the webroot method's own permission-denied augmentation branch).
+- Updated `tests/test_certbot_package.py`'s size-guidance guard: `routes_obtain_execute.py` is no longer a known exception.
+
 ## [3.12.0] - 2026-09-18 - Refactor: split app_utils/system/smart.py (Large File Refactor Plan, Phase 4a-ii)
 
 Companion to the same phase's `snapshot.py` split. `_collect_smart_health` was one 425-line function: locate smartctl, then for each device build a query command, run it, validate/parse its JSON output, infer an overall health status from the exit code when smartctl's own verdict is absent, and populate ~35 result fields from the report.

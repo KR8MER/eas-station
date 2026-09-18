@@ -44,12 +44,14 @@ Dependencies run one way::
     nginx                  -> log
     staging                -> log, paths
     install                -> log, nginx, paths
+    obtain_validation       -> blueprint, log
+    obtain_methods          -> failures, install, log, nginx, paths
     routes_pages           -> blueprint, log
     routes_settings        -> blueprint, log
     routes_status          -> blueprint, log, paths
     routes_obtain          -> blueprint, log, paths
-    routes_obtain_execute  -> blueprint, failures, install, log, nginx,
-                              paths, staging
+    routes_obtain_execute  -> blueprint, log, obtain_methods,
+                              obtain_validation, paths, staging
     routes_renew           -> blueprint, failures, log, paths, staging
     routes_actions         -> blueprint, install, log, paths
 
@@ -74,6 +76,8 @@ from . import (  # noqa: F401  - imported for their side effect of registering r
     install,
     log,
     nginx,
+    obtain_methods,
+    obtain_validation,
     paths,
     routes_actions,
     routes_obtain,
