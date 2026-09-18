@@ -1557,10 +1557,18 @@ def after_request(response):
             else:
                 response.headers['Cache-Control'] = 'public, max-age=60'
 
-    # Add security headers
-    response.headers.add('X-Content-Type-Options', 'nosniff')
-    response.headers.add('X-Frame-Options', 'SAMEORIGIN')
-    response.headers.add('X-XSS-Protection', '1; mode=block')
+    # X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, and
+    # Strict-Transport-Security are set by nginx (config/nginx-eas-station.conf),
+    # not here -- nginx is the actual TLS-terminating edge, and setting the
+    # same headers at both layers meant the browser received two
+    # Strict-Transport-Security header fields with different max-age values.
+    # Per RFC 6797 section 8.1, a browser that sees more than one STS header
+    # field is required to ignore all of them, so HSTS was silently not being
+    # enforced at all despite looking configured in both places. Content-
+    # Security-Policy stays here since nginx never sets it and this value is
+    # dynamic (depends on the configured Icecast origin, resolved per-request
+    # below).
+    #
     # CSP allowlist covers external resources the UI legitimately loads:
     #   - img.shields.io: tech-stack and system-health badges (base.html, footer,
     #     templates/system_health.html)
@@ -1610,11 +1618,6 @@ def after_request(response):
             "frame-ancestors 'none';"
         ),
     )
-    if request.is_secure:
-        response.headers.setdefault(
-            'Strict-Transport-Security',
-            'max-age=63072000; includeSubDomains',
-        )
 
     _record_traffic(response)
 
