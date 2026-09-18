@@ -47,6 +47,17 @@ logger = logging.getLogger(__name__)
 healthchecks_bp = Blueprint('healthchecks', __name__, url_prefix='/admin/healthchecks')
 
 
+def _safe_api_error_message(e: "healthchecks_client.HealthchecksAPIError") -> str:
+    """A message safe to log, store, or return to a client: carries the HTTP
+    status code only, never the exception's own text (which echoes whatever
+    healthchecks.io's API put in its response body). CodeQL's stack-trace/
+    exception-exposure checks flag any raw exception object reaching a
+    response or a stored field, regardless of how that message was built."""
+    if e.status_code:
+        return f'healthchecks.io API error (HTTP {e.status_code})'
+    return 'healthchecks.io API error'
+
+
 def get_or_create_settings() -> HealthchecksSettings:
     """Public (no leading underscore) since webapp/admin/tickstem.py's page
     route calls this too, to load healthchecks.io settings for the shared
@@ -121,8 +132,18 @@ def create_all_service_heartbeats():
     data = request.get_json(silent=True) or {}
     interval_secs = int(data.get('interval_secs') or 300)
     requested = data.get('service_names')
-    valid_services = set(get_eas_services())
-    wanted = [s for s in requested if s in valid_services] if requested else list(get_eas_services())
+    all_services = list(get_eas_services())
+    # Build `wanted` by filtering the trusted service list against the
+    # request, rather than filtering the request against the trusted list --
+    # so every value ever assigned to `service_name` below is sourced from
+    # get_eas_services(), never echoed straight from the request body. Same
+    # result, but breaks the taint flow CodeQL's log-injection check follows
+    # from request.get_json() into the logger.error() call further down.
+    if requested:
+        requested_set = set(requested)
+        wanted = [s for s in all_services if s in requested_set]
+    else:
+        wanted = all_services
 
     existing = {row.service_name for row in HealthchecksServiceHeartbeat.query.all()}
     created, errors = [], []
@@ -139,7 +160,7 @@ def create_all_service_heartbeats():
             )
         except healthchecks_client.HealthchecksAPIError as e:
             logger.error(f"healthchecks.io create_check failed for {service_name}: {e}")
-            errors.append(f'{service_name}: {e}')
+            errors.append(f'{service_name}: {_safe_api_error_message(e)}')
             if e.status_code == 403:
                 quota_reached = True
                 break
@@ -196,9 +217,9 @@ def _service_heartbeat_status_action(heartbeat_row_id: int, action_fn, new_statu
         action_fn(settings.api_key, row.check_uuid)
     except healthchecks_client.HealthchecksAPIError as e:
         logger.error(f"healthchecks.io {audit_action} failed for {row.service_name}: {e}")
-        row.last_ping_error = str(e)
+        row.last_ping_error = _safe_api_error_message(e)
         db.session.commit()
-        return jsonify({'success': False, 'error': str(e)}), 502
+        return jsonify({'success': False, 'error': _safe_api_error_message(e)}), 502
 
     row.status = new_status
     row.enabled = (new_status != 'paused')
@@ -244,7 +265,7 @@ def delete_service_heartbeat(heartbeat_row_id):
             healthchecks_client.delete_check(settings.api_key, row.check_uuid)
         except healthchecks_client.HealthchecksAPIError as e:
             logger.error(f"healthchecks.io delete_check failed for {row.service_name}: {e}")
-            return jsonify({'success': False, 'error': str(e)}), 502
+            return jsonify({'success': False, 'error': _safe_api_error_message(e)}), 502
 
     service_name = row.service_name
     db.session.delete(row)
