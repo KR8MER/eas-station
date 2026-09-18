@@ -17,9 +17,10 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Network interface traffic counters."""
+"""Network interface enumeration and traffic counters."""
 
 import contextlib
+import socket
 from typing import Any, Dict, List, Optional, Tuple
 
 import psutil
@@ -109,3 +110,75 @@ def _select_primary_interface(interfaces: List[Dict[str, Any]]) -> Optional[Dict
 
     sorted_interfaces = sorted(interfaces, key=interface_priority)
     return sorted_interfaces[0] if sorted_interfaces else None
+
+
+def _collect_network_info() -> Dict[str, Any]:
+    """Enumerate interfaces and addresses, then attach traffic counters and
+    the selected primary interface."""
+
+    network_info: Dict[str, Any] = {"hostname": socket.gethostname(), "interfaces": []}
+
+    try:
+        net_if_addrs = psutil.net_if_addrs()
+        net_if_stats = psutil.net_if_stats()
+
+        for interface_name, interface_addresses in net_if_addrs.items():
+            interface_info = {
+                "name": interface_name,
+                "addresses": [],
+                "is_up": net_if_stats[interface_name].isup if interface_name in net_if_stats else False,
+            }
+
+            if interface_name in net_if_stats:
+                stats_entry = net_if_stats[interface_name]
+                interface_info["speed_mbps"] = getattr(stats_entry, "speed", None)
+                interface_info["mtu"] = getattr(stats_entry, "mtu", None)
+                interface_info["duplex"] = getattr(stats_entry, "duplex", None)
+
+            for address in interface_addresses:
+                if address.family == socket.AF_INET:
+                    interface_info["addresses"].append(
+                        {
+                            "type": "IPv4",
+                            "address": address.address,
+                            "netmask": address.netmask,
+                            "broadcast": address.broadcast,
+                        }
+                    )
+                elif address.family == socket.AF_INET6:
+                    interface_info["addresses"].append(
+                        {
+                            "type": "IPv6",
+                            "address": address.address,
+                            "netmask": address.netmask,
+                        }
+                    )
+                else:
+                    link_family = getattr(psutil, "AF_LINK", None)
+                    if link_family is not None and address.family == link_family:
+                        interface_info["mac_address"] = address.address
+
+            if interface_info["addresses"]:
+                network_info["interfaces"].append(interface_info)
+    except Exception:
+        pass
+
+    network_info["traffic"] = _collect_network_traffic()
+
+    primary_interface = _select_primary_interface(network_info["interfaces"])
+    if primary_interface:
+        network_info["primary_interface"] = primary_interface
+        primary_ipv4 = next(
+            (
+                address.get("address")
+                for address in primary_interface.get("addresses", [])
+                if address.get("type") == "IPv4"
+            ),
+            None,
+        )
+        if primary_ipv4:
+            network_info["primary_ipv4"] = primary_ipv4
+        if primary_interface.get("name"):
+            network_info["primary_interface_name"] = primary_interface["name"]
+
+    return network_info
