@@ -251,10 +251,13 @@ class TestHandleAlertBroadcastLeadTimes:
             broadcaster, _ = _make_broadcaster(tmpdir)
 
             calls = []
-            with patch('app_utils.eas.time.sleep', side_effect=lambda s: calls.append(('sleep', s))), \
-                 patch('app_utils.eas.set_broadcast_active',
+            # broadcaster.py imports time/set_broadcast_active/clear_broadcast_active
+            # by value, so the patch has to target the module that calls them,
+            # not the app_utils.eas shim re-export.
+            with patch('app_utils.eas.broadcaster.time.sleep', side_effect=lambda s: calls.append(('sleep', s))), \
+                 patch('app_utils.eas.broadcaster.set_broadcast_active',
                        side_effect=lambda **kw: calls.append(('set_broadcast_active', kw)) or True), \
-                 patch('app_utils.eas.clear_broadcast_active',
+                 patch('app_utils.eas.broadcaster.clear_broadcast_active',
                        side_effect=lambda **kw: calls.append(('clear_broadcast_active', kw))), \
                  patch.object(broadcaster, '_play_audio_or_bytes',
                               side_effect=lambda *a, **kw: calls.append(('play', None))):
@@ -287,10 +290,10 @@ class TestHandleAlertBroadcastLeadTimes:
             broadcaster, _ = _make_broadcaster(tmpdir)
 
             captured = {}
-            with patch('app_utils.eas.time.sleep'), \
-                 patch('app_utils.eas.set_broadcast_active',
+            with patch('app_utils.eas.broadcaster.time.sleep'), \
+                 patch('app_utils.eas.broadcaster.set_broadcast_active',
                        side_effect=lambda **kw: captured.update(kw) or True), \
-                 patch('app_utils.eas.clear_broadcast_active'), \
+                 patch('app_utils.eas.broadcaster.clear_broadcast_active'), \
                  patch.object(broadcaster, '_play_audio_or_bytes'):
                 broadcaster.handle_alert(_build_minimal_alert(), _build_payload())
 
