@@ -44,6 +44,7 @@ import pytest
 pytestmark = pytest.mark.unit
 
 from poller.cap_poller import CAPPoller
+from poller import cap_geometry
 
 
 def _fake_self(**overrides):
@@ -54,7 +55,6 @@ def _fake_self(**overrides):
         cap_endpoints=['https://example.invalid/feed'],
         last_fetch_errors=[],
         last_poll_sources=[],
-        _should_replace_alert=MagicMock(return_value=False),
     )
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -133,14 +133,12 @@ _GOOD_ALERT_XML = """
 """
 
 
-def test_parse_ipaws_xml_feed_one_malformed_alert_does_not_drop_the_others():
-    # _convert_cap_alert() calls several other instance helper methods
-    # (_select_cap_info, _extract_cap_parameters, etc.) that are pure
-    # functions of their arguments, not instance state -- a real
-    # (uninitialized) instance resolves those normally via the class,
-    # unlike a SimpleNamespace stand-in.
-    fake_self = CAPPoller.__new__(CAPPoller)
-    fake_self.logger = MagicMock()
+def test_parse_ipaws_xml_feed_one_malformed_alert_does_not_drop_the_others(monkeypatch):
+    # _convert_cap_alert() and _parse_ipaws_xml_feed() both live in
+    # poller/cap_geometry.py (Large File Refactor Plan Phase 4c
+    # continuation) as free functions now, not CAPPoller methods -- no
+    # poller instance needed at all, just a logger.
+    logger = MagicMock()
 
     xml_text = _XML_TEMPLATE.format(
         alerts=(
@@ -156,22 +154,26 @@ def test_parse_ipaws_xml_feed_one_malformed_alert_does_not_drop_the_others():
     # Force _convert_cap_alert to raise specifically for the malformed
     # middle element, while still running the real implementation for the
     # two good ones -- reproduces "the loop must isolate per item" without
-    # depending on exactly which internal CAP field trips it up.
-    real_convert = CAPPoller._convert_cap_alert
+    # depending on exactly which internal CAP field trips it up. Patched at
+    # module level (poller.cap_geometry._convert_cap_alert) since
+    # _parse_ipaws_xml_feed() calls it as a same-module bare name, not
+    # through an instance -- patching anything else would silently not
+    # intercept the call.
+    real_convert = cap_geometry._convert_cap_alert
 
-    def _convert_with_injected_failure(self, alert_elem, ns):
+    def _convert_with_injected_failure(alert_elem, ns, logger):
         identifier_el = alert_elem.find('cap:identifier', ns)
         if identifier_el is None:
             raise ValueError("simulated malformed <alert> element")
-        return real_convert(self, alert_elem, ns)
+        return real_convert(alert_elem, ns, logger)
 
-    fake_self._convert_cap_alert = lambda alert_elem, ns: _convert_with_injected_failure(fake_self, alert_elem, ns)
+    monkeypatch.setattr(cap_geometry, '_convert_cap_alert', _convert_with_injected_failure)
 
-    result = CAPPoller._parse_ipaws_xml_feed(fake_self, xml_text)
+    result = cap_geometry._parse_ipaws_xml_feed(xml_text, logger)
 
     identifiers = {a['properties']['identifier'] for a in result}
     assert identifiers == {'GOOD-XML-1', 'GOOD-XML-2'}
-    fake_self.logger.error.assert_called()
+    logger.error.assert_called()
 
 
 # ---------------------------------------------------------------------------

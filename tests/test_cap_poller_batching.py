@@ -21,6 +21,7 @@ Repository: https://github.com/KR8MER/eas-station
 import logging
 
 from poller.cap_poller import CAPPoller
+from poller.cap_geometry import parse_cap_alert
 
 
 def _make_test_poller() -> CAPPoller:
@@ -128,7 +129,7 @@ def test_parse_cap_alert_extracts_noaa_id():
         "geometry": None,
     }
     
-    parsed = poller.parse_cap_alert(alert_data)
+    parsed = parse_cap_alert(alert_data, poller.logger)
     
     assert parsed is not None
     assert parsed['identifier'] == "urn:oid:2.49.0.1.840.0.012993182ce4df4373b29b81453102e4bf2023b3.001.1"
@@ -148,7 +149,7 @@ def test_parse_cap_alert_prefers_identifier_over_id():
         "geometry": None,
     }
 
-    parsed = poller.parse_cap_alert(alert_data)
+    parsed = parse_cap_alert(alert_data, poller.logger)
 
     assert parsed is not None
     assert parsed['identifier'] == "preferred-identifier"
