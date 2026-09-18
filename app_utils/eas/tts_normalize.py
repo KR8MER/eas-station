@@ -129,8 +129,6 @@ def _normalize_text_for_tts(text: str, db_session=None) -> str:
     if not text:
         return text
 
-    import re
-
     # ── Layer 1: Time pronunciation expansion ────────────────────────────
     # TTS engines read "1100" as "eleven hundred" (military) and "11:00" can
     # also be mispronounced.  Convert to fully-spoken word form so that every
