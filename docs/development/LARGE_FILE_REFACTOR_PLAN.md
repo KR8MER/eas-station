@@ -1917,6 +1917,68 @@ restructuring, the same way `_handle_sentence` was pinned before its
 highest-risk work remaining in this entire plan, now that `system.py` and
 `eas.py` are done and turned out not to need it.
 
+### 4d. `app_core/eas_storage.py` — pure motion, package of 14 modules ✅
+
+Profiled first rather than assumed, per the "check shape before planning"
+note this plan added after 4c: 2,825 lines, 57 top-level functions, **zero**
+classes — the same pure-motion shape as `system.py` (4a) and `eas.py` (4b),
+not a god-class. Grouped into 14 modules by topic — audio-decode logging,
+disk file caching/purging, schema migrations, one-time backfills, delivery
+records/trends, the FCC compliance log (parsing + collection + CSV/PDF
+export), weekly/monthly summary reports (common window helpers + the
+received/initiated builders + the summary builders + CSV/PDF export), and
+precedence — plus a `__init__.py` shim re-exporting all 40 public names
+(and `format_local_datetime`/`utc_now`, two pass-through names some callers
+import from this module rather than `app_utils.time` directly).
+
+**All 69 top-level definitions verified `ast.dump()`-identical with zero
+normalization needed** — a first for this plan. Every prior split needed at
+least the `self`-stripping/docstring-dedent pair (2d, 4a-ii, 4c) because
+code moved out of a class or a closure; nothing here did, so the AST
+comparison caught real textual differences with no false positives to
+filter out.
+
+**Built the call graph before laying out modules, not after.** A free-
+variable scan across all 57 functions found `collect_compliance_dashboard_data`
+calls `collect_compliance_log_entries` as a same-module bare name — the
+exact `eas.py` `build_same_header`/`clear_broadcast_active` hazard shape.
+Since `tests/test_public_logs_data.py` monkeypatches
+`eas_storage.collect_compliance_log_entries` expecting to intercept calls
+made through `collect_compliance_dashboard_data`, the two had to land in the
+same module (`compliance_log.py`) rather than being split further by
+sub-topic — confirmed by grepping the whole tree for the call graph first,
+not discovered by a test failure after the fact.
+
+**The free-variable scanner needed to cover constants, not just functions.**
+The first pass only walked `FunctionDef`/`AsyncFunctionDef` bodies for
+import dependencies, so `_CAP_SOURCE_ORIGINATORS` — a module-level dict
+literal referencing `ALERT_SOURCE_NOAA` and friends — silently lost its
+import and failed at collection time (`NameError`, not a lint-catchable
+issue, since nothing evaluates a dict literal's values at parse time).
+Re-ran the scan over `Assign`/`AnnAssign` nodes too and caught two more
+constants missing an import the same way (`Tuple` in `compliance_export.py`,
+`Dict` in `reports_common.py`) before they became runtime failures.
+
+**Comments attached to a constant, not a function, are invisible to
+`ast`.** The mechanical per-node extraction (slicing exact source text by
+`node.lineno`/`end_lineno`) silently dropped four standalone comment blocks
+that preceded a constant rather than sitting inside a docstring —
+including a six-line FCC Part-11 citation above `_CAP_SOURCE_ORIGINATORS`
+and a four-line rationale above `REPORT_MAX_ROWS`. Caught by the plan's own
+"every non-blank line lands in exactly one module" check (a line-set diff
+against the original file), not by any AST-based verification, since a
+`Comment` node doesn't exist in Python's AST at all.
+
+**One confirmed-dead import dropped**: `ORIGINATOR_DESCRIPTIONS` from
+`app_utils.eas`, imported in the original file but referenced nowhere in
+it. The free-variable scan simply never listed it as a dependency of
+anything; confirmed dead (not a false negative) by grepping the whole
+original file for the name before dropping it.
+
+`compliance_log.py` lands at 405 lines — negligible, deliberate overage to
+keep the internal-call pair above together. Full suite green: 3367 passed,
+identical to the pre-split count.
+
 ---
 
 ## Phase 5 — Frontend
@@ -1963,6 +2025,8 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-09-18 | 3.13.0 | Phase 3e-ii (`webapp/admin/certbot/routes_obtain_execute.py`, 454 → 99 lines + `obtain_validation.py` + `obtain_methods.py`). The last known-exception module in the size audit, and — like 3e itself — had **zero** test coverage beforehand; added `tests/test_certbot_obtain_execute.py` (28 tests), the module's first ever. `subprocess.run`/`time.sleep` are patched globally (both shared singleton modules, the 4a-ii `psutil` reasoning), sidestepping the retarget trap for those two; the higher-level collaborators still had to move from `routes_obtain_execute` to `obtain_methods`. A 20-mutation sweep caught 18 immediately; the other two were the same *isolation-gap* shape 4a-ii hit — an assertion that matched raw pre-augmentation text as readily as the augmented message, and a missing test for webroot's own permission-denied augmentation branch (its sibling "No such file or directory" branch was tested; this one wasn't). **No known exceptions remain in `webapp/admin/certbot/`.** |
 | 2026-09-18 | 3.14.0 | Phase 4b (`app_utils/eas.py`, 4246 → package of 14 modules under `app_utils/eas/`). The single largest file in the tree, and — contrary to the plan's original "dominated by one very large class" note — actually 48 mostly-independent top-level functions plus two god-classes (`EASAudioGenerator`, `EASBroadcaster`) that are a small fraction of the file: the 2a/2b pure-motion shape, not the characterization-harness shape Phase 4 was scoped for. 48/48 definitions and 32/32 constants `ast.dump()`-identical; full suite green (3,362 passed, 0 failures). Found and fixed a confirmed internal-cross-call hazard: `EASBroadcaster.handle_alert()` calls `build_same_header()`/`clear_broadcast_active()` as same-module bare names, and `test_gpio_centralized_keying.py` patches both at the module level expecting to intercept that internal call — verified load-bearing by reverting the retarget and watching it fail with `KeyError: 'present'`. `subprocess`/`time` re-exported as modules (not just functions) from the shim so two more tests' patches keep resolving. Hit the symtable free-variable bug for the fourth time in this plan (4a, 3c, 3d, now 4b) — this time it also missed type annotations on bare module-level constants. 12/14 modules land under the guidance; `generator.py` (848) and `broadcaster.py` (489) are known-exception god-classes, `config.py` (408) is one 369-line function, all tracked as follow-ups. `poller/cap_poller.py`, still unstarted, is confirmed to be a genuine god-class (59-method `CAPPoller`) — the next Phase 4 file needs the characterization-harness technique this one didn't. |
 | 2026-09-18 | 3.16.0 | Phase 4c partial (`poller/cap_poller.py`'s 9 stateless methods, 143 lines, → `poller/cap_alert_parsing.py`). Confirmed by profiling that `CAPPoller` really is the god-class the plan originally assumed (3,978/4,933 lines, 59 methods) — unlike `system.py` and `eas.py`. The 2d technique applied cleanly to the stateless slice: 9/9 `ast.dump()`-identical after normalizing `self` and docstring indentation, 19 internal call sites rewritten, one test retargeted off a live-instance call. Caught two more lessons: `ruff` (not available by default in this sandbox — installed into a scratch venv rather than trusting `py_compile` alone) flagged F821s that `from __future__ import annotations` had silently let slide past both `py_compile` and a real `import`; and GitHub's PR-scoped CodeQL analysis re-flagged 3 confirmed-pre-existing findings as "new" purely because the file paths moved or a data flow passed through a moved file — verified via `ast.dump()`/byte-identical diffs against `main`, and merged anyway since `main` has no branch protection requiring CodeQL and already carries ~100 open alerts of the same categories. **The remaining 50 stateful methods (3,711 lines) — the actual Phase 4c work — are not started** and are now the highest-risk item left in this plan. |
+| 2026-09-18 | 3.16.1 | Fix (not a split): `app_core/minimal_app.py`, a lightweight `create_minimal_app()` bootstrap for CLI/timer scripts that only need `db.session` (GitHub issue #2581). `security-perimeter-ingest.timer` ran `ingest_security_perimeter_log.py` every 2 minutes forever through `app.py`'s full `create_app()` — ~260 routes, every subsystem, 7.2s per run — to tail a log and insert a few rows. Measured 7.2s → 1.8s (639 routes → 1) after retargeting it and two other by-hand admin scripts (`fix_admin_roles.py`, `create_example_screens.py`) at the new bootstrap instead. |
+| 2026-09-18 | 3.17.0 | Phase 4d (`app_core/eas_storage.py`, 2825 → package of 14 modules). Profiled first and confirmed pure-motion shape (57 functions, zero classes) — like `system.py`/`eas.py`, not a god-class. 69/69 definitions `ast.dump()`-identical with **zero** normalization needed, a first for this plan (nothing moved out of a class this time). Caught the `eas.py`-shaped internal-call hazard again (`collect_compliance_dashboard_data` → `collect_compliance_log_entries`, monkeypatched in `test_public_logs_data.py`) by building the call graph before laying out modules, not after. Two new lessons: the free-variable scanner needed to walk `Assign`/`AnnAssign` nodes too, not just function bodies, after a module-level dict constant silently lost its import; and `ast`-based extraction is blind to comments, which don't exist as AST nodes — four standalone comment blocks preceding constants were dropped on the first pass and only caught by the plan's line-coverage diff, not by any AST check. Dropped one confirmed-dead import (`ORIGINATOR_DESCRIPTIONS`). `sdr_hardware_service.py` and `eas_monitoring_service.py` — the other two files this plan flagged unprofiled — turned out to be `main()`-shaped instead (891 and 1079-line dominant functions) and need the 2e technique, not this one. |
 
 ## Next up
 
@@ -2008,10 +2072,16 @@ in their entirety. Needs the 2e technique — characterization harness built
 *before* any restructuring — the same way `_handle_sentence` was pinned
 before its `nmea.py` extraction, just at a much larger scale. Budget it as
 its own dedicated multi-session effort, not a routine split.
-`app_core/eas_storage.py` (2824), `sdr_hardware_service.py` (2275) and
-`eas_monitoring_service.py` (2246) are still completely unprofiled — check
-their shape (god-class vs. free functions) the way 4a/4b/4c did before
-assuming any of them need the same treatment.
+**`app_core/eas_storage.py` (2825, 57 top-level functions) was profiled and
+confirmed pure-motion shape** — like `system.py` and `eas.py`, not a
+god-class — and split into a 14-module package, 2026-09-18. `main()`-shaped
+files remain unstarted: `sdr_hardware_service.py` (2924 lines) is dominated
+by one 891-line `process_commands` function, and `eas_monitoring_service.py`
+(2546 lines) by one 1079-line `main()` — both need the 2e
+characterization-harness technique cap_poller's remaining 50 methods need,
+not the pure-motion technique that worked for `eas_storage.py`. Check shape
+before planning either one; do not assume either is safe to split the same
+way.
 
 ## Pre-split checklist
 
