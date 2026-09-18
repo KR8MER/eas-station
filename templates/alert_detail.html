@@ -2887,9 +2887,14 @@ function populateLayerToggles() {
 }
 
 function loadBoundaries() {
-    // Load boundaries using the same approach as index.html
+    // Alert-scoped, unlike index.html's dashboard map: alert_id restricts
+    // each type to the boundaries this alert actually intersects (the same
+    // Intersection rows the sidebar's "X of Y affected" counts come from),
+    // instead of every boundary of that type county-wide. Without this the
+    // "Affected Boundaries" toggle drew every village/fire district/etc. in
+    // the whole service area regardless of the alert's real coverage.
     BOUNDARY_TYPES.forEach(type => {
-        fetch(`/api/boundaries?type=${type}`)
+        fetch(`/api/boundaries?type=${type}&alert_id=${alertData.id}`)
             .then(response => response.json())
             .then(data => {
                 if (data.features && data.features.length > 0) {
