@@ -12,14 +12,14 @@ import os
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app import create_app
+from app_core.minimal_app import create_minimal_app
 from app_core.extensions import db
 from app_core.models import AdminUser
 from app_core.auth.roles import Role, initialize_default_roles_and_permissions
 
 def fix_admin_roles():
     """Assign admin role to users without roles."""
-    app = create_app()
+    app = create_minimal_app()
     
     with app.app_context():
         # First, ensure roles are initialized

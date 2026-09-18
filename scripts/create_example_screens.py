@@ -1449,7 +1449,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    from app import create_app
+    from app_core.minimal_app import create_minimal_app
 
-    app = create_app()
+    app = create_minimal_app()
     create_example_screens(app, args.display_type)
