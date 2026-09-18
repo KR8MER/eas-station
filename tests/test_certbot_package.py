@@ -231,13 +231,13 @@ def test_domain_and_email_patterns_still_discriminate():
 def test_package_modules_stay_within_the_size_guidance():
     """AGENTS.md asks for Python modules under ~400 lines.
 
-    ``routes_obtain_execute.py`` is the documented exception: the handler is a
-    single 387-line ``try`` block, so module-level splitting cannot shrink it.
-    Reducing it means extracting collaborators from the body, which is a
-    behavioural refactor and needs characterization tests first — tracked as a
-    follow-up in docs/development/LARGE_FILE_REFACTOR_PLAN.md.
+    ``routes_obtain_execute.py`` was the one documented exception (a single
+    387-line ``try`` block) until Phase 3e-ii extracted its collaborators —
+    see docs/development/LARGE_FILE_REFACTOR_PLAN.md. No known exceptions
+    remain; if a future change reintroduces one, update this set rather than
+    silently letting it slide.
     """
-    known_exceptions = {'routes_obtain_execute.py'}
+    known_exceptions: set[str] = set()
 
     oversized = {
         path.name: len(path.read_text(encoding='utf-8').splitlines())
