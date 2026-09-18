@@ -1,0 +1,8 @@
+# CODEOWNERS — see https://docs.github.com/articles/about-code-owners
+#
+# Requests review from the listed owner(s) whenever a matching path changes
+# in a pull request. This is currently a single-maintainer repo, so one
+# global rule covers everything; add path-specific rules below it as more
+# people start reviewing specific areas.
+
+* @KR8MER
