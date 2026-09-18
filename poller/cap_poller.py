@@ -196,6 +196,17 @@ from app_utils.eas import load_eas_config
 from app_core.audio.auto_forward import auto_forward_cap_alert
 print(f"[CAP_POLLER] Importing app_core.models...")
 from app_core.models import PollerSettings
+from poller.cap_alert_parsing import (
+    _apply_cancellation_status,
+    _coords_equal,
+    _extract_cap_event_codes,
+    _extract_cap_parameters,
+    _normalize_same_code,
+    _safe_json_copy,
+    _select_cap_info,
+    _summarise_geometry,
+    _validate_ugc_code,
+)
 print(f"[CAP_POLLER] All app module imports complete!")
 
 # Use optimized XML parser (lxml if available, else xml.etree.ElementTree)
@@ -1458,10 +1469,10 @@ class CAPPoller:
         identifier = get_text(alert_elem, 'cap:identifier')
         sent = get_text(alert_elem, 'cap:sent')
         info_elems = alert_elem.findall('cap:info', ns)
-        info_elem = self._select_cap_info(info_elems, ns)
+        info_elem = _select_cap_info(info_elems, ns)
 
-        parameters = self._extract_cap_parameters(info_elem, ns)
-        event_codes = self._extract_cap_event_codes(info_elem, ns)
+        parameters = _extract_cap_parameters(info_elem, ns)
+        event_codes = _extract_cap_event_codes(info_elem, ns)
         geometry, area_desc, geocodes = self._extract_area_details(info_elem, ns)
         resources = self._extract_cap_resources(info_elem, ns)
 
@@ -1520,77 +1531,8 @@ class CAPPoller:
 
         return feature
 
-    def _select_cap_info(self, info_elements: List[ET.Element], ns: Dict[str, str]) -> Optional[ET.Element]:
-        if not info_elements:
-            return None
 
-        preferred_langs = ['en-US', 'en-us', 'en']
-        for preferred in preferred_langs:
-            for info_elem in info_elements:
-                language = info_elem.findtext('cap:language', default='', namespaces=ns)
-                if language and language.lower().startswith(preferred.lower()):
-                    return info_elem
 
-        return info_elements[0]
-
-    def _extract_cap_event_codes(self, info_elem: Optional[ET.Element], ns: Dict[str, str]) -> Dict[str, List[str]]:
-        """Extract <eventCode> elements from a CAP <info> block.
-
-        Same shape as <parameter> (a <valueName>/<value> pair), and this
-        used to be the one CAP <info> child _convert_cap_alert() didn't
-        extract at all -- properties['eventCode'] was simply never set for
-        IPAWS-sourced alerts, even when the source alert carried one.
-        Reproduced live: a county gas-leak "shelter in place" alert whose
-        raw CAP XML had <eventCode><valueName>SAME</valueName><value>SPW
-        </value></eventCode> was stored with no eventCode in `properties`
-        at all, so the event code fell through as unresolved ("UNKNOWN")
-        downstream and the alert was silently dropped by the forwarding
-        allowlist -- even though the allowlist itself already included
-        SPW. NWS's api.weather.gov CAP-JSON feed doesn't need this (it
-        already includes eventCode natively in the properties it returns);
-        this only affects the IPAWS-OPEN XML path this method parses.
-
-        Returned shape matches the geocode dict convention used elsewhere
-        (and what app_utils.eas._collect_event_code_candidates() expects):
-        {"SAME": ["SPW"], ...}, keyed by valueName with one list per name
-        so multiple <eventCode> elements sharing a valueName all survive.
-        """
-        event_codes: Dict[str, List[str]] = {}
-        if info_elem is None:
-            return event_codes
-
-        for code_elem in info_elem.findall('cap:eventCode', ns):
-            name = code_elem.findtext('cap:valueName', default='', namespaces=ns)
-            value = code_elem.findtext('cap:value', default='', namespaces=ns)
-            if not name:
-                continue
-            name = name.strip()
-            if not name:
-                continue
-            value = (value or '').strip()
-            if not value:
-                continue
-            event_codes.setdefault(name, []).append(value)
-
-        return event_codes
-
-    def _extract_cap_parameters(self, info_elem: Optional[ET.Element], ns: Dict[str, str]) -> Dict[str, List[str]]:
-        parameters: Dict[str, List[str]] = {}
-        if info_elem is None:
-            return parameters
-
-        for param in info_elem.findall('cap:parameter', ns):
-            name = param.findtext('cap:valueName', default='', namespaces=ns)
-            value = param.findtext('cap:value', default='', namespaces=ns)
-            if not name:
-                continue
-            name = name.strip()
-            if not name:
-                continue
-            value = (value or '').strip()
-            parameters.setdefault(name, []).append(value)
-
-        return parameters
 
     def _extract_cap_resources(self, info_elem: Optional[ET.Element], ns: Dict[str, str]) -> List[Dict[str, str]]:
         """Extract resource elements from CAP info block.
@@ -1696,11 +1638,6 @@ class CAPPoller:
         area_desc = '; '.join(area_descs)
         return geometry, area_desc, geocodes
 
-    def _coords_equal(self, p1: List[float], p2: List[float], epsilon: float = 1e-7) -> bool:
-        """Check if two coordinate pairs are equal within floating-point tolerance."""
-        if len(p1) < 2 or len(p2) < 2:
-            return False
-        return abs(p1[0] - p2[0]) < epsilon and abs(p1[1] - p2[1]) < epsilon
 
     def _parse_cap_polygon(self, polygon_text: Optional[str]) -> Optional[List[List[float]]]:
         if not polygon_text:
@@ -1731,7 +1668,7 @@ class CAPPoller:
             return None
 
         # Use epsilon tolerance for coordinate comparison to handle floating-point precision
-        if not self._coords_equal(coords[0], coords[-1]):
+        if not _coords_equal(coords[0], coords[-1]):
             coords.append(coords[0])
 
         return coords
@@ -1905,7 +1842,7 @@ class CAPPoller:
             return coords
 
         # Use epsilon tolerance for ring closure
-        if coords and not self._coords_equal(coords[0], coords[-1]):
+        if coords and not _coords_equal(coords[0], coords[-1]):
             coords.append(coords[0])
 
         return coords
@@ -2179,55 +2116,10 @@ class CAPPoller:
 
         return unique_alerts
 
-    def _safe_json_copy(self, value: Any) -> Any:
-        try:
-            return json_loads(json_dumps(value))
-        except Exception:
-            return value
 
-    def _summarise_geometry(self, geometry: Optional[Dict]) -> Tuple[Optional[str], Optional[int], Optional[List[List[float]]]]:
-        if not geometry or not isinstance(geometry, dict):
-            return None, None, None
-
-        geom_type = geometry.get('type')
-        coordinates = geometry.get('coordinates')
-        polygon_count: Optional[int] = None
-        preview: Optional[List[List[float]]] = None
-
-        if geom_type == 'Polygon':
-            polygon_count = 1
-            rings = coordinates or []
-            if rings and isinstance(rings, list) and rings[0]:
-                preview = [list(point) for point in rings[0][: min(len(rings[0]), 12)]]
-        elif geom_type == 'MultiPolygon':
-            polygon_count = len(coordinates or []) if isinstance(coordinates, list) else 0
-            if coordinates and isinstance(coordinates, list):
-                first_polygon = coordinates[0] or []
-                if first_polygon and isinstance(first_polygon, list) and first_polygon[0]:
-                    preview = [list(point) for point in first_polygon[0][: min(len(first_polygon[0]), 12)]]
-        else:
-            if isinstance(coordinates, list):
-                polygon_count = len(coordinates)
-                preview = [list(point) for point in coordinates[: min(len(coordinates), 12)]]
-
-        return geom_type, polygon_count, preview
 
     # ---------- Relevance ----------
-    def _validate_ugc_code(self, ugc: str) -> bool:
-        r"""Validate UGC code format: [A-Z]{2}[CZ]\d{3} (e.g., OHZ016, OHC137)."""
-        if not ugc or not isinstance(ugc, str):
-            return False
-        ugc = ugc.strip().upper()
-        # Valid UGC format: 2 letters, C or Z, 3 digits
-        return bool(re.match(r'^[A-Z]{2}[CZ]\d{3}$', ugc))
 
-    @staticmethod
-    def _normalize_same_code(value: Any) -> Optional[str]:
-        digits = ''.join(ch for ch in str(value) if ch.isdigit())
-        if not digits:
-            return None
-        normalized = digits.zfill(6)[:6]
-        return normalized if normalized.strip('0') else normalized
 
     def get_alert_relevance_details(self, alert_data: Dict) -> Dict[str, Any]:
         result: Dict[str, Any] = {
@@ -2256,7 +2148,7 @@ class CAPPoller:
                 if not ugc:
                     continue
                 ugc_str = str(ugc).strip().upper()
-                if self._validate_ugc_code(ugc_str):
+                if _validate_ugc_code(ugc_str):
                     normalized_ugc.append(ugc_str)
                 else:
                     self.logger.warning(
@@ -2267,7 +2159,7 @@ class CAPPoller:
 
             normalized_same = []
             for same in same_codes_raw:
-                normalized = self._normalize_same_code(same)
+                normalized = _normalize_same_code(same)
                 if normalized:
                     normalized_same.append(normalized)
             result['same_codes'] = normalized_same
@@ -2978,7 +2870,7 @@ class CAPPoller:
         # identifier rather than a brand-new product; recognise it here so the
         # alert flips to Cancelled instead of silently keeping its 'Actual'
         # status until the original expiry lapses.
-        self._apply_cancellation_status(existing)
+        _apply_cancellation_status(existing)
 
         self.db_session.commit()
 
@@ -3085,7 +2977,7 @@ class CAPPoller:
         # A cancellation product (msgType=Cancel / VTEC CAN) is itself a notice
         # that the event is over — label it Cancelled so it is reported as such
         # and stays out of the active-alerts view.
-        self._apply_cancellation_status(new_alert)
+        _apply_cancellation_status(new_alert)
 
         # First commit: Save alert to database to get the ID needed for EAS message linking
         self.db_session.add(new_alert)
@@ -3331,31 +3223,6 @@ class CAPPoller:
 
         return True
 
-    def _apply_cancellation_status(self, alert: CAPAlert) -> bool:
-        """Mark *alert* as Cancelled when it is an explicit cancellation product.
-
-        Recognises both the CAP ``msgType=Cancel`` envelope and the VTEC ``CAN``
-        action code.  Sets ``status='Cancelled'`` and stamps ``cancelled_at``
-        while leaving ``expires`` untouched, so the alert detail view can show
-        the event was lifted early.  Returns ``True`` when the alert is (now) a
-        cancellation.
-
-        This handles the case where a cancellation arrives as an *update* to the
-        same CAP identifier (the prior-product path is covered by
-        ``_mark_vtec_chain_superseded``).  Air behaviour is unchanged: the
-        auto-forward guard already suppresses terminal VTEC actions and any
-        non-'Actual' status.
-        """
-        if not is_cancellation(
-            getattr(alert, 'message_type', None),
-            getattr(alert, 'vtec_action', None),
-        ):
-            return False
-        if alert.status != 'Cancelled':
-            alert.status = 'Cancelled'
-        if getattr(alert, 'cancelled_at', None) is None:
-            alert.cancelled_at = utc_now()
-        return True
 
     def _mark_cap_references_superseded(self, new_alert: CAPAlert, references: Union[str, list, None]) -> int:
         """Mark prior alert(s) referenced by a CAP Update as superseded by it.
@@ -3986,7 +3853,7 @@ class CAPPoller:
         sent_raw = properties.get('sent')
         sent_dt = parse_nws_datetime(sent_raw) if sent_raw else None
         geometry = alert_data.get('geometry') if isinstance(alert_data.get('geometry'), dict) else None
-        geom_type, polygon_count, preview = self._summarise_geometry(geometry)
+        geom_type, polygon_count, preview = _summarise_geometry(geometry)
 
         log_entry = relevance.get('log') if isinstance(relevance, dict) else None
         notes: List[str] = []
@@ -4000,8 +3867,8 @@ class CAPPoller:
             'event': properties.get('event', 'Unknown'),
             'alert_sent': sent_dt,
             'source': properties.get('source'),
-            'raw_properties': self._safe_json_copy(properties),
-            'geometry_geojson': self._safe_json_copy(geometry) if geometry else None,
+            'raw_properties': _safe_json_copy(properties),
+            'geometry_geojson': _safe_json_copy(geometry) if geometry else None,
             'geometry_preview': preview,
             'geometry_type': geom_type,
             'polygon_count': polygon_count,
@@ -4061,8 +3928,8 @@ class CAPPoller:
                     source=entry.get('source'),
                     is_relevant=entry.get('is_relevant', False),
                     relevance_reason=entry.get('relevance_reason'),
-                    relevance_matches=self._safe_json_copy(entry.get('relevance_matches')),
-                    ugc_codes=self._safe_json_copy(entry.get('ugc_codes')),
+                    relevance_matches=_safe_json_copy(entry.get('relevance_matches')),
+                    ugc_codes=_safe_json_copy(entry.get('ugc_codes')),
                     area_desc=entry.get('area_desc'),
                     was_saved=entry.get('was_saved', False),
                     was_new=entry.get('was_new', False),
@@ -4071,9 +3938,9 @@ class CAPPoller:
                     parse_error=entry.get('parse_error'),
                     polygon_count=entry.get('polygon_count'),
                     geometry_type=entry.get('geometry_type'),
-                    geometry_geojson=self._safe_json_copy(entry.get('geometry_geojson')),
-                    geometry_preview=self._safe_json_copy(entry.get('geometry_preview')),
-                    raw_properties=self._safe_json_copy(entry.get('raw_properties')),
+                    geometry_geojson=_safe_json_copy(entry.get('geometry_geojson')),
+                    geometry_preview=_safe_json_copy(entry.get('geometry_preview')),
+                    raw_properties=_safe_json_copy(entry.get('raw_properties')),
                     raw_xml_present=entry.get('raw_xml_present', False),
                     notes="\n".join(filter(None, entry.get('notes', []))) or None,
                 )
@@ -4531,8 +4398,8 @@ class CAPPoller:
                         debug_entry['alert_sent'] = parsed.get('sent')
                         geometry_data = parsed.get('_geometry_data')
                         if geometry_data:
-                            debug_entry['geometry_geojson'] = self._safe_json_copy(geometry_data)
-                            geom_type, polygon_count, preview = self._summarise_geometry(geometry_data)
+                            debug_entry['geometry_geojson'] = _safe_json_copy(geometry_data)
+                            geom_type, polygon_count, preview = _summarise_geometry(geometry_data)
                             debug_entry['geometry_type'] = geom_type
                             debug_entry['polygon_count'] = polygon_count
                             debug_entry['geometry_preview'] = preview

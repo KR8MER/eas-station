@@ -21,6 +21,21 @@ All notable changes to this project are documented in this file. The format is b
 - **`.github/PULL_REQUEST_TEMPLATE.md`**: prompts for a summary, test plan, and the release/versioning checklist `docs/development/AGENTS.md` §9 already requires of every change.
 - **`.github/ISSUE_TEMPLATE/`**: structured bug-report and feature-request forms (GitHub's YAML issue-forms format), plus a `config.yml` disabling blank issues and redirecting security reports to private vulnerability reporting instead.
 
+## [3.16.0] - 2026-09-18 - Refactor: extract poller/cap_poller.py's stateless methods (Large File Refactor Plan, Phase 4c partial)
+
+Profiling `poller/cap_poller.py` (4,933 lines) confirmed it really is the god-class the plan originally assumed for Phase 4 — unlike `system.py` and `eas.py`, both of which turned out to be mostly independent functions once actually profiled. `CAPPoller` is ~3,978 of the file's lines across 59 methods.
+
+### Changed
+- Extracted `CAPPoller`'s 9 stateless methods (zero `self` references, 143 lines) into `poller/cap_alert_parsing.py`: `_select_cap_info`, `_extract_cap_event_codes`, `_extract_cap_parameters`, `_summarise_geometry`, `_apply_cancellation_status`, `_validate_ugc_code`, `_normalize_same_code`, `_coords_equal`, `_safe_json_copy`. Rewrote all 19 internal `self.method(...)` call sites to bare function calls. `cap_poller.py`: 4933 → 4800 lines — still far over the guidance; the other 50 methods (3,711 lines) are the actual remaining work, not started, and are now the highest-risk item left in this plan.
+- All 9 moved functions verified `ast.dump()`-identical to their originals (after normalizing away `self` and one level of docstring indentation — the same two normalizations Phase 2d needed for `GPSManager`'s stateless methods).
+- Retargeted `tests/test_ipaws_event_code_extraction.py`'s `TestExtractCapEventCodes` off a live `CAPPoller` instance (`object.__new__(CAPPoller)`, built solely to reach the now-moved method) to call `_extract_cap_event_codes` directly.
+- Full test suite green.
+
+### Fixed (tooling)
+- `ruff` (not available in this environment by default) installed into a scratch venv for a real lint pass, catching two `F821`s that `py_compile` and even a real `import` of the new module had both stayed silent about: `ET.Element`/`CAPAlert` type hints relying on `from __future__ import annotations` to dodge real imports, which defers evaluation but doesn't exempt a name from needing to resolve. Fixed by importing `ET` the same way `cap_poller.py` itself does (`get_element_tree_module()`) and `CAPAlert` from `app_core.models`.
+
+🔒 GitHub's PR-scoped CodeQL analysis flagged 3 "new" alerts on the `app_utils/eas.py` package PR that merged just before this one — a polynomial-regex pattern and a log-injection pattern in files that split out of `eas.py`, and a stack-trace-exposure pattern in `webapp/admin/pending_alerts.py`, a file that PR never touched at all. All three confirmed pre-existing (byte-identical or `ast.dump()`-identical to code already on `main`) rather than fixed — a security-flagged regex or log call is a behaviour change and doesn't belong in a pure-motion refactor commit. `main` has no branch protection requiring CodeQL to pass and already carries ~100 open alerts of the same rule categories elsewhere in the tree. Noted here for visibility, not silently dropped.
+
 ## [3.14.0] - 2026-09-18 - Refactor: split app_utils/eas.py into a package (Large File Refactor Plan, Phase 4)
 
 The single largest file in the tree at the time (4,246 lines, grown from the 3,848 lines the plan was originally scoped against). Unlike the plan's original note calling this "a very large class," the file had actually grown into 48 mostly-independent top-level functions plus two large classes (`EASAudioGenerator`, `EASBroadcaster`) — the 2a/2b pure-motion shape, not the god-class shape Phase 4 was expected to need.
