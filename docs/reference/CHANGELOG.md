@@ -7,6 +7,14 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.19.0] - 2026-09-18 - Add healthchecks.io per-service heartbeat integration
+
+### Added
+- **healthchecks.io Management API v3 support (`app_core/healthchecks_client.py`), alongside the existing Tickstem integration, for outbound per-service dead-man's-switch monitoring.** Requested: "Can we add healthchecks.io API support along with Tickstem?" One heartbeat check per `app_core.config.get_eas_services()` entry (the same 11 EAS subsystems + poller Tickstem's per-service heartbeats already cover), each pinged by the shared `HeartbeatWorker` background thread only while that specific systemd service is actually running — so a missed ping on healthchecks.io's side identifies exactly which subsystem stalled, not just "something is down." New `HealthchecksSettings` (encrypted account API key) and `HealthchecksServiceHeartbeat` (per-service check UUID/ping URL/interval/status) models, migration `20260918_healthchecks_settings`.
+- **No new page.** Per explicit direction ("No separate page though in the settings, update the tickstem page, maybe rename it") the integration has no standalone settings page or nav entry — `webapp/admin/healthchecks.py` is API-routes-only. The existing Tickstem settings page (`webapp/admin/tickstem.py`, `templates/admin/tickstem.html`) was renamed "Uptime Monitoring" and now renders both providers' settings and per-service heartbeat tables in one place, since both are the same kind of thing (outbound dead-man's-switch heartbeats) differing only in which third-party API they call.
+- Bulk "create all" endpoint (`/admin/healthchecks/service-heartbeats/create-all`) stops immediately on an HTTP 403 (healthchecks.io's plan-quota-exhausted response) instead of retrying the same failure for every remaining service, and reports which services it did create before hitting the limit.
+- `tests/test_healthchecks_service_heartbeats.py` — 15 tests covering the worker's active-and-due gating logic (mirroring the existing `test_tickstem_service_heartbeats.py` shape, since both providers share `HeartbeatWorker._ping_one_service_heartbeat()`), the API client's request/error-handling shape, and the bulk-create route's subset/quota-stop/missing-key behavior.
+
 ## [3.18.3] - 2026-09-18 - Fix: duplicate security headers silently disabled HSTS enforcement
 
 ### Fixed

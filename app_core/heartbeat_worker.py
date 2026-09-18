@@ -32,12 +32,13 @@ HealthAlertWorker is for): the ping fires unconditionally on schedule, so
 its only failure mode is "this process stopped running," which is exactly
 the condition it exists to catch.
 
-This same loop also drives a second, independent signal: TickstemSettings'
-"service heartbeat", which -- unlike the one above -- IS gated on
-get_system_health()'s aggregate status, so a crashed/failed subsystem (or a
-lost database connection) shows up as a missed heartbeat too. Sharing the
-loop keeps this to one background thread rather than two near-identical
-ones; each signal tracks its own last-ping time and interval independently.
+This same loop also drives two further, independent signals:
+TickstemServiceHeartbeat and HealthchecksServiceHeartbeat rows -- unlike the
+one above, both ARE gated on get_system_health()'s aggregate status, so a
+crashed/failed subsystem (or a lost database connection) shows up as a
+missed heartbeat too. Sharing the loop keeps this to one background thread
+rather than three near-identical ones; each signal tracks its own last-ping
+time and interval independently.
 """
 
 import logging
@@ -92,6 +93,7 @@ class HeartbeatWorker:
                 with self._app.app_context():
                     self._ping_once()
                     self._ping_service_heartbeats_once()
+                    self._ping_healthchecks_service_heartbeats_once()
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.error("Heartbeat worker iteration failed: %s", exc)
             self._stop_event.wait(_MIN_INTERVAL_SECONDS)
@@ -160,6 +162,35 @@ class HeartbeatWorker:
         except Exception as exc:
             logger.error("Failed to record service heartbeat ping result for %s: %s", row.service_name, exc)
             db.session.rollback()
+
+    def _ping_healthchecks_service_heartbeats_once(self) -> None:
+        """healthchecks.io equivalent of _ping_service_heartbeats_once()
+        above -- same gating (due AND the row's own service currently
+        active), same per-row independence. Kept as a separate method
+        rather than folding the two models into one query, since a shared
+        helper would need to abstract over which model/table to query for
+        no real benefit -- both are a handful of rows, pinged at most once
+        a minute.
+        """
+        from app_core.models import HealthchecksServiceHeartbeat
+
+        rows = HealthchecksServiceHeartbeat.query.filter_by(enabled=True).all()
+        if not rows:
+            return
+
+        try:
+            service_status = _current_service_status()
+        except Exception as exc:
+            logger.error("healthchecks.io service-heartbeat health check failed: %s", exc)
+            return
+
+        for row in rows:
+            interval = max(row.interval_secs or _MIN_INTERVAL_SECONDS, _MIN_INTERVAL_SECONDS)
+            if not _is_due(row.last_ping_at, interval):
+                continue
+            if not service_status.get(row.service_name):
+                continue  # that service isn't active right now -- stay silent, let the ping lapse
+            self._ping_one_service_heartbeat(row)
 
 
 def send_heartbeat_ping(ping_url: str, timeout: int = 10):

@@ -89,6 +89,7 @@ from ._models_sms_optin import SmsOptInRequest
 from ._models_sms_log import SmsMessageLog, record_sms_message
 from ._models_polling import PollDebugRecord, PollHistory, PollerSettings
 from ._models_tickstem import TickstemSettings, TickstemServiceHeartbeat
+from ._models_healthchecks import HealthchecksSettings, HealthchecksServiceHeartbeat
 from ._models_settings import (
     AlertFilterSettings,
     ApplicationSettings,
@@ -200,6 +201,8 @@ __all__ = [
     "TailscaleSettings",
     "TickstemSettings",
     "TickstemServiceHeartbeat",
+    "HealthchecksSettings",
+    "HealthchecksServiceHeartbeat",
     "TrafficAnalyticsSettings",
     "USCountyBoundary",
     "VFDDisplay",

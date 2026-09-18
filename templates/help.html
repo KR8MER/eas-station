@@ -478,12 +478,26 @@
                                         </li>
                                         <li>
                                             <strong>Tickstem Uptime Monitor</strong> (<strong>Settings &rarr;
-                                            Tickstem Uptime Monitor</strong>, <code>/admin/tickstem/</code>): the
+                                            Uptime Monitoring</strong>, <code>/admin/tickstem/</code>): the
                                             opposite direction from Uptime Heartbeat above &mdash; instead of this
                                             box pinging out, <a href="https://tickstem.dev" target="_blank" rel="noopener">Tickstem</a>
                                             polls a public URL (normally this box's own <code>/health</code>) from
                                             the outside and alerts if it stops answering. Create, pause, resume, and
                                             delete the monitor from this page using a Tickstem account API key.
+                                        </li>
+                                        <li>
+                                            <strong>healthchecks.io Per-Service Heartbeats</strong> (also on
+                                            <strong>Settings &rarr; Uptime Monitoring</strong>): a third outbound
+                                            direction, same shape as Uptime Heartbeat above but one check per
+                                            critical service (from the System Health page) rather than one combined
+                                            ping. Each service's check is pinged only while that specific service
+                                            is active, so a missed ping on
+                                            <a href="https://healthchecks.io" target="_blank" rel="noopener">healthchecks.io</a>'s
+                                            side names the exact subsystem that failed. Create, pause, resume, and
+                                            delete checks from this page using a healthchecks.io account API key
+                                            &mdash; unlike Tickstem's Monitors API, healthchecks.io has no
+                                            "poll a public URL" product, so it only ever manages this per-service
+                                            heartbeat signal, not the URL-polling one above.
                                         </li>
                                         <li>
                                             <strong>Backup restore verification</strong> (<strong>Admin &rarr;
