@@ -61,6 +61,7 @@ import logging
 from types import SimpleNamespace
 
 from poller.cap_poller import CAPPoller
+from poller.cap_alert_parsing import _extract_cap_event_codes
 from app_utils.eas import _collect_event_code_candidates
 from app_utils.event_codes import resolve_event_code
 from app_core.audio.auto_forward import _resolve_event_code
@@ -143,22 +144,24 @@ def _parse_info(xml_body: str):
 
 
 class TestExtractCapEventCodes:
-    """Unit tests for CAPPoller._extract_cap_event_codes()."""
+    """Unit tests for _extract_cap_event_codes() (poller/cap_alert_parsing.py).
+
+    Extracted out of CAPPoller as a stateless module-level function (Large
+    File Refactor Plan Phase 4c) -- called directly rather than through a
+    poller instance now that it no longer touches ``self``.
+    """
 
     def test_extracts_same_value(self):
-        poller = _make_test_poller()
         info_elem = _parse_info(_GAS_LEAK_INFO_XML)
-        result = poller._extract_cap_event_codes(info_elem, _NS)
+        result = _extract_cap_event_codes(info_elem, _NS)
         assert result == {'SAME': ['SPW']}
 
     def test_missing_eventcode_returns_empty_dict(self):
-        poller = _make_test_poller()
         info_elem = _parse_info('<info><event>Test</event></info>')
-        result = poller._extract_cap_event_codes(info_elem, _NS)
+        result = _extract_cap_event_codes(info_elem, _NS)
         assert result == {}
 
     def test_multiple_valuenames_preserved_separately(self):
-        poller = _make_test_poller()
         xml_body = (
             '<info><event>Severe Thunderstorm Warning</event>'
             '<eventCode><valueName>SAME</valueName><value>SVR</value></eventCode>'
@@ -166,18 +169,16 @@ class TestExtractCapEventCodes:
             '</info>'
         )
         info_elem = _parse_info(xml_body)
-        result = poller._extract_cap_event_codes(info_elem, _NS)
+        result = _extract_cap_event_codes(info_elem, _NS)
         assert result == {'SAME': ['SVR'], 'NationalWeatherService': ['SVW']}
 
     def test_none_info_elem_returns_empty_dict(self):
-        poller = _make_test_poller()
-        assert poller._extract_cap_event_codes(None, _NS) == {}
+        assert _extract_cap_event_codes(None, _NS) == {}
 
     def test_empty_value_skipped(self):
-        poller = _make_test_poller()
         xml_body = '<info><eventCode><valueName>SAME</valueName><value></value></eventCode></info>'
         info_elem = _parse_info(xml_body)
-        result = poller._extract_cap_event_codes(info_elem, _NS)
+        result = _extract_cap_event_codes(info_elem, _NS)
         assert result == {}
 
 

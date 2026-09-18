@@ -1824,6 +1824,99 @@ started; tracked as a follow-up. `config.py` (408) is the same shape at a
 smaller scale: one 369-line function (`load_eas_config`) dominates a module
 whose only other content is a 5-line helper and a 3-line constant list.
 
+### 4c. `poller/cap_poller.py` — stateless methods extracted, god-class remains ⚠️ partial
+
+`CAPPoller` is confirmed to be a genuine god-class, exactly as the plan
+originally assumed for Phase 4 (unlike `system.py` and `eas.py`, which
+turned out not to be): 4,933 lines total, `CAPPoller` itself ~3,978 of
+them, 59 methods. Profiling by `self` usage — the same technique 2d used on
+`GPSManager` — splits it cleanly:
+
+| Group | Methods | Lines | Extractable as motion? |
+| --- | ---: | ---: | --- |
+| Stateless (zero `self` references) | 9 | 143 | ✅ yes — all 9 moved here |
+| Stateful (touches `self`) | 50 | 3,711 | ❌ no — needs collaborators, the 2e technique |
+
+The nine that moved, to `poller/cap_alert_parsing.py` (187 lines):
+`_select_cap_info`, `_extract_cap_event_codes`, `_extract_cap_parameters`,
+`_summarise_geometry`, `_apply_cancellation_status`, `_validate_ugc_code`,
+`_normalize_same_code` (already `@staticmethod`), `_coords_equal`,
+`_safe_json_copy`. `cap_poller.py`: 4933 → **4800** lines — still far over
+the guidance, because module-level splitting only ever had 143 of the
+4,933 lines to work with here. The other 3,711 lines are the real Phase 4c
+work, not started.
+
+**Verified the same way 2d verified `GPSManager`'s stateless methods**: all
+9 are `ast.dump()`-identical to their originals once `self` is stripped
+from the signature and docstring indentation is normalized (one dedent
+level, 8→4 spaces) — the exact same two normalizations 2d needed, for the
+exact same reason (a class method's docstring and a module function's
+docstring are conventionally indented one level apart, and that's a real
+textual difference `ast.dump()` correctly reports, not a false mismatch).
+
+**19 internal call sites rewritten** from `self._method(...)` to
+`_method(...)` across `cap_poller.py` — found by `grep -c
+"self\.$method("` per method rather than assumed, matching the "a truncated
+search cannot prove a negative" lesson from 2d/2e.
+
+**One test file called a moved method through a live instance and had to
+be retargeted.** `tests/test_ipaws_event_code_extraction.py` built a
+`CAPPoller` via `object.__new__(CAPPoller)` specifically to reach
+`poller._extract_cap_event_codes(...)` — the only one of the 36 usages of
+these 9 names anywhere in the tree (production or tests, AST-scanned) that
+called through an instance rather than importing `load_eas_config`-style or
+not touching them at all. Retargeted to import `_extract_cap_event_codes`
+directly from `poller.cap_alert_parsing` and call it bare, dropping the now-
+pointless `_make_test_poller()` instance entirely for that test class.
+
+**The `ET`/`CAPAlert` type hints needed real imports, not the
+`from __future__ import annotations` shortcut.** Three of the nine methods
+type-hint parameters as `ET.Element` or `CAPAlert` without using either as a
+runtime value (pure duck-typing via `.findall()`/`getattr()` in the
+bodies). The first draft relied on `from __future__ import annotations` to
+defer hint evaluation and skip importing either — `py_compile` and even a
+real `import poller.cap_alert_parsing` both stayed silent about this, since
+neither actually evaluates annotation expressions. `ruff check` (not
+available in this sandbox by default — installed into a scratch venv to
+get a real lint pass rather than trusting `py_compile` alone) caught both
+as F821 immediately. Fixed by importing `ET` the same way `cap_poller.py`
+itself resolves it (`get_element_tree_module()` from
+`app_utils.optimized_parsing`) and `CAPAlert` directly from
+`app_core.models` — both harmless from `poller.cap_alert_parsing`, which
+already sits downstream of both in the dependency graph.
+
+**A CodeQL false-positive class worth naming for the next phase.** The PR
+was flagged with 3 "new" alerts: a polynomial-regex pattern in
+`tts_normalize.py`, a log-injection pattern in `audio_conversion.py`
+(both landed in 4b, not 4c), and a stack-trace-exposure pattern in
+`webapp/admin/pending_alerts.py` — a file this session never touched at
+all. All three were confirmed pre-existing: the first two are
+`ast.dump()`-identical to code already on `main` before the split, and the
+third has a byte-identical diff (none) against `main`. GitHub's PR-scoped
+CodeQL analysis identifies an alert partly by file path, so moving a file
+makes its pre-existing findings reappear as "new," and a data-flow source
+passing *through* a moved file (here, `load_eas_config`) can do the same to
+an untouched file downstream of it. `main` already carries ~100 open
+alerts of these same rule categories elsewhere in the tree (including in
+this plan's own already-merged `certbot/obtain_methods.py` split), and
+`main` has no branch protection requiring CodeQL to pass — confirmed via
+`gh api repos/.../branches/main/protection` (404) and `gh pr view --json
+mergeable,mergeStateStatus` (`MERGEABLE`/`UNSTABLE`, not blocked) rather
+than assumed. Fixing a security-flagged regex or log call is a behaviour
+change and does not belong in a pure-motion commit; documented here rather
+than silently fixed or silently ignored, matching the plan's standing rule
+for pre-existing issues found mid-phase.
+
+**What is left.** The remaining 50 stateful methods, 3,711 lines, are the
+actual Phase 4c work — dominated by `poll_and_process` (464 lines, 153
+`self` references), `__init__` (285 lines), `_insert_new_alert` (225),
+`fetch_cap_alerts` (208), `process_intersections` (170), and 45 more.
+These need the 2e technique: a characterization harness built *before* any
+restructuring, the same way `_handle_sentence` was pinned before its
+`nmea.py` extraction. Budget this as its own dedicated phase — it is the
+highest-risk work remaining in this entire plan, now that `system.py` and
+`eas.py` are done and turned out not to need it.
+
 ---
 
 ## Phase 5 — Frontend
@@ -1869,6 +1962,7 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-09-18 | 3.12.0 | Phase 4a-ii cont. (`app_utils/system/smart.py`, 425 → 191 lines + 4 new modules: `smart_command.py`, `smart_query.py`, `smart_status.py`, `smart_attributes.py`). Unlike `snapshot.py`, this is one per-device *pipeline* (build command → run → validate/parse → infer status → populate fields), so the modules are stages, not independent collectors — the 3b-ii `alerts()` shape. Existing coverage (`tests/test_smart_health.py`) only exercised the status-inference fallback in depth; added `tests/test_smart_health_package.py` (24 tests) for the rest. An 18-mutation sweep caught 16 immediately; the other two were an untested bit0 exit-code branch and an `-n standby` command flag that `_detect_device_type()` currently never actually triggers, so it got a direct unit test against the newly-extracted `_build_smartctl_command()` instead. 23 `subprocess.run`/`os.path` patch sites across both test files would have silently degraded to no-ops had the retarget (to `smart_query.py`/`smart_command.py`) been missed — caught on the same pass as the extraction. **Phase 4a-ii complete** — every module in `app_utils/system/` is within the 400-line guidance. |
 | 2026-09-18 | 3.13.0 | Phase 3e-ii (`webapp/admin/certbot/routes_obtain_execute.py`, 454 → 99 lines + `obtain_validation.py` + `obtain_methods.py`). The last known-exception module in the size audit, and — like 3e itself — had **zero** test coverage beforehand; added `tests/test_certbot_obtain_execute.py` (28 tests), the module's first ever. `subprocess.run`/`time.sleep` are patched globally (both shared singleton modules, the 4a-ii `psutil` reasoning), sidestepping the retarget trap for those two; the higher-level collaborators still had to move from `routes_obtain_execute` to `obtain_methods`. A 20-mutation sweep caught 18 immediately; the other two were the same *isolation-gap* shape 4a-ii hit — an assertion that matched raw pre-augmentation text as readily as the augmented message, and a missing test for webroot's own permission-denied augmentation branch (its sibling "No such file or directory" branch was tested; this one wasn't). **No known exceptions remain in `webapp/admin/certbot/`.** |
 | 2026-09-18 | 3.14.0 | Phase 4b (`app_utils/eas.py`, 4246 → package of 14 modules under `app_utils/eas/`). The single largest file in the tree, and — contrary to the plan's original "dominated by one very large class" note — actually 48 mostly-independent top-level functions plus two god-classes (`EASAudioGenerator`, `EASBroadcaster`) that are a small fraction of the file: the 2a/2b pure-motion shape, not the characterization-harness shape Phase 4 was scoped for. 48/48 definitions and 32/32 constants `ast.dump()`-identical; full suite green (3,362 passed, 0 failures). Found and fixed a confirmed internal-cross-call hazard: `EASBroadcaster.handle_alert()` calls `build_same_header()`/`clear_broadcast_active()` as same-module bare names, and `test_gpio_centralized_keying.py` patches both at the module level expecting to intercept that internal call — verified load-bearing by reverting the retarget and watching it fail with `KeyError: 'present'`. `subprocess`/`time` re-exported as modules (not just functions) from the shim so two more tests' patches keep resolving. Hit the symtable free-variable bug for the fourth time in this plan (4a, 3c, 3d, now 4b) — this time it also missed type annotations on bare module-level constants. 12/14 modules land under the guidance; `generator.py` (848) and `broadcaster.py` (489) are known-exception god-classes, `config.py` (408) is one 369-line function, all tracked as follow-ups. `poller/cap_poller.py`, still unstarted, is confirmed to be a genuine god-class (59-method `CAPPoller`) — the next Phase 4 file needs the characterization-harness technique this one didn't. |
+| 2026-09-18 | 3.16.0 | Phase 4c partial (`poller/cap_poller.py`'s 9 stateless methods, 143 lines, → `poller/cap_alert_parsing.py`). Confirmed by profiling that `CAPPoller` really is the god-class the plan originally assumed (3,978/4,933 lines, 59 methods) — unlike `system.py` and `eas.py`. The 2d technique applied cleanly to the stateless slice: 9/9 `ast.dump()`-identical after normalizing `self` and docstring indentation, 19 internal call sites rewritten, one test retargeted off a live-instance call. Caught two more lessons: `ruff` (not available by default in this sandbox — installed into a scratch venv rather than trusting `py_compile` alone) flagged F821s that `from __future__ import annotations` had silently let slide past both `py_compile` and a real `import`; and GitHub's PR-scoped CodeQL analysis re-flagged 3 confirmed-pre-existing findings as "new" purely because the file paths moved or a data flow passed through a moved file — verified via `ast.dump()`/byte-identical diffs against `main`, and merged anyway since `main` has no branch protection requiring CodeQL and already carries ~100 open alerts of the same categories. **The remaining 50 stateful methods (3,711 lines) — the actual Phase 4c work — are not started** and are now the highest-risk item left in this plan. |
 
 ## Next up
 
@@ -1903,18 +1997,21 @@ exceptions remain in `webapp/admin/certbot/`.
 **Phase 3 and Phase 4a-ii are now both fully complete** (bar `app.py`, 3g,
 deliberately deferred). `app_utils/eas.py` landed as 4b, 2026-09-18.
 
-**`poller/cap_poller.py` (4933, was 3996 when the plan was written) is the
-one Phase 4 file confirmed to still need the full characterization-harness
-treatment.** `CAPPoller` is ~3,900 lines by itself, 59 methods — a genuine
-god-class, unlike `system.py` (4a) and `eas.py` (4b), both of which turned
-out to be mostly independent functions once actually profiled. Profile it
-the way 4a and 4b were profiled — count top-level definitions, check the
-call graph, check for a dominant class — before assuming it needs the same
-treatment as `gps_manager.py`'s 2d/2e split; it very likely does, but verify
-rather than assume. `app_core/eas_storage.py` (2824),
-`sdr_hardware_service.py` (2275) and `eas_monitoring_service.py` (2246) are
-still completely unprofiled. This work sits directly on the alert path —
-pin behaviour with tests *before* moving anything, once the shape is known.
+**`poller/cap_poller.py` (4933, was 3996 when the plan was written) is
+confirmed a genuine god-class**, unlike `system.py` (4a) and `eas.py` (4b).
+Its 9 stateless methods (143 lines) landed as 4c, 2026-09-18 — the same
+2d technique used on `GPSManager`. **The other 50 methods (3,711 lines) are
+the actual remaining Phase 4c work, not started**, and this is now the
+highest-risk item left in the whole plan: `poll_and_process` (464 lines,
+153 `self` references) alone is bigger than most files this plan has split
+in their entirety. Needs the 2e technique — characterization harness built
+*before* any restructuring — the same way `_handle_sentence` was pinned
+before its `nmea.py` extraction, just at a much larger scale. Budget it as
+its own dedicated multi-session effort, not a routine split.
+`app_core/eas_storage.py` (2824), `sdr_hardware_service.py` (2275) and
+`eas_monitoring_service.py` (2246) are still completely unprofiled — check
+their shape (god-class vs. free functions) the way 4a/4b/4c did before
+assuming any of them need the same treatment.
 
 ## Pre-split checklist
 
