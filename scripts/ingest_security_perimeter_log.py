@@ -23,23 +23,25 @@ new ones to the security_perimeter_events table, powering the Security
 Center "Edge Defense" tab. Run every 2 minutes by
 security-perimeter-ingest.timer (see systemd/); safe to run by hand.
 
-SKIP_DB_INIT is set before importing app.py so this doesn't also spin up
-every background worker (schedulers, pollers, etc.) just to do one tail-
-and-insert pass -- see app.py's own comment on that flag.
+Uses app_core.minimal_app.create_minimal_app() rather than app.py's
+create_app(): this only ever touches db.session, so there's no reason to
+import ~260 routes and every subsystem (TTS, Icecast, hardware proxies,
+...) just to tail a log and insert a few rows -- measured at ~6s of
+near-single-core CPU per run under the full factory, paid every 2 minutes
+forever. See GitHub issue #2581.
 """
 
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.environ["SKIP_DB_INIT"] = "1"
 
-from app import create_app  # noqa: E402
+from app_core.minimal_app import create_minimal_app  # noqa: E402
 from app_core.analytics.security_blocks import ingest_new_events  # noqa: E402
 
 
 def main() -> int:
-    app = create_app()
+    app = create_minimal_app()
     with app.app_context():
         count = ingest_new_events()
         print(f"ingest_security_perimeter_log: {count} new event(s)")

@@ -7,6 +7,15 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.16.1] - 2026-09-18 - Fix: lightweight Flask bootstrap for CLI/timer scripts (GitHub issue #2581)
+
+### Fixed
+- **`scripts/ingest_security_perimeter_log.py` booted the entire Flask app just to tail a log and insert a few DB rows.** `create_app()` imports ~260 routes and initializes every subsystem (TTS, Icecast, hardware proxies, ...) regardless of what the caller needs, and this script runs every 2 minutes forever via `security-perimeter-ingest.timer` — a `Nice=10`/`IOSchedulingClass=idle` mitigation (see that unit's own comment, now updated) kept the ~6s-per-run CPU burst from starving the real-time SDR/demod/SAME-decode path, but the underlying cost was still paid every run. Measured 7.2s → 1.8s per invocation after the fix (639 registered routes → 1, Flask's own default `static` endpoint).
+
+### Added
+- **`app_core/minimal_app.py`**: a `create_minimal_app()` helper that builds a bare Flask app bound only to the shared `db` extension (`app_core.extensions.db`) — no route registration, no subsystem init, no schema-migration sweep — for standalone scripts that only ever touch the ORM. Loads environment variables the same way `app.py` does (`CONFIG_PATH` or the default `.env`, both `override=True`), and sizes the SQLAlchemy engine pool for a one-shot process (`pool_size=1`) instead of `app.py`'s two-gunicorn-worker sizing (`pool_size=10`). `tests/test_minimal_app.py` covers the `DATABASE_URL`-required contract, the zero-routes guarantee, and the sqlite/postgres engine-option split.
+- Points `scripts/ingest_security_perimeter_log.py`, `scripts/fix_admin_roles.py`, and `scripts/create_example_screens.py` at the new bootstrap instead of `app.py`'s `create_app()` — all three only ever needed `db.session` and ORM models, confirmed by tracing their imports (`app_core.analytics.security_blocks`, `app_core.auth.roles`, `app_core.models`) back to see none of them touch `app.py`.
+
 ## [3.15.0] - 2026-09-18 - GitHub repo hygiene: fix the Release workflow, add SECURITY.md/CODEOWNERS/templates
 
 ### Fixed
