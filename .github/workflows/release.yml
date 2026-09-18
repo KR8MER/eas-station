@@ -61,7 +61,17 @@ jobs:
       - name: Validate release metadata
         if: steps.guard.outputs.exists == 'false'
         run: |
+          # tests/test_release_metadata.py itself is deliberately dependency-light
+          # (it loads app_utils/versioning.py standalone to avoid the heavier
+          # app_core/app_utils import chain), but pytest always collects
+          # tests/conftest.py for any run in this directory, and conftest.py's
+          # autouse _isolate_eas_stream_injection fixture (added 2026-09-17)
+          # imports app_core.audio.redis_commands for every test, unconditionally.
+          # That needs the full app stack importable -- Flask, SQLAlchemy, etc.
+          # -- even though this one test file never touches a database. No
+          # service containers needed: nothing here does real DB/Redis I/O.
           python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
           python -m pip install pytest
           python -m pytest -q tests/test_release_metadata.py
 

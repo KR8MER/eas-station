@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/KR8MER/eas-station/security/advisories/new
+    about: Please report security issues privately instead of opening a public issue.

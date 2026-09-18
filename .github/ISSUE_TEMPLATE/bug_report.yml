@@ -1,0 +1,67 @@
+name: Bug report
+description: Something isn't working the way it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. If this is a **security
+        vulnerability** (auth bypass, injection, anything that could trigger
+        a false broadcast or suppress a real one), please use
+        [private vulnerability reporting](https://github.com/KR8MER/eas-station/security/advisories/new)
+        instead of a public issue.
+
+  - type: input
+    id: version
+    attributes:
+      label: EAS Station version
+      description: Contents of the `VERSION` file, or the release tag you installed.
+      placeholder: "3.15.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. Screenshots welcome — drag and drop them here.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: false
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps, if you can reproduce it reliably.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. See error
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        Logs from `/logs` in the web UI, or `sudo journalctl -u eas-station-web.service -n 100`.
+        This will be automatically formatted as code, no need for backticks.
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware
+      description: e.g. Raspberry Pi 5, SDR model, install type (bare metal / other).
+    validations:
+      required: false

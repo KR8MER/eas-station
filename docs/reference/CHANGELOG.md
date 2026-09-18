@@ -7,6 +7,20 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.15.0] - 2026-09-18 - GitHub repo hygiene: fix the Release workflow, add SECURITY.md/CODEOWNERS/templates
+
+### Fixed
+- **`.github/workflows/release.yml`'s "Validate release metadata" step was broken** and had been since 2026-09-17, silently: it only ever installed bare `pytest`, not the project's own dependencies. `tests/conftest.py`'s autouse `_isolate_eas_stream_injection` fixture (added that day, see the 3.10.3 entry above) imports `app_core.audio.redis_commands` for every test unconditionally, which needs Flask/SQLAlchemy/etc. importable even for `tests/test_release_metadata.py`'s own dependency-light tests. Manually re-running the workflow (last run: 2026-08-31, `v2.207.4` — three weeks and many version bumps stale) surfaced the failure immediately. Fixed by installing `requirements.txt` before running pytest, matching `tests.yml`'s pattern; no service containers needed since nothing in this step does real DB/Redis I/O.
+- Re-ran the Release workflow after the fix to catch main up to the current `VERSION`.
+
+### Added
+- **Branch protection on `main`**: `CodeQL`, `analyze`, `lint`, and `pytest (3.13)` must all pass before a PR can merge; force-pushes and branch deletion are blocked; open PR conversations must be resolved. No required-review rule, so a maintainer (or an agent working under one) can still merge once checks are green.
+- **`allow_auto_merge`** enabled at the repo level, and **`delete_branch_on_merge`** enabled — a PR can now be set to merge itself the moment checks pass, and its branch is deleted automatically afterward.
+- **Private vulnerability reporting** enabled, with `.github/SECURITY.md` documenting how to use it, what's in scope, and the (rolling-release, latest-only) support policy.
+- **`.github/CODEOWNERS`**: a single global rule for now (one-maintainer repo); add path-specific rules as that changes.
+- **`.github/PULL_REQUEST_TEMPLATE.md`**: prompts for a summary, test plan, and the release/versioning checklist `docs/development/AGENTS.md` §9 already requires of every change.
+- **`.github/ISSUE_TEMPLATE/`**: structured bug-report and feature-request forms (GitHub's YAML issue-forms format), plus a `config.yml` disabling blank issues and redirecting security reports to private vulnerability reporting instead.
+
 ## [3.14.0] - 2026-09-18 - Refactor: split app_utils/eas.py into a package (Large File Refactor Plan, Phase 4)
 
 The single largest file in the tree at the time (4,246 lines, grown from the 3,848 lines the plan was originally scoped against). Unlike the plan's original note calling this "a very large class," the file had actually grown into 48 mostly-independent top-level functions plus two large classes (`EASAudioGenerator`, `EASBroadcaster`) — the 2a/2b pure-motion shape, not the god-class shape Phase 4 was expected to need.
