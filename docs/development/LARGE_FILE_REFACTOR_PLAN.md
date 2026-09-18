@@ -1483,13 +1483,79 @@ need. `ruff --select F` caught both as F811/F401. Only `snapshot.py` actually
 issues SQL. Lint the generated package before trusting an inferred import
 block — name-level inference cannot see scope.
 
-**Still over the cap — follow-up needed.** `snapshot.py` (478) and `smart.py`
-(429) are each *one function*: `build_system_health_snapshot` is 406 lines and
-`_collect_smart_health` is 396. Module-level splitting cannot shrink them, so
-they need collaborator extraction with a characterization harness built first
-— the 2e / 3a-ii technique. Tracked as Phase 4a-ii. `build_system_health_snapshot`
-is the more tractable of the two: it is a sequence of independent `_collect_*`
-calls assembled into one dict, so the seam is already drawn.
+**Still over the cap at the time — follow-up needed.** `snapshot.py` (478) and
+`smart.py` (429) were each *one function*: `build_system_health_snapshot` was
+406 lines and `_collect_smart_health` is 396. Module-level splitting cannot
+shrink them, so they need collaborator extraction with a characterization
+harness built first — the 2e / 3a-ii technique. Tracked as Phase 4a-ii.
+`snapshot.py` landed 2026-09-18 (below); `smart.py` is still open.
+
+### 4a-ii. `build_system_health_snapshot` → `app_utils/system/{cpu,memory,disk_usage,processes,loadavg,db_health,status}.py` ✅
+
+The easier of the two Phase 4a-ii files, as predicted: the function's `try`
+block was already a sequence of independent figures assembled into one dict
+— CPU, memory, disk, network, process table, load average and a database
+probe — followed by a status computation reading several of them. No single
+piece touched another's state, so the seam was cutting each block out to its
+own `_collect_*` function and reassembling the calls in `snapshot.py`.
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `cpu.py` | 51 | `_collect_cpu_info` |
+| `memory.py` | 42 | `_collect_memory_info` |
+| `disk_usage.py` | 74 | `_collect_disk_info` — distinct from `disks.py`'s block-device enumeration for SMART |
+| `processes.py` | 135 | `_AUDIO_PROCESS_KEYWORDS`, `_is_audio_processing_process`, `_collect_process_info` |
+| `loadavg.py` | 34 | `_collect_load_averages` |
+| `db_health.py` | 85 | `_collect_database_health` |
+| `status.py` | 79 | `_compute_overall_status` |
+| `network.py` (extended) | 184 | added `_collect_network_info`, composing the existing `_collect_network_traffic` / `_select_primary_interface` with interface enumeration that used to live inline in `snapshot.py` |
+
+`snapshot.py`: 480 → **158** lines, now pure orchestration. Every module in
+`app_utils/system/` is within the 400-line guidance for the first time since
+this plan started.
+
+**Verified by characterization, not `ast.dump()`** — dedenting an inline
+block into a function is restructuring, not motion, in the same sense as 2e.
+`tests/test_system_health_snapshot_package.py` (18 tests) was written and run
+green against the pre-refactor function first, mocking only the true I/O
+boundary (`psutil`, `socket`, `os`, the database session, the logger) plus
+the twelve *already-extracted* sibling collectors this phase does not touch.
+Re-run green after the split with no changes to the assertions.
+
+**The harness caught a real assertion bug in itself before the refactor even
+started.** `running_processes` reads `proc.info["status"]` *before* the
+per-process `try/except (NoSuchProcess, AccessDenied)` — so a process that
+disappears mid-scan still counts toward "running." A first-draft test
+expected it excluded; running the harness against the untouched original
+function failed immediately and pointed at the wrong assumption, not a bug.
+
+**A mutation sweep (14 mutations, one per collector) caught 12 on the first
+pass and found two of the test's own isolation gaps.** Both are the same
+shape as the audit trail lesson in 3b-ii: a test that only checks *a* correct
+outcome, not *the specific mechanism* that produced it, cannot catch a
+mutation to a different mechanism that happens to produce the same outcome.
+
+1. The original critical-status test set CPU to 95% *and* forced a database
+   failure in the same call, then asserted `status == "critical"` and
+   `any("CPU usage" in reason for reason in status_reasons)`. Both survive
+   even with the CPU-critical threshold mutated to 190%, because the DB
+   failure alone forces `critical`, and the *warning*-branch reason text
+   also contains the substring "CPU usage". Split into
+   `test_status_critical_cpu_alone` / `test_status_critical_memory_alone`
+   (DB healthy, asserting `status_reasons == ["CPU usage is 95.0%"]` exactly)
+   and `test_status_critical_db_alone_overrides_healthy_cpu`.
+2. The disk permission-error test put the denied partition at a fake mount
+   and the surviving one at `/` — so if `except PermissionError` is mutated
+   to `except KeyError`, the exception escapes to the outer handler, which
+   falls back to querying `/` itself, and the assertion (`mountpoint == "/"`)
+   passes anyway. Moved the surviving partition to `/data` and made the fake
+   `disk_usage` raise `AssertionError` on any query for `/`, so the fallback
+   path is unreachable in a correct implementation and loudly wrong in a
+   broken one.
+
+**No `__file__` hazard, checked rather than assumed** — `grep -n "__file__"`
+across every touched file came back empty, and none of the collectors resolve
+a path relative to their own module depth.
 
 ---
 
@@ -1532,6 +1598,7 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-08-08 | 2.150.0 | Phase 3h (`webapp/routes/alert_verification.py`, 1668 → 14 modules + a 123-line `__init__`). 27/28 AST matches including nested definitions; URL map 549 rules / 0 differences. The closure was reproduced from `symtable`: four capture-free helpers dedented to module scope, four capturing ones kept inside per-module `register`s. The silent-no-op hazard was *measured* — with the mutable globals re-exported, all six async tests pass while writing to the real temp dir. An import cycle from grouping by topic name instead of the call graph was caught and is now checked. **Phase 3 complete except `app.py`.** |
 | 2026-08-08 | 2.149.0 | Phase 3f (`webapp/admin/maintenance.py`, 1802 → 15 modules + a 118-line `__init__`). 31/31 AST matches, URL map 549 rules / 0 differences, every module under the cap. The `__file__` hazard fired for the second phase running — `repo_root` drives backup, upgrade *and* the `.env` editor. `get_operation_status` is imported by `websocket_push` but absent from `__all__`, so the export test derives its list from the tree. `app.py` was assessed and deliberately deferred — see 3g. |
 | 2026-08-08 | 2.148.0 | Phase 3e (`webapp/admin/certbot.py`, 1946 → 14 modules + a 105-line `__init__`). 22/23 AST matches, URL map 549 rules / 0 differences. Carried both `__file__` hazards at once: `CERTBOT_BASE_DIR` would have silently moved the whole certbot tree to `webapp/certbot_data`, and per-module loggers would have renamed every log record. The module had **zero** test coverage beforehand; the split added 11 tests, three guards mutation-checked. `routes_obtain_execute.py` (449) is left over the cap as Phase 3e-ii — it is one 387-line `try` block. |
+| 2026-09-18 | 3.11.0 | Phase 4a-ii (`app_utils/system/snapshot.py`, 480 → 158 lines + 7 new collector modules + an extended `network.py`). `build_system_health_snapshot` was already a sequence of independent CPU/memory/disk/network/process/load-average/database figures, so the seam was cutting each to its own `_collect_*` function. Verified by 18 characterization tests written and run green against the pre-refactor function first, then a 14-mutation sweep — which caught 12 mutations immediately and found two of the *test's own* isolation gaps (a conflated CPU+DB critical-status assertion, and a disk-permission-error test that couldn't distinguish "correctly skipped" from "silently fell back to `/`"). `smart.py` (429) is the one Phase 4a-ii file left. |
 
 ## Next up
 
@@ -1561,10 +1628,13 @@ so it needs collaborators extracted from the body rather than module-level
 splitting. It shells out to certbot and nginx, so a characterization harness
 has to fake both; build that first. Same technique as 2e / 3a-ii / 3b-ii.
 
-**Phase 4a-ii — `snapshot.py` (478) and `smart.py` (429)**, the two modules
-4a left over the cap. Each is one function; `build_system_health_snapshot` is
-the easier one because its body is already a sequence of independent
-`_collect_*` calls.
+**Phase 4a-ii — `snapshot.py` landed 2026-09-18 (480 → 158 + 7 new modules).**
+`smart.py` (429, one 396-line `_collect_smart_health` function) is the one
+left. Unlike `snapshot.py`, it is a single function reading and building up
+one nested structure across many SMART attribute checks rather than a
+sequence of independent pieces — check which shape it actually is (the note
+after the Phase 3 table applies here too) before assuming the same
+`_collect_*`-per-figure split will fit.
 
 **Phase 4 (`poller/cap_poller.py`, 3996 — the largest Python module in the
 tree, and `app_utils/eas.py`, 3848)** is the highest-risk work in this plan:

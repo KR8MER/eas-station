@@ -7,6 +7,15 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.11.0] - 2026-09-18 - Refactor: split app_utils/system/snapshot.py (Large File Refactor Plan, Phase 4a-ii)
+
+Pure-motion follow-up to Phase 4a (`docs/development/LARGE_FILE_REFACTOR_PLAN.md`). `build_system_health_snapshot` was one 480-line function collecting CPU, memory, disk, network, process-table, load-average and database figures inline before computing an overall status — the one piece of `app_utils/system/` Phase 4a left over the 400-line guidance.
+
+### Changed
+- Extracted the inline collection blocks into their own modules, each independently testable: `cpu.py`, `memory.py`, `disk_usage.py`, `processes.py`, `loadavg.py`, `db_health.py`, and a `_collect_network_info()` added to the existing `network.py`. The overall-status computation moved to a new `status.py`. `snapshot.py` is now 158 lines of orchestration calling these collectors and assembling the response dict — every module in `app_utils/system/` is now within the 400-line guidance.
+- `build_system_health_snapshot`'s public signature and return shape are unchanged; `app_utils.build_system_health_snapshot` and `app_utils.system.build_system_health_snapshot` still resolve.
+- Added `tests/test_system_health_snapshot_package.py`: 18 characterization tests written and run green against the pre-refactor function first (per the plan's ground rules), covering every branch through psutil, the process table and the database probe, with the twelve already-extracted sibling collectors (systemd, hardware, SMART, temperature, dependencies, GPS, RTC, clock sync, Raspberry-Pi health, OS details, shields badges, distro logo) stubbed so the tests exercise only the logic that moved. A 14-mutation sweep across the new modules confirmed the suite is discriminating (all caught after two isolation fixes — the initial CPU/DB critical-status test conflated the two triggers, and the disk-permission-error test couldn't distinguish "correctly skipped" from "silently fell back to `/`").
+
 ## [3.10.4] - 2026-09-17 - Fix raw HTML tags rendering as visible text on the Alert Details page
 
 Reported via a user-submitted PDF of the Alert Details page for a Van Wert County, OH Flood Warning (Database ID #1108): the Description and Instructions sections showed literal, visible text like `</p><p class="mt-2 mb-0">` and `<br>` instead of real paragraph breaks — even though the alert's `description` column, verified directly against the database, is clean plain text with real `\n\n` breaks and contains no HTML at all.
