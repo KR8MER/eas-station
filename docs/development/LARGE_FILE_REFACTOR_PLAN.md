@@ -1557,6 +1557,75 @@ mutation to a different mechanism that happens to produce the same outcome.
 across every touched file came back empty, and none of the collectors resolve
 a path relative to their own module depth.
 
+### 4a-ii (cont). `_collect_smart_health` → `app_utils/system/{smart_command,smart_query,smart_status,smart_attributes}.py` ✅
+
+The harder of the two Phase 4a-ii files, also as predicted. Unlike
+`snapshot.py`'s independent figures, `_collect_smart_health` is one
+425-line **pipeline** per device — locate smartctl once, then for each
+device: build a query command, run it, validate/parse its JSON output, infer
+a health status when smartctl's own verdict is absent, and populate ~35
+result fields from the report. Each stage consumes what the last produced,
+so — like 3b-ii's `alerts()` split — the modules are pipeline stages, not
+independent collectors.
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `smart_command.py` | 85 | `_find_smartctl_path`, `_build_smartctl_command` |
+| `smart_query.py` | 115 | `_query_smartctl` (subprocess + its three exception branches), `_validate_smartctl_output` (exit-code/empty-output/JSON-parse validation) |
+| `smart_status.py` | 108 | `_derive_overall_status` — the exit-code-bitmask health inference fallback |
+| `smart_attributes.py` | 161 | `_populate_identity_fields`, `_populate_smart_attributes` (wraps the existing `smart_fields.py` extractors), `_populate_nvme_extended_fields` |
+
+`smart.py`: 425 → **191** lines — `_device_result_skeleton` (the per-device
+default dict) and `_collect_one_device` (the per-device pipeline, calling the
+four new modules in sequence) plus the top-level `_collect_smart_health`
+loop. Every module in `app_utils/system/` is now within the 400-line
+guidance — Phase 4a-ii is complete.
+
+**Existing coverage was narrower than it looked.** `tests/test_smart_health.py`
+(8 tests) covers the exit-code health-inference fallback in real depth, but
+nothing else: smartctl discovery, every subprocess failure mode, output
+validation, or field-extraction wiring. `tests/test_smart_health_package.py`
+(24 tests) was written and run green against the pre-refactor function first
+to cover the rest — deliberately *not* re-testing what `smart_fields.py`'s
+own extractors already have dedicated tests for elsewhere, only that
+`_collect_smart_health` wires their results into the right keys.
+
+**A mutation sweep (18 mutations) caught 16 on the first pass; the other two
+were structural, not assertion gaps, and both point at the same underlying
+fact: `_detect_device_type()` (`disks.py`) currently only ever returns
+`"nvme"` or `"auto"`.**
+
+1. The bit0 ("Invalid command line arguments") exit-code branch had no test
+   at all — bit1 and bit2 were covered, bit0 was an oversight. Added
+   `test_nonzero_exit_with_empty_output_invalid_command_line`.
+2. `command.extend(["-n", "standby"])` only fires when
+   `device_type_flag in ("ata", "sat")` — a code path `_detect_device_type`
+   cannot currently produce, so no route through `_collect_smart_health()`
+   can reach it end to end. Since `_build_smartctl_command()` is now its own
+   importable unit (it wasn't, before this split), it gets a direct unit
+   test instead: `test_standby_flag_added_for_ata_and_sat_device_types` /
+   `_omitted_for_other_device_types`. First attempt asserted `"-n" not in
+   command`, which is ambiguous — `sudo -n` (don't prompt) is also `"-n"` —
+   and passed for the wrong reason; fixed to check for the literal
+   `"standby"` argument instead.
+
+**The retargeting trap fired exactly as predicted, immediately.** Both
+`tests/test_smart_health.py` and the new package test patched
+`"app_utils.system.smart.subprocess.run"` and
+`"app_utils.system.smart.os.path.exists"` — those attributes moved to
+`smart_query.py` and `smart_command.py` respectively, so every one of those
+23 patch sites would have become a silent no-op (real `subprocess.run` /
+`os.path.exists` executing against the test host) had they not been
+retargeted before the split landed. Caught before merging, not after, by
+retargeting on the same pass as the extraction rather than treating it as a
+follow-up.
+
+**No `__file__` hazard** — `grep -n "__file__"` across all four new modules
+came back empty, matching `snapshot.py`.
+
+**Phase 4a-ii is complete.** Every module in `app_utils/system/` is now
+within the 400-line guidance.
+
 ---
 
 ## Phase 5 — Frontend
@@ -1599,6 +1668,7 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-08-08 | 2.149.0 | Phase 3f (`webapp/admin/maintenance.py`, 1802 → 15 modules + a 118-line `__init__`). 31/31 AST matches, URL map 549 rules / 0 differences, every module under the cap. The `__file__` hazard fired for the second phase running — `repo_root` drives backup, upgrade *and* the `.env` editor. `get_operation_status` is imported by `websocket_push` but absent from `__all__`, so the export test derives its list from the tree. `app.py` was assessed and deliberately deferred — see 3g. |
 | 2026-08-08 | 2.148.0 | Phase 3e (`webapp/admin/certbot.py`, 1946 → 14 modules + a 105-line `__init__`). 22/23 AST matches, URL map 549 rules / 0 differences. Carried both `__file__` hazards at once: `CERTBOT_BASE_DIR` would have silently moved the whole certbot tree to `webapp/certbot_data`, and per-module loggers would have renamed every log record. The module had **zero** test coverage beforehand; the split added 11 tests, three guards mutation-checked. `routes_obtain_execute.py` (449) is left over the cap as Phase 3e-ii — it is one 387-line `try` block. |
 | 2026-09-18 | 3.11.0 | Phase 4a-ii (`app_utils/system/snapshot.py`, 480 → 158 lines + 7 new collector modules + an extended `network.py`). `build_system_health_snapshot` was already a sequence of independent CPU/memory/disk/network/process/load-average/database figures, so the seam was cutting each to its own `_collect_*` function. Verified by 18 characterization tests written and run green against the pre-refactor function first, then a 14-mutation sweep — which caught 12 mutations immediately and found two of the *test's own* isolation gaps (a conflated CPU+DB critical-status assertion, and a disk-permission-error test that couldn't distinguish "correctly skipped" from "silently fell back to `/`"). `smart.py` (429) is the one Phase 4a-ii file left. |
+| 2026-09-18 | 3.12.0 | Phase 4a-ii cont. (`app_utils/system/smart.py`, 425 → 191 lines + 4 new modules: `smart_command.py`, `smart_query.py`, `smart_status.py`, `smart_attributes.py`). Unlike `snapshot.py`, this is one per-device *pipeline* (build command → run → validate/parse → infer status → populate fields), so the modules are stages, not independent collectors — the 3b-ii `alerts()` shape. Existing coverage (`tests/test_smart_health.py`) only exercised the status-inference fallback in depth; added `tests/test_smart_health_package.py` (24 tests) for the rest. An 18-mutation sweep caught 16 immediately; the other two were an untested bit0 exit-code branch and an `-n standby` command flag that `_detect_device_type()` currently never actually triggers, so it got a direct unit test against the newly-extracted `_build_smartctl_command()` instead. 23 `subprocess.run`/`os.path` patch sites across both test files would have silently degraded to no-ops had the retarget (to `smart_query.py`/`smart_command.py`) been missed — caught on the same pass as the extraction. **Phase 4a-ii complete** — every module in `app_utils/system/` is within the 400-line guidance. |
 
 ## Next up
 
@@ -1628,13 +1698,9 @@ so it needs collaborators extracted from the body rather than module-level
 splitting. It shells out to certbot and nginx, so a characterization harness
 has to fake both; build that first. Same technique as 2e / 3a-ii / 3b-ii.
 
-**Phase 4a-ii — `snapshot.py` landed 2026-09-18 (480 → 158 + 7 new modules).**
-`smart.py` (429, one 396-line `_collect_smart_health` function) is the one
-left. Unlike `snapshot.py`, it is a single function reading and building up
-one nested structure across many SMART attribute checks rather than a
-sequence of independent pieces — check which shape it actually is (the note
-after the Phase 3 table applies here too) before assuming the same
-`_collect_*`-per-figure split will fit.
+**Phase 4a-ii is complete**, both landed 2026-09-18: `snapshot.py` (480 → 158
++ 7 new modules) and `smart.py` (425 → 191 + 4 new modules). Every module in
+`app_utils/system/` is now within the 400-line guidance.
 
 **Phase 4 (`poller/cap_poller.py`, 3996 — the largest Python module in the
 tree, and `app_utils/eas.py`, 3848)** is the highest-risk work in this plan:
