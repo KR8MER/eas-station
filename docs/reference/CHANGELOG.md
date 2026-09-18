@@ -7,6 +7,18 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.17.0] - 2026-09-18 - Refactor: split app_core/eas_storage.py into a package (Large File Refactor Plan)
+
+Profiling confirmed `eas_storage.py` (2,825 lines, 57 top-level functions) has the same pure-motion shape as `system.py` (4a) and `eas.py` (4b) — mostly independent functions across ~10 topics, not a god-class — unlike `poller/cap_poller.py` (4c). `app_core/eas_storage/`, `sdr_hardware_service.py` and `eas_monitoring_service.py` were the three remaining unprofiled files the plan flagged; this closes out the first of the three (the other two are dominated by a single ~900-1100-line function each and need the 2e characterization-harness technique, not this technique).
+
+### Changed
+- Split into 14 modules by topic: `audio_decode_log.py`, `file_cache.py`, `schema_migrations.py`, `backfill.py`, `delivery_records.py`, `delivery_trends.py`, `compliance_parsing.py`, `compliance_log.py`, `compliance_export.py`, `reports_common.py`, `reports_received_initiated.py`, `reports_summary.py`, `reports_export.py`, `precedence.py`, plus a `__init__.py` shim re-exporting all 40 public names (and the `format_local_datetime`/`utc_now` pass-throughs some callers import from this module) exactly as before.
+- All 69 top-level definitions (57 functions + 12 constants, plus the `PrecedenceLevel`/`PRECEDENCE_AVAILABLE` try/except import block) verified `ast.dump()`-identical to their originals — no normalization needed this time, since nothing moved out of a class (unlike 4a-ii/4c's `self`-stripping).
+- Kept `collect_compliance_log_entries` and `collect_compliance_dashboard_data` in the same module (`compliance_log.py`) specifically because the latter calls the former as a same-module bare name — the same internal-call hazard shape as `eas.py`'s `build_same_header`/`clear_broadcast_active`, caught this time by tracing the call graph before laying out modules rather than after.
+- Dropped one confirmed-dead import (`ORIGINATOR_DESCRIPTIONS` from `app_utils.eas`, imported but never referenced anywhere in the original file).
+- `compliance_log.py` lands at 405 lines, a negligible, deliberate overage over the 400-line guideline to keep the internal-call pair above together rather than split them across files.
+- Full suite green: 3367 passed, 0 failures — identical pass count to before the split.
+
 ## [3.16.1] - 2026-09-18 - Fix: lightweight Flask bootstrap for CLI/timer scripts (GitHub issue #2581)
 
 ### Fixed
