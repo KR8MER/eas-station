@@ -654,7 +654,14 @@
                         <div class="feature-card fc-purple h-100">
                             <div class="feature-card-icon"><i class="fas fa-satellite-dish"></i></div>
                             <h3 class="feature-card-title h5">Inbound Tickstem Uptime Monitor</h3>
-                            <p class="feature-card-text">The opposite direction from the outbound heartbeat: <a href="https://tickstem.dev" target="_blank" rel="noopener">Tickstem</a> polls this box's public <code>/health</code> endpoint from the outside. Created, paused, resumed, and deleted from Settings &rarr; Tickstem Uptime Monitor via Tickstem's own API — no need to leave this appliance to manage it.</p>
+                            <p class="feature-card-text">The opposite direction from the outbound heartbeat: <a href="https://tickstem.dev" target="_blank" rel="noopener">Tickstem</a> polls this box's public <code>/health</code> endpoint from the outside. Created, paused, resumed, and deleted from Settings &rarr; Uptime Monitoring via Tickstem's own API — no need to leave this appliance to manage it.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-purple h-100">
+                            <div class="feature-card-icon"><i class="fas fa-heart-pulse"></i></div>
+                            <h3 class="feature-card-title h5">healthchecks.io Per-Service Heartbeats</h3>
+                            <p class="feature-card-text">A third outbound direction alongside the heartbeat above, but one check per critical service instead of one combined ping — a missed ping on <a href="https://healthchecks.io" target="_blank" rel="noopener">healthchecks.io</a>'s side names the exact subsystem that failed. Managed from the same Settings &rarr; Uptime Monitoring page via a healthchecks.io account API key.</p>
                         </div>
                     </div>
                     <div class="col-md-6 col-lg-4">

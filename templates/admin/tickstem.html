@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Tickstem Uptime Monitor - EAS Station{% endblock %}
+{% block title %}Uptime Monitoring - EAS Station{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
@@ -8,8 +8,8 @@
 
 {% block content %}
 {% set header_icon = 'fas fa-satellite-dish' %}
-{% set header_title = 'Tickstem Uptime Monitor' %}
-{% set header_subtitle = 'Tickstem integration: inbound uptime checks and an outbound service-health heartbeat' %}
+{% set header_title = 'Uptime Monitoring' %}
+{% set header_subtitle = 'Tickstem and healthchecks.io: inbound uptime checks and per-service outbound heartbeats, all from one page' %}
 {% include 'components/page_header.html' %}
 
 <div class="container-fluid">
@@ -213,6 +213,127 @@
                     </div>
                     {% elif not unmonitored_services %}
                     <p class="text-muted mb-0 small">Save a Tickstem API key above to monitor critical services individually.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h2 class="mb-0 h5"><i class="fas fa-heart-pulse"></i> healthchecks.io Per-Service Heartbeats</h2>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info small">
+                        <i class="fas fa-circle-info"></i>
+                        <a href="https://healthchecks.io" target="_blank" rel="noopener">healthchecks.io</a> has no
+                        "poll an external URL" product the way the Uptime Monitor section above does -- every check
+                        is a dead-man's-switch this box pings <em>out</em> to on a schedule, the same direction as
+                        <a href="{{ url_for('heartbeat.heartbeat_settings') }}">Uptime Heartbeat</a> but one check
+                        per critical service, managed here via your account's Management API key, so a missed ping
+                        names the exact subsystem that failed.
+                    </div>
+
+                    <form id="hcApiKeyForm" class="mb-3">
+                        <div class="mb-2">
+                            <label for="hc_api_key" class="form-label">Account API Key</label>
+                            <input type="password" class="form-control font-monospace" id="hc_api_key" name="api_key"
+                                   placeholder="{{ 'Saved -- leave blank to keep it' if healthchecks_settings and healthchecks_settings.api_key else 'Paste key from healthchecks.io -> Settings -> API Access' }}"
+                                   autocomplete="off">
+                            <div class="form-text">
+                                Used only server-side as <code>X-Api-Key: &lt;key&gt;</code>. Never sent to the
+                                browser once saved.
+                            </div>
+                        </div>
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                <i class="fas fa-save"></i> Save Key
+                            </button>
+                        </div>
+                    </form>
+
+                    {% if healthchecks_unmonitored %}
+                    <form id="hcCreateAllHeartbeatsForm" class="mb-3">
+                        <div class="alert alert-warning small py-2 mb-2">
+                            <i class="fas fa-triangle-exclamation"></i>
+                            healthchecks.io's free plan caps the number of checks (20 total, across everything in
+                            your account). Pick only the services you most need alerted on if you're near that
+                            limit; creation stops cleanly the moment the quota is hit rather than failing
+                            repeatedly for the rest.
+                        </div>
+                        <div class="mb-2">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="hcSelectAllUnmonitored">
+                                <label class="form-check-label small" for="hcSelectAllUnmonitored">Select all {{ healthchecks_unmonitored | length }}</label>
+                            </div>
+                            {% for service_name in healthchecks_unmonitored %}
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input hc-unmonitored-service-checkbox" value="{{ service_name }}" id="hc_svc_{{ loop.index }}">
+                                <label class="form-check-label small font-monospace" for="hc_svc_{{ loop.index }}">{{ service_name }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="row align-items-end">
+                            <div class="col-md-6 mb-2">
+                                <label for="hc_new_heartbeat_interval_secs" class="form-label">Ping Interval (seconds)</label>
+                                <input type="number" class="form-control" id="hc_new_heartbeat_interval_secs"
+                                       min="60" max="86400" value="300">
+                            </div>
+                            <div class="col-md-6 mb-2 text-md-end">
+                                <button type="submit" class="btn btn-primary" id="hcCreateAllHeartbeatsBtn" disabled>
+                                    <i class="fas fa-plus"></i> Monitor Selected Services
+                                </button>
+                            </div>
+                        </div>
+                        <div class="small mt-2" id="hcCreateAllHeartbeatsStatus"></div>
+                    </form>
+                    {% endif %}
+
+                    {% if healthchecks_heartbeats %}
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0" id="hcServiceHeartbeatsTable">
+                            <thead>
+                                <tr>
+                                    <th>Service</th>
+                                    <th>Status</th>
+                                    <th>Last Ping</th>
+                                    <th>Error</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in healthchecks_heartbeats %}
+                                <tr data-heartbeat-row-id="{{ row.id }}">
+                                    <td class="text-break-anywhere">{{ row.service_name }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if row.status in ('up', 'new') else ('warning' if row.status in ('paused', 'grace') else 'danger') }}">
+                                            {{ (row.status or 'unknown') | capitalize }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {{ row.last_ping_at | localtime('%Y-%m-%d %H:%M:%S %Z', 'Never') }}
+                                        {% if row.last_ping_at %}({{ 'ok' if row.last_ping_success else 'failed' }}){% endif %}
+                                    </td>
+                                    <td class="text-danger small text-break-anywhere">{{ row.last_ping_error or '' }}</td>
+                                    <td class="text-end text-nowrap">
+                                        {% if row.status == 'paused' %}
+                                        <button type="button" class="btn btn-sm btn-outline-success hc-service-heartbeat-resume" title="Resume">
+                                            <i class="fas fa-play"></i>
+                                        </button>
+                                        {% else %}
+                                        <button type="button" class="btn btn-sm btn-outline-warning hc-service-heartbeat-pause" title="Pause">
+                                            <i class="fas fa-pause"></i>
+                                        </button>
+                                        {% endif %}
+                                        <button type="button" class="btn btn-sm btn-outline-danger hc-service-heartbeat-delete" title="Delete">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% elif not healthchecks_unmonitored %}
+                    <p class="text-muted mb-0 small">Save a healthchecks.io API key above to monitor critical services individually.</p>
                     {% endif %}
                 </div>
             </div>
@@ -526,6 +647,119 @@ document.addEventListener('DOMContentLoaded', function() {
                 checksTable.querySelector('tbody').innerHTML = '<tr><td colspan="5" class="text-danger">Failed to load checks</td></tr>';
             });
     }
+
+    // -------------------- healthchecks.io section --------------------
+
+    const hcApiKeyForm = document.getElementById('hcApiKeyForm');
+    if (hcApiKeyForm) {
+        hcApiKeyForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const apiKey = document.getElementById('hc_api_key').value.trim();
+            if (!apiKey) { showToast('Enter an API key to save', 'warning'); return; }
+            try {
+                const resp = await fetch('/admin/healthchecks/save-key', {
+                    method: 'POST', headers: csrfHeaders, body: JSON.stringify({ api_key: apiKey }),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showToast('API key saved', 'success');
+                    document.getElementById('hc_api_key').value = '';
+                    document.getElementById('hc_api_key').placeholder = 'Saved -- leave blank to keep it';
+                } else {
+                    showToast(data.error || 'Failed to save key', 'danger');
+                }
+            } catch (err) {
+                showToast('Error saving API key', 'danger');
+            }
+        });
+    }
+
+    const hcCreateAllHeartbeatsForm = document.getElementById('hcCreateAllHeartbeatsForm');
+    const hcCreateAllHeartbeatsStatus = document.getElementById('hcCreateAllHeartbeatsStatus');
+    const hcCreateAllHeartbeatsBtn = document.getElementById('hcCreateAllHeartbeatsBtn');
+    const hcSelectAllUnmonitored = document.getElementById('hcSelectAllUnmonitored');
+    const hcServiceCheckboxes = Array.from(document.querySelectorAll('.hc-unmonitored-service-checkbox'));
+
+    function hcSelectedServiceNames() {
+        return hcServiceCheckboxes.filter(cb => cb.checked).map(cb => cb.value);
+    }
+
+    function hcUpdateCreateAllButtonState() {
+        if (hcCreateAllHeartbeatsBtn) hcCreateAllHeartbeatsBtn.disabled = hcSelectedServiceNames().length === 0;
+    }
+
+    hcServiceCheckboxes.forEach(cb => cb.addEventListener('change', hcUpdateCreateAllButtonState));
+
+    if (hcSelectAllUnmonitored) {
+        hcSelectAllUnmonitored.addEventListener('change', function() {
+            hcServiceCheckboxes.forEach(cb => { cb.checked = hcSelectAllUnmonitored.checked; });
+            hcUpdateCreateAllButtonState();
+        });
+    }
+
+    if (hcCreateAllHeartbeatsForm) {
+        hcCreateAllHeartbeatsForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const serviceNames = hcSelectedServiceNames();
+            if (!serviceNames.length) return;
+            if (hcCreateAllHeartbeatsBtn) hcCreateAllHeartbeatsBtn.disabled = true;
+            hcCreateAllHeartbeatsStatus.textContent = 'Creating heartbeats...';
+            try {
+                const resp = await fetch('/admin/healthchecks/service-heartbeats/create-all', {
+                    method: 'POST', headers: csrfHeaders,
+                    body: JSON.stringify({
+                        service_names: serviceNames,
+                        interval_secs: document.getElementById('hc_new_heartbeat_interval_secs').value,
+                    }),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    let msg = data.created.length
+                        ? 'Created heartbeats for: ' + data.created.join(', ')
+                        : 'No new heartbeats created';
+                    if (data.quota_reached) msg += ' -- healthchecks.io plan quota reached, stopped there.';
+                    showToast(msg, (data.errors.length || data.quota_reached) ? 'warning' : 'success');
+                    window.location.reload();
+                } else {
+                    let msg = data.errors.join('; ') || 'Failed to create heartbeats';
+                    if (data.quota_reached) msg = 'healthchecks.io plan quota reached -- ' + msg;
+                    hcCreateAllHeartbeatsStatus.innerHTML = '<span class="text-danger">' + msg + '</span>';
+                    if (hcCreateAllHeartbeatsBtn) hcCreateAllHeartbeatsBtn.disabled = false;
+                }
+            } catch (err) {
+                hcCreateAllHeartbeatsStatus.innerHTML = '<span class="text-danger">Request failed</span>';
+                if (hcCreateAllHeartbeatsBtn) hcCreateAllHeartbeatsBtn.disabled = false;
+            }
+        });
+    }
+
+    async function hcServiceHeartbeatRowAction(rowId, action, confirmMsg) {
+        if (confirmMsg && !confirm(confirmMsg)) return;
+        try {
+            const resp = await fetch('/admin/healthchecks/service-heartbeats/' + rowId + '/' + action, {
+                method: 'POST', headers: csrfHeaders,
+            });
+            const data = await resp.json();
+            if (data.success) {
+                showToast('Done', 'success');
+                window.location.reload();
+            } else {
+                showToast(data.error || 'Action failed', 'danger');
+            }
+        } catch (err) {
+            showToast('Request failed', 'danger');
+        }
+    }
+
+    document.querySelectorAll('#hcServiceHeartbeatsTable tr[data-heartbeat-row-id]').forEach(function(row) {
+        const rowId = row.getAttribute('data-heartbeat-row-id');
+        const pauseBtn = row.querySelector('.hc-service-heartbeat-pause');
+        const resumeBtn = row.querySelector('.hc-service-heartbeat-resume');
+        const deleteBtn = row.querySelector('.hc-service-heartbeat-delete');
+        if (pauseBtn) pauseBtn.addEventListener('click', () => hcServiceHeartbeatRowAction(rowId, 'pause'));
+        if (resumeBtn) resumeBtn.addEventListener('click', () => hcServiceHeartbeatRowAction(rowId, 'resume'));
+        if (deleteBtn) deleteBtn.addEventListener('click', () => hcServiceHeartbeatRowAction(rowId, 'delete', 'Delete this service heartbeat?'));
+    });
 });
 </script>
 {% endblock %}

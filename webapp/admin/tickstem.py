@@ -49,9 +49,14 @@ def _get_or_create_settings() -> TickstemSettings:
 @require_auth
 @require_permission('system.configure')
 def tickstem_settings():
-    """Display Tickstem uptime-monitor configuration page."""
+    """Display the Uptime Monitoring page: Tickstem's inbound monitor and
+    per-service heartbeats, plus healthchecks.io's per-service heartbeats
+    (webapp/admin/healthchecks.py) -- every uptime-monitoring provider
+    managed from one page rather than one page per provider.
+    """
     from app_core.config import get_eas_services
-    from app_core.models import TickstemServiceHeartbeat
+    from app_core.models import TickstemServiceHeartbeat, HealthchecksServiceHeartbeat
+    from webapp.admin.healthchecks import get_or_create_settings as get_or_create_healthchecks_settings
 
     try:
         settings = _get_or_create_settings()
@@ -60,16 +65,27 @@ def tickstem_settings():
         unmonitored_services = [
             s for s in get_eas_services() if s not in {row.service_name for row in service_heartbeats}
         ]
+
+        healthchecks_settings = get_or_create_healthchecks_settings()
+        healthchecks_heartbeats = HealthchecksServiceHeartbeat.query.order_by(
+            HealthchecksServiceHeartbeat.service_name).all()
+        healthchecks_unmonitored = [
+            s for s in get_eas_services() if s not in {row.service_name for row in healthchecks_heartbeats}
+        ]
+
         return render_template(
             'admin/tickstem.html', settings=settings, default_health_url=default_health_url,
             service_heartbeats=service_heartbeats, unmonitored_services=unmonitored_services,
+            healthchecks_settings=healthchecks_settings, healthchecks_heartbeats=healthchecks_heartbeats,
+            healthchecks_unmonitored=healthchecks_unmonitored,
         )
     except SQLAlchemyError as e:
-        logger.error(f"Database error loading Tickstem settings: {str(e)}")
+        logger.error(f"Database error loading Uptime Monitoring settings: {str(e)}")
         db.session.rollback()
         return render_template(
             'admin/tickstem.html', settings=None, default_health_url='',
             service_heartbeats=[], unmonitored_services=[],
+            healthchecks_settings=None, healthchecks_heartbeats=[], healthchecks_unmonitored=[],
         )
 
 
