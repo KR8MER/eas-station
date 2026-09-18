@@ -62,6 +62,7 @@ from types import SimpleNamespace
 
 from poller.cap_poller import CAPPoller
 from poller.cap_alert_parsing import _extract_cap_event_codes
+from poller.cap_geometry import _convert_cap_alert
 from app_utils.eas import _collect_event_code_candidates
 from app_utils.event_codes import resolve_event_code
 from app_core.audio.auto_forward import _resolve_event_code
@@ -199,7 +200,7 @@ class TestConvertCapAlertIncludesEventCode:
             '</alert>'
         )
         alert_elem = parse_xml_string(alert_xml)
-        feature = poller._convert_cap_alert(alert_elem, _NS)
+        feature = _convert_cap_alert(alert_elem, _NS, poller.logger)
 
         assert feature['properties']['eventCode'] == {'SAME': ['SPW']}
         assert feature['properties']['event'] == 'Natural gas leak'
@@ -223,7 +224,7 @@ class TestConvertCapAlertIncludesEventCode:
             '</alert>'
         )
         alert_elem = parse_xml_string(alert_xml)
-        feature = poller._convert_cap_alert(alert_elem, _NS)
+        feature = _convert_cap_alert(alert_elem, _NS, poller.logger)
 
         assert feature['properties']['eventCode'] == {'SAME': ['SPW']}
         assert feature['properties']['event'] == 'Severe Thunderstorm Warning'
@@ -251,7 +252,7 @@ class TestConvertCapAlertIncludesEventCode:
             '</alert>'
         )
         alert_elem = parse_xml_string(alert_xml)
-        feature = poller._convert_cap_alert(alert_elem, _NS)
+        feature = _convert_cap_alert(alert_elem, _NS, poller.logger)
         assert feature['properties']['eventCode'] == {}
 
 

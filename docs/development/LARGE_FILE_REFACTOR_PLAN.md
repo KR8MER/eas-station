@@ -1907,15 +1907,72 @@ change and does not belong in a pure-motion commit; documented here rather
 than silently fixed or silently ignored, matching the plan's standing rule
 for pre-existing issues found mid-phase.
 
-**What is left.** The remaining 50 stateful methods, 3,711 lines, are the
-actual Phase 4c work — dominated by `poll_and_process` (464 lines, 153
-`self` references), `__init__` (285 lines), `_insert_new_alert` (225),
-`fetch_cap_alerts` (208), `process_intersections` (170), and 45 more.
-These need the 2e technique: a characterization harness built *before* any
-restructuring, the same way `_handle_sentence` was pinned before its
-`nmea.py` extraction. Budget this as its own dedicated phase — it is the
-highest-risk work remaining in this entire plan, now that `system.py` and
-`eas.py` are done and turned out not to need it.
+**What was left after 4c, before 4c-ii.** The remaining 50 stateful methods,
+3,711 lines, were the actual Phase 4c work — dominated by `poll_and_process`
+(464 lines, 153 `self` references), `__init__` (285 lines),
+`_insert_new_alert` (225), `fetch_cap_alerts` (208), `process_intersections`
+(170), and 45 more. These need the 2e technique: a characterization harness
+built *before* any restructuring, the same way `_handle_sentence` was pinned
+before its `nmea.py` extraction. Highest-risk work remaining in this entire
+plan, now that `system.py` and `eas.py` are done and turned out not to need
+it.
+
+### 4c-ii. `poller/cap_poller.py` — CAP-geometry collaborator, 2e technique ✅
+
+The first slice of the 50 stateful methods above to actually land, using the
+2e technique this section called for: characterization tests written and
+run green against the *pre-extraction* bound methods first, extraction
+second, same tests retargeted at the extracted free functions third.
+
+Profiling by `self`-attribute usage (not just reference count) found 12
+methods touching only `self.logger` — set once in `__init__`, never
+reassigned — or each other, never `self.db_session` or the poller's
+zone/SAME-code configuration: `_parse_ipaws_xml_feed`, `_convert_cap_alert`,
+`_extract_cap_resources`, `_extract_area_details`, `_parse_cap_polygon`,
+`_parse_cap_circle`, `_approximate_circle_polygon`, `_message_type_priority`,
+`_alert_sort_key`, `_should_replace_alert`, `parse_cap_alert`,
+`_count_vertices` — a CAP-XML-to-GeoJSON-feature parsing concern, cleanly
+separable from the DB/config-coupled methods (`fetch_cap_alerts`,
+`get_alert_relevance_details`, `_has_geometry_changed`, ...) that stay
+behind. Moved to `poller/cap_geometry.py` along with the module-level
+`_serialize_alert_for_sig` helper (`_convert_cap_alert`'s only caller) and
+the `MESSAGE_TYPE_PRIORITIES` class attribute (actually a shared constant,
+not instance state).
+
+**`self.logger` became an explicit `logger` parameter, not a new
+`logging.getLogger(__name__)`.** Phase 3e's lesson applies here unchanged: a
+fresh per-module logger would silently rename every record these 12
+functions emit from `poller.cap_poller` to `poller.cap_geometry`, breaking
+any journald filter or log search keyed on the old name. `cap_poller.py`'s 4
+remaining call sites (`_parse_feed_payload`, `fetch_cap_alerts`,
+`_set_alert_geometry`, `poll_and_process`) now pass `self.logger` explicitly
+to the module functions instead of calling `self.method(...)`.
+
+**Not pure motion, so no bare `ast.dump()` equality this time** — every
+signature changed (dropped `self`, added `logger`), so verification had to
+be behavioral: 59 characterization tests (`tests/test_cap_geometry.py`)
+written against the pre-extraction bound methods, confirmed 2 of them
+load-bearing via targeted mutation spot-checks (a `_should_replace_alert`
+CANCEL-priority flip and a `_parse_cap_polygon` minimum-vertex-count change,
+both caught immediately), then the same 59 assertions retargeted at the
+extracted free functions and re-run green.
+
+**Three existing test files needed retargeting off the removed bound
+methods** — `test_ipaws_event_code_extraction.py`, `test_cap_poller_batching.py`,
+`test_cap_poller_per_item_isolation.py`. The last one needed a real fix, not
+just an import change: `test_parse_ipaws_xml_feed_one_malformed_alert_does_not_drop_the_others`
+patched `fake_self._convert_cap_alert` (an instance attribute) expecting to
+intercept `_parse_ipaws_xml_feed`'s internal call — but that call is now a
+same-module bare name inside `cap_geometry.py`, so an instance-attribute
+patch has nothing left to intercept. Retargeted to
+`monkeypatch.setattr(cap_geometry, '_convert_cap_alert', ...)`, the same
+same-module-bare-call hazard this plan has hit repeatedly (`eas.py`'s
+`build_same_header`, `eas_storage.py`'s `collect_compliance_log_entries`).
+
+`cap_poller.py`: 4933 → 4800 (4c) → **4244** lines (4c-ii). `CAPPoller`
+itself is ~3,183 lines across the remaining 38 methods — still the actual
+Phase 4c work, not started, and still the highest-risk item left in this
+plan (`poll_and_process` alone is 464 lines / 153 `self` references).
 
 ### 4d. `app_core/eas_storage.py` — pure motion, package of 14 modules ✅
 
@@ -2027,6 +2084,7 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-09-18 | 3.16.0 | Phase 4c partial (`poller/cap_poller.py`'s 9 stateless methods, 143 lines, → `poller/cap_alert_parsing.py`). Confirmed by profiling that `CAPPoller` really is the god-class the plan originally assumed (3,978/4,933 lines, 59 methods) — unlike `system.py` and `eas.py`. The 2d technique applied cleanly to the stateless slice: 9/9 `ast.dump()`-identical after normalizing `self` and docstring indentation, 19 internal call sites rewritten, one test retargeted off a live-instance call. Caught two more lessons: `ruff` (not available by default in this sandbox — installed into a scratch venv rather than trusting `py_compile` alone) flagged F821s that `from __future__ import annotations` had silently let slide past both `py_compile` and a real `import`; and GitHub's PR-scoped CodeQL analysis re-flagged 3 confirmed-pre-existing findings as "new" purely because the file paths moved or a data flow passed through a moved file — verified via `ast.dump()`/byte-identical diffs against `main`, and merged anyway since `main` has no branch protection requiring CodeQL and already carries ~100 open alerts of the same categories. **The remaining 50 stateful methods (3,711 lines) — the actual Phase 4c work — are not started** and are now the highest-risk item left in this plan. |
 | 2026-09-18 | 3.16.1 | Fix (not a split): `app_core/minimal_app.py`, a lightweight `create_minimal_app()` bootstrap for CLI/timer scripts that only need `db.session` (GitHub issue #2581). `security-perimeter-ingest.timer` ran `ingest_security_perimeter_log.py` every 2 minutes forever through `app.py`'s full `create_app()` — ~260 routes, every subsystem, 7.2s per run — to tail a log and insert a few rows. Measured 7.2s → 1.8s (639 routes → 1) after retargeting it and two other by-hand admin scripts (`fix_admin_roles.py`, `create_example_screens.py`) at the new bootstrap instead. |
 | 2026-09-18 | 3.17.0 | Phase 4d (`app_core/eas_storage.py`, 2825 → package of 14 modules). Profiled first and confirmed pure-motion shape (57 functions, zero classes) — like `system.py`/`eas.py`, not a god-class. 69/69 definitions `ast.dump()`-identical with **zero** normalization needed, a first for this plan (nothing moved out of a class this time). Caught the `eas.py`-shaped internal-call hazard again (`collect_compliance_dashboard_data` → `collect_compliance_log_entries`, monkeypatched in `test_public_logs_data.py`) by building the call graph before laying out modules, not after. Two new lessons: the free-variable scanner needed to walk `Assign`/`AnnAssign` nodes too, not just function bodies, after a module-level dict constant silently lost its import; and `ast`-based extraction is blind to comments, which don't exist as AST nodes — four standalone comment blocks preceding constants were dropped on the first pass and only caught by the plan's line-coverage diff, not by any AST check. Dropped one confirmed-dead import (`ORIGINATOR_DESCRIPTIONS`). `sdr_hardware_service.py` and `eas_monitoring_service.py` — the other two files this plan flagged unprofiled — turned out to be `main()`-shaped instead (891 and 1079-line dominant functions) and need the 2e technique, not this one. |
+| 2026-09-18 | 3.18.0 | Phase 4c-ii (`poller/cap_poller.py`, 12 of the 50 remaining stateful methods → `poller/cap_geometry.py`). First slice of the highest-risk item in this plan to actually land, using the 2e technique: 59 characterization tests written and run green against the pre-extraction bound methods, 2 confirmed load-bearing by mutation spot-check, extraction, then the same tests retargeted at the extracted free functions. Not pure motion (every signature dropped `self`, most gained an explicit `logger` parameter to avoid Phase 3e's module-level-logger hazard), so no `ast.dump()` equality this time — verification was entirely behavioral. Found and fixed a real retarget gap in an existing test: `test_parse_ipaws_xml_feed_one_malformed_alert_does_not_drop_the_others` patched an instance attribute expecting to intercept an internal call that's now a same-module bare name in `cap_geometry.py` — the same hazard shape as `eas.py`'s `build_same_header` and `eas_storage.py`'s `collect_compliance_log_entries`, retargeted to `monkeypatch.setattr(cap_geometry, ...)`. `cap_poller.py`: 4800 → 4244 lines; `CAPPoller` itself now 3,183 lines across the remaining 38 methods. Full suite: 3426 passed (was 3367). |
 
 ## Next up
 
@@ -2064,14 +2122,18 @@ deliberately deferred). `app_utils/eas.py` landed as 4b, 2026-09-18.
 **`poller/cap_poller.py` (4933, was 3996 when the plan was written) is
 confirmed a genuine god-class**, unlike `system.py` (4a) and `eas.py` (4b).
 Its 9 stateless methods (143 lines) landed as 4c, 2026-09-18 — the same
-2d technique used on `GPSManager`. **The other 50 methods (3,711 lines) are
-the actual remaining Phase 4c work, not started**, and this is now the
-highest-risk item left in the whole plan: `poll_and_process` (464 lines,
-153 `self` references) alone is bigger than most files this plan has split
-in their entirety. Needs the 2e technique — characterization harness built
-*before* any restructuring — the same way `_handle_sentence` was pinned
-before its `nmea.py` extraction, just at a much larger scale. Budget it as
-its own dedicated multi-session effort, not a routine split.
+2d technique used on `GPSManager`. A further 12 methods (the CAP-geometry
+collaborator: only touched `self.logger` and each other, never
+`self.db_session` or the poller's zone/SAME-code config) landed as 4c-ii,
+2026-09-18, using the 2e technique in earnest for the first time —
+characterization tests against the pre-extraction bound methods first,
+extraction second. **38 methods (3,183 lines) remain, still not started**,
+and this is still the highest-risk item left in the whole plan:
+`poll_and_process` (464 lines, 153 `self` references) alone is bigger than
+most files this plan has split in their entirety. Needs the same 2e
+technique 4c-ii proved out, just at a much larger scale and against methods
+that are genuinely DB/config-coupled rather than "only needs a logger."
+Budget it as its own dedicated multi-session effort, not a routine split.
 **`app_core/eas_storage.py` (2825, 57 top-level functions) was profiled and
 confirmed pure-motion shape** — like `system.py` and `eas.py`, not a
 god-class — and split into a 14-module package, 2026-09-18. `main()`-shaped

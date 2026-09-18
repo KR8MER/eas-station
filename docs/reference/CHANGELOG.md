@@ -7,6 +7,17 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.18.0] - 2026-09-18 - Refactor: extract poller/cap_poller.py's CAP-geometry collaborator (Large File Refactor Plan, Phase 4c continuation)
+
+The first slice of `CAPPoller`'s 50 remaining stateful methods (the highest-risk item left in the plan) to actually land, using the 2e characterization-harness technique: pin behavior with tests written against the pre-extraction bound methods first, extract, then verify the same tests pass against the extracted free functions.
+
+### Changed
+- Extracted 12 methods (plus the module-level `_serialize_alert_for_sig` helper and the `MESSAGE_TYPE_PRIORITIES` class constant) into `poller/cap_geometry.py` (664 lines): `_parse_ipaws_xml_feed`, `_convert_cap_alert`, `_extract_cap_resources`, `_extract_area_details`, `_parse_cap_polygon`, `_parse_cap_circle`, `_approximate_circle_polygon`, `_message_type_priority`, `_alert_sort_key`, `_should_replace_alert`, `parse_cap_alert`, `_count_vertices`. All 12 only ever touched `self.logger` (set once in `__init__`, never reassigned) or each other — never `self.db_session` or the poller's zone/SAME-code configuration — making them a genuinely low-risk collaborator, unlike the 50 methods that remain.
+- `logger` is threaded through as an explicit parameter rather than a fresh per-module `logging.getLogger(__name__)`, specifically to avoid the module-level-logger hazard `docs/development/AGENTS.md` documents from Phase 3e (a new logger here would silently rename every log record from `poller.cap_poller` to `poller.cap_geometry`). `cap_poller.py`'s 4 remaining call sites pass `self.logger` explicitly.
+- 59 characterization tests written against the pre-extraction bound methods first (`tests/test_cap_geometry.py`, superseding a since-deleted `test_cap_geometry_characterization.py`), 2 confirmed load-bearing via targeted mutation spot-checks (both caught immediately) before any code moved. Retargeted 3 existing test files (`test_ipaws_event_code_extraction.py`, `test_cap_poller_batching.py`, `test_cap_poller_per_item_isolation.py`) off the now-removed bound methods; one of those (`test_parse_ipaws_xml_feed_one_malformed_alert_does_not_drop_the_others`) needed a real monkeypatch retarget to intercept `_parse_ipaws_xml_feed`'s internal same-module call to `_convert_cap_alert`, since an instance-attribute patch no longer has anything to intercept once both live in `cap_geometry.py` as free functions.
+- `cap_poller.py`: 4800 → 4244 lines. `CAPPoller` itself is now ~3,183 of those lines across the remaining 38 methods — still the actual Phase 4c work, not started.
+- Full suite green: 3426 passed (was 3367), 0 failures.
+
 ## [3.17.0] - 2026-09-18 - Refactor: split app_core/eas_storage.py into a package (Large File Refactor Plan)
 
 Profiling confirmed `eas_storage.py` (2,825 lines, 57 top-level functions) has the same pure-motion shape as `system.py` (4a) and `eas.py` (4b) — mostly independent functions across ~10 topics, not a god-class — unlike `poller/cap_poller.py` (4c). `app_core/eas_storage/`, `sdr_hardware_service.py` and `eas_monitoring_service.py` were the three remaining unprofiled files the plan flagged; this closes out the first of the three (the other two are dominated by a single ~900-1100-line function each and need the 2e characterization-harness technique, not this technique).
