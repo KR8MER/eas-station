@@ -809,8 +809,11 @@ class TestPronunciationDictionaryRawSession(unittest.TestCase):
     def test_session_forwarded_to_loader(self):
         import app_utils.eas as eas_mod
         sentinel = object()
+        # _normalize_text_for_tts calls _load_pronunciation_rules as a
+        # same-module bare name (both live in tts_normalize.py); patching
+        # the package shim's re-export doesn't reach that call.
         with patch.object(
-            eas_mod, '_load_pronunciation_rules', return_value=[]
+            eas_mod.tts_normalize, '_load_pronunciation_rules', return_value=[]
         ) as loader:
             eas_mod._normalize_text_for_tts('TEST TEXT', db_session=sentinel)
         loader.assert_called_once_with(sentinel)

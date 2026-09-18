@@ -392,8 +392,12 @@ def _build_forwarding_broadcaster(monkeypatch, client, duration_seconds):
     import app_utils.eas as eas
 
     _patch_redis(monkeypatch, client)
+    # EASBroadcaster (app_utils/eas/broadcaster.py) imports build_same_header by
+    # value at module load, so patching the app_utils.eas shim re-export would
+    # not reach broadcaster.handle_alert()'s internal call -- patch the module
+    # that actually calls it.
     monkeypatch.setattr(
-        eas,
+        eas.broadcaster,
         "build_same_header",
         lambda alert, payload, config, location_settings: (
             "ZCZC-EAS-RWT-039000+0015-2180000-EASNODE-",
@@ -459,7 +463,10 @@ def test_forwarded_broadcast_holds_marker_for_full_playout(monkeypatch):
         marker_present_at_clear["at"] = _time.monotonic()
         real_clear(identifier=identifier)
 
-    monkeypatch.setattr(eas, "clear_broadcast_active", _recording_clear)
+    # Same reasoning as build_same_header above: broadcaster.py imports
+    # clear_broadcast_active by value, so the patch has to target the module
+    # that calls it, not the app_utils.eas shim re-export.
+    monkeypatch.setattr(eas.broadcaster, "clear_broadcast_active", _recording_clear)
 
     started = _time.monotonic()
     result = broadcaster.handle_alert(alert, payload)

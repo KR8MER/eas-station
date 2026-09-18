@@ -1467,17 +1467,23 @@ the same session as a routine split.
 
 ## Phase 4 — Long-running services
 
-Highest risk: these are the alert path. Each is dominated by one very large
-class, so the split is mixins or extracted collaborators rather than free
-functions, and each needs its behaviour pinned by tests before it moves.
+Highest risk: these are the alert path. The plan's original assumption was
+that each file is dominated by one very large class, needing mixins or
+extracted collaborators rather than free functions, with behaviour pinned by
+tests before anything moves. **That assumption held for `system.py` (not a
+god-class, landed as 4a) and did not hold for `eas.py`** (also not a
+god-class by the time it was split — see 4b). Check which shape a file
+actually is, the way the Phase 3 table note already says to, before
+assuming a characterization harness is the only way in. `poller/cap_poller.py`
+is the one file here confirmed to still be a genuine god-class.
 
 | File | Lines | Note |
 | --- | ---: | --- |
-| `poller/cap_poller.py` | 3996 | `CAPPoller` is 3,340 lines by itself — fetch / parse / persist / relevance / cleanup are the seams |
-| `app_utils/eas.py` | 3848 | config loading · SAME header build+describe · TTS normalisation · audio generation · `EASBroadcaster` |
-| `app_core/eas_storage.py` | 2824 | |
-| `sdr_hardware_service.py` | 2275 | |
-| `eas_monitoring_service.py` | 2246 | |
+| `poller/cap_poller.py` | 4933 (was 3996) | `CAPPoller` is ~3,900 lines by itself, 59 methods — a genuine god-class. fetch / parse / persist / relevance / cleanup are the seams. Not started. |
+| `app_utils/eas.py` | 4246 (was 3848) | ✅ landed — see 4b. Turned out to be 48 mostly-independent functions plus two god-classes, not one large class as originally scoped. |
+| `app_core/eas_storage.py` | 2824 | Not started — not yet profiled for shape (god-class vs. free functions). |
+| `sdr_hardware_service.py` | 2275 | Not started. |
+| `eas_monitoring_service.py` | 2246 | Not started. |
 | `app_utils/system.py` | 2580 | ✅ landed — see 4a |
 
 ### 4a. `app_utils/system.py` → `app_utils/system/` ✅
@@ -1687,6 +1693,137 @@ came back empty, matching `snapshot.py`.
 **Phase 4a-ii is complete.** Every module in `app_utils/system/` is now
 within the 400-line guidance.
 
+### 4b. `app_utils/eas.py` → `app_utils/eas/` ✅
+
+The single largest file in the tree at the time of the split: 4,246 lines,
+grown from the 3,848 the plan was originally scoped against. The plan's own
+table called this "config loading · SAME header build+describe · TTS
+normalisation · audio generation · `EASBroadcaster`" and grouped it with the
+god-class files. **Profiling it first showed that description was stale.**
+48 top-level definitions shared the file — mostly independent functions,
+the 2a/2b pure-motion shape — plus two large classes (`EASAudioGenerator`,
+791 lines/5 methods; `EASBroadcaster`, 445 lines/5 methods) that are
+god-classes in their own right but are a small fraction of the file. This
+is the same lesson 4a already taught, generalized: **profile a Phase 4 file
+before assuming it needs a characterization harness.** `system.py` wasn't a
+god-class either; `cap_poller.py`, still unstarted, is confirmed to be one.
+
+| New module | Lines | Contents |
+| --- | ---: | --- |
+| `indicators.py` | 302 | Redis-backed broadcast/incoming-alert indicator state: `set_broadcast_active`, `clear_broadcast_active`, `get_broadcast_state`, `set_incoming_alert`, `clear_incoming_alert`, `get_incoming_alert_state`, the pub/sub nudge, `BROADCAST_LEAD_IN/OUT_SECONDS` |
+| `config.py` | 408 | `load_eas_config` — one 369-line function, the module's whole reason for being over the cap |
+| `same_header_constants.py` | 228 | Static SAME/NRSC-4-B lookup tables: originator descriptions, county abbreviations, purge-time/field tables, P-digit meanings |
+| `same_header_decode.py` | 367 | `decode_county_originator`, `describe_same_header`, `score_decode_confidence` |
+| `same_header_build.py` | 283 | `build_same_header`, `build_eom_header`, `_collect_event_code_candidates`, `_duration_code`, `_julian_time`, `_normalise_same_codes` |
+| `tts_normalize.py` | 360 | `_normalize_text_for_tts` (ALL-CAPS CAP text → sentence case), `_load_pronunciation_rules` |
+| `tts_compose.py` | 288 | `_compose_message_text`, `_strip_awips_identifier`, `manual_default_same_codes` |
+| `tone_generation.py` | 209 | `_generate_tone`, `_generate_silence`, `_generate_station_terminator_samples`, `_normalize_audio_amplitude`, the MDC1200 op-code helpers |
+| `chime.py` | 263 | `_generate_chime` (bell/beep/three-tone/QC-II/DTMF/MDC1200) and its DTMF frequency table — split out from `tone_generation.py` separately, see below |
+| `wav_io.py` | 118 | `samples_to_wav_bytes`, `_wav_duration_seconds`, `truncate_wav_to_max_seconds`, `_write_wave_file` |
+| `broadcast_pid.py` | 213 | The in-flight playback subprocess's PID/EOM Redis markers, `_run_command`, `play_broadcast_audio` |
+| `audio_conversion.py` | 349 | `_fetch_embedded_audio`, `_convert_audio_to_samples`, `_resample_audio` |
+| `generator.py` | 848 | `EASAudioGenerator` — known exception, see below |
+| `broadcaster.py` | 489 | `EASBroadcaster` — known exception, see below |
+
+`app_utils/eas.py` is gone; `app_utils/eas/__init__.py` is the compatibility
+shim, re-exporting every one of the 37 distinct names anything in the tree
+(production or tests) ever imported from `app_utils.eas` — enumerated by an
+AST scan across `app_core/`, `app_utils/`, `webapp/`, `scripts/`,
+`services/`, `tools/`, `poller/` and `tests/` first, rather than trusted from
+memory or from the pre-existing `__all__` (which, as every prior phase has
+found, is not the same thing as the real public surface).
+
+**Verification.** 48/48 top-level functions/classes and 32/32 module-level
+constants `ast.dump()`-identical before and after. Every non-blank original
+line placed in exactly one new module, checked programmatically (the only
+"missing" lines were the `__all__` block, deliberately relocated to
+`__init__.py`). Full test suite green: 3,362 passed, 282 skipped, 62
+xfailed, 9 xpassed, 0 failures. Every production consumer
+(`app_core.audio.*`, `app_core.eas_processing`, `app_core.gpio_input_listener`,
+`app_core.websocket_push`, `eas_monitoring_service`, `poller.cap_poller`,
+`scripts.manual_eas_event`, `scripts.resend_eas_broadcast`,
+`scripts.run_eas_broadcaster`, `services.gpio.alert_indicators`,
+`tools.generate_sample_audio`, `webapp.admin`, `webapp.eas`,
+`webapp.routes.broadcast_control`, `webapp.routes_monitoring`,
+`webapp.routes_rwt_schedule`) imported directly to confirm the shim
+resolves. `grep -n "__file__"` across all 14 new modules is empty.
+
+**A confirmed internal-cross-call hazard — found by scoping, not by
+accident.** `EASBroadcaster.handle_alert()` calls `build_same_header()` and
+`clear_broadcast_active()` as same-module bare names today, resolved through
+the file's own global namespace. `tests/test_gpio_centralized_keying.py`
+monkeypatches both at the `app_utils.eas` module level and then calls
+`broadcaster.handle_alert()` directly, expecting the patch to intercept that
+internal call — this is exactly the shape the checklist's "map the closure
+before splitting a module that is one big function" item warns about, except
+here it is two *module-level* names a class method calls bare, not a
+closure. An AST scan across all 36 test files that reference
+`app_utils.eas` in any form (`import ... as`, `from ... import`, or bare
+`import app_utils.eas` — not just the subset a naive grep for the literal
+substring `"app_utils.eas."` would catch) found this as the only two sites
+where the patched name is *also* called from inside a class that is itself
+moving. Retargeted to `eas.broadcaster.build_same_header` /
+`eas.broadcaster.clear_broadcast_active`, and verified load-bearing by
+temporarily reverting the retarget: the test fails with `KeyError:
+'present'`, because the recording wrapper that patch installs never gets
+called — the real, unpatched function runs instead, silently.
+
+**`subprocess` and `time` are re-exported from the shim as modules, not
+just the functions that use them.** `tests/test_gpio_dump_broadcast.py`
+patches `eas_module.subprocess.Popen` and `tests/test_airchain_fringe_cases.py`
+patches `'app_utils.eas.time.sleep'` via `unittest.mock.patch`'s string-path
+resolution — both require `app_utils.eas.subprocess` / `app_utils.eas.time`
+to exist as attributes, which a package `__init__.py` doesn't get for free
+the way a single-file module's own `import subprocess` did. Both are shared
+singleton stdlib modules (the same reasoning as `psutil` in 4a-ii and
+`subprocess` in 3e-ii): patching an attribute *on* the module object affects
+every importer of it, so `import subprocess` / `import time` in the shim is
+enough — no further retargeting needed for these two, unlike the two
+same-module bare-name calls above.
+
+**Two rounds of missing-import bugs, both caught by actually importing the
+result rather than trusting a script.** The generator script derived each
+module's free-variable set with a hand-rolled AST scope walker (symtable's
+own `get_identifiers()` turned out to conflate "referenced in this scope"
+with "bound in this scope" for module-level names, so it silently swallowed
+genuine free references — `P_DIGIT_LABELS` in `same_header_constants.py`
+came back with *zero* free names when it plainly needed one). The walker
+also didn't attribute type-annotation expressions on bare module-level
+`AnnAssign` constants (`PRIMARY_ORIGINATORS: Tuple[str, ...] = (...)`) to
+the same free-variable pass as everything else, so several modules' derived
+`typing` imports were incomplete (missing `Dict`, `Optional`, `Sequence`, or
+`Tuple` depending on the module). Neither was caught by `py_compile` — a
+missing name inside a function body only raises at call time, and a missing
+name in a bare module-level annotation only raises at *import* time, which
+`py_compile` doesn't execute. The fix in both cases was the same: actually
+`import app_utils.eas` and iterate on the `NameError`s it raised, rather
+than trusting the derivation. This is the fourth appearance of the
+`symtable`/free-variable lesson in this plan (4a, 3c, 3d, now 4b) — it
+remains the single most repeated mistake in this effort.
+
+**`chime.py` split out from `tone_generation.py` after the fact, once line
+counts included the license header and import block.** The generator
+script's own line-count estimates were computed on the bare function bodies
+before headers/imports were added, which put `tone_generation.py` at an
+estimated 395 lines — under the cap on paper, 446 once assembled. Rather
+than accept the overage, `_generate_chime` (231 lines, self-contained
+except for the DTMF frequency table it already owned) moved to its own
+module, bringing both `tone_generation.py` (209) and the new `chime.py`
+(263) comfortably under. Lesson for the next phase: budget for header +
+import overhead (~35-40 lines per module) when estimating module sizes
+up front, not just the bare body content.
+
+**`generator.py` (848) and `broadcaster.py` (489) are known exceptions.**
+`EASAudioGenerator` and `EASBroadcaster` are each one class; module-level
+splitting cannot shrink a single class, the same conclusion 2a reached for
+`RBDSWorker`/`RBDSDecoder` and 3e reached for `obtain_certificate_execute`
+before its own 3e-ii follow-up. Bringing them under the cap needs
+collaborators extracted from the class bodies — a behavioural change
+needing a characterization harness built first, the 2e technique. Not
+started; tracked as a follow-up. `config.py` (408) is the same shape at a
+smaller scale: one 369-line function (`load_eas_config`) dominates a module
+whose only other content is a 5-line helper and a 3-line constant list.
+
 ---
 
 ## Phase 5 — Frontend
@@ -1731,6 +1868,7 @@ inline `<script>` moves to `static/js/pages/<page>.js`, repeated markup moves to
 | 2026-09-18 | 3.11.0 | Phase 4a-ii (`app_utils/system/snapshot.py`, 480 → 158 lines + 7 new collector modules + an extended `network.py`). `build_system_health_snapshot` was already a sequence of independent CPU/memory/disk/network/process/load-average/database figures, so the seam was cutting each to its own `_collect_*` function. Verified by 18 characterization tests written and run green against the pre-refactor function first, then a 14-mutation sweep — which caught 12 mutations immediately and found two of the *test's own* isolation gaps (a conflated CPU+DB critical-status assertion, and a disk-permission-error test that couldn't distinguish "correctly skipped" from "silently fell back to `/`"). `smart.py` (429) is the one Phase 4a-ii file left. |
 | 2026-09-18 | 3.12.0 | Phase 4a-ii cont. (`app_utils/system/smart.py`, 425 → 191 lines + 4 new modules: `smart_command.py`, `smart_query.py`, `smart_status.py`, `smart_attributes.py`). Unlike `snapshot.py`, this is one per-device *pipeline* (build command → run → validate/parse → infer status → populate fields), so the modules are stages, not independent collectors — the 3b-ii `alerts()` shape. Existing coverage (`tests/test_smart_health.py`) only exercised the status-inference fallback in depth; added `tests/test_smart_health_package.py` (24 tests) for the rest. An 18-mutation sweep caught 16 immediately; the other two were an untested bit0 exit-code branch and an `-n standby` command flag that `_detect_device_type()` currently never actually triggers, so it got a direct unit test against the newly-extracted `_build_smartctl_command()` instead. 23 `subprocess.run`/`os.path` patch sites across both test files would have silently degraded to no-ops had the retarget (to `smart_query.py`/`smart_command.py`) been missed — caught on the same pass as the extraction. **Phase 4a-ii complete** — every module in `app_utils/system/` is within the 400-line guidance. |
 | 2026-09-18 | 3.13.0 | Phase 3e-ii (`webapp/admin/certbot/routes_obtain_execute.py`, 454 → 99 lines + `obtain_validation.py` + `obtain_methods.py`). The last known-exception module in the size audit, and — like 3e itself — had **zero** test coverage beforehand; added `tests/test_certbot_obtain_execute.py` (28 tests), the module's first ever. `subprocess.run`/`time.sleep` are patched globally (both shared singleton modules, the 4a-ii `psutil` reasoning), sidestepping the retarget trap for those two; the higher-level collaborators still had to move from `routes_obtain_execute` to `obtain_methods`. A 20-mutation sweep caught 18 immediately; the other two were the same *isolation-gap* shape 4a-ii hit — an assertion that matched raw pre-augmentation text as readily as the augmented message, and a missing test for webroot's own permission-denied augmentation branch (its sibling "No such file or directory" branch was tested; this one wasn't). **No known exceptions remain in `webapp/admin/certbot/`.** |
+| 2026-09-18 | 3.14.0 | Phase 4b (`app_utils/eas.py`, 4246 → package of 14 modules under `app_utils/eas/`). The single largest file in the tree, and — contrary to the plan's original "dominated by one very large class" note — actually 48 mostly-independent top-level functions plus two god-classes (`EASAudioGenerator`, `EASBroadcaster`) that are a small fraction of the file: the 2a/2b pure-motion shape, not the characterization-harness shape Phase 4 was scoped for. 48/48 definitions and 32/32 constants `ast.dump()`-identical; full suite green (3,362 passed, 0 failures). Found and fixed a confirmed internal-cross-call hazard: `EASBroadcaster.handle_alert()` calls `build_same_header()`/`clear_broadcast_active()` as same-module bare names, and `test_gpio_centralized_keying.py` patches both at the module level expecting to intercept that internal call — verified load-bearing by reverting the retarget and watching it fail with `KeyError: 'present'`. `subprocess`/`time` re-exported as modules (not just functions) from the shim so two more tests' patches keep resolving. Hit the symtable free-variable bug for the fourth time in this plan (4a, 3c, 3d, now 4b) — this time it also missed type annotations on bare module-level constants. 12/14 modules land under the guidance; `generator.py` (848) and `broadcaster.py` (489) are known-exception god-classes, `config.py` (408) is one 369-line function, all tracked as follow-ups. `poller/cap_poller.py`, still unstarted, is confirmed to be a genuine god-class (59-method `CAPPoller`) — the next Phase 4 file needs the characterization-harness technique this one didn't. |
 
 ## Next up
 
@@ -1763,14 +1901,20 @@ exceptions remain in `webapp/admin/certbot/`.
 `app_utils/system/` is now within the 400-line guidance.
 
 **Phase 3 and Phase 4a-ii are now both fully complete** (bar `app.py`, 3g,
-deliberately deferred). The only work left outside Phase 5 (frontend, not
-started) is Phase 4's two largest remaining files.
+deliberately deferred). `app_utils/eas.py` landed as 4b, 2026-09-18.
 
-**Phase 4 (`poller/cap_poller.py`, 3996 — the largest Python module in the
-tree, and `app_utils/eas.py`, 3848)** is the highest-risk work in this plan:
-both sit directly on the alert path, and each is dominated by one very large
-class, so the split means extracted collaborators rather than free functions.
-Pin the behaviour with tests *before* moving anything.
+**`poller/cap_poller.py` (4933, was 3996 when the plan was written) is the
+one Phase 4 file confirmed to still need the full characterization-harness
+treatment.** `CAPPoller` is ~3,900 lines by itself, 59 methods — a genuine
+god-class, unlike `system.py` (4a) and `eas.py` (4b), both of which turned
+out to be mostly independent functions once actually profiled. Profile it
+the way 4a and 4b were profiled — count top-level definitions, check the
+call graph, check for a dominant class — before assuming it needs the same
+treatment as `gps_manager.py`'s 2d/2e split; it very likely does, but verify
+rather than assume. `app_core/eas_storage.py` (2824),
+`sdr_hardware_service.py` (2275) and `eas_monitoring_service.py` (2246) are
+still completely unprofiled. This work sits directly on the alert path —
+pin behaviour with tests *before* moving anything, once the shape is known.
 
 ## Pre-split checklist
 

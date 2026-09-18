@@ -119,7 +119,7 @@ def test_run_command_still_blocks_until_exit(monkeypatch, redis_client_factory):
 
     redis_client_factory(_FakeRedis())
     process = _FakeProcess(pid=1234)
-    monkeypatch.setattr(eas_module.subprocess, "Popen", lambda *a, **k: process)
+    monkeypatch.setattr(eas_module.broadcast_pid.subprocess, "Popen", lambda *a, **k: process)
 
     eas_module._run_command(["aplay", "test.wav"], logger=None)
 
@@ -132,7 +132,7 @@ def test_run_command_publishes_and_clears_pid_on_success(monkeypatch, redis_clie
     client = _FakeRedis()
     redis_client_factory(client)
     process = _FakeProcess(pid=5555)
-    monkeypatch.setattr(eas_module.subprocess, "Popen", lambda *a, **k: process)
+    monkeypatch.setattr(eas_module.broadcast_pid.subprocess, "Popen", lambda *a, **k: process)
 
     eas_module._run_command(["aplay", "test.wav"], logger=None)
 
@@ -147,7 +147,7 @@ def test_run_command_publishes_and_clears_eom_wav(monkeypatch, redis_client_fact
     client = _FakeRedis()
     redis_client_factory(client)
     process = _FakeProcess(pid=5556)
-    monkeypatch.setattr(eas_module.subprocess, "Popen", lambda *a, **k: process)
+    monkeypatch.setattr(eas_module.broadcast_pid.subprocess, "Popen", lambda *a, **k: process)
 
     published = {}
     original_wait = process.wait
@@ -178,7 +178,7 @@ def test_run_command_clears_pid_even_if_wait_raises(monkeypatch, redis_client_fa
     client = _FakeRedis()
     redis_client_factory(client)
     process = _FakeProcess(pid=6666, wait_exception=OSError("boom"))
-    monkeypatch.setattr(eas_module.subprocess, "Popen", lambda *a, **k: process)
+    monkeypatch.setattr(eas_module.broadcast_pid.subprocess, "Popen", lambda *a, **k: process)
 
     logged = []
     fake_logger = type("L", (), {"warning": lambda self, msg: logged.append(msg)})()
@@ -198,7 +198,7 @@ def test_run_command_swallows_launch_failure_like_before(monkeypatch, redis_clie
     def _raise(*a, **k):
         raise FileNotFoundError("no such player")
 
-    monkeypatch.setattr(eas_module.subprocess, "Popen", _raise)
+    monkeypatch.setattr(eas_module.broadcast_pid.subprocess, "Popen", _raise)
 
     logged = []
     fake_logger = type("L", (), {"warning": lambda self, msg: logged.append(msg)})()
@@ -220,7 +220,7 @@ def test_run_command_kills_on_timeout(monkeypatch, redis_client_factory):
     client = _FakeRedis()
     redis_client_factory(client)
     process = _FakeTimeoutProcess()
-    monkeypatch.setattr(eas_module.subprocess, "Popen", lambda *a, **k: process)
+    monkeypatch.setattr(eas_module.broadcast_pid.subprocess, "Popen", lambda *a, **k: process)
 
     logged = []
     fake_logger = type("L", (), {"warning": lambda self, msg: logged.append(msg)})()
@@ -238,7 +238,7 @@ def test_play_broadcast_audio_delegates_to_run_command(monkeypatch, redis_client
     client = _FakeRedis()
     redis_client_factory(client)
     process = _FakeProcess(pid=7070)
-    monkeypatch.setattr(eas_module.subprocess, "Popen", lambda *a, **k: process)
+    monkeypatch.setattr(eas_module.broadcast_pid.subprocess, "Popen", lambda *a, **k: process)
 
     eas_module.play_broadcast_audio(
         ["aplay", "test.wav"], logger=None, eom_wav=b"EOM", timeout=12.0,
