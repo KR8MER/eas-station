@@ -78,7 +78,13 @@ ProtectHome=true
 # - /etc/nginx: Required for certbot nginx plugin to modify config
 # - /etc/letsencrypt: Standard Let's Encrypt directory (if used)
 # - /etc/chrony: LAN NTP Server admin page writes conf.d/eas-station-ntp-server.conf here
-ReadWritePaths=/opt/eas-station /var/log/eas-station /var/www /run /etc/nginx /etc/letsencrypt /etc/icecast2 /etc/chrony
+# - /var/log/nginx: nginx.conf declares `error_log /var/log/nginx/error.log`
+#   in the main context, so `nginx -t` (run via sudo from the certbot
+#   install flow) opens that path as part of validating the config, even
+#   though it never writes to it. Without this, `nginx -t` fails with
+#   EROFS (read-only under ProtectSystem=strict) on every certificate
+#   install/renewal, even when the config itself is valid.
+ReadWritePaths=/opt/eas-station /var/log/eas-station /var/www /run /etc/nginx /etc/letsencrypt /etc/icecast2 /etc/chrony /var/log/nginx
 
 # GPIO device access for OLED button on Pi 5
 DeviceAllow=/dev/gpiochip0 rw
