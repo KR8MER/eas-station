@@ -7,6 +7,14 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.20.0] - 2026-09-18 - Add OCSP stapling support to the nginx template
+
+### Added
+- **OCSP stapling**, prompted by a Qualys SSL Labs report on a production deployment (easstation.com) showing "OCSP stapling: No" as the one real gap in an otherwise A+ rating. `config/nginx-eas-station.conf` now sets `ssl_stapling on; ssl_stapling_verify on;` plus a `resolver` in both HTTPS server blocks (443 main site, 8081 pgweb proxy) -- nginx attaches the CA's cached, signed "still valid" response to the TLS handshake itself, so clients skip their own live OCSP query to the CA (faster handshake; the CA no longer sees every visitor's browsing habits via those individual per-visitor lookups).
+- `webapp/admin/certbot/install.py`'s nginx snippet writer now also writes `ssl_trusted_certificate` (from the issued cert's `chain.pem`, alongside the `fullchain.pem`/`privkey.pem` it already wrote) -- stapling verification needs the issuer chain to check the OCSP response against. Falls back to omitting the line (stapling silently stays inactive, nothing else breaks) if `chain.pem` is missing, since certbot always produces one but an unusual manually-imported cert might not.
+- No-op and harmless for the default self-signed certificate (confirmed via `nginx -t`: a clean "ssl_stapling ignored, issuer certificate not found" warning, not an error) -- self-signed certs have no real CA-backed OCSP responder to staple, so stapling only actually activates once a real Let's Encrypt certificate is installed through the existing certbot flow.
+- Investigated the same report's "fatal handshake" rows (a handful of pre-2014 clients: Windows XP-era IE/Chrome/Firefox, old Java, iOS 7/8 Safari) and the "HSTS preload not opted in" note -- both are the correct, intentional trade-off of the existing `TLSv1.2`/`TLSv1.3`-only configuration (re-enabling legacy protocols to satisfy those ~15-20-year-old clients would drop the rating well below A+ and reopen real vulnerabilities for effectively zero real-world traffic), and HSTS preload submission is a separate, much harder-to-reverse decision left for a deliberate future call rather than bundled into this fix. Neither needed a code change.
+
 ## [3.19.2] - 2026-09-18 - Fix: dead "Service Heartbeat Status" card on the Uptime Monitoring page
 
 ### Fixed
