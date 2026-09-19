@@ -245,7 +245,7 @@
                 </div>
             </div>
             
-            <div class="d-flex gap-2 mt-3">
+            <div class="d-flex gap-2 mt-3 flex-wrap">
                 <button type="button" class="btn btn-primary" onclick="checkCertificateStatus()">
                     <i class="fas fa-shield-halved"></i> Check Certificate Status
                 </button>
@@ -255,7 +255,16 @@
                 <button type="button" class="btn btn-outline-secondary" onclick="viewCertbotLogs()">
                     <i class="fas fa-file-lines"></i> View Logs
                 </button>
+                <button type="button" class="btn btn-outline-primary" onclick="installCertificate()"
+                        title="Re-writes the nginx SSL snippet for the currently installed certificate and reloads nginx. Use this after an EAS Station update adds a new nginx SSL directive (e.g. OCSP stapling) -- an app update alone doesn't re-run certificate installation, only obtaining a new certificate or clicking this does.">
+                    <i class="fas fa-rotate"></i> Re-sync Nginx Configuration
+                </button>
             </div>
+            <p class="text-muted small mt-2 mb-0">
+                <i class="fas fa-circle-info"></i> "Re-sync Nginx Configuration" doesn't request a new certificate --
+                it re-applies the currently installed one's nginx wiring and reloads nginx. Use it after an update
+                changes how the certificate is configured (for example, adding OCSP stapling support).
+            </p>
         </div>
 
         <!-- Certificate Acquisition -->
