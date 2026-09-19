@@ -7,6 +7,12 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.19.1] - 2026-09-18 - Fix: outbound API calls could hang for ~60s per request on a black-holed IPv6 path
+
+### Fixed
+- **healthchecks.io's per-service heartbeat bulk-create ("Monitor Selected Services") appeared to hang indefinitely instead of completing in under a second.** Root-caused on the live deployment: the host has a valid global IPv6 address and default route, but that path is silently black-holed to multiple unrelated destinations (confirmed via `ping6`/`curl -6` timeouts against healthchecks.io, Tickstem's API, Google's public DNS, and Cloudflare alike -- not specific to any one of them). `socket.create_connection()` tries `getaddrinfo()`'s results in order, and RFC 6724 sorts IPv6 first, so every outbound `requests` call hung for a full connect-timeout on the dead IPv6 address before falling back to the IPv4 address that actually works -- turning what should be a sub-second healthchecks.io API call into one that took about 60 seconds. The per-service bulk-create endpoint makes one such call per selected service (up to 12) in a single synchronous request, so the page's "Creating heartbeats..." status could sit for over ten minutes without any visible sign it was still working, rather than the seconds it should take.
+- Added `app_core.http_defaults.prefer_ipv4_for_outbound_requests()`, called once at `app.py` import time, which makes `requests`/`urllib3` skip AAAA lookups for the whole process. Verified against the live failure: the same healthchecks.io call went from ~60s to ~0.5s, both with and without gevent's socket monkey-patching (gunicorn's `--worker-class gevent`). This is a resilience fix independent of whatever is actually black-holing this host's IPv6 path (a router/upstream issue, not something in this codebase) -- every outbound integration this station makes works fine over IPv4 alone.
+
 ## [3.19.0] - 2026-09-18 - Add healthchecks.io per-service heartbeat integration
 
 ### Added

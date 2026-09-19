@@ -37,6 +37,40 @@ already scattered around this codebase happened.
 
 import os
 
+_ipv4_preferred = False
+
+
+def prefer_ipv4_for_outbound_requests() -> None:
+    """Make ``requests``/``urllib3`` skip IPv6 (AAAA) lookups for every
+    outbound connection this process makes, for the rest of the process's
+    life. Idempotent -- safe to call more than once or from more than one
+    module.
+
+    Works around a real failure mode: a host can have a live global IPv6
+    address and a default route and still have that path silently
+    black-holed (SYN sent, nothing comes back -- no rejection, just
+    nothing) all the way out to multiple unrelated IPv6 destinations.
+    ``socket.create_connection()`` tries the addresses ``getaddrinfo()``
+    returns in order, and RFC 6724 sorts IPv6 first, so every request
+    hangs for a full connect timeout on the dead IPv6 path before falling
+    back to the IPv4 address that actually works -- turning what should
+    be a sub-second call into one that takes as long as the client's
+    timeout (observed: ~60s per healthchecks.io API call during the
+    per-service heartbeat bulk-create, https://healthchecks.io/docs/api/).
+    Every outbound integration this station makes works fine over IPv4
+    alone, so there's nothing lost by skipping the AAAA lookup entirely.
+    """
+    global _ipv4_preferred
+    if _ipv4_preferred:
+        return
+    try:
+        import socket
+        import urllib3.util.connection as urllib3_cn
+        urllib3_cn.allowed_gai_family = lambda: socket.AF_INET
+    except ImportError:
+        return
+    _ipv4_preferred = True
+
 
 def get_default_user_agent() -> str:
     """Return the station's configured outbound ``User-Agent`` string.
