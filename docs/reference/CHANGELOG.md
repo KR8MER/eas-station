@@ -7,6 +7,11 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.20.2] - 2026-09-19 - Add a "Re-sync Nginx Configuration" action to the Certbot admin page
+
+### Added
+- **A persistent "Re-sync Nginx Configuration" button on Settings -> Certbot**, found missing while rolling out the v3.20.0 OCSP stapling fix to a production deployment: `update.sh` pulls new code and reloads nginx, but it doesn't re-run certificate *installation* -- the step that (re)writes `/etc/nginx/snippets/ssl-letsencrypt.conf`. The only existing UI path to re-run that step (the "Install Certificate Now" button) is conditionally rendered and only appears when a certificate has been obtained but never installed; once a certificate is already active -- the normal, common state -- there was no way through the UI to make it re-apply its nginx wiring, so an app update that adds a new SSL directive to the certbot-managed snippet (like `ssl_trusted_certificate`, needed for stapling) had no way to actually reach an existing installation without hand-editing nginx config. The new button reuses the same existing, idempotent `/admin/api/certbot/install-certificate` route -- no new certificate is requested, no Let's Encrypt/ACME call is made, it just rewrites the local nginx snippet for the currently-installed certificate and reloads nginx.
+
 ## [3.20.1] - 2026-09-19 - Add HSTS preload flag to the nginx template
 
 ### Added
