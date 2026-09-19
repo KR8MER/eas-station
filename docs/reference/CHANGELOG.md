@@ -7,6 +7,11 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.20.1] - 2026-09-19 - Add HSTS preload flag to the nginx template
+
+### Added
+- **`preload` added to the `Strict-Transport-Security` header** in both HTTPS server blocks of `config/nginx-eas-station.conf` (`max-age=31536000; includeSubDomains` -> `max-age=31536000; includeSubDomains; preload`), following up on the same Qualys SSL Labs report that prompted the OCSP stapling fix (v3.20.0). Deliberately deferred in that earlier change since preload is close to permanent once a domain is accepted onto browsers' built-in list -- removal can take months to propagate to already-shipped browsers. This header change alone does not enroll any domain; that's still a separate, manual, one-time step the domain's owner takes at <https://hstspreload.org/> once this config is live and serving HTTPS-only on every subdomain.
+
 ## [3.20.0] - 2026-09-18 - Add OCSP stapling support to the nginx template
 
 ### Added
