@@ -7,6 +7,11 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.19.2] - 2026-09-18 - Fix: dead "Service Heartbeat Status" card on the Uptime Monitoring page
+
+### Fixed
+- **The "Service Heartbeat Status" card (Settings -> Uptime Monitoring, right column) always showed "Not created" / "Never," regardless of whether Tickstem's per-service heartbeats were actually pinging successfully.** Root cause: it read `settings.service_heartbeat_id`, `settings.service_heartbeat_status`, `settings.last_service_heartbeat_at`/`_success`/`_error` -- none of which exist on the `TickstemSettings` model, and none of which any route ever sets. Jinja2 silently renders a missing attribute as falsy rather than raising, so the card has shown this same dead placeholder state since it was added in #2557, unrelated to anything in this session's healthchecks.io work. The real, working per-service heartbeat data (both Tickstem's and healthchecks.io's) is already shown in the "Per-Service Heartbeats" table directly above this card -- with per-row status and last-ping timestamps that do reflect reality -- so removed the dead card rather than inventing a new single-value aggregate concept that has no well-defined meaning across N independently-scheduled per-service heartbeats.
+
 ## [3.19.1] - 2026-09-18 - Fix: outbound API calls could hang for ~60s per request on a black-holed IPv6 path
 
 ### Fixed
