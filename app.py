@@ -60,6 +60,12 @@ except ImportError:
         pass
 import pytz
 
+# Skip AAAA/IPv6 lookups for every outbound HTTP call this process makes,
+# before any module below gets a chance to import `requests` and use it --
+# see app_core.http_defaults.prefer_ipv4_for_outbound_requests()'s docstring.
+from app_core.http_defaults import prefer_ipv4_for_outbound_requests
+prefer_ipv4_for_outbound_requests()
+
 # Application utilities
 from app_utils import (
     get_location_timezone_name,
