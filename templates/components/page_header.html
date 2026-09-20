@@ -33,6 +33,14 @@
     in page templates — include this component instead.
 #}
 <div class="{% if header_variant == 'gradient' %}page-header-gradient{% else %}page-header{% endif %}">
+    {% if header_variant != 'gradient' %}
+    {# .page-header-gradient already has its own ::before glow ellipse and
+       animated rainbow underline -- orbs would compete rather than add.
+       Plain .page-header has neither, so this is its only ambient accent. #}
+    <div class="orb"></div>
+    <div class="orb"></div>
+    <div class="orb"></div>
+    {% endif %}
     <div class="container-fluid">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
             <div class="header-content">

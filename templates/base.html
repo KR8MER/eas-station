@@ -168,6 +168,17 @@
 
     <!-- Main Content -->
     <main class="page-shell">
+        <!-- Floating ambient background orbs -- purely decorative, fixed
+             position, order matters (styled by :nth-child in styles.css
+             under "Page Shell Orbs"), must stay as the first five children
+             so .page-shell > *:not(.orb):not(.modal) keeps real content
+             layered above them. -->
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+        <div class="orb orb-4"></div>
+        <div class="orb orb-5"></div>
+
         {% block content %}{% endblock %}
     </main>
 
