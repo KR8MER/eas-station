@@ -72,6 +72,35 @@
         }
     }
 
+    /**
+     * Pull the public status summary into the footer's "System Status"
+     * widget (present on every page, logged in or not) so "System OK" is a
+     * live read of /api/public/status rather than a hardcoded string. Best
+     * effort: a fetch failure just leaves the previous text in place.
+     */
+    function updateFooterHealthWidget() {
+        const textEl = document.getElementById('footer-health-text');
+        const iconEl = document.getElementById('footer-health-icon');
+        if (!textEl || !iconEl) {
+            return;
+        }
+        fetch('/api/public/status', { headers: { 'Accept': 'application/json' } })
+            .then((resp) => (resp.ok ? resp.json() : null))
+            .then((data) => {
+                if (!data || data.error || !data.services) {
+                    return;
+                }
+                const status = data.services.overall_status;
+                textEl.textContent = data.services.status_summary || 'Status unknown';
+                iconEl.className = 'fas fa-circle-check me-2 ' + (
+                    status === 'healthy' ? 'text-success'
+                        : status === 'warning' ? 'text-warning'
+                            : 'text-danger'
+                );
+            })
+            .catch(() => { /* transient network hiccup -- next tick retries */ });
+    }
+
     function exportToExcel(data, baseFilename = 'export') {
         if (!Array.isArray(data) || data.length === 0) {
             window.showToast && window.showToast('No data available to export.', 'warning');
@@ -298,6 +327,9 @@
         // Update time immediately and then every second
         updateCurrentTime();
         setInterval(updateCurrentTime, 1000);
+
+        updateFooterHealthWidget();
+        setInterval(updateFooterHealthWidget, 60000);
 
         trackOpenDropdowns();
     }

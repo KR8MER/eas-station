@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}System Status - EAS Station™{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<style>
+    .status-service-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 10px;
+    }
+    .status-service-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        background: var(--surface-color);
+        min-width: 0;
+    }
+    .status-service-row .live-dot { flex-shrink: 0; }
+    .live-dot.ok { background: #3fb950; }
+    .live-dot.down { background: #f85149; }
+    .status-service-row .name {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text-color);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .status-service-row .state {
+        margin-left: auto;
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+    }
+    .status-footnote {
+        color: var(--text-muted);
+        font-size: 0.82rem;
+    }
+    @media (max-width: 767.98px) {
+        .status-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set header_icon = 'fas fa-tower-broadcast' %}
+{% set header_title = 'System Status' %}
+{% set header_subtitle %}A public, read-only look at whether this station is up, tested and tamper-checked. No account required.{% endset %}
+{% set header_actions %}
+    <span class="status-pill {{ 'ok' if status.services.overall_status == 'healthy' else ('warn' if status.services.overall_status == 'warning' else 'danger') }}" id="status-overall-pill" title="{{ status.services.status_summary }}">
+        <span class="live-dot {{ 'ok' if status.services.overall_status == 'healthy' else 'down' }}"></span>
+        <span id="status-overall-text">{{ status.services.status_summary }}</span>
+    </span>
+    <a href="/api/public/status" class="btn btn-sm btn-outline-light" title="Same data as JSON">
+        <i class="fas fa-code me-1"></i>JSON
+    </a>
+{% endset %}
+{% include 'components/page_header.html' %}
+
+<div class="container-fluid mt-3">
+
+    {% if status.error %}
+    <div class="alert alert-warning" role="alert">
+        <i class="fas fa-triangle-exclamation me-2"></i>{{ status.error }}
+    </div>
+    {% else %}
+
+    <section class="status-strip" aria-label="Status at a glance">
+        <div class="status-tile is-primary {{ 'sev-ok' if status.services.overall_status == 'healthy' else ('sev-warn' if status.services.overall_status == 'warning' else 'sev-fault') }}">
+            <div class="lbl"><i class="fas fa-heart-pulse"></i> Overall</div>
+            <div class="val">{{ status.services.overall_status | capitalize }}</div>
+            <div class="sub">{{ status.services.status_summary }}</div>
+        </div>
+        <div class="status-tile sev-info">
+            <div class="lbl"><i class="fas fa-clock"></i> Uptime</div>
+            <div class="val">{{ status.services.uptime_human or 'Unknown' }}</div>
+            <div class="sub">since last restart</div>
+        </div>
+        <div class="status-tile {{ 'sev-ok' if status.audit_chain.ok else ('sev-unknown' if status.audit_chain.ok is none else 'sev-fault') }}">
+            <div class="lbl"><i class="fas fa-link"></i> Audit Chain</div>
+            <div class="val">
+                {% if status.audit_chain.ok is none %}Not yet verified{% elif status.audit_chain.ok %}Intact{% else %}Failed{% endif %}
+            </div>
+            <div class="sub">{{ status.audit_chain.last_verified_at[:19].replace('T', ' ') ~ ' UTC' if status.audit_chain.last_verified_at else 'no verification run yet' }}</div>
+        </div>
+        <div class="status-tile {{ 'sev-ok' if status.compliance.rwt_status == 'current' else ('sev-unknown' if status.compliance.rwt_status == 'unknown' else 'sev-warn') }}">
+            <div class="lbl"><i class="fas fa-clipboard-check"></i> Weekly Test (RWT)</div>
+            <div class="val">{{ status.compliance.rwt_status | capitalize }}</div>
+            <div class="sub">{{ status.compliance.last_rwt_at[:10] if status.compliance.last_rwt_at else 'none recorded' }}</div>
+        </div>
+        <div class="status-tile {{ 'sev-ok' if status.compliance.rmt_status == 'current' else ('sev-unknown' if status.compliance.rmt_status == 'unknown' else 'sev-warn') }}">
+            <div class="lbl"><i class="fas fa-calendar-check"></i> Monthly Test (RMT)</div>
+            <div class="val">{{ status.compliance.rmt_status | capitalize }}</div>
+            <div class="sub">{{ status.compliance.last_rmt_at[:10] if status.compliance.last_rmt_at else 'none recorded' }}</div>
+        </div>
+        <div class="status-tile sev-info">
+            <div class="lbl"><i class="fas fa-bell"></i> Alerts Monitored</div>
+            <div class="val">{{ '{:,}'.format(status.alerts_monitored) }}</div>
+            <div class="sub">all-time CAP feed total</div>
+        </div>
+    </section>
+
+    <div class="card mb-3" style="background: var(--surface-color); border-color: var(--border-color);">
+        <div class="card-header" style="background: transparent; border-color: var(--border-color);">
+            <i class="fas fa-server me-2"></i>Core EAS Subsystems
+        </div>
+        <div class="card-body">
+            <div class="status-service-list" id="status-service-list">
+                {% for svc in status.services.services %}
+                <div class="status-service-row">
+                    <span class="live-dot {{ 'ok' if svc.up else 'down' }}"></span>
+                    <span class="name">{{ svc.name }}</span>
+                    <span class="state">{{ 'Up' if svc.up else 'Down' }}</span>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No service data available.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    {% endif %}
+
+    <p class="status-footnote mt-3">
+        <i class="fas fa-flask me-1"></i>
+        EAS Station™ is a laboratory / research platform, not a certified broadcast appliance —
+        see <a href="{{ url_for('about_page') }}">About</a> for the full compliance notice. This page is not an uptime SLA.
+        Last checked <span id="status-generated-at">{{ status.generated_at[:19].replace('T', ' ') ~ ' UTC' if status.generated_at else 'just now' }}</span>,
+        refreshes automatically every 30s.
+    </p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+(function () {
+    'use strict';
+
+    function severityPillClass(status) {
+        if (status === 'healthy') return 'ok';
+        if (status === 'warning') return 'warn';
+        return 'danger';
+    }
+
+    function refresh() {
+        fetch('/api/public/status', { headers: { 'Accept': 'application/json' } })
+            .then(function (resp) { return resp.ok ? resp.json() : null; })
+            .then(function (data) {
+                if (!data || data.error || !data.services) return;
+
+                var pill = document.getElementById('status-overall-pill');
+                var text = document.getElementById('status-overall-text');
+                if (pill && text) {
+                    pill.classList.remove('ok', 'warn', 'danger');
+                    pill.classList.add(severityPillClass(data.services.overall_status));
+                    text.textContent = data.services.status_summary;
+                }
+
+                var generated = document.getElementById('status-generated-at');
+                if (generated && data.generated_at) {
+                    generated.textContent = data.generated_at.slice(0, 19).replace('T', ' ') + ' UTC';
+                }
+            })
+            .catch(function () { /* transient network hiccup -- next tick retries */ });
+    }
+
+    setInterval(refresh, 30000);
+})();
+</script>
+{% endblock %}

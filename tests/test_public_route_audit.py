@@ -51,6 +51,7 @@ EXPECTED_PUBLIC_PAGES = {
     '/repo-stats',
     '/attribution',
     '/style-guide',
+    '/status',
 }
 
 #: Machine-describing GETs that must never answer an anonymous internet caller.

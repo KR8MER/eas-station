@@ -7,6 +7,22 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.22.0] - 2026-09-20 - Add a public, no-login System Status page
+
+### Added
+- **A public transparency page at `/status`** (Reports → Analytics → System Status, footer "System Status" widget) showing overall health, core-subsystem up/down state, tamper-evident audit-chain verification status, and RWT/RMT test cadence — readable by anyone, no operator account required. A JSON view is available at `/api/public/status` for external monitoring.
+- **Deliberately narrow by design**: reuses the existing (login-gated) `/system_health` snapshot server-side but only re-serves the non-host-identifying subset — service up/down and the overall status summary — never hostname, IP, disk, receiver or process detail, which stay behind the existing `LOCAL_API_GET_PATHS` boundary in `app.py`. See `webapp/public/status_page.py` for the full rationale.
+- **The footer's "System Status" widget, present on every page, is now live** instead of a hardcoded "System OK" string — it polls `/api/public/status` every 60s (`static/js/core/utils.js`) and links to the new page.
+- Server-side response is cached for 30 seconds (`webapp/public/status_page.py`) since this is the one route on the site reachable by an anonymous caller at any rate they choose.
+
+## [3.21.0] - 2026-09-19 - Add a world-clock + EAS status screen to the LED sign rotation
+
+### Added
+- **A new LED sign screen (`led_world_clock_status`)** showing Eastern/Zulu/Central time on three static lines plus a rolling status line (active alert count + decoder sync state), appended to the existing `led_default_rotation` alongside the 9 screens already cycling there. Requested as a "world clock with system status rolling on the bottom," modeled after a physical ops-room multi-zone clock.
+- Two new built-in template variables, `{now.time_zulu}` and `{now.time_central}`, added to `ScreenRenderer.substitute_variables()` (`scripts/screen_renderer.py`) using the stdlib `zoneinfo` module -- joins the existing `{now.time}` (local/Eastern) and `{now.time_24}`/`{now.date}`/`{now.datetime}` built-ins available to any LED/VFD/OLED screen template, not just this one.
+- **Found and worked around a real hardware limit while building this**: the Alpha 9120C hard-caps every line, including SCROLL-mode lines, at 20 characters (`scripts/led_sign_controller.py`'s `max_chars_per_line`) -- this is the sign's actual per-line buffer, not a display-only truncation. The original request envisioned a longer multi-item rolling ticker (poller status + last alert + SDR lock); that doesn't fit in 20 characters, so the status line was scoped down to the two fields that matter most and fit reliably (`ALERTS:{status.active_alerts_count} SYNC:{eas_monitor.decoder_synced}`), deferring the fuller status picture to the existing `led_system_status` and `led_alert_summary` screens already in the same rotation.
+- **Also discovered, and left unchanged, a pre-existing LED alert-priority gap**: unlike OLED's rotation (`skip_on_alert=True`, with its own dedicated immediate-preemption code path), the LED rotation (`skip_on_alert=False`) has no true "alert always wins instantly" behavior -- an active alert only appears when the conditional `led_alert_summary` screen's turn comes up in the ~91s rotation cycle, same as before this change. Building genuine immediate LED alert preemption (an OLED-style dedicated path) was explicitly scoped out of this change as separate future work.
+
 ## [3.20.2] - 2026-09-19 - Add a "Re-sync Nginx Configuration" action to the Certbot admin page
 
 ### Added

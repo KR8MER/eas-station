@@ -449,6 +449,12 @@ _REPORTS = NavSection(
                     description="Live code, route and component metrics for this build.",
                 ),
                 NavItem(
+                    label="System Status",
+                    icon="fas fa-tower-broadcast",
+                    href="/status",
+                    description="Public uptime, test-cadence and audit-integrity page — no login required.",
+                ),
+                NavItem(
                     label="API Reference",
                     icon="fas fa-plug",
                     href="/api-reference",

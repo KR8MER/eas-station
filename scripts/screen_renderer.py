@@ -385,6 +385,16 @@ class ScreenRenderer:
             }
         }
 
+        # Additional named time zones for multi-zone clock screens. Best-effort:
+        # a missing tzdata package shouldn't break every screen that uses `now`,
+        # so a zone that fails to resolve is just left out of `now`.
+        for zone_key, zone_name in (('time_zulu', 'UTC'), ('time_central', 'America/Chicago')):
+            try:
+                from zoneinfo import ZoneInfo
+                builtin_data['now'][zone_key] = datetime.now(ZoneInfo(zone_name)).strftime('%I:%M %p')
+            except Exception as exc:
+                logger.debug("Could not resolve time zone %s for %s: %s", zone_name, zone_key, exc)
+
         # Merge data with built-ins
         all_data = {**data, **builtin_data}
 

@@ -38,7 +38,7 @@ from pathlib import Path
 
 from flask import Flask
 
-from webapp.public import alerts, logs, logs_data, pages, sitemap, sms_optin, stats
+from webapp.public import alerts, logs, logs_data, pages, sitemap, sms_optin, stats, status_page
 
 
 def register(app: Flask, logger) -> None:
@@ -53,6 +53,7 @@ def register(app: Flask, logger) -> None:
     stats.register(app, route_logger)
     alerts.register(app, route_logger)
     logs.register(app, route_logger, logs_data.build_logs_loader(route_logger))
+    status_page.register(app, route_logger.getChild("status_page"))
 
 
 __all__ = ["register"]

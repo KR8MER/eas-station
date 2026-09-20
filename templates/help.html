@@ -761,6 +761,27 @@
                             </div>
                         </div>
 
+                        <!-- Public Status Page -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="publicStatusHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#publicStatusCollapse">
+                                    <i class="fas fa-tower-broadcast me-2"></i>Public Status Page
+                                </button>
+                            </h2>
+                            <div id="publicStatusCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>Reports → Analytics → System Status</strong> (<code>/status</code>) is a read-only transparency page — no sign-in required — for anyone who needs to check "is this station actually working" without an operator account: a supervisor, a training-program auditor, or a public visitor.</p>
+                                    <ul>
+                                        <li><strong>Overall status</strong> and <strong>uptime</strong>, rolled up the same way the header health indicator is elsewhere in the app.</li>
+                                        <li><strong>Core EAS subsystems</strong> — up/down for the poller, SDR, demodulator, audio monitor and related services, without any host-identifying detail (hostname, IP, disk or process info stay behind the login-gated <strong>System Health</strong> page).</li>
+                                        <li><strong>Audit chain integrity</strong> — when the tamper-evident audit ledger was last verified and whether it passed, from <strong>Admin → Audit Log</strong>'s <em>Verify Chain Integrity</em> action.</li>
+                                        <li><strong>Weekly/monthly test cadence</strong> — whether the most recent RWT and RMT are current or overdue.</li>
+                                    </ul>
+                                    <p>The page auto-refreshes every 30 seconds and also has a <strong>JSON</strong> endpoint at <code>/api/public/status</code> for external monitoring. The footer's "System Status" widget on every page links here and mirrors the same live summary.</p>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- API Dashboard -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="apiDashboardHeading">

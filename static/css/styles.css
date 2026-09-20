@@ -2902,6 +2902,15 @@ footer a:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
+/* footer-health-widget is an <a> (links to the public /status page) while
+   its siblings are plain <div>s -- reset link styling so it still reads as
+   a status chip, not a hyperlink. */
+a.footer-health-widget,
+a.footer-health-widget:hover {
+    color: inherit;
+    text-decoration: none;
+}
+
 /* Tech stack section */
 .footer-tech-stack {
     position: relative;

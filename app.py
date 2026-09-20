@@ -468,6 +468,10 @@ PUBLIC_API_GET_PATHS = {
     # for external players/widgets, same spirit as a station's public
     # "now playing" page. See webapp/routes_now_playing.py.
     '/api/audio/now-playing',
+    # Backs the public /status page's auto-refresh -- see
+    # webapp/public/status_page.py for what it deliberately does and does not
+    # include.
+    '/api/public/status',
 }
 
 # GET APIs that may be read without a session, but only by a caller on the
@@ -562,6 +566,11 @@ _PUBLIC_PAGE_PATHS = frozenset({
     '/docs',
     '/support',
     '/repo-stats',
+    # Public transparency/status page -- see webapp/public/status_page.py for
+    # why every field it reads is safe to publish with no login (it is a
+    # deliberately narrow, non-host-identifying subset of the login-gated
+    # /system_health snapshot).
+    '/status',
     # Open-source attribution and third-party licence notices. EAS Station is
     # AGPL-3.0; putting its licence disclosures behind a login defeats their
     # purpose, and the page contains no station data.

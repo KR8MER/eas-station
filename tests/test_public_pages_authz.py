@@ -41,3 +41,11 @@ def test_broadcast_state_api_is_public():
     # page and after a session expires. It must stay in the public GET allowlist
     # or those polls flood the logs with 401s.
     assert "/api/broadcast/state" in PUBLIC_API_GET_PATHS
+
+
+def test_status_page_and_api_are_public():
+    # /status is the no-login transparency page; every page's footer widget
+    # polls /api/public/status on a 60s interval, including for anonymous
+    # visitors, so both must stay outside the auth gate.
+    assert _is_public("/status")
+    assert "/api/public/status" in PUBLIC_API_GET_PATHS
