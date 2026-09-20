@@ -5032,10 +5032,11 @@ html:has(.modal.show) {
 }
 
 .card:hover {
-    box-shadow: 0 12px 30px rgba(32, 72, 133, 0.18),
-                0 6px 15px rgba(32, 72, 133, 0.12);
-    transform: translateY(-2px);
-    border-color: color-mix(in srgb, var(--primary-color) 20%, var(--border-color));
+    box-shadow: 0 22px 45px color-mix(in srgb, var(--primary-color) 20%, transparent),
+                0 10px 22px color-mix(in srgb, var(--secondary-color, var(--primary-color)) 14%, transparent),
+                0 3px 8px rgba(0, 0, 0, 0.08);
+    transform: translateY(-6px);
+    border-color: color-mix(in srgb, var(--primary-color) 25%, var(--border-color));
 }
 
 /* Glass Card Effect */
