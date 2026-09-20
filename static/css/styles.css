@@ -3596,6 +3596,13 @@ a.footer-health-widget:hover {
     transition: width 0s, height 0s, opacity 0.4s;
 }
 
+/* Tactile press feedback alongside the ripple above -- same scale-down
+   the .press-effect utility defines, folded into every .btn directly since
+   there's no reason a button press should feel different site-wide. */
+.btn:active {
+    transform: scale(0.97);
+}
+
 .btn-primary {
     background: linear-gradient(135deg,
         var(--vibrant-blue) 0%,
@@ -8177,6 +8184,9 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     background: rgba(15, 23, 42, 0.55);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
+    /* Reuses the existing (previously unused) `float` keyframe -- a slow,
+       gentle bob so the hero mark reads as alive without being distracting. */
+    animation: float 6s ease-in-out infinite;
     box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28),
                 0 0 0 1px rgba(255, 255, 255, 0.18) inset;
 }
@@ -8241,18 +8251,22 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     box-shadow: 0 6px 18px rgba(0,0,0,0.12);
     flex-shrink: 0;
 }
+/* Colored glow per variant, layered under the base neutral shadow above --
+   same color-mix idiom .feature-card-icon already uses for its fc-* tints,
+   applied here so the smaller section-head icons pick up matching depth
+   instead of a flat black shadow regardless of their own hue. */
 .eas-section-icon.ico-primary,
-.about-section-icon.ico-primary { background: linear-gradient(135deg, var(--vibrant-blue), var(--vibrant-indigo)); }
+.about-section-icon.ico-primary { background: linear-gradient(135deg, var(--vibrant-blue), var(--vibrant-indigo)); box-shadow: 0 6px 16px color-mix(in srgb, var(--vibrant-blue) 35%, transparent); }
 .eas-section-icon.ico-success,
-.about-section-icon.ico-success { background: linear-gradient(135deg, var(--vibrant-green), var(--vibrant-teal)); }
+.about-section-icon.ico-success { background: linear-gradient(135deg, var(--vibrant-green), var(--vibrant-teal)); box-shadow: 0 6px 16px color-mix(in srgb, var(--vibrant-green) 35%, transparent); }
 .eas-section-icon.ico-info,
-.about-section-icon.ico-info    { background: linear-gradient(135deg, var(--vibrant-teal), var(--vibrant-blue)); }
+.about-section-icon.ico-info    { background: linear-gradient(135deg, var(--vibrant-teal), var(--vibrant-blue)); box-shadow: 0 6px 16px color-mix(in srgb, var(--vibrant-teal) 35%, transparent); }
 .eas-section-icon.ico-warning,
-.about-section-icon.ico-warning { background: linear-gradient(135deg, var(--vibrant-orange), var(--vibrant-yellow)); color: #1a1a1a; }
+.about-section-icon.ico-warning { background: linear-gradient(135deg, var(--vibrant-orange), var(--vibrant-yellow)); color: #1a1a1a; box-shadow: 0 6px 16px color-mix(in srgb, var(--vibrant-orange) 35%, transparent); }
 .eas-section-icon.ico-danger,
-.about-section-icon.ico-danger  { background: linear-gradient(135deg, var(--vibrant-red), var(--vibrant-pink)); }
+.about-section-icon.ico-danger  { background: linear-gradient(135deg, var(--vibrant-red), var(--vibrant-pink)); box-shadow: 0 6px 16px color-mix(in srgb, var(--vibrant-red) 35%, transparent); }
 .eas-section-icon.ico-purple,
-.about-section-icon.ico-purple  { background: linear-gradient(135deg, var(--vibrant-purple), var(--vibrant-indigo)); }
+.about-section-icon.ico-purple  { background: linear-gradient(135deg, var(--vibrant-purple), var(--vibrant-indigo)); box-shadow: 0 6px 16px color-mix(in srgb, var(--vibrant-purple) 35%, transparent); }
 .eas-section-title,
 .about-section-title {
     font-size: 1.2rem; font-weight: 700; letter-spacing: -0.01em; margin: 0;
