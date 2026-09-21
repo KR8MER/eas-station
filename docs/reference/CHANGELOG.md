@@ -7,6 +7,11 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.22.2] - 2026-09-21 - Run manual EAS tone synthesis off the request worker
+
+### Fixed
+- **`POST /eas/manual/generate` (Broadcast Builder) no longer blocks its gunicorn worker for the full SAME/tone synthesis duration.** `EASAudioGenerator.build_manual_components()` synthesizes FSK tones sample-by-sample in pure Python — genuinely CPU-bound work with no I/O yield points, so under this app's gevent worker model it used to block the *entire worker process*, stalling every other concurrent request routed there (the same bug already found and fixed for alert image export). The synthesis call now runs on a real OS thread via the existing `_run_off_worker()` helper (`webapp/admin/api/routes_alert_export.py`), keeping request parsing and the DB-backed activation record on the main greenlet. Since the pronunciation-dictionary lookup inside synthesis normally falls back to Flask-SQLAlchemy's `Model.query`, which requires an app context that a plain thread doesn't have, it's now handed an explicit `db_session` bound to the same engine instead — mirroring the image-export fix's `render_session` pattern.
+
 ## [3.22.1] - 2026-09-21 - Fix update.sh leaving all services stopped on failure
 
 ### Fixed
