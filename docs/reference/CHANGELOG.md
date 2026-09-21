@@ -7,6 +7,11 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.22.3] - 2026-09-21 - Fix invisible section headings on 7 dark themes
+
+### Fixed
+- **Every section/card heading inside a `--light-color`-backed container rendered near-invisible (light text on a light background) on the `lightning`, `aurora`, `nebula`, `midnight`, `charcoal`, `obsidian`, and `slate` themes.** A prior fix made these seven dark themes' `.workflow-card > .card-header`, `.same-chip`, `#date-filters`, `.alert-summary-panel`, `.feature-group`, `.layout-preset-btn:hover`, and `.rss-item-row` containers set a dark ink color so inherited text reads on their pale `--light-color` backgrounds — but headings (`h1`-`h6` / `.h1`-`.h6`) have their own color set directly by the global typography rule, and a direct rule on an element always wins over an inherited one regardless of the ancestor's specificity (the same reasoning already documented for the `<code>` carve-out next to this fix). In practice this meant the dashboard's "Active Alerts by Type" heading, every card-header title on the Broadcast Builder page ("Manual Activation Builder," "Recent Manual Activations," "Recent Automatic Captures"), and every section heading on the LED Control page ("Message Designer," "Display Settings," "Date Format," etc.) were unreadable on those 7 themes. Extended the existing ancestor rule to also force the dark ink onto headings; verified against the live dashboard and against fixtures built from the real templates, with `scripts/diagnostics/check_theme_contrast.py` still passing clean across all 20 themes.
+
 ## [3.22.2] - 2026-09-21 - Run manual EAS tone synthesis off the request worker
 
 ### Fixed
