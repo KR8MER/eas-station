@@ -181,7 +181,7 @@ s3fs==2026.7.0
 # upper bound first.
 aiobotocore==3.9.1
 botocore==1.43.75
-boto3==1.43.75  # Unencrypted, anonymous read access to NOAA's public Level II archive on AWS Open Data (no credentials needed)
+boto3==1.43.97  # Unencrypted, anonymous read access to NOAA's public Level II archive on AWS Open Data (no credentials needed)
 cartopy==0.26.0  # Geographic (Web Mercator) projection for plot_ppi_map, matching the OSM basemap tiles it composites onto
 cmweather==0.3.2  # Registers the 'NWSRef' reflectivity colormap (the standard ~15-band NWS scale most radar apps use, not a hand-rolled ramp)
 matplotlib==3.11.2  # plot_ppi_map's rendering backend (Agg, headless) -- pcolormesh draws each gate's true polar footprint
