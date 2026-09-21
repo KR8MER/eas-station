@@ -184,7 +184,7 @@ botocore==1.43.75
 boto3==1.43.75  # Unencrypted, anonymous read access to NOAA's public Level II archive on AWS Open Data (no credentials needed)
 cartopy==0.25.0  # Geographic (Web Mercator) projection for plot_ppi_map, matching the OSM basemap tiles it composites onto
 cmweather==0.3.2  # Registers the 'NWSRef' reflectivity colormap (the standard ~15-band NWS scale most radar apps use, not a hand-rolled ramp)
-matplotlib==3.11.1  # plot_ppi_map's rendering backend (Agg, headless) -- pcolormesh draws each gate's true polar footprint
+matplotlib==3.11.2  # plot_ppi_map's rendering backend (Agg, headless) -- pcolormesh draws each gate's true polar footprint
 
 # Country-level geolocation for the Traffic Analytics dashboard. Resolves public
 # visitor IPs to countries/flags from an operator-supplied MaxMind GeoLite2
