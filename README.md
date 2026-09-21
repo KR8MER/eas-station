@@ -10,7 +10,7 @@
 [![Flask](https://img.shields.io/badge/Flask-3.1.3-000000?style=flat-square&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
 [![Werkzeug](https://img.shields.io/badge/Werkzeug-3.1.8-000000?style=flat-square)](https://werkzeug.palletsprojects.com/)
 [![Jinja2](https://img.shields.io/badge/Jinja2-3.1.6-B41717?style=flat-square&logo=jinja&logoColor=white)](https://jinja.palletsprojects.com/)
-[![Socket.IO](https://img.shields.io/badge/Socket.IO-5.16.4-010101?style=flat-square&logo=socketdotio&logoColor=white)](https://socket.io/)
+[![Socket.IO](https://img.shields.io/badge/Socket.IO-5.17.0-010101?style=flat-square&logo=socketdotio&logoColor=white)](https://socket.io/)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0.52-CA2C39?style=flat-square&logo=sqlalchemy&logoColor=white)](https://www.sqlalchemy.org/)
 [![Alembic](https://img.shields.io/badge/Alembic-1.20.0-6BA3BE?style=flat-square&logo=sqlalchemy&logoColor=white)](https://alembic.sqlalchemy.org/)
 [![PostgreSQL + PostGIS](https://img.shields.io/badge/PostgreSQL-17%20%2B%20PostGIS-0093D0?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
@@ -482,7 +482,7 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 | Flask‑WTF | 1.3.0 | BSD‑3‑Clause | CSRF protection on every POST form and JSON endpoint. | https://flask-wtf.readthedocs.io/ |
 | Flask‑Limiter | 4.1.1 | MIT | Rate limiting on login, API key, and webhook endpoints (Redis or in‑memory backend). | https://flask-limiter.readthedocs.io/ |
 | Flask‑Caching | 2.5.0 | BSD‑3‑Clause | Response and view caching for expensive admin pages and read‑heavy JSON endpoints. | https://flask-caching.readthedocs.io/ |
-| python‑socketio | 5.16.4 | MIT | Core Socket.IO protocol implementation that Flask‑SocketIO builds on. | https://python-socketio.readthedocs.io/ |
+| python‑socketio | 5.17.0 | MIT | Core Socket.IO protocol implementation that Flask‑SocketIO builds on. | https://python-socketio.readthedocs.io/ |
 
 ### Database & ORM
 
