@@ -62,6 +62,36 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/scripts/lib/ui.sh"
 ui_install_traps
 
+# ── Failure safety net ───────────────────────────────────────────────────────
+# ui_install_traps (above) registered scripts/lib/ui.sh's cleanup_on_exit as
+# the EXIT trap -- shared with install.sh, it only reports a failure
+# (whiptail dialog + tty reset). It has no notion of "this run stopped live
+# services." Override the EXIT trap with a wrapper that also restarts
+# eas-station.target on any non-zero exit that happens after this script
+# stopped services for the update, so a failure partway through (git
+# fetch/reset, a dependency install, a migration, ...) never leaves the
+# system down until someone notices and re-runs update.sh by hand -- which
+# is exactly what happened in production 2026-09-21: a git fetch failed on
+# step 4/12, ownership drift under .git having gone undetected by a
+# top-level-only check (see the recursive check below), and every EAS
+# Station service stayed stopped for 35+ minutes with no automatic recovery
+# and nothing to alert anyone.
+SERVICES_STOPPED_FOR_UPDATE=false
+rollback_services_on_failure() {
+    local exit_code=$?
+    if [ "$exit_code" -ne 0 ] && [ "$SERVICES_STOPPED_FOR_UPDATE" = "true" ]; then
+        echo ""
+        echo_error "Update failed (exit $exit_code) after services were stopped -- restarting them now so the system does not stay down."
+        if systemctl restart eas-station.target 2>&1; then
+            echo_success "Services restarted with the pre-update code (update did not complete)"
+        else
+            echo_error "FAILED to restart services automatically -- manual intervention required: sudo systemctl restart eas-station.target"
+        fi
+    fi
+    cleanup_on_exit "$exit_code"
+}
+trap rollback_services_on_failure EXIT
+
 # ── Startup ──────────────────────────────────────────────────────────────────
 
 # Show the modern ASCII banner.
@@ -222,6 +252,11 @@ echo_progress "Stopping EAS Station services..."
 
 if systemctl is-active --quiet eas-station.target 2>/dev/null; then
     systemctl stop eas-station.target
+    # Arms rollback_services_on_failure (see the trap set up near the top of
+    # this script): only restart automatically on failure if this run is the
+    # one that stopped things -- never force-start a target that was already
+    # stopped before this update began.
+    SERVICES_STOPPED_FOR_UPDATE=true
     echo_success "Services stopped successfully"
 else
     echo_info "Services were not running"
@@ -261,14 +296,23 @@ if [ -d ".git" ]; then
     git config --global --replace-all safe.directory "$INSTALL_DIR" 2>/dev/null || true
     sudo -u "$SERVICE_USER" git config --global --replace-all safe.directory "$INSTALL_DIR" 2>/dev/null || true
 
-    # Check git directory ownership - critical for sudo -u eas-station to work
-    echo_progress "Checking git directory ownership..."
-    GIT_OWNER=$(stat -c '%U' "$INSTALL_DIR/.git" 2>/dev/null || echo "unknown")
-    
-    if [ "$GIT_OWNER" != "$SERVICE_USER" ]; then
-        echo_warning "Git directory is owned by '$GIT_OWNER', should be '$SERVICE_USER'"
+    # Check git directory ownership - critical for sudo -u eas-station to work.
+    #
+    # This must be a RECURSIVE check, not just `stat` on .git itself: a prior
+    # root-level git operation (e.g. the "retry as root" fallback further
+    # below, or a one-off manual `sudo git ...`) can leave individual files
+    # or object subdirectories owned by root while .git itself stays
+    # eas-station-owned. A top-level-only check reports "correct" in that
+    # case and skips the recursive chown -- and then `git fetch` fails with
+    # "insufficient permission for adding an object to repository database"
+    # the moment it needs to write into one of those root-owned paths.
+    echo_progress "Checking git directory ownership (recursively)..."
+    BAD_OWNER_PATH=$(find "$INSTALL_DIR/.git" ! -user "$SERVICE_USER" -print -quit 2>/dev/null)
+
+    if [ -n "$BAD_OWNER_PATH" ]; then
+        echo_warning "Found a path under .git not owned by '$SERVICE_USER' (e.g. $BAD_OWNER_PATH)"
         echo_info "Fixing ownership to allow git operations as $SERVICE_USER..."
-        
+
         if chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR" 2>/dev/null; then
             echo_success "Ownership corrected to $SERVICE_USER"
         else
@@ -1607,6 +1651,12 @@ echo_success "Failed service states cleared"
 # Longer sleep (8s) to allow services to fully initialize and load new code
 systemctl restart eas-station.target
 sleep 8
+
+# This is the update's own intentional restart, not a failure recovery --
+# disarm rollback_services_on_failure so a problem in the remaining
+# cosmetic steps below (version display, summary) can't trigger a redundant
+# second restart.
+SERVICES_STOPPED_FOR_UPDATE=false
 
 # Check status
 echo_progress "Checking service status..."

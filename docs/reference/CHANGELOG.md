@@ -7,6 +7,13 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.22.1] - 2026-09-21 - Fix update.sh leaving all services stopped on failure
+
+### Fixed
+- **A failed `update.sh` run no longer leaves the whole EAS Station stack down indefinitely.** In production, a `git fetch` failure on step 4/12 (after step 2 had already stopped every service) aborted the script with nothing to restore service — the install stayed fully down for 35+ minutes until someone asked why. `update.sh` now tracks whether it stopped services for this run (`SERVICES_STOPPED_FOR_UPDATE`) and its `EXIT` trap (`rollback_services_on_failure`, layered on top of `scripts/lib/ui.sh`'s existing `cleanup_on_exit`) restarts `eas-station.target` automatically whenever the script exits non-zero after stopping them — a failure partway through now means a brief, self-healed outage with a clear error in the log instead of a silent, indefinite one.
+- **Root cause of that specific failure**: the git-directory ownership check before `git fetch` only inspected the top-level `.git` directory (`stat -c '%U' .git`), so files/subdirectories left owned by `root` by an earlier root-level git operation (e.g. this same script's own "retry as root" fallback on a failed `git reset`) went undetected — the check reported "ownership is correct" right before `fetch` failed on exactly those paths. The check is now recursive (`find .git ! -user "$SERVICE_USER"`).
+- `cleanup_on_exit` (`scripts/lib/ui.sh`, shared with `install.sh`) now accepts an optional explicit exit code argument so a script-specific wrapper trap (like `update.sh`'s new one) can run its own logic first without clobbering `$?` before handing off to it.
+
 ## [3.22.0] - 2026-09-20 - Add a public, no-login System Status page
 
 ### Added
