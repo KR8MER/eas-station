@@ -31,6 +31,7 @@ include the underlying error message so an operator can act on the result.
 import logging
 import os
 import re
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -431,6 +432,126 @@ def check_ntp_sync() -> CheckResult:
     return out
 
 
+def check_outbound_connectivity() -> CheckResult:
+    """Test outbound reachability to the NOAA CAP endpoint over IPv4 and IPv6 separately.
+
+    An interface can have a valid IPv6 address and default route (SLAAC
+    succeeded, `ip -6 addr` looks fine) while still having no real upstream
+    IPv6 transit -- every connection attempt over that family just hangs
+    until timeout. Since a resolver commonly returns AAAA records first when
+    both exist, that failure mode is invisible from interface/route state
+    alone and silently adds delay to every outbound call to a dual-stack
+    host (see check_poll_latency() for the symptom this produces in the
+    poller). Testing each family's actual TCP connect, not just local
+    config, is the only way to catch it from this box.
+
+    IPv4 failing here means the box cannot reach NOAA at all and is
+    reported as a failure. IPv6 failing is reported as a warning, not a
+    failure -- losing IPv6 does not break alert polling as long as IPv4
+    still works, so it should not read as severely as an outright outage.
+    """
+    out = _empty_result()
+    host = "api.weather.gov"
+    port = 443
+    connect_timeout = 5.0
+
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        out["failed"].append(f"DNS resolution for {host} failed: {exc}")
+        return out
+
+    for family, label, bucket_on_fail in (
+        (socket.AF_INET, "IPv4", "failed"),
+        (socket.AF_INET6, "IPv6", "warnings"),
+    ):
+        candidates = [info for info in infos if info[0] == family]
+        if not candidates:
+            out["info"].append(f"{host} has no {label} address on record — skipping {label} test")
+            continue
+
+        sockaddr = candidates[0][4]
+        addr = sockaddr[0]
+        t0 = time.perf_counter()
+        try:
+            with socket.socket(family, socket.SOCK_STREAM) as sock:
+                sock.settimeout(connect_timeout)
+                sock.connect(sockaddr)
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            out["passed"].append(f"{label} connect to {host} ({addr}) succeeded in {elapsed_ms:.0f} ms")
+        except (socket.timeout, TimeoutError):
+            out[bucket_on_fail].append(
+                f"{label} connect to {host} ({addr}) timed out after {connect_timeout:.0f}s — "
+                f"address resolves but has no working {label} route/transit"
+            )
+        except OSError as exc:
+            out[bucket_on_fail].append(f"{label} connect to {host} ({addr}) failed: {exc}")
+
+    return out
+
+
+def check_poll_latency() -> CheckResult:
+    """Surface the alert poller's recent per-cycle fetch duration.
+
+    ``poll_history.execution_time_ms`` is recorded on every cycle but was
+    never shown anywhere, so a poll that quietly started taking 20-30s
+    instead of its normal ~1s (e.g. exactly the outbound-connectivity
+    failure mode check_outbound_connectivity() probes for) had no visible
+    symptom short of alerts arriving late. Thresholds are calibrated off
+    this project's own observed baseline: normal cycles run 700-950ms with
+    occasional blips up to ~7s, so 5s/8s (warning) and 15s/20s (failure)
+    give real margin above normal jitter while still catching a poll stuck
+    anywhere near the poller's own 30s CAP_TIMEOUT.
+    """
+    out = _empty_result()
+    try:
+        from app_core.models import PollHistory
+
+        recent = (
+            PollHistory.query
+            .order_by(PollHistory.timestamp.desc())
+            .limit(10)
+            .all()
+        )
+    except Exception as exc:
+        out["warnings"].append(f"Could not read poll history: {exc}")
+        return out
+
+    if not recent:
+        out["info"].append("No poll history yet — the poller may not have run since startup")
+        return out
+
+    durations = [r.execution_time_ms for r in recent if r.execution_time_ms is not None]
+    if not durations:
+        out["info"].append("Recent poll history rows have no recorded execution time")
+        return out
+
+    avg_ms = sum(durations) / len(durations)
+    max_ms = max(durations)
+    latest = recent[0]
+
+    summary = (
+        f"Last {len(durations)} poll(s): avg {avg_ms:.0f} ms, max {max_ms:.0f} ms "
+        f"(most recent: {latest.execution_time_ms} ms, {latest.data_source or 'unknown source'})"
+    )
+
+    if avg_ms >= 15000 or max_ms >= 20000:
+        out["failed"].append(summary)
+        out["info"].append(
+            "Poll cycles are taking far longer than the normal ~1s — check the "
+            "Outbound Connectivity result above, or NOAA/IPAWS status"
+        )
+    elif avg_ms >= 5000 or max_ms >= 8000:
+        out["warnings"].append(summary)
+        out["info"].append(
+            "Poll cycles are slower than normal; a broken IPv6 path with a working "
+            "IPv4 fallback is a common cause — see the Outbound Connectivity check"
+        )
+    else:
+        out["passed"].append(summary)
+    return out
+
+
 _LOG_ERROR_PATTERN = re.compile(
     r"\b(ERROR|CRITICAL|Traceback|Exception)\b", flags=re.IGNORECASE
 )
@@ -487,6 +608,8 @@ CHECKS: List[Tuple[str, Callable[[], CheckResult]]] = [
     ("Audio Service", check_audio_service_heartbeat),
     ("Audio Devices", check_audio_devices),
     ("NTP Sync", check_ntp_sync),
+    ("Outbound Connectivity", check_outbound_connectivity),
+    ("Poll Latency", check_poll_latency),
     ("Recent Logs", check_recent_logs),
 ]
 

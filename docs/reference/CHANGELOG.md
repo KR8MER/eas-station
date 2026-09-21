@@ -7,6 +7,14 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.23.0] - 2026-09-21 - Add Outbound Connectivity and Poll Latency diagnostics
+
+### Added
+- **Two new checks on the Diagnostics page (`/diagnostics`): "Outbound Connectivity" and "Poll Latency".** Added after a live investigation found a Wi-Fi interface with a valid global IPv6 address and default route that nonetheless had no working upstream IPv6 transit — every connection attempt over that family just hung until timeout. Nothing in the existing diagnostics suite tested outbound reachability at all, so this class of problem was invisible without SSH access.
+  - **Outbound Connectivity** resolves and connects to `api.weather.gov` (the actual NOAA CAP endpoint the poller hits) over IPv4 and IPv6 *separately*. IPv4 failing is reported as a failure (the box genuinely cannot reach NOAA); IPv6 failing is reported as a warning, not a failure, since IPv4 fallback keeps alert polling working.
+  - **Poll Latency** surfaces `poll_history.execution_time_ms`, which was already recorded on every poll cycle but never shown anywhere. Thresholds (5s/8s warning, 15s/20s failure) are calibrated off this project's own observed baseline (normal cycles run 700-950ms) and catch a poll stuck in the IPv6-fallback-delay failure mode well before it approaches the poller's own 30s `CAP_TIMEOUT`.
+  - Both are plain functions added to the existing `CHECKS` list in `webapp/routes_diagnostics.py` — no new routes or templates needed, since the Diagnostics page and its API already render whatever is in that list generically.
+
 ## [3.22.3] - 2026-09-21 - Fix invisible section headings on 7 dark themes
 
 ### Fixed
