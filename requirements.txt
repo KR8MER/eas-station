@@ -20,7 +20,7 @@ Brotli==1.2.0  # Brotli encoder used by Flask-Compress (preferred over gzip)
 Werkzeug==3.1.8
 
 # Web framework support dependencies
-python-socketio==5.16.4  # Socket.IO support for Flask-SocketIO
+python-socketio==5.17.0  # Socket.IO support for Flask-SocketIO
 jinja2==3.1.6  # Template rendering
 itsdangerous==2.2.0  # Secure session cookies and CSRF tokens
 
