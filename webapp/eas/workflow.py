@@ -75,6 +75,7 @@ from app_utils.fips_codes import (
     get_extended_state_county_tree,
     state_index_from_tree,
 )
+from webapp.admin.api.routes_alert_export import _run_off_worker
 
 ALLOWED_AUDIO_EXTENSIONS = {'.wav', '.mp3', '.ogg', '.aac', '.flac'}
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
@@ -521,8 +522,6 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             workflow_logger.error('Failed to build manual SAME header: %s', exc)
             return jsonify({'error': 'Unable to build SAME header.'}), 500
 
-        generator = EASAudioGenerator(manual_config, logger=workflow_logger)
-
         # FCC 47 CFR §11.61(a)(1)(ii): RWT carries SAME header + EOM only —
         # no Attention Signal, no voice narration. Enforced unconditionally
         # in build_manual_components(); mirror it here so the saved record
@@ -537,17 +536,50 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
         uploaded_pre_alert = _read_upload_file('pre_alert_audio', workflow_logger)
         uploaded_post_alert = _read_upload_file('post_alert_audio', workflow_logger)
 
+        # SAME/FSK tone synthesis (and pyttsx3 narration, when that's the
+        # configured TTS provider) is pure-Python, sample-by-sample CPU work
+        # with no I/O yield points -- on this app's gevent worker model that
+        # blocks the *entire worker process* for the full synthesis duration,
+        # stalling every other concurrent request routed to that worker
+        # (the same bug already found and fixed for alert image export; see
+        # _run_off_worker's docstring). Run it off the request greenlet.
+        #
+        # build_manual_components() falls back to Flask-SQLAlchemy's
+        # `Model.query` for the pronunciation dictionary when handed no
+        # db_session, which raises outside an app context -- there is none
+        # on the plain OS thread _run_off_worker uses. Hand it an explicit
+        # session bound to the same engine instead, exactly like the image
+        # export fix's `render_session`.
+        from sqlalchemy.orm import sessionmaker
+
+        # db.engine needs an app context to resolve (it reads current_app
+        # internally) -- must be looked up here, on the request greenlet,
+        # not inside _generate(), which runs on a plain thread with no app
+        # context pushed at all.
+        engine = db.engine
+        Session = sessionmaker(bind=engine)
+
+        def _generate():
+            render_session = Session()
+            try:
+                generator = EASAudioGenerator(
+                    manual_config, logger=workflow_logger, db_session=render_session,
+                )
+                return generator.build_manual_components(
+                    alert_object,
+                    header,
+                    tone_profile=tone_profile,
+                    tone_duration=tone_seconds,
+                    include_tts=include_tts,
+                    narration_upload_samples=uploaded_narration,
+                    pre_alert_samples=uploaded_pre_alert,
+                    post_alert_samples=uploaded_post_alert,
+                )
+            finally:
+                render_session.close()
+
         try:
-            components = generator.build_manual_components(
-                alert_object,
-                header,
-                tone_profile=tone_profile,
-                tone_duration=tone_seconds,
-                include_tts=include_tts,
-                narration_upload_samples=uploaded_narration,
-                pre_alert_samples=uploaded_pre_alert,
-                post_alert_samples=uploaded_post_alert,
-            )
+            components = _run_off_worker(_generate)
         except Exception as exc:
             workflow_logger.error('Manual EAS generation failed: %s', exc)
             workflow_logger.exception('Manual EAS generation exception details:')
