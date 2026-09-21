@@ -159,7 +159,7 @@ pyproj==3.8.0  # CRS reprojection from shapefile .prj to WGS84 (optional, gracef
 # Python ecosystem. `arm_pyart` has no prebuilt ARM wheel (piwheels
 # covers its dependencies but not the package itself) -- expect a ~5-6
 # minute from-source build the first time, one-time cost.
-arm_pyart==2.2.5  # NEXRAD Archive II decode; RadarMapDisplay.plot_ppi_map renders each gate's true polar footprint, no interpolation (PyPI name; imports as `pyart`)
+arm_pyart==2.3.0  # NEXRAD Archive II decode; RadarMapDisplay.plot_ppi_map renders each gate's true polar footprint, no interpolation (PyPI name; imports as `pyart`)
 # arm_pyart requires fsspec and s3fs but only loosely (fsspec>=2021.11.0),
 # and neither is otherwise pinned here. Older s3fs releases hard-pin an
 # exact matching fsspec version (e.g. s3fs==2025.3.1 requires
