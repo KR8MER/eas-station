@@ -12,7 +12,7 @@
 [![Jinja2](https://img.shields.io/badge/Jinja2-3.1.6-B41717?style=flat-square&logo=jinja&logoColor=white)](https://jinja.palletsprojects.com/)
 [![Socket.IO](https://img.shields.io/badge/Socket.IO-5.16.4-010101?style=flat-square&logo=socketdotio&logoColor=white)](https://socket.io/)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0.52-CA2C39?style=flat-square&logo=sqlalchemy&logoColor=white)](https://www.sqlalchemy.org/)
-[![Alembic](https://img.shields.io/badge/Alembic-1.19.2-6BA3BE?style=flat-square&logo=sqlalchemy&logoColor=white)](https://alembic.sqlalchemy.org/)
+[![Alembic](https://img.shields.io/badge/Alembic-1.20.0-6BA3BE?style=flat-square&logo=sqlalchemy&logoColor=white)](https://alembic.sqlalchemy.org/)
 [![PostgreSQL + PostGIS](https://img.shields.io/badge/PostgreSQL-17%20%2B%20PostGIS-0093D0?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-8.0-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
 [![Gunicorn](https://img.shields.io/badge/Gunicorn-26.2.0-499848?style=flat-square&logo=gunicorn&logoColor=white)](https://gunicorn.org/)
@@ -489,7 +489,7 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 | Library | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
 | SQLAlchemy | 2.0.52 | MIT | ORM for every persisted entity — alerts, settings, audit logs, RBAC, GPS samples. | https://www.sqlalchemy.org/ |
-| Alembic | 1.19.2 | MIT | Schema migrations (`app_core/migrations/versions/*`); `alembic upgrade head` runs on install/update. | https://alembic.sqlalchemy.org/ |
+| Alembic | 1.20.0 | MIT | Schema migrations (`app_core/migrations/versions/*`); `alembic upgrade head` runs on install/update. | https://alembic.sqlalchemy.org/ |
 | psycopg2‑binary | 2.9.12 | LGPL‑3.0 | Sync PostgreSQL driver SQLAlchemy talks to. | https://www.psycopg.org/ |
 | GeoAlchemy2 | 0.20.0 | MIT | SQLAlchemy types and ST_* function bindings for PostGIS geometry/geography columns. | https://geoalchemy-2.readthedocs.io/ |
 | PostgreSQL | 17 | PostgreSQL | Primary database (alerts, users, audit, configuration). | https://www.postgresql.org/ |
