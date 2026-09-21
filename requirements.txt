@@ -29,7 +29,7 @@ SQLAlchemy==2.0.52
 psycopg2-binary==2.9.13  # Sync PostgreSQL driver
 GeoAlchemy2==0.20.0
 Alembic==1.19.2
-greenlet==3.5.5  # Required for SQLAlchemy 2.0 sync operations with gevent
+greenlet==3.5.6  # Required for SQLAlchemy 2.0 sync operations with gevent
 
 # HTTP client for API calls
 requests==2.34.2
