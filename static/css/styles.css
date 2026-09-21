@@ -1225,6 +1225,37 @@
     background: color-mix(in srgb, #0d1b2a 8%, transparent);
 }
 
+/* Headings inside these same regions have the identical problem to `code`
+   above, and for the same reason: the global `h1, h2, h3, h4, h5, h6, .h1,
+   .h2, .h3, .h4, .h5, .h6 { color: var(--text-color) }` rule (Typography
+   section) is a declaration directly on the element itself -- matched via
+   its `.h5`/`.h6` utility class, not just the bare tag -- so it always wins
+   over inheriting the dark ink from a parent like `.workflow-card >
+   .card-header` or `.feature-group` above, regardless of that ancestor
+   rule's specificity. This was the widest-reaching instance of the bug:
+   every card-header title on the Broadcast Builder page (`<h2 class="h5">`),
+   every section heading on the LED Control page (`<h3 class="h6">` inside
+   `.feature-group`), and the dashboard's "Active Alerts by Type" heading
+   inside `.alert-summary-panel` all rendered in near-white --text-color on
+   these themes' own pale --light-color backgrounds -- confirmed live via a
+   screenshot of the dashboard on the lightning theme. */
+:is([data-theme="lightning"],
+    [data-theme="aurora"],
+    [data-theme="nebula"],
+    [data-theme="midnight"],
+    [data-theme="charcoal"],
+    [data-theme="obsidian"],
+    [data-theme="slate"]) :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row) :is(h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6) {
+    color: #0d1b2a;
+}
+
 /* ----------------------------------------------------------------------------
    Bootstrap .form-text helper text
    ----------------------------------------------------------------------------
