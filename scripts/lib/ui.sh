@@ -991,7 +991,11 @@ show_celebration() {
 # sourcing this file (defaulting to a generic message).
 FAILURE_TITLE="${FAILURE_TITLE:-Script Failed}"
 cleanup_on_exit() {
-    local exit_code=$?
+    # Accepts an optional explicit exit code so a caller-specific EXIT trap
+    # (update.sh's rollback_services_on_failure) can run its own logic first
+    # -- which would otherwise overwrite $? before this function's default
+    # `$?` capture ever ran -- and still hand this function the real code.
+    local exit_code="${1:-$?}"
     # A script that aborts mid-run (Ctrl+C, a hard failure) may still have
     # the gauge open -- close it before this trap's own whiptail msgbox
     # tries to draw, same reasoning as show_celebration.
