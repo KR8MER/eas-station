@@ -30,6 +30,8 @@ from app_utils.eas_fsk import (
     SAME_BAUD,
     SAME_MARK_FREQ,
     SAME_SPACE_FREQ,
+    apply_edge_ramp,
+    apply_low_pass_filter,
     generate_fsk_samples,
 )
 
@@ -74,3 +76,100 @@ def test_generate_fsk_samples_matches_reference_script():
 
     assert actual == expected
     assert len(actual) == len(bits) * int(round(sample_rate / BIT_RATE))
+
+
+def test_apply_edge_ramp_fades_through_zero_without_changing_length():
+    # A constant-amplitude "tone" concatenated with silence would otherwise
+    # step straight from 0 to full scale -- an audible click. The ramp must
+    # bring the very first/last sample to (near) zero and leave the middle
+    # of the segment untouched.
+    sample_rate = 8000
+    peak = 30000
+    samples = [peak] * 400  # 50 ms, well over the ~5 ms ramp window
+
+    ramped = apply_edge_ramp(samples, sample_rate)
+
+    assert len(ramped) == len(samples)
+    assert ramped[0] == 0
+    assert ramped[-1] == 0
+    assert ramped[len(ramped) // 2] == peak
+    # Monotonically rises from 0 up to full scale over the ramp window.
+    ramp_window = ramped[:40]
+    assert ramp_window == sorted(ramp_window)
+
+
+def test_apply_edge_ramp_leaves_short_segments_unchanged():
+    # A segment shorter than 4 samples has no meaningful "edge" to ramp;
+    # returning it unchanged avoids degenerate zero-length ramp windows.
+    tiny = [100, -100, 100]
+    assert apply_edge_ramp(tiny, sample_rate=8000) == tiny
+
+
+def test_same_header_burst_edges_are_softened_end_to_end():
+    """Regression test for the harsh/splattery software-encoder audio
+    reported vs. a hardware ENDEC (e.g. Sage 3644): every generated burst
+    must fade in/out at its edges rather than stepping to full scale."""
+    sample_rate = 11025
+    amplitude = 0.7 * 32767
+    bits = [1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0]
+
+    burst = apply_edge_ramp(
+        generate_fsk_samples(
+            bits,
+            sample_rate=sample_rate,
+            bit_rate=BIT_RATE,
+            mark_freq=SAME_MARK_FREQ,
+            space_freq=SAME_SPACE_FREQ,
+            amplitude=amplitude,
+        ),
+        sample_rate,
+    )
+
+    assert burst[0] == 0
+    assert burst[-1] == 0
+    # Well inside the burst, samples should be free to reach full scale --
+    # only the edges are tamed.
+    assert max(abs(s) for s in burst[100:-100]) > 0.9 * amplitude
+
+
+def _rms(samples):
+    return math.sqrt(sum(s * s for s in samples) / len(samples))
+
+
+def _tone(freq_hz, sample_rate, seconds, amplitude=20000):
+    n = int(seconds * sample_rate)
+    return [
+        int(math.sin(2 * math.pi * freq_hz * i / sample_rate) * amplitude)
+        for i in range(n)
+    ]
+
+
+def test_apply_low_pass_filter_attenuates_above_cutoff_preserves_below():
+    sample_rate = 44100
+    low_tone = _tone(1000.0, sample_rate, 0.2)  # well below the 4 kHz default cutoff
+    high_tone = _tone(12000.0, sample_rate, 0.2)  # well above it
+
+    low_filtered = apply_low_pass_filter(low_tone, sample_rate)
+    high_filtered = apply_low_pass_filter(high_tone, sample_rate)
+
+    assert len(low_filtered) == len(low_tone)
+    assert len(high_filtered) == len(high_tone)
+    # In-band content should survive largely intact...
+    assert _rms(low_filtered) > 0.8 * _rms(low_tone)
+    # ...while content well above the cutoff should be substantially cut.
+    assert _rms(high_filtered) < 0.2 * _rms(high_tone)
+
+
+def test_apply_low_pass_filter_clamps_cutoff_below_nyquist_at_8khz():
+    # This codebase also supports 8 kHz operation (test_8khz_stress_test.py);
+    # the default 4 kHz cutoff sits exactly at Nyquist there and scipy
+    # rejects that outright unless the cutoff is clamped down first.
+    sample_rate = 8000
+    tone = _tone(1000.0, sample_rate, 0.2)
+    filtered = apply_low_pass_filter(tone, sample_rate)
+    assert len(filtered) == len(tone)
+
+
+def test_apply_low_pass_filter_leaves_short_segments_unchanged():
+    tiny = [100, -100, 100]
+    assert apply_low_pass_filter(tiny, sample_rate=8000) == tiny

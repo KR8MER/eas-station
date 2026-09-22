@@ -26,7 +26,15 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from ..eas_fsk import SAME_BAUD, SAME_MARK_FREQ, SAME_SPACE_FREQ, encode_same_bits, generate_fsk_samples
+from ..eas_fsk import (
+    SAME_BAUD,
+    SAME_MARK_FREQ,
+    SAME_SPACE_FREQ,
+    apply_edge_ramp,
+    apply_low_pass_filter,
+    encode_same_bits,
+    generate_fsk_samples,
+)
 from ..eas_tts import TTSEngine
 
 from .audio_conversion import _convert_audio_to_samples, _fetch_embedded_audio
@@ -107,13 +115,19 @@ class EASAudioGenerator:
 
         same_bits = encode_same_bits(header, include_preamble=True)
         amplitude = 0.7 * 32767
-        header_samples = generate_fsk_samples(
-            same_bits,
-            sample_rate=self.sample_rate,
-            bit_rate=float(SAME_BAUD),
-            mark_freq=SAME_MARK_FREQ,
-            space_freq=SAME_SPACE_FREQ,
-            amplitude=amplitude,
+        header_samples = apply_edge_ramp(
+            apply_low_pass_filter(
+                generate_fsk_samples(
+                    same_bits,
+                    sample_rate=self.sample_rate,
+                    bit_rate=float(SAME_BAUD),
+                    mark_freq=SAME_MARK_FREQ,
+                    space_freq=SAME_SPACE_FREQ,
+                    amplitude=amplitude,
+                ),
+                self.sample_rate,
+            ),
+            self.sample_rate,
         )
         terminator_samples = self._terminator_samples(amplitude)
 
@@ -342,13 +356,19 @@ class EASAudioGenerator:
         # build_manual_components() and satisfying FCC 47 CFR §11.31.
         eom_header = build_eom_header(self.config)
         eom_bits = encode_same_bits(eom_header, include_preamble=True, include_cr=False)
-        eom_header_samples = generate_fsk_samples(
-            eom_bits,
-            sample_rate=self.sample_rate,
-            bit_rate=float(SAME_BAUD),
-            mark_freq=SAME_MARK_FREQ,
-            space_freq=SAME_SPACE_FREQ,
-            amplitude=amplitude,
+        eom_header_samples = apply_edge_ramp(
+            apply_low_pass_filter(
+                generate_fsk_samples(
+                    eom_bits,
+                    sample_rate=self.sample_rate,
+                    bit_rate=float(SAME_BAUD),
+                    mark_freq=SAME_MARK_FREQ,
+                    space_freq=SAME_SPACE_FREQ,
+                    amplitude=amplitude,
+                ),
+                self.sample_rate,
+            ),
+            self.sample_rate,
         )
         eom_raw_samples: List[int] = []
         for burst_index in range(3):
@@ -492,13 +512,19 @@ class EASAudioGenerator:
 
         same_bits = encode_same_bits(header, include_preamble=True, include_cr=False)
         amplitude = 0.7 * 32767
-        header_samples = generate_fsk_samples(
-            same_bits,
-            sample_rate=self.sample_rate,
-            bit_rate=float(SAME_BAUD),
-            mark_freq=SAME_MARK_FREQ,
-            space_freq=SAME_SPACE_FREQ,
-            amplitude=amplitude,
+        header_samples = apply_edge_ramp(
+            apply_low_pass_filter(
+                generate_fsk_samples(
+                    same_bits,
+                    sample_rate=self.sample_rate,
+                    bit_rate=float(SAME_BAUD),
+                    mark_freq=SAME_MARK_FREQ,
+                    space_freq=SAME_SPACE_FREQ,
+                    amplitude=amplitude,
+                ),
+                self.sample_rate,
+            ),
+            self.sample_rate,
         )
         terminator_samples = self._terminator_samples(amplitude)
 
@@ -560,13 +586,19 @@ class EASAudioGenerator:
 
         amplitude = 0.7 * 32767
         same_bits = encode_same_bits(header, include_preamble=True)
-        header_samples = generate_fsk_samples(
-            same_bits,
-            sample_rate=self.sample_rate,
-            bit_rate=float(SAME_BAUD),
-            mark_freq=SAME_MARK_FREQ,
-            space_freq=SAME_SPACE_FREQ,
-            amplitude=amplitude,
+        header_samples = apply_edge_ramp(
+            apply_low_pass_filter(
+                generate_fsk_samples(
+                    same_bits,
+                    sample_rate=self.sample_rate,
+                    bit_rate=float(SAME_BAUD),
+                    mark_freq=SAME_MARK_FREQ,
+                    space_freq=SAME_SPACE_FREQ,
+                    amplitude=amplitude,
+                ),
+                self.sample_rate,
+            ),
+            self.sample_rate,
         )
         terminator_samples = self._terminator_samples(amplitude)
 
@@ -659,13 +691,19 @@ class EASAudioGenerator:
 
         eom_header = build_eom_header(self.config)
         eom_bits = encode_same_bits(eom_header, include_preamble=True, include_cr=False)
-        eom_header_samples = generate_fsk_samples(
-            eom_bits,
-            sample_rate=self.sample_rate,
-            bit_rate=float(SAME_BAUD),
-            mark_freq=SAME_MARK_FREQ,
-            space_freq=SAME_SPACE_FREQ,
-            amplitude=amplitude,
+        eom_header_samples = apply_edge_ramp(
+            apply_low_pass_filter(
+                generate_fsk_samples(
+                    eom_bits,
+                    sample_rate=self.sample_rate,
+                    bit_rate=float(SAME_BAUD),
+                    mark_freq=SAME_MARK_FREQ,
+                    space_freq=SAME_SPACE_FREQ,
+                    amplitude=amplitude,
+                ),
+                self.sample_rate,
+            ),
+            self.sample_rate,
         )
 
         eom_samples: List[int] = []
