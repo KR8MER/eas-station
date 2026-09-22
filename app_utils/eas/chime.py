@@ -22,6 +22,8 @@ Repository: https://github.com/KR8MER/eas-station
 import math
 from typing import Dict, List, Optional, Tuple
 
+from ..eas_fsk import apply_edge_ramp, apply_low_pass_filter
+
 # Standard DTMF tone-pair frequency map: digit -> (low Hz, high Hz).
 # Source: ITU-T Recommendation Q.23 / Q.24.
 _DTMF_FREQUENCIES: Dict[str, Tuple[float, float]] = {
@@ -123,13 +125,15 @@ def _generate_chime(
         out: List[int] = []
         for idx, digit in enumerate(digits):
             f_low, f_high = _DTMF_FREQUENCIES[digit]
+            digit_samples: List[int] = []
             for n in range(tone_samples):
                 t = n / sample_rate
                 value = (
                     math.sin(2 * math.pi * f_low * t)
                     + math.sin(2 * math.pi * f_high * t)
                 )
-                out.append(int(value * per_tone_amp))
+                digit_samples.append(int(value * per_tone_amp))
+            out.extend(apply_edge_ramp(apply_low_pass_filter(digit_samples, sample_rate), sample_rate))
             if idx < len(digits) - 1:
                 out.extend([0] * gap_samples)
         return out
@@ -148,7 +152,7 @@ def _generate_chime(
         for n in range(total_samples):
             t = n / sample_rate
             samples.append(int(math.sin(2 * math.pi * freq * t) * amplitude))
-        return samples
+        return apply_edge_ramp(apply_low_pass_filter(samples, sample_rate), sample_rate)
 
     if name == 'bell':
         # 880 Hz sine with an exponential amplitude decay (-decay_rate * t).
@@ -159,7 +163,7 @@ def _generate_chime(
             t = n / sample_rate
             envelope = math.exp(-decay_rate * t)
             samples.append(int(math.sin(2 * math.pi * freq * t) * envelope * amplitude))
-        return samples
+        return apply_edge_ramp(apply_low_pass_filter(samples, sample_rate), sample_rate)
 
     if name in ('three_tone', 'threetone', '3tone', '3_tone'):
         freqs = (440.0, 880.0, 1320.0)
@@ -168,9 +172,14 @@ def _generate_chime(
             # Last tone absorbs any rounding remainder so the total length matches.
             tone_len = per_tone if idx < len(freqs) - 1 else (total_samples - per_tone * (len(freqs) - 1))
             tone_len = max(1, tone_len)
+            segment: List[int] = []
             for n in range(tone_len):
                 t = n / sample_rate
-                samples.append(int(math.sin(2 * math.pi * freq * t) * amplitude))
+                segment.append(int(math.sin(2 * math.pi * freq * t) * amplitude))
+            # Filtered and ramped per-segment (not just at the ends of the whole
+            # chime) so the 440->880->1320 Hz jumps between tones don't
+            # themselves click.
+            samples.extend(apply_edge_ramp(apply_low_pass_filter(segment, sample_rate), sample_rate))
         return samples
 
     if name in ('qc2', 'qcii', 'quickcall', 'quick_call', 'two_tone'):
@@ -192,13 +201,20 @@ def _generate_chime(
 
         a_samples = max(1, int(1.0 * sample_rate))
         b_samples = max(1, int(4.0 * sample_rate))
-        out: List[int] = []
+        tone_a: List[int] = []
         for n in range(a_samples):
             t = n / sample_rate
-            out.append(int(math.sin(2 * math.pi * freq_a * t) * amplitude))
+            tone_a.append(int(math.sin(2 * math.pi * freq_a * t) * amplitude))
+        tone_b: List[int] = []
         for n in range(b_samples):
             t = n / sample_rate
-            out.append(int(math.sin(2 * math.pi * freq_b * t) * amplitude))
+            tone_b.append(int(math.sin(2 * math.pi * freq_b * t) * amplitude))
+        # Filtered and ramped individually so the Tone A -> Tone B handoff
+        # doesn't click.
+        out: List[int] = (
+            apply_edge_ramp(apply_low_pass_filter(tone_a, sample_rate), sample_rate)
+            + apply_edge_ramp(apply_low_pass_filter(tone_b, sample_rate), sample_rate)
+        )
 
         # Optional long tone: a sustained steady tone at Tone B frequency
         # appended after the standard A + B sequence.
@@ -209,9 +225,11 @@ def _generate_chime(
                 long_secs = 10.0
             long_secs = max(1.0, min(120.0, long_secs))
             long_samples = max(1, int(long_secs * sample_rate))
+            long_tone: List[int] = []
             for n in range(long_samples):
                 t = n / sample_rate
-                out.append(int(math.sin(2 * math.pi * freq_b * t) * amplitude))
+                long_tone.append(int(math.sin(2 * math.pi * freq_b * t) * amplitude))
+            out.extend(apply_edge_ramp(apply_low_pass_filter(long_tone, sample_rate), sample_rate))
 
         return out
 
@@ -250,13 +268,19 @@ def _generate_chime(
             if 1 <= _t <= 0xFFFF:
                 target_int = _t
 
-        return generate_mdc1200_samples(
-            opcode=op,
-            arg=arg,
-            unit_id=unit_id_int,
-            sample_rate=sample_rate,
-            amplitude=amplitude,
-            target_unit_id=target_int,
+        return apply_edge_ramp(
+            apply_low_pass_filter(
+                generate_mdc1200_samples(
+                    opcode=op,
+                    arg=arg,
+                    unit_id=unit_id_int,
+                    sample_rate=sample_rate,
+                    amplitude=amplitude,
+                    target_unit_id=target_int,
+                ),
+                sample_rate,
+            ),
+            sample_rate,
         )
 
     # Unknown profile: be safe and emit no chime rather than raise.

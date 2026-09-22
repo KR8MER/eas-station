@@ -30,6 +30,8 @@ from ..eas_fsk import (
     SAME_BAUD,
     SAME_MARK_FREQ,
     SAME_SPACE_FREQ,
+    apply_edge_ramp,
+    apply_low_pass_filter,
     encode_terminator_bits,
     generate_fsk_samples,
 )
@@ -45,7 +47,7 @@ def _generate_tone(freqs: Iterable[float], duration: float, sample_rate: int, am
         value = sum(math.sin(2 * math.pi * freq * t) for freq in freqs)
         value /= max(len(freqs), 1)
         samples.append(int(value * amplitude))
-    return samples
+    return apply_edge_ramp(apply_low_pass_filter(samples, sample_rate), sample_rate)
 
 
 
@@ -160,13 +162,19 @@ def _generate_station_terminator_samples(amplitude: float, sample_rate: int) -> 
     decoded).  Our own decoder captures the run and reports ENDEC_MODE_EAS_STATION.
     """
     bits = encode_terminator_bits(0xA9, 3)
-    return generate_fsk_samples(
-        bits,
-        sample_rate=sample_rate,
-        bit_rate=float(SAME_BAUD),
-        mark_freq=SAME_MARK_FREQ,
-        space_freq=SAME_SPACE_FREQ,
-        amplitude=amplitude,
+    return apply_edge_ramp(
+        apply_low_pass_filter(
+            generate_fsk_samples(
+                bits,
+                sample_rate=sample_rate,
+                bit_rate=float(SAME_BAUD),
+                mark_freq=SAME_MARK_FREQ,
+                space_freq=SAME_SPACE_FREQ,
+                amplitude=amplitude,
+            ),
+            sample_rate,
+        ),
+        sample_rate,
     )
 
 
