@@ -32,7 +32,9 @@ from ..eas_fsk import (
     SAME_SPACE_FREQ,
     apply_edge_ramp,
     apply_low_pass_filter,
+    apply_saturation,
     encode_same_bits,
+    encode_terminator_bits,
     generate_fsk_samples,
 )
 from ..eas_tts import TTSEngine
@@ -44,7 +46,6 @@ from .same_header_build import build_eom_header
 from .tone_generation import (
     POST_ALERT_SIGNAL_GAP_SECONDS,
     _generate_silence,
-    _generate_station_terminator_samples,
     _generate_tone,
     _mdc1200_meta_target_unit_id,
     _normalize_audio_amplitude,
@@ -91,11 +92,46 @@ class EASAudioGenerator:
         # the 3 × 0xA9 trill appended after each SAME burst.  Defaults to True.
         self._fingerprint_enabled = bool(config.get('endec_fingerprint', True))
 
-    def _terminator_samples(self, amplitude: float) -> List[int]:
-        """Return the station fingerprint samples, or [] when fingerprinting is disabled."""
-        if not self._fingerprint_enabled:
-            return []
-        return _generate_station_terminator_samples(amplitude, self.sample_rate)
+    def _build_header_burst(self, header_bits: List[int], amplitude: float) -> List[int]:
+        """Render one continuous SAME/EOM burst: header bits plus the 3 × 0xA9
+        station fingerprint terminator bits (when enabled), as a SINGLE
+        shaped FSK signal.
+
+        Every caller immediately concatenates the header with the
+        fingerprint terminator with zero gap between them -- they are one
+        continuous burst on the wire. An earlier version of this method
+        generated and shaped (band-limited + edge-ramped) the header and the
+        terminator as two independent segments, which introduced a spurious
+        amplitude dip exactly at their junction (each segment's own edge-ramp
+        faded toward zero right where the signal should have stayed at full
+        strength) and burned ~22% of the terminator's very short (~46 ms)
+        duration on its own redundant fade-in -- audibly weakening the
+        station's fingerprint trill even though the encoded bytes still
+        decoded correctly (see tests/test_eas_decode.py's EAS_STATION mode
+        detection). Building the combined bit sequence and shaping it ONCE
+        -- ramping only at the true start of the header and the true end of
+        the terminator -- fixes both.
+        """
+        combined_bits = list(header_bits)
+        if self._fingerprint_enabled:
+            combined_bits.extend(encode_terminator_bits(0xA9, 3))
+        return apply_edge_ramp(
+            apply_saturation(
+                apply_low_pass_filter(
+                    generate_fsk_samples(
+                        combined_bits,
+                        sample_rate=self.sample_rate,
+                        bit_rate=float(SAME_BAUD),
+                        mark_freq=SAME_MARK_FREQ,
+                        space_freq=SAME_SPACE_FREQ,
+                        amplitude=amplitude,
+                    ),
+                    self.sample_rate,
+                ),
+                self.sample_rate,
+            ),
+            self.sample_rate,
+        )
 
     def build_files(
         self,
@@ -115,21 +151,7 @@ class EASAudioGenerator:
 
         same_bits = encode_same_bits(header, include_preamble=True)
         amplitude = 0.7 * 32767
-        header_samples = apply_edge_ramp(
-            apply_low_pass_filter(
-                generate_fsk_samples(
-                    same_bits,
-                    sample_rate=self.sample_rate,
-                    bit_rate=float(SAME_BAUD),
-                    mark_freq=SAME_MARK_FREQ,
-                    space_freq=SAME_SPACE_FREQ,
-                    amplitude=amplitude,
-                ),
-                self.sample_rate,
-            ),
-            self.sample_rate,
-        )
-        terminator_samples = self._terminator_samples(amplitude)
+        header_samples = self._build_header_burst(same_bits, amplitude)
 
         samples: List[int] = []
         segment_samples: Dict[str, List[int]] = {
@@ -172,8 +194,6 @@ class EASAudioGenerator:
         for burst_index in range(3):
             samples.extend(header_samples)
             segment_samples['same'].extend(header_samples)
-            samples.extend(terminator_samples)
-            segment_samples['same'].extend(terminator_samples)
             silence = _generate_silence(1.0, self.sample_rate)
             samples.extend(silence)
             segment_samples['same'].extend(silence)
@@ -356,24 +376,10 @@ class EASAudioGenerator:
         # build_manual_components() and satisfying FCC 47 CFR §11.31.
         eom_header = build_eom_header(self.config)
         eom_bits = encode_same_bits(eom_header, include_preamble=True, include_cr=False)
-        eom_header_samples = apply_edge_ramp(
-            apply_low_pass_filter(
-                generate_fsk_samples(
-                    eom_bits,
-                    sample_rate=self.sample_rate,
-                    bit_rate=float(SAME_BAUD),
-                    mark_freq=SAME_MARK_FREQ,
-                    space_freq=SAME_SPACE_FREQ,
-                    amplitude=amplitude,
-                ),
-                self.sample_rate,
-            ),
-            self.sample_rate,
-        )
+        eom_header_samples = self._build_header_burst(eom_bits, amplitude)
         eom_raw_samples: List[int] = []
         for burst_index in range(3):
             eom_raw_samples.extend(eom_header_samples)
-            eom_raw_samples.extend(terminator_samples)
             if burst_index < 2:
                 eom_raw_samples.extend(_generate_silence(1.0, self.sample_rate))
         samples.extend(eom_raw_samples)
@@ -512,26 +518,11 @@ class EASAudioGenerator:
 
         same_bits = encode_same_bits(header, include_preamble=True, include_cr=False)
         amplitude = 0.7 * 32767
-        header_samples = apply_edge_ramp(
-            apply_low_pass_filter(
-                generate_fsk_samples(
-                    same_bits,
-                    sample_rate=self.sample_rate,
-                    bit_rate=float(SAME_BAUD),
-                    mark_freq=SAME_MARK_FREQ,
-                    space_freq=SAME_SPACE_FREQ,
-                    amplitude=amplitude,
-                ),
-                self.sample_rate,
-            ),
-            self.sample_rate,
-        )
-        terminator_samples = self._terminator_samples(amplitude)
+        header_samples = self._build_header_burst(same_bits, amplitude)
 
         samples: List[int] = []
         for burst_index in range(3):
             samples.extend(header_samples)
-            samples.extend(terminator_samples)
             if burst_index < 2:
                 samples.extend(_generate_silence(1.0, self.sample_rate))
 
@@ -586,27 +577,12 @@ class EASAudioGenerator:
 
         amplitude = 0.7 * 32767
         same_bits = encode_same_bits(header, include_preamble=True)
-        header_samples = apply_edge_ramp(
-            apply_low_pass_filter(
-                generate_fsk_samples(
-                    same_bits,
-                    sample_rate=self.sample_rate,
-                    bit_rate=float(SAME_BAUD),
-                    mark_freq=SAME_MARK_FREQ,
-                    space_freq=SAME_SPACE_FREQ,
-                    amplitude=amplitude,
-                ),
-                self.sample_rate,
-            ),
-            self.sample_rate,
-        )
-        terminator_samples = self._terminator_samples(amplitude)
+        header_samples = self._build_header_burst(same_bits, amplitude)
 
         repeats = max(1, int(repeats))
         same_samples: List[int] = []
         for burst_index in range(repeats):
             same_samples.extend(header_samples)
-            same_samples.extend(terminator_samples)
             if burst_index < repeats - 1:
                 same_samples.extend(_generate_silence(silence_between_headers, self.sample_rate))
 
@@ -691,25 +667,11 @@ class EASAudioGenerator:
 
         eom_header = build_eom_header(self.config)
         eom_bits = encode_same_bits(eom_header, include_preamble=True, include_cr=False)
-        eom_header_samples = apply_edge_ramp(
-            apply_low_pass_filter(
-                generate_fsk_samples(
-                    eom_bits,
-                    sample_rate=self.sample_rate,
-                    bit_rate=float(SAME_BAUD),
-                    mark_freq=SAME_MARK_FREQ,
-                    space_freq=SAME_SPACE_FREQ,
-                    amplitude=amplitude,
-                ),
-                self.sample_rate,
-            ),
-            self.sample_rate,
-        )
+        eom_header_samples = self._build_header_burst(eom_bits, amplitude)
 
         eom_samples: List[int] = []
         for burst_index in range(3):
             eom_samples.extend(eom_header_samples)
-            eom_samples.extend(terminator_samples)
             if burst_index < 2:
                 eom_samples.extend(_generate_silence(1.0, self.sample_rate))
 
