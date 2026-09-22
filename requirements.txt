@@ -86,7 +86,7 @@ pytest-asyncio==1.4.0  # For async test support
 pyttsx3==2.99  # Offline text-to-speech engine for the pyttsx3 provider
 
 # Audio processing for EAS decoding
-scipy==1.18.1  # Butterworth low-pass filtering of synthesized SAME/attention/chime audio (app_utils/eas_fsk.py::apply_low_pass_filter); not used for EAS resampling
+scipy==1.18.1  # Butterworth low-pass filtering + anti-aliased saturation of synthesized SAME/attention/chime audio (app_utils/eas_fsk.py); not used for EAS resampling
 pydub==0.25.1  # Audio stream decoding (MP3, AAC, OGG) for HTTP/Icecast streams
 numba>=0.67.0,<0.68.0  # JIT compilation for real-time FM demodulation (RBDS performance, 10-100x speedup)
 # Note: pydub requires ffmpeg to be installed via system packages (libavcodec, libavformat)
