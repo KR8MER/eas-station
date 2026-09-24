@@ -34,7 +34,11 @@ PrivateTmp=yes
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/tmp
+# Same writable set as the sibling units: /var/log/eas-station for the shared
+# eas_station.log file handler, /opt/eas-station for the broadcast WAV/text
+# files auto-forwarding writes under static/eas_messages.  With only /tmp
+# listed, both failed with EROFS on every start and every broadcast.
+ReadWritePaths=/tmp /opt/eas-station /var/log/eas-station
 
 [Install]
 WantedBy=multi-user.target eas-station.target

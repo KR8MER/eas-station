@@ -28,6 +28,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from flask import current_app, has_app_context
 from sqlalchemy import or_, text
+from sqlalchemy.orm import load_only
 
 from app_utils import ALERT_SOURCE_NOAA, normalize_alert_source, utc_now
 
@@ -244,8 +245,20 @@ def load_alert_plain_text_map(alert_ids: Sequence[int]) -> Dict[int, str]:
     if not alert_ids:
         return {}
 
+    # Only the text columns: EASMessage rows carry up to ~10 MB of bytea
+    # audio each, and the OLED screen manager calls this once per second.
+    # Loading the full rows made Postgres serialize every stored broadcast of
+    # an active alert on each call (188 MB/s once a watchdog-kill loop left 19
+    # copies of one alert behind).
     rows = (
         db.session.query(EASMessage)
+        .options(load_only(
+            EASMessage.id,
+            EASMessage.cap_alert_id,
+            EASMessage.text_payload,
+            EASMessage.text_filename,
+            EASMessage.created_at,
+        ))
         .filter(EASMessage.cap_alert_id.in_(alert_ids))
         .order_by(EASMessage.cap_alert_id.asc(), EASMessage.created_at.desc())
         .all()
