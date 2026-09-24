@@ -29,7 +29,10 @@ always safe to call.
 
 import os
 import socket
+import threading
 import time
+from contextlib import contextmanager
+from typing import Iterator
 
 
 def notify(state: str) -> bool:
@@ -77,3 +80,33 @@ class Watchdog:
         if now - self._last_kick >= self._min_interval:
             notify("WATCHDOG=1")
             self._last_kick = now
+
+
+@contextmanager
+def watchdog_keepalive(max_seconds: float, interval: float = 5.0) -> Iterator[None]:
+    """Keep the systemd watchdog fed while a known-long blocking call runs.
+
+    For work that legitimately blocks the kicking loop for longer than
+    ``WatchdogSec`` -- an EAS broadcast holds its thread for the full playout,
+    which can exceed three minutes -- a daemon thread sends ``WATCHDOG=1``
+    every ``interval`` seconds. The keepalive is *bounded*: after
+    ``max_seconds`` it stops, so a call that truly hangs past its budget is
+    still caught by the watchdog. A no-op when not running under systemd.
+    """
+    if not os.environ.get("NOTIFY_SOCKET"):
+        yield
+        return
+
+    stop = threading.Event()
+    deadline = time.monotonic() + max(0.0, max_seconds)
+
+    def _run() -> None:
+        while not stop.wait(interval) and time.monotonic() < deadline:
+            notify("WATCHDOG=1")
+
+    thread = threading.Thread(target=_run, name="watchdog-keepalive", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop.set()

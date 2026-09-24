@@ -149,6 +149,41 @@ def _collect_event_code_candidates(alert: object, payload: Dict[str, object]) ->
 
 
 
+def filter_same_codes_to_coverage(
+    same_codes: Iterable[str],
+    location_settings: Optional[Dict[str, object]],
+) -> List[str]:
+    """Keep only the SAME codes inside the configured broadcast area.
+
+    Alerts may cover many counties; only the codes matching our area go into
+    the SAME header, so the header reflects our coverage, not the full alert
+    area.  Nationwide (000000) and statewide (SS000) wildcards are preserved
+    as-is -- stripping them would let the caller's fallback substitute every
+    configured FIPS code, producing an incorrect header.  Returns the input
+    unchanged when no coverage codes are configured, and an empty list when
+    none match (callers decide their own fallback).
+    """
+    codes = list(same_codes or [])
+    configured_raw = (
+        (location_settings or {}).get('fips_codes')
+        or (location_settings or {}).get('same_codes')
+        or []
+    )
+    configured_normalised = set(
+        _normalise_same_codes([str(c).strip() for c in configured_raw if str(c).strip()])
+    )
+    if not configured_normalised:
+        return codes
+    filtered: List[str] = []
+    for code in codes:
+        norm = ''.join(ch for ch in str(code) if ch.isdigit()).zfill(6)
+        if norm == '000000' or (norm.endswith('000') and norm != '000000'):
+            filtered.append(code)
+        elif norm in configured_normalised:
+            filtered.append(code)
+    return filtered
+
+
 def build_same_header(alert: object, payload: Dict[str, object], config: Dict[str, object],
                       location_settings: Optional[Dict[str, object]] = None) -> Tuple[str, List[str], str]:
     event_name = (getattr(alert, 'event', '') or '').strip()
@@ -182,28 +217,7 @@ def build_same_header(alert: object, payload: Dict[str, object], config: Dict[st
     # Alerts may cover many counties; we only forward the codes that match our
     # area so the SAME header reflects our actual coverage, not the full alert area.
     if same_codes and location_settings:
-        configured_raw = (
-            location_settings.get('fips_codes')
-            or location_settings.get('same_codes')
-            or []
-        )
-        configured_normalised = set(
-            _normalise_same_codes([str(c).strip() for c in configured_raw if str(c).strip()])
-        )
-        if configured_normalised:
-            filtered: List[str] = []
-            for code in same_codes:
-                norm = ''.join(ch for ch in str(code) if ch.isdigit()).zfill(6)
-                # Nationwide (000000) and statewide (SS000) wildcards are preserved
-                # as-is — they must not be stripped by the per-county filter or the
-                # fallback will replace them with all configured FIPS codes, producing
-                # an incorrect broadcast header.
-                if norm == '000000' or (norm.endswith('000') and norm != '000000'):
-                    filtered.append(code)
-                elif norm in configured_normalised:
-                    filtered.append(code)
-            # Use filtered list; if nothing matched fall through to fallback below.
-            same_codes = filtered
+        same_codes = filter_same_codes_to_coverage(same_codes, location_settings)
 
     if not same_codes and location_settings:
         fallback_same_raw = (

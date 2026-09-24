@@ -3054,6 +3054,57 @@ class CAPPoller:
 
         evaluated = 0
         for alert in pending:
+            # EASBroadcaster commits the EASMessage row immediately before
+            # playout, so a row for this alert means the broadcast already
+            # started and the process died after that (e.g. a watchdog kill
+            # mid-playout), not at ingest.  Re-running the decision would air
+            # it again -- on 2026-09-24 this looped 19 times in an hour.
+            # Record the broadcast instead.
+            try:
+                aired_message_id = (
+                    self.db_session.query(EASMessage.id)
+                    .filter(EASMessage.cap_alert_id == alert.id)
+                    .order_by(EASMessage.created_at.asc())
+                    .limit(1)
+                    .scalar()
+                )
+            except Exception as exc:
+                self.logger.warning(
+                    "Forwarding catch-up: broadcast lookup failed for %s; "
+                    "skipping this cycle rather than risk a re-air: %s",
+                    alert.identifier, exc,
+                )
+                try:
+                    self.db_session.rollback()
+                except Exception:
+                    pass
+                continue
+            if aired_message_id is not None:
+                self.logger.warning(
+                    "Alert %s already has EASMessage %s — broadcast started "
+                    "before the pipeline was interrupted; recording it as "
+                    "forwarded instead of re-airing",
+                    alert.identifier, aired_message_id,
+                )
+                try:
+                    alert.eas_forwarded = True
+                    alert.eas_forwarding_reason = (
+                        f"Forwarded (EASMessage {aired_message_id}); process "
+                        f"interrupted before status was recorded"
+                    )[:255]
+                    self.db_session.add(alert)
+                    self.db_session.commit()
+                except Exception as exc:
+                    self.logger.error(
+                        "Failed to record interrupted broadcast for %s: %s",
+                        alert.identifier, exc,
+                    )
+                    try:
+                        self.db_session.rollback()
+                    except Exception:
+                        pass
+                continue
+
             self.logger.warning(
                 "Alert %s was saved but never evaluated for forwarding "
                 "(pipeline interrupted at ingest) — re-running the "

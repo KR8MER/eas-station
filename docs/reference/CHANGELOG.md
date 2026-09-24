@@ -7,6 +7,17 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.23.3] - 2026-09-24 - Stop watchdog-kill re-air loop and display blob query
+
+### Fixed
+- **A CAP alert was re-aired 19 times in an hour after the poller was killed mid-broadcast.** A Flood Warning extension carried 164.9 s of audio; generation plus playout ran inside one `poll_and_process()` call with no watchdog kick, so `WatchdogSec=180` killed the poller before `eas_forwarded` was written. Each restart's `retry_unevaluated_forwards()` treated the alert as "never evaluated" and broadcast it again, until the 60-minute catch-up window closed. Three fixes:
+  - `EASBroadcaster.handle_alert()` now runs inside a bounded `watchdog_keepalive()` (`app_utils/system/sd_notify.py`) sized to generation budget + `max_activation_seconds`, so a legitimate long broadcast no longer trips the watchdog while a genuine hang past that budget still does.
+  - The catch-up sweep checks for an existing `EASMessage` row (committed immediately before playout) and, if one exists, records the alert as forwarded instead of re-running the forwarding decision.
+  - Cross-source dedup for CAP alerts compared the alert's *full* SAME set against the broadcast's coverage-filtered locations, so an alert spanning counties outside the coverage area never matched its own earlier broadcast. The CAP path now compares the coverage-filtered set via the new `filter_same_codes_to_coverage()` (extracted from `build_same_header`); the advisory-lock key stays on the unfiltered set so it still matches the OTA path.
+- **Displays service pegged the CPU while an alert was active.** The OLED screen manager refreshes active alerts every second through `load_alert_plain_text_map()`, which loaded full `EASMessage` rows including all six audio `bytea` columns -- ~188 MB per call once the loop above left 19 copies of one alert. It now loads only the text columns; `is_duplicate_broadcast()` gets the same `load_only` treatment.
+  - Regression-guarded by `tests/test_broadcast_reair_guards.py` and a new case in `tests/test_forwarding_pipeline_guard.py`.
+- **Poller could not write its log file or broadcast files.** `eas-station-poller.service` runs under `ProtectSystem=strict` but listed only `/tmp` in `ReadWritePaths`, so every start logged `Could not set up log file at /var/log/eas-station/eas_station.log: [Errno 30] Read-only file system`, and every auto-forwarded broadcast's WAV/text files under `/opt/eas-station/static/eas_messages` failed to write (kept in the database only). The unit now has the same writable set as its sibling services (`/opt/eas-station /var/log/eas-station`). Guarded by `tests/test_systemd_writable_paths.py`, which checks every strict-sandboxed Python unit.
+
 ## [3.23.2] - 2026-09-22 - Fix fingerprint-trill dip and add calibrated tone saturation
 
 ### Fixed
