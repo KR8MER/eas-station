@@ -169,7 +169,7 @@ arm_pyart==2.3.0  # NEXRAD Archive II decode; RadarMapDisplay.plot_ppi_map rende
 # seen when a routine boto3 patch bump alone was enough to trigger it.
 # Pinned to the versions already verified working together in production.
 fsspec==2026.7.0
-s3fs==2026.7.0
+s3fs==2026.9.0
 # s3fs's own dependency, aiobotocore, lags boto3/botocore releases -- its
 # newest release (3.9.1) caps botocore at <1.43.76, while a boto3 bump
 # past 1.43.75 forces a botocore floor aiobotocore can't satisfy yet
