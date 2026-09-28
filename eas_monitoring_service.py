@@ -941,6 +941,16 @@ def _source_watchdog_loop(app, audio_controller, stop_event, interval_seconds: f
             logger.debug("Dead-air criteria refresh failed: %s", exc)
 
         try:
+            # Close out air-checks whose transmission was never heard back
+            # off the air -- this raises the "missed" error promptly instead
+            # of waiting for someone to open the Air-Check page.
+            from app_core.air_check import sweep_overdue
+            with app.app_context():
+                sweep_overdue()
+        except Exception as exc:
+            logger.debug("Air-check sweep failed: %s", exc)
+
+        try:
             # Look up which sources should be running.  This query MUST run
             # inside a Flask app context — the previous inline implementation
             # ran it without one, so Flask-SQLAlchemy raised on every cycle,
@@ -1027,6 +1037,11 @@ def initialize_eas_monitor(app, audio_controller):
         from app_core.audio.eas_monitor_v3 import UnifiedEASMonitorService
         from app_core.audio.eas_monitor import create_fips_filtering_callback
         from app_core.audio.startup_integration import load_fips_codes_from_config
+        from app_core.air_check import (
+            ROLE_AIR_CHECK,
+            record_off_air_decode,
+            resolve_source_role,
+        )
 
         logger.info("Initializing unified EAS monitor service (V3 architecture)...")
 
@@ -1100,6 +1115,13 @@ def initialize_eas_monitor(app, audio_controller):
                             len(_live_fips), _exc,
                         )
                     _fips_refresh['last_loaded'] = now
+                # An air-check receiver listens to this station's OWN
+                # transmitter: match its decode against what we sent, and
+                # never relay it -- forwarding our own output would loop.
+                role, receiver_identifier = resolve_source_role(alert.get('source_name'))
+                if role == ROLE_AIR_CHECK:
+                    record_off_air_decode(alert, receiver_identifier=receiver_identifier)
+                    return None
                 return _alert_callback_inner(alert)
 
 

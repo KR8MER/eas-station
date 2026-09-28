@@ -52,6 +52,7 @@ from .local_authorities import register_local_authority_routes
 from .tailscale import register_tailscale_routes
 from .poller import poller_bp
 from .heartbeat import heartbeat_bp
+from .air_check import air_check_bp
 from .tickstem import tickstem_bp
 from .healthchecks import healthchecks_bp
 from .alert_gating import alert_gating_bp
@@ -103,6 +104,7 @@ def register(app, logger):
     app.register_blueprint(poller_bp)  # Poller settings management
     logger.info("Poller settings routes registered")
     app.register_blueprint(heartbeat_bp)  # Outbound dead-man's-switch heartbeat settings
+    app.register_blueprint(air_check_bp)  # Off-air self-monitoring of our own transmissions
     app.register_blueprint(tickstem_bp)  # Tickstem uptime-monitor integration
     app.register_blueprint(healthchecks_bp)  # healthchecks.io per-service heartbeat integration
     logger.info("Heartbeat settings routes registered")

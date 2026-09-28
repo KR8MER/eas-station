@@ -1141,6 +1141,35 @@
                             </div>
                         </div>
 
+                        <!-- Air-Check -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="airCheckHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#airCheckCollapse">
+                                    <i class="fas fa-tower-broadcast me-2"></i>Air-Check (Off-Air Self-Monitoring)
+                                </button>
+                            </h2>
+                            <div id="airCheckCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p>Confirms that every alert this station sends actually makes it onto the air, by listening to your own transmitter with an SDR.</p>
+                                    <ol>
+                                        <li>On <strong>Monitor &rarr; Receivers</strong> (<code>/admin/radio</code>), edit the SDR tuned to your transmitter and set its <strong>Role</strong> to <em>Air-check</em>. Receivers listening to upstream sources keep the default <em>Monitor</em> role.</li>
+                                        <li>Send an alert (a Required Weekly Test is the easiest) and open <strong>Diagnostics &rarr; Air-Check</strong>.</li>
+                                    </ol>
+                                    <ul>
+                                        <li><strong>Verified</strong> &mdash; the header decoded off the air matches the one sent, field for field (originator, event, locations, purge time, issue time, station ID).</li>
+                                        <li><strong>Mismatch</strong> &mdash; it was heard, but at least one field differs; the page lists which. Logged as an error.</li>
+                                        <li><strong>Missed</strong> &mdash; nothing was heard before the deadline (playout length plus the grace period set on the page). Logged as an error and included in the compliance health-alert email/SNMP trap.</li>
+                                        <li><strong>Unexpected</strong> &mdash; a header was heard on your transmitter that this station did not send.</li>
+                                    </ul>
+                                    <p>Decodes from an air-check receiver are <strong>never relayed</strong>, so monitoring your own output can't loop it back to air. Use <em>Acknowledge</em> on a problem row once it has been investigated, so it stops counting in the health alerts. If nothing is set to the Air-check role, no checks are opened and no errors are raised.</p>
+                                    <div class="alert alert-light">
+                                        <i class="fas fa-link me-2"></i>
+                                        <strong>Access:</strong> Navigate to <strong>Diagnostics &rarr; Air-Check</strong> or visit <code>/air-check</code>. Guide: <a href="/docs/guides/AIR_CHECK_VERIFICATION">Air-Check Verification</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Display Controls -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="displaysHeading">
