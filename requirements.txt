@@ -25,7 +25,7 @@ jinja2==3.1.6  # Template rendering
 itsdangerous==2.2.0  # Secure session cookies and CSRF tokens
 
 # Database dependencies
-SQLAlchemy==2.0.52
+SQLAlchemy==2.1.0
 psycopg2-binary==2.9.13  # Sync PostgreSQL driver
 GeoAlchemy2==0.20.0
 Alembic==1.20.0
