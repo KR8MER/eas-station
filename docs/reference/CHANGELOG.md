@@ -7,6 +7,16 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.24.0] - 2026-09-28 - Add SDR receiver roles and off-air air-check verification
+
+### Added
+- **Receiver roles and off-air self-monitoring ("air-check").** The README described SDR verification as proving "that what went out of the transmitter is what the encoder commanded", but no code compared a received header with a transmitted one. The SDR path only decoded, logged and FIPS-filtered/relayed upstream alerts. The Alert Verification dashboard's delivery status read `playout_events` metadata that nothing wrote, and the Theory of Operation diagram showed a "Match with transmitted" step that did not exist. This release implements that check.
+  - **Receiver role** (`radio_receivers.role`, migration `20260928_add_air_check`): *Monitor* (default; upstream source, decodes may be relayed) or *Air-check* (tuned to the station's own transmitter). Set on Monitor → Receivers → edit → **Role**. Air-check receivers get a badge in the receiver table.
+  - **Every transmit path opens an air-check** with the exact SAME header as playout starts: automatic CAP / relayed broadcasts (`EASBroadcaster.handle_alert`), manual Broadcast Builder sends, automated and manual RWTs, and resends (the Resend button and the GPIO "Forward Last Alert" input). The deadline is playout plus relay lead-in/lead-out plus a configurable grace period (default 60 s). Nothing is recorded while no Air-check receiver exists, so there are no false alarms.
+  - **Decodes from an Air-check receiver are matched, never relayed.** The header is compared field by field (originator, event, location set, purge, issue time, station ID) and the record becomes **verified**, **mismatch** (differing fields listed, ERROR logged) or, for a header the station never sent, **unexpected** (WARNING logged). Pending records past their deadline are swept to **missed** every 30 s by the audio-service watchdog and logged as ERROR. Open problems feed the existing compliance health-alert email/SNMP worker. Matching works in both directions: the decoder only reports at EOM and the manual-send path records its activation after playout, so an early decode is adopted when the transmission registers. A resend of an identical header closes its own record rather than the original's.
+  - **Diagnostics → Air-Check** (`/air-check`): 24-hour status tiles, filterable results with sent/heard headers side by side, latency and decode confidence, per-row **Acknowledge**, the list of air-check receivers and the grace-period setting. API: `GET /api/air-check/records`, `POST /api/air-check/records/<id>/acknowledge`, `POST /api/air-check/settings`.
+  - Code in `app_core/air_check/` (`matching.py`, `roles.py`, `service.py`, `reporting.py`); tests in `tests/test_air_check.py`. The README SDR section, Theory of Operation §6, `/help`, `/about` and the new guide `docs/guides/AIR_CHECK_VERIFICATION.md` now describe what the code does.
+
 ## [3.23.2] - 2026-09-22 - Fix fingerprint-trill dip and add calibrated tone saturation
 
 ### Fixed

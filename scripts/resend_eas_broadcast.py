@@ -148,6 +148,17 @@ def _run(message_id: int, operator: str | None) -> int:
             # for exactly the composite audio duration without this process
             # touching GPIO.
             activation_ts = time.monotonic()
+            # Expect this header back off the air on any air-check receiver
+            # (no-op when none is configured). Never raises.
+            from app_core.air_check import register_transmission
+            register_transmission(
+                message.same_header,
+                origin_type='resend',
+                origin_id=message_id,
+                alert_identifier=message.alert_identifier,
+                event_code=event_code,
+                playout_seconds=playback_duration,
+            )
             airchain_signalled = set_broadcast_active(
                 event_code=event_code,
                 label=event_label,

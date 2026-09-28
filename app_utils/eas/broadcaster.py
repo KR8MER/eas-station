@@ -328,6 +328,18 @@ class EASBroadcaster:
         # / audio mute / duration-of-alert holds + flash) — so the relay is
         # asserted for the whole broadcast without this process touching GPIO.
         _duration_hint = _wav_duration_seconds(audio_bytes) if audio_bytes else 0.0
+        # Expect this header back off the air on any air-check receiver
+        # (no-op when none is configured). Never raises.
+        from app_core.air_check import register_transmission
+        register_transmission(
+            header,
+            origin_type='broadcast',
+            origin_id=getattr(record, 'id', None),
+            alert_identifier=str(alert_identifier) if alert_identifier else None,
+            event_code=event_code,
+            playout_seconds=_duration_hint,
+            session=self.db_session,
+        )
         _event_info = EVENT_CODE_REGISTRY.get(event_code or '', {})
         _event_label = (
             _event_info.get('name', event_code) if isinstance(_event_info, dict) else event_code

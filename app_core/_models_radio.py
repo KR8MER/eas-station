@@ -67,6 +67,12 @@ class RadioReceiver(db.Model):
     stereo_enabled = db.Column(db.Boolean, nullable=False, default=True)  # FM stereo decoding
     deemphasis_us = db.Column(db.Float, nullable=False, default=75.0)  # De-emphasis (75μs NA, 50μs EU)
     enable_rbds = db.Column(db.Boolean, nullable=False, default=False)  # Extract RBDS/RDS from FM
+    # What this receiver is listening to. 'monitor' (default) is an upstream
+    # monitoring assignment whose decodes are FIPS-filtered and may be
+    # relayed. 'air_check' is tuned to this station's OWN transmitter: its
+    # decodes are matched against what the station sent (app_core.air_check)
+    # and are never relayed -- relaying them would loop our own output.
+    role = db.Column(db.String(16), nullable=False, default='monitor', server_default='monitor')
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = db.Column(
         db.DateTime(timezone=True),
