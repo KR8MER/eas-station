@@ -24,12 +24,23 @@ from app_utils import utc_now
 from webapp.public import status_page
 
 
+_TABLES = [CAPAlert.__table__, EASMessage.__table__, AuditLog.__table__]
+
+
 def _create_tables(app):
+    """Create the tables these aggregators read, and empty them.
+
+    The ``app`` fixture is the process-wide app on a shared in-memory
+    SQLite database, so rows other tests insert survive into this file:
+    tests/test_import_alert_batching.py leaves three CAPAlert rows, which
+    made the empty-database case below see alerts_monitored == 3 whenever
+    the full suite ran it first.
+    """
     with app.app_context():
-        db.metadata.create_all(
-            bind=db.engine,
-            tables=[CAPAlert.__table__, EASMessage.__table__, AuditLog.__table__],
-        )
+        db.metadata.create_all(bind=db.engine, tables=_TABLES)
+        for table in _TABLES:
+            db.session.execute(table.delete())
+        db.session.commit()
 
 
 def test_collect_public_status_with_empty_database(app):

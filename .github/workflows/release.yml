@@ -1,13 +1,17 @@
 name: Release
 
-# Publishes a signed GitHub Release. This workflow is triggered manually only
-# (Actions → Release → Run workflow); it does NOT fire automatically when the
-# VERSION file changes. Artifacts are signed keylessly with GitHub artifact
+# Publishes a signed GitHub Release. It runs automatically whenever a push to
+# main changes the VERSION file (every merged PR bumps it), and can still be
+# run by hand (Actions → Release → Run workflow). A version that is already
+# released is skipped, so re-runs are harmless. Artifacts are signed keylessly with GitHub artifact
 # attestations (Sigstore-backed SLSA build provenance) — there are no signing
 # keys to manage or rotate. See docs/process/RELEASING.md for the full process
 # and verification instructions.
 
 on:
+  push:
+    branches: [main]
+    paths: [VERSION]
   workflow_dispatch:
 
 permissions:

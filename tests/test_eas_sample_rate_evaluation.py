@@ -218,14 +218,15 @@ def test_cpu_time_comparison(tmp_path: Path) -> None:
         audio_file = tmp_path / f"perf_{rate}hz.wav"
         _write_same_audio(str(audio_file), header, sample_rate=rate)
         
-        # Time the decode
-        start = time.perf_counter()
-        for _ in range(5):  # Average over 5 runs
+        # Best of 7: the minimum is the least scheduler-noise-affected
+        # estimate of the real cost, unlike a mean on a shared CI runner.
+        runs = []
+        for _ in range(7):
+            start = time.perf_counter()
             result = decode_same_audio(str(audio_file), sample_rate=rate)
+            runs.append(time.perf_counter() - start)
             assert len(result.headers) > 0
-        elapsed = time.perf_counter() - start
-        
-        times[rate] = elapsed / 5  # Average time
+        times[rate] = min(runs)
     
     # Print results for analysis
     print("\n=== CPU Time Comparison ===")
@@ -234,9 +235,12 @@ def test_cpu_time_comparison(tmp_path: Path) -> None:
         pct = (times[rate] / baseline) * 100
         print(f"{rate:6} Hz: {times[rate]:.4f}s ({pct:5.1f}% of 22050 Hz)")
     
-    # Verify that lower sample rates are faster
-    assert times[16000] < times[22050], "16kHz should be faster than 22kHz"
-    assert times[11025] < times[16000], "11kHz should be faster than 16kHz"
+    # Lower sample rates should be cheaper. Only compare rates far enough
+    # apart for the difference to exceed timing noise: adjacent rates
+    # (11025 vs 16000 Hz) measured within ~3% of each other and flipped
+    # order on CI runners (41.0 ms vs 40.1 ms), failing unrelated PRs.
+    assert times[8000] < times[44100], "8kHz should be faster than 44.1kHz"
+    assert times[16000] < times[44100], "16kHz should be faster than 44.1kHz"
 
 
 def test_memory_usage_comparison(tmp_path: Path) -> None:
