@@ -7,6 +7,14 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.28.0] - 2026-10-05 - SMTP From address (SMTP2GO, SendGrid, Resend, Mailgun)
+
+### Added
+- **From Address setting for email notifications** (*Settings → Notifications*, migration `20261005_add_smtp_from_address`). Outgoing mail always used the SMTP username as its sender. Several relays use a login that is not an email address: SendGrid (`apikey`), Resend (`resend`), and usually SMTP2GO and Mailgun. Each rejects mail from an unverified sender, so email through them could not work. The From address is now separate. When it's blank, the old behaviour (username as sender) applies, so existing setups are unchanged. Alert emails, compliance/health emails and **Send Test Email** all use it via `resolve_sender()` in `app_core/notifications/email.py`.
+  - Accepts `alerts@example.com` or `EAS Station <alerts@example.com>`; anything else is rejected on save with a message.
+  - `tests/test_smtp_from_address.py` sends real SMTP to an in-process server and checks the From header and envelope sender on the wire.
+  - `docs/guides/notifications.md` has SMTP2GO setup steps. Its configuration steps also described a single "Mail Server URL" field the page no longer has; they now match the current host/port/username fields.
+
 ## [3.27.0] - 2026-10-05 - Automatic Pi deploys and hourly health watchdog
 
 ### Added

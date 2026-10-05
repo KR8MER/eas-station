@@ -77,6 +77,19 @@
                                 <div class="form-text">Leave blank for unauthenticated relay.</div>
                             </div>
                             <div class="col-sm-6">
+                                <label for="smtp_from_address" class="form-label">
+                                    <i class="fas fa-at"></i> From Address
+                                </label>
+                                <input type="text" class="form-control" id="smtp_from_address" name="smtp_from_address"
+                                       value="{{ settings.smtp_from_address or '' }}"
+                                       placeholder="alerts@example.com"
+                                       autocomplete="off">
+                                <div class="form-text">
+                                    Sender shown on outgoing mail. Leave blank to use the username.
+                                    Relays such as SMTP2GO require a verified sender here.
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
                                 <label for="smtp_password" class="form-label">
                                     <i class="fas fa-lock"></i> Password
                                 </label>

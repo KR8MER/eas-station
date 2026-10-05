@@ -86,7 +86,30 @@ All support TLS on port 587.
 | **SendGrid** | 100 msg/day | `smtp.sendgrid.net:587` | `apikey` (literally) | Pass = API key |
 | **Mailgun** | 100 msg/day (3 mo) | `smtp.mailgun.org:587` | Mailgun SMTP login | Domain verification required |
 | **Resend** | 100 msg/day | `smtp.resend.com:587` | `resend` (literally) | Pass = API key |
-| **SMTP2GO** | 1,000 msg/month | `mail.smtp2go.com:587` | SMTP2GO username | Good for low-volume |
+| **SMTP2GO** | 1,000 msg/month | `mail.smtp2go.com:587` | SMTP2GO username | Verified sender required (see below) |
+
+!!! important "Set the From Address for these providers"
+    Several of these relays use a login that is **not an email address**: SendGrid
+    (`apikey`), Resend (`resend`), and usually SMTP2GO and Mailgun. Every one of them
+    rejects mail whose sender isn't an address you've verified with them. Enter that
+    verified address in **From Address**. When it's blank, EAS Station falls back to the
+    username as the sender, which only works when the username is itself a valid address.
+
+#### SMTP2GO
+
+1. In SMTP2GO, verify your sending domain (or a single sender address) under
+   **Sending → Verified Senders**, and create an SMTP user under **Sending → SMTP Users**.
+2. In EAS Station (**Settings → Notifications**), enter:
+
+    | Field | Value |
+    |---|---|
+    | SMTP Host | `mail.smtp2go.com` |
+    | Port | `587` (or `2525` if your network blocks 587; `465` with SSL/TLS) |
+    | Username / Password | the SMTP user from step 1 |
+    | From Address | an address on your verified domain, e.g. `EAS Station <alerts@example.com>` |
+    | Connection Security | STARTTLS (SSL/TLS for port 465) |
+
+3. **Save Settings**, then **Send Test Email**.
 
 For EAS Station™, alert volume is typically very low (alerts are only sent on actual EAS
 events), so any free tier will comfortably cover normal operation.
@@ -131,12 +154,14 @@ smtp://your.address@yourdomain.com:PASSWORD@smtp.office365.com:587?tls=true
 
 1. Go to **Settings → Notifications** in the EAS Station™ web UI.
 2. Set **Enable Email Notifications** to **Enabled**.
-3. Enter your SMTP URL in the **Mail Server URL** field.
-4. Add recipient addresses to **EAS Alert Recipients** (one per line).
-5. Optionally add addresses to **Compliance / Health Alert Recipients**.
-6. Toggle **Attach Composite Audio** if you want WAV files attached to alert emails.
-7. Click **Save Settings**.
-8. Use the **Send Test Email** button to verify delivery before going live.
+3. Enter **SMTP Host**, **Port**, **Username**, **Password** and **Connection Security**.
+4. Set **From Address** if your provider's login isn't your sender address (see above).
+5. Add recipient addresses to **EAS Alert Recipients** (one per line).
+6. Optionally add addresses to **Compliance / Health Alert Recipients**.
+7. Toggle **Attach Composite Audio** if you want WAV files attached to alert emails.
+8. Click **Save Settings**.
+9. Use the **Send Test Email** button to verify delivery before going live. It uses the
+   *saved* settings, so save first.
 
 ---
 

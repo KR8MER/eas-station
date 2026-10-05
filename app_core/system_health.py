@@ -816,6 +816,7 @@ class HealthAlertWorker:
         smtp_security = "starttls"
         smtp_username = None
         smtp_password = None
+        from_address = ""
         recipients: List[str] = []
 
         try:
@@ -827,6 +828,7 @@ class HealthAlertWorker:
                 smtp_security = settings.smtp_security or "starttls"
                 smtp_username = settings.smtp_username or None
                 smtp_password = settings.smtp_password or None
+                from_address = getattr(settings, "smtp_from_address", "") or ""
                 recipients = [
                     addr.strip()
                     for addr in (settings.compliance_alert_emails or [])
@@ -857,7 +859,9 @@ class HealthAlertWorker:
             self._logger.warning("Mail server not configured; skipping compliance email alert")
             return
 
-        sender = smtp_username or "alerts@localhost"
+        from app_core.notifications.email import resolve_sender
+
+        sender = resolve_sender(from_address, smtp_username or "")
 
         message = EmailMessage()
         message["Subject"] = "EAS System Health Alert"
