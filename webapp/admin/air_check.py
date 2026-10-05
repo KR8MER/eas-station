@@ -142,7 +142,7 @@ def api_air_check_acknowledge(record_id: int):
         return jsonify({'success': True, 'record': record.to_dict()})
     except SQLAlchemyError as exc:
         db.session.rollback()
-        logger.error(f"Database error acknowledging air-check {record_id}: {exc}")
+        logger.error("Database error acknowledging air-check %d: %s", record.id, exc)
         return jsonify({'success': False, 'error': 'Database error'}), 500
 
 
