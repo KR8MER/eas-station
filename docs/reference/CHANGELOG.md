@@ -16,6 +16,7 @@ All notable changes to this project are documented in this file. The format is b
 ### Fixed
 - **`test_collect_public_status_with_empty_database` failed in full-suite runs.** The `app` fixture shares one in-memory SQLite database across the suite, and `tests/test_import_alert_batching.py` leaves three `CAPAlert` rows behind, so the "empty database" case saw `alerts_monitored == 3`. The test now empties the tables it reads during setup.
 - **`test_cpu_time_comparison` failed at random in CI.** It asserted an order between adjacent sample rates (11025 vs 16000 Hz), which measured within ~3% of each other and flipped on CI runners (41.0 ms vs 40.1 ms). It now takes the best of 7 runs and compares only rates whose cost differs 2–3× (8 kHz and 16 kHz against 44.1 kHz).
+- **`test_sustained_silence_alarms_then_clears_on_recovery` failed on a loaded CI runner.** Its loop allowed only 1.2 s of wall-clock time for an alarm with a 0.5 s hold-off, and the first chunk's processing could use most of that. The deadline is now 10 s. It only caps a hung loop, which exits as soon as the alarm fires, so passing runs are no slower.
 
 ## [3.25.2] - 2026-10-05 - Bump the python-deps group across 1 directory with 5 updates
 

@@ -191,7 +191,11 @@ def test_sustained_silence_alarms_then_clears_on_recovery():
         on_change=lambda name, silent, verdict: events.append((silent, verdict.reason)),
     )
 
-    deadline = time.time() + 1.2
+    # The deadline only caps a hung loop -- it exits as soon as the alarm
+    # fires (~0.5 s here). 1.2 s was too tight for a loaded CI runner, where
+    # the first chunk's processing ate most of it and the test failed
+    # without anything being wrong.
+    deadline = time.time() + 10.0
     while time.time() < deadline and not monitor.is_silent():
         chunk = _hiss(0.3)
         monitor.process(chunk, _rms_db(chunk))
