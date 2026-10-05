@@ -7,6 +7,11 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.25.2] - 2026-10-05 - Bump the python-deps group across 1 directory with 5 updates
+
+### Changed
+- Bump the python-deps group across 1 directory with 5 updates (Dependabot #2713); documented versions synced by scripts/sync_dependency_versions.py.
+
 ## [3.25.1] - 2026-10-05 - Let aiobotocore drive boto3/botocore; sync only on Dependabot-triggered runs
 
 ### Changed

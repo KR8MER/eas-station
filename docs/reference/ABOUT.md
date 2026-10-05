@@ -43,7 +43,7 @@ The application combines open-source tooling and optional cloud integrations. Ve
 ### Application Framework
 - Python 3.13 runtime (compatible with current Debian/Raspberry Pi OS SoapySDR bindings)
 - Flask 3.1.3 web framework
-- Werkzeug 3.1.8 WSGI utilities
+- Werkzeug 3.1.9 WSGI utilities
 - Flask-SQLAlchemy 3.1.1 ORM integration
 - SQLAlchemy 2.1.2 ORM core
 - Gunicorn 26.2.0 production WSGI server
@@ -57,7 +57,7 @@ The application combines open-source tooling and optional cloud integrations. Ve
 - requests 2.34.2 for CAP feed retrieval and IPAWS integration
 - pytz 2026.4 timezone utilities
 - psutil 7.2.2 system health and receiver monitoring
-- python-dotenv 1.2.3 configuration loading
+- python-dotenv 1.2.4 configuration loading
 - cryptography — Ed25519 signing and SHA-256 hashing backing the tamper-evident `audit_logs` chain (see `app_core/auth/audit.py::AuditLogger.verify_chain`)
 
 ### Front-End Tooling
