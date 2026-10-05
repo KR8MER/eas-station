@@ -25,7 +25,7 @@ jinja2==3.1.6  # Template rendering
 itsdangerous==2.2.0  # Secure session cookies and CSRF tokens
 
 # Database dependencies
-SQLAlchemy==2.0.52
+SQLAlchemy==2.1.2
 psycopg2-binary==2.9.13  # Sync PostgreSQL driver
 GeoAlchemy2==0.20.0
 Alembic==1.20.0
@@ -38,7 +38,7 @@ certifi==2026.7.22  # Updated CA bundle for SSL certificate verification (requir
 httpx==0.28.1  # Modern async HTTP client with connection pooling
 
 # Timezone handling (CRITICAL FOR PROPER TIME DISPLAY)
-pytz==2026.3.post1
+pytz==2026.4
 
 # System monitoring
 psutil==7.2.2
@@ -76,7 +76,7 @@ gevent>=26.9.0    # Async worker for Flask-SocketIO with Gunicorn (Python 3.13+ 
 # and eas-station-audio, which each receive ~31 msgs/s. 7.4.1 does not leak.
 # Guarded by tests/test_redis_pubsub_leak_pin.py; see CHANGELOG 3.23.4.
 redis==7.4.1
-hiredis==3.4.1  # C parser for better Redis performance
+hiredis==3.4.2  # C parser for better Redis performance
 
 # Development and debugging (optional)
 # flask-debugtoolbar==0.13.1  # Uncomment for development
@@ -92,7 +92,7 @@ pyttsx3==2.99  # Offline text-to-speech engine for the pyttsx3 provider
 # Audio processing for EAS decoding
 scipy==1.18.1  # Butterworth low-pass filtering + anti-aliased saturation of synthesized SAME/attention/chime audio (app_utils/eas_fsk.py); not used for EAS resampling
 pydub==0.25.1  # Audio stream decoding (MP3, AAC, OGG) for HTTP/Icecast streams
-numba>=0.67.0,<0.68.0  # JIT compilation for real-time FM demodulation (RBDS performance, 10-100x speedup)
+numba>=0.68.0,<0.69.0  # JIT compilation for real-time FM demodulation (RBDS performance, 10-100x speedup)
 # Note: pydub requires ffmpeg to be installed via system packages (libavcodec, libavformat)
 # Note: EAS monitor uses numpy's linear interpolation for efficient resampling on Raspberry Pi
 # Note: numba 0.67 pulls llvmlite 0.49.0, whose aarch64 wheel is ~58MB -- a one-time
@@ -172,20 +172,19 @@ arm_pyart==2.3.0  # NEXRAD Archive II decode; RadarMapDisplay.plot_ppi_map rende
 # bump elsewhere in this file and fail with "ResolutionImpossible" --
 # seen when a routine boto3 patch bump alone was enough to trigger it.
 # Pinned to the versions already verified working together in production.
-fsspec==2026.7.0
-s3fs==2026.7.0
-# s3fs's own dependency, aiobotocore, lags boto3/botocore releases -- its
-# newest release (3.9.1) caps botocore at <1.43.76, while a boto3 bump
-# past 1.43.75 forces a botocore floor aiobotocore can't satisfy yet
-# ("ResolutionImpossible", the same failure mode as the fsspec/s3fs pin
-# above, one dependency layer deeper). Pinning all three explicitly keeps
-# the resolver from wandering into that gap. Bump boto3/botocore past
-# 1.43.75 only once a newer aiobotocore release raises this ceiling --
-# check https://pypi.org/pypi/aiobotocore/json for its current botocore
-# upper bound first.
-aiobotocore==3.9.1
-botocore==1.43.75
-boto3==1.43.75  # Unencrypted, anonymous read access to NOAA's public Level II archive on AWS Open Data (no credentials needed)
+fsspec==2026.9.0
+s3fs==2026.9.0
+# s3fs's own dependency, aiobotocore, lags boto3/botocore releases and
+# caps botocore tightly (3.9.2: >=1.43.101,<1.43.107), while each boto3
+# release requires its own botocore -- so a lone boto3/botocore bump fails
+# with "ResolutionImpossible" (the same failure mode as the fsspec/s3fs
+# pin above, one dependency layer deeper). Pin all three together, with
+# boto3/botocore at the newest release under aiobotocore's ceiling, and
+# check https://pypi.org/pypi/aiobotocore/json for that ceiling before
+# bumping. Dependabot bumps these five as one group (.github/dependabot.yml).
+aiobotocore==3.9.2
+botocore==1.43.106
+boto3==1.43.106  # Unencrypted, anonymous read access to NOAA's public Level II archive on AWS Open Data (no credentials needed)
 cartopy==0.26.0  # Geographic (Web Mercator) projection for plot_ppi_map, matching the OSM basemap tiles it composites onto
 cmweather==0.3.2  # Registers the 'NWSRef' reflectivity colormap (the standard ~15-band NWS scale most radar apps use, not a hand-rolled ramp)
 matplotlib==3.11.2  # plot_ppi_map's rendering backend (Agg, headless) -- pcolormesh draws each gate's true polar footprint
@@ -207,7 +206,7 @@ audioop-lts==0.2.2  # Drop-in replacement for audioop (removed in Python 3.13)
 # (see app_core/auth/audit.py AuditLogger.verify_chain).  Pinned >=46.0.5 to
 # avoid GHSA on SECT-curve subgroup validation (we use Ed25519, which is
 # unaffected, but the same library exposes the affected curves).
-cryptography>=50.0.1
+cryptography>=50.0.2
 
 # ── System packages (NOT installed by pip) ─────────────────────────────────────
 # fail2ban is a host service, not a Python package, so it cannot be installed

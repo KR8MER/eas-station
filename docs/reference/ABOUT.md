@@ -45,7 +45,7 @@ The application combines open-source tooling and optional cloud integrations. Ve
 - Flask 3.1.3 web framework
 - Werkzeug 3.1.8 WSGI utilities
 - Flask-SQLAlchemy 3.1.1 ORM integration
-- SQLAlchemy 2.0.52 ORM core
+- SQLAlchemy 2.1.2 ORM core
 - Gunicorn 26.2.0 production WSGI server
 
 ### Data and Spatial Layer

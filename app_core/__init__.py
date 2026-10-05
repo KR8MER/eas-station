@@ -22,8 +22,12 @@ Repository: https://github.com/KR8MER/eas-station
 # The package exposes commonly used symbols so callers can import from
 # ``app_core`` without having to know the concrete module layout.
 
-from .extensions import db  # noqa: F401
-from . import models  # noqa: F401
+from .db_driver import pin_postgres_driver
+
+pin_postgres_driver()
+
+from .extensions import db  # noqa: E402,F401
+from . import models  # noqa: E402,F401
 
 __all__ = [
     "db",
