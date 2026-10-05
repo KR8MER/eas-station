@@ -3,7 +3,7 @@
 [![Tests](https://github.com/KR8MER/eas-station/actions/workflows/tests.yml/badge.svg)](https://github.com/KR8MER/eas-station/actions/workflows/tests.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-3.24.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.24.1-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -11,7 +11,7 @@
 [![Werkzeug](https://img.shields.io/badge/Werkzeug-3.1.8-000000?style=flat-square)](https://werkzeug.palletsprojects.com/)
 [![Jinja2](https://img.shields.io/badge/Jinja2-3.1.6-B41717?style=flat-square&logo=jinja&logoColor=white)](https://jinja.palletsprojects.com/)
 [![Socket.IO](https://img.shields.io/badge/Socket.IO-5.17.0-010101?style=flat-square&logo=socketdotio&logoColor=white)](https://socket.io/)
-[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0.52-CA2C39?style=flat-square&logo=sqlalchemy&logoColor=white)](https://www.sqlalchemy.org/)
+[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.1.2-CA2C39?style=flat-square&logo=sqlalchemy&logoColor=white)](https://www.sqlalchemy.org/)
 [![Alembic](https://img.shields.io/badge/Alembic-1.20.0-6BA3BE?style=flat-square&logo=sqlalchemy&logoColor=white)](https://alembic.sqlalchemy.org/)
 [![PostgreSQL + PostGIS](https://img.shields.io/badge/PostgreSQL-17%20%2B%20PostGIS-0093D0?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-8.0-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
@@ -488,7 +488,7 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 
 | Library | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
-| SQLAlchemy | 2.0.52 | MIT | ORM for every persisted entity — alerts, settings, audit logs, RBAC, GPS samples. | https://www.sqlalchemy.org/ |
+| SQLAlchemy | 2.1.2 | MIT | ORM for every persisted entity — alerts, settings, audit logs, RBAC, GPS samples. | https://www.sqlalchemy.org/ |
 | Alembic | 1.20.0 | MIT | Schema migrations (`app_core/migrations/versions/*`); `alembic upgrade head` runs on install/update. | https://alembic.sqlalchemy.org/ |
 | psycopg2‑binary | 2.9.12 | LGPL‑3.0 | Sync PostgreSQL driver SQLAlchemy talks to. | https://www.psycopg.org/ |
 | GeoAlchemy2 | 0.20.0 | MIT | SQLAlchemy types and ST_* function bindings for PostGIS geometry/geography columns. | https://geoalchemy-2.readthedocs.io/ |

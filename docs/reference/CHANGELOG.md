@@ -7,6 +7,14 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.24.1] - 2026-10-05 - Dependency updates (SQLAlchemy 2.1, numba 0.68, AWS/s3fs group)
+
+### Changed
+- Batched the open Dependabot updates (#2685, #2686, #2689–#2696): SQLAlchemy 2.0.52 → 2.1.2, numba 0.67 → 0.68, cryptography ≥ 50.0.2, pytz 2026.4, hiredis 3.4.2, fsspec/s3fs 2026.9.0, aiobotocore 3.9.2, and boto3/botocore 1.43.106. Dependabot proposed boto3/botocore 1.43.107, but aiobotocore 3.9.2 caps botocore below 1.43.107, so those PRs could never resolve. Dependabot now bumps boto3/botocore/aiobotocore/s3fs/fsspec as one `aws-s3fs` group.
+
+### Fixed
+- **SQLAlchemy 2.1 would have stopped every service from starting.** 2.1 changed the default driver for a bare `postgresql://` URL from psycopg2 to psycopg 3, which is not installed. `DATABASE_URL` is read raw in app.py, the poller, the audio/SDR services and the service bootstrap, so each failed at `create_engine` with `No module named 'psycopg'`. That was the CI failure on #2696. `app_core/db_driver.py` registers psycopg2 for the bare `postgresql` name when `app_core` is imported. Regression-guarded by `tests/test_postgres_driver_pin.py`.
+
 ## [3.24.0] - 2026-10-05 - Add SDR receiver roles and off-air air-check verification
 
 ### Added
