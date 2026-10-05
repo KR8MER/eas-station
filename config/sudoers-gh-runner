@@ -1,0 +1,14 @@
+# EAS Station -- GitHub Actions runner deploy permission
+#
+# Lets the self-hosted runner user (gh-runner) run exactly one command as
+# root: the reviewed, root-owned deploy script. The script only deploys
+# origin/main's current tip (see scripts/deploy/eas-deploy.sh), so this
+# rule cannot be used to deploy unmerged code.
+#
+# Install (after reviewing it and scripts/deploy/eas-deploy.sh):
+#   sudo install -o root -g root -m 0755 scripts/deploy/eas-deploy.sh /usr/local/sbin/eas-deploy
+#   sudo install -o root -g root -m 0440 config/sudoers-gh-runner /etc/sudoers.d/gh-runner
+#   sudo visudo -c -f /etc/sudoers.d/gh-runner
+# See docs/maintenance/PI_AUTODEPLOY.md.
+
+gh-runner ALL=(root) NOPASSWD: /usr/local/sbin/eas-deploy

@@ -1,0 +1,95 @@
+# Deploy main to the EAS Station Pi, and watch its health hourly.
+#
+# Both jobs run on the self-hosted runner on the Pi (labels: self-hosted,
+# eas-pi; user gh-runner, no general sudo). Setup and the security model are
+# in docs/maintenance/PI_AUTODEPLOY.md.
+#
+# deploy   -- every push to main. Calls the root-owned, reviewed
+#             /usr/local/sbin/eas-deploy through its single sudoers rule. That
+#             script refuses anything but origin/main's tip, waits out an alert
+#             on air, migrates before restarting, health-checks every service
+#             and rolls back on failure. No repo code is checked out or run on
+#             the runner by this job.
+# watchdog -- hourly. Runs scripts/deploy/eas_watchdog.py from the deployed
+#             /opt checkout (services, memory and leak trend, swap, health,
+#             Icecast real-time delivery) and keeps one open GitHub issue
+#             labelled "watchdog" in step: opened or updated while something
+#             is wrong, closed when it recovers.
+#
+# This file only ever triggers on push to main, a schedule, or a manual run --
+# never on pull requests -- so outside code cannot reach the runner through
+# it. Outside contributors' workflow runs also need maintainer approval
+# (repo setting: all external contributors).
+
+name: Deploy to Pi
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "What to run"
+        type: choice
+        options: [deploy, watchdog]
+        default: deploy
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.job == 'deploy')
+    runs-on: [self-hosted, eas-pi]
+    concurrency:
+      group: deploy-pi
+      cancel-in-progress: false
+    steps:
+      - name: Deploy origin/main
+        env:
+          SHA: ${{ github.sha }}
+        run: sudo -n /usr/local/sbin/eas-deploy "$SHA"
+
+  watchdog:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.job == 'watchdog')
+    runs-on: [self-hosted, eas-pi]
+    permissions:
+      issues: write
+    concurrency:
+      group: watchdog-pi
+      cancel-in-progress: true
+    steps:
+      - name: Run health checks
+        id: check
+        run: |
+          set +e
+          python3 /opt/eas-station/scripts/deploy/eas_watchdog.py --report "$RUNNER_TEMP/report.md"
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Open, update or close the watchdog issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          STATUS: ${{ steps.check.outputs.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create watchdog --color B60205 \
+            --description "Opened by the hourly Pi health watchdog" 2>/dev/null || true
+          issue=$(gh issue list --label watchdog --state open --json number --jq '.[0].number // empty')
+          body="$(cat "$RUNNER_TEMP/report.md")
+
+          [Watchdog run]($RUN_URL) · $(date -u '+%Y-%m-%d %H:%M UTC')"
+          if [ "$STATUS" != "0" ]; then
+            if [ -n "$issue" ]; then
+              gh issue comment "$issue" --body "$body"
+            else
+              gh issue create --label watchdog --title "Pi health watchdog: problem detected" --body "$body"
+            fi
+            exit 1
+          elif [ -n "$issue" ]; then
+            gh issue close "$issue" --comment "Recovered.
+
+          $body"
+          fi

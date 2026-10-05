@@ -7,6 +7,25 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.27.0] - 2026-10-05 - Automatic Pi deploys and hourly health watchdog
+
+### Added
+- **Merges to `main` deploy themselves to the Pi.** `.github/workflows/deploy-pi.yml` (`deploy` job, self-hosted runner `eas-pi`) calls the root-owned `/usr/local/sbin/eas-deploy` (`scripts/deploy/eas-deploy.sh`) through one sudoers rule (`config/sudoers-gh-runner`). The script:
+  - deploys only `origin/main`'s tip, and refuses if `/opt/eas-station` has hand edits;
+  - installs changed requirements in both venvs and runs migrations before restarting;
+  - waits out an alert on air before restarting;
+  - health-checks every unit plus `/health`, and rolls back on failure.
+
+  Docs-, tests- and CI-only merges update the checkout without a restart. The installed script is never updated by a deploy, so a merge cannot change what runs as root.
+- **Hourly health watchdog.** `scripts/deploy/eas_watchdog.py` (unprivileged, stdlib-only) checks:
+  - every unit under `eas-station.target`;
+  - per-service anonymous memory against a ceiling, plus a steady-growth leak trend within each service run (the redis-py 8 leak grew ~25 MB/h for 13 days unnoticed);
+  - swap use, and `/health`;
+  - each Icecast mount's delivery against real time, using the bitrate from its own MP3 headers.
+
+  The `watchdog` job keeps one GitHub issue labelled `watchdog` open while anything is wrong and closes it on recovery.
+- Setup, security model and troubleshooting: `docs/maintenance/PI_AUTODEPLOY.md`. Guarded by `tests/test_pi_autodeploy.py`, which pins the deploy script's safety properties, the single-command sudoers rule and the workflow's no-pull-request triggers, and unit-tests the watchdog's decisions.
+
 ## [3.26.0] - 2026-10-05 - Automatic releases, Dependabot auto-merge, flaky-test fixes
 
 ### Added
