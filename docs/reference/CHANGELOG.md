@@ -7,6 +7,13 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.23.4] - 2026-10-05 - Fix redis-py 8.x pub/sub memory leak
+
+### Fixed
+- **`eas-station-demod` grew to 8.6 GB and `eas-station-audio` to 3.3 GB, filling RAM and swap.** Every redis-py 8.x release (8.0.0, 8.0.1 and 8.1.0, pulled in by the 2026-08-24 dependency upgrade #2466) leaks one `list` per pub/sub message read through the hiredis parser. The leaked list holds a stray reference and its items are already freed, so it is never collected. Both services read about 31 messages/s (`sdr:samples:*` IQ chunks and `demod:audio:*`), so demod leaked about 600 MB a day until the kernel's OOM killer stepped in, and the swapping starved the Icecast feeder threads. Reproduced on a private channel: 8.0.0–8.1.0 leak exactly one list per message with hiredis 3.2.1, 3.3.0 and 3.4.1; 7.4.1 and the pure-Python parser do not.
+  - `redis` is pinned to `7.4.1` (the last 7.x) in `requirements.txt` and capped at `<8` in `requirements-sdr.txt`; Dependabot ignores `redis>=8`.
+  - Regression-guarded by `tests/test_redis_pubsub_leak_pin.py`, which counts gc-tracked lists across 600 real pub/sub messages (fails on 8.1.0 with 600 leaked; passes on 7.4.1).
+
 ## [3.23.3] - 2026-09-24 - Stop watchdog-kill re-air loop and display blob query
 
 ### Fixed

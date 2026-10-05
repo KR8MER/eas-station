@@ -71,7 +71,11 @@ gevent>=26.9.0    # Async worker for Flask-SocketIO with Gunicorn (Python 3.13+ 
 
 # Redis for state management and worker coordination
 # Replaces fragile file-based coordination with robust distributed state
-redis==8.1.0
+# Held at 7.4.x: every redis-py 8.x release (8.0.0-8.1.0) leaks one list per
+# pub/sub message with the hiredis parser -- ~600 MB/day in eas-station-demod
+# and eas-station-audio, which each receive ~31 msgs/s. 7.4.1 does not leak.
+# Guarded by tests/test_redis_pubsub_leak_pin.py; see CHANGELOG 3.23.4.
+redis==7.4.1
 hiredis==3.4.1  # C parser for better Redis performance
 
 # Development and debugging (optional)
