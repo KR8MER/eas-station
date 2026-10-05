@@ -10,6 +10,12 @@ updates:
     open-pull-requests-limit: 10
     labels:
       - "dependencies"
+    ignore:
+      # redis-py 8.x leaks one list per pub/sub message with hiredis (see
+      # requirements.txt). Re-test with tests/test_redis_pubsub_leak_pin.py
+      # before lifting this.
+      - dependency-name: "redis"
+        versions: [">=8"]
 
   # Keep the actions pinned in .github/workflows/*.yml (actions/checkout,
   # actions/setup-python, github/codeql-action, etc.) current.

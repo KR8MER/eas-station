@@ -20,7 +20,7 @@ GeoAlchemy2>=0.15.0
 greenlet>=3.5.6
 
 # Redis
-redis>=4.5.0
+redis>=4.5.0,<8  # 8.x leaks per pub/sub message with hiredis; see requirements.txt
 hiredis>=3.0.0
 
 # System and utilities
