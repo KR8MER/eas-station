@@ -227,6 +227,7 @@ nav:
           - Alpha (M) Protocol: reference/protocols/ALPHA_M_PROTOCOL.md
   - Maintenance:
       - Disk Space Cleanup: maintenance/DISK_SPACE_CLEANUP.md
+      - Automatic Deploys & Watchdog (Pi): maintenance/PI_AUTODEPLOY.md
   - Policies:
       - Terms of Use: policies/TERMS_OF_USE.md
       - Privacy Policy: policies/PRIVACY_POLICY.md

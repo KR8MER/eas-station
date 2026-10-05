@@ -70,6 +70,13 @@ workflow re-applies the sync to the recreated branch.
 `python scripts/sync_dependency_versions.py` before committing.
 `tests/test_tech_stack_badges.py` fails CI on any drift and names the command.
 
+## Deploying to the Pi
+
+Merging to `main` also deploys to the station's Raspberry Pi automatically
+(migrations, restart, health check, rollback on failure), and an hourly
+watchdog reports problems as a GitHub issue. See
+[Automatic Deploys and Health Watchdog](../maintenance/PI_AUTODEPLOY.md).
+
 ## Full vs. minimal tarball
 
 Every release publishes two source tarballs:
