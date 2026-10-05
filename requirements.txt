@@ -44,7 +44,7 @@ pytz==2026.4
 psutil==7.2.2
 
 # Environment variables
-python-dotenv==1.2.3
+python-dotenv==1.2.4
 
 # Markdown rendering for documentation viewer
 mistune==3.3.4  # Fast, extensible markdown parser with full GFM support
