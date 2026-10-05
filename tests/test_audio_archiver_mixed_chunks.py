@@ -1,23 +1,22 @@
-#!/usr/bin/env python3
 """
-Regression test for AudioArchiver's background-flush fix.
+EAS Station - Emergency Alert System
+Copyright (c) 2025-2026 EAS Station, LLC (KR8MER)
 
-Before the fix, _flush_segment() ran inline in _archive_loop() -- encoding a
-full segment via FFmpeg (~14s wall time for 600s of 48kHz stereo on a
-Raspberry Pi, measured live) blocked the loop from draining its
-BroadcastQueue subscriber for that entire window, causing the upstream
-publisher to drop chunks for this subscriber on every single segment flush
-("Audio chunks dropped for subscriber 'archiver-<name>' ... consuming
-slower than real time").
+This file is part of EAS Station.
 
-_start_flush_async() now snapshots and resets the in-memory chunk buffer
-synchronously, then hands the actual encode/write/prune off to a background
-thread -- so the archive loop's queue-draining is never blocked by how long
-encoding takes.
+EAS Station is dual-licensed software:
+- GNU Affero General Public License v3 (AGPL-3.0) for open-source use
+- Commercial License for proprietary use
+
+You should have received a copy of both licenses with this software.
+For more information, see LICENSE and LICENSE-COMMERCIAL files.
+
+IMPORTANT: This software cannot be rebranded or have attribution removed.
+See NOTICE file for complete terms.
+
+Repository: https://github.com/KR8MER/eas-station
 """
-import sys
-import time
-import os
+
 """An EAS injection into a stereo SDR source must not lose the archive segment.
 
 SDR sources publish ``(frames, 2)`` chunks; the EAS stream injector
