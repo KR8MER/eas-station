@@ -9,7 +9,7 @@
 Flask>=3.0.0
 Flask-SQLAlchemy>=3.1.1
 Flask-Caching>=2.5.1
-Werkzeug>=3.0.0
+Werkzeug>=3.1.9
 Jinja2>=3.1.0
 itsdangerous>=2.0.0
 
@@ -25,7 +25,7 @@ hiredis>=3.0.0
 
 # System and utilities
 psutil>=5.9.0
-python-dotenv>=1.0.0
+python-dotenv>=1.2.4
 PyYAML>=6.0.0
 pytz>=2024.1
 python-dateutil>=2.8.0
