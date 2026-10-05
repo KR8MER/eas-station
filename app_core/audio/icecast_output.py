@@ -48,7 +48,7 @@ import numpy as np
 import requests
 from requests import exceptions as requests_exceptions
 
-from .icecast_pacing import ByteCreditPacer
+from .icecast_pacing import RealTimePacer
 from .now_playing_metadata import extract_now_playing_fields
 from .stream_profiles import StreamFormat
 
@@ -605,9 +605,12 @@ class IcecastStreamer:
                 time.sleep(1.0)
 
         buffer_low_watermark = 150  # Warn if buffer drops below 7.5 seconds (25% of max)
-        # Release buffered audio by duration, not chunk count -- see
-        # icecast_pacing.py for the EAS-injection slowdown this prevents.
-        pacer = ByteCreditPacer()
+        # Release buffered audio against the wall clock -- see
+        # icecast_pacing.py for the alert slowdown and bursty-source
+        # starvation that chunk- and byte-counting each caused.
+        pacer = RealTimePacer(
+            lambda: self.config.sample_rate * max(1, int(self.config.channels)) * 2
+        )
 
         # Diagnostic: Check audio source type and status
         source_type = type(self.audio_source).__name__
@@ -632,7 +635,6 @@ class IcecastStreamer:
                 if samples is not None:
                     pcm_bytes = self._samples_to_pcm_bytes(samples)
                     self._bank_pcm(buffer, pcm_bytes)
-                    pacer.earn(len(pcm_bytes))
                     self._consecutive_empty_reads = 0  # Reset counter on successful read
 
                     # Opportunistically drain any further chunks already
@@ -655,7 +657,6 @@ class IcecastStreamer:
                 else:
                     # Track consecutive empty reads to diagnose source issues
                     self._consecutive_empty_reads += 1
-                    pacer.earn_one_chunk(buffer)
                     if self._consecutive_empty_reads == 20: 
                         logger.error(
                             f"Audio source for mount {self.config.mount} has not provided data for ~20 reads. "

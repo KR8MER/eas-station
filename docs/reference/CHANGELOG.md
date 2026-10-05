@@ -7,6 +7,13 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.23.8] - 2026-10-05 - Pace Icecast feeds against the wall clock
+
+### Fixed
+- **WNCI's Icecast stream kept cutting out after 3.23.5.** 3.23.5's `ByteCreditPacer` released one byte out per byte read, but only the *first* chunk of each read earned credit. An HTTP stream source delivers chunks in bursts, and the rest of each burst is drained without earning. `/wnci.mp3` therefore ran at 66–70% of real time continuously, and listeners' players kept reconnecting. `RealTimePacer` (`app_core/audio/icecast_pacing.py`) replaces it and releases by elapsed wall-clock time: one second of audio per second, whatever the chunk sizes, bursts or injections on the input side. When the local cushion exceeds 20 s (an injected alert banks its whole length at once), release runs 2% faster so latency drains back down.
+  - Verified on the lab box: both mounts deliver about 100% of real time before, during and after an injected 12 s test tone, which decodes as 12 × 0.50 s bursts exactly 1.00 s apart on `/wnci.mp3` and `/sdr-wbks.mp3`.
+  - `tests/test_icecast_pacing.py` now covers a bursty source (real time ±1%), the 50/85 ms alert case, the 2% catch-up above high water, and that idle time cannot bank a burst.
+
 ## [3.23.7] - 2026-10-05 - Stop an injected alert being wiped from an Icecast mount
 
 ### Fixed

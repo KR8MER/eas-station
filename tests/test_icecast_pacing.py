@@ -17,13 +17,17 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Regression tests for duration-based Icecast feed pacing.
+"""Regression tests for wall-clock Icecast feed pacing.
 
-An injected EAS alert is queued as 50 ms chunks while a stream source's
-live chunks are 85 ms (4096 frames at 48 kHz). The feed loop used to
-release one buffered chunk per chunk read, so the alert went out at
-50/85 = 59% of real time -- measured on air as ~50% for ~30 s, heard as
-stutter. These tests drive ``ByteCreditPacer`` with those exact sizes.
+1. One-in/one-out: an injected EAS alert is queued as 50 ms chunks while a
+   stream source's live chunks are 85 ms, so the alert went out at ~59% of
+   real time (measured ~50% for ~30 s, heard as stutter).
+2. Byte-counting fixed that but starved bursty HTTP sources -- only the
+   first chunk of each burst earned output -- WNCI ran at ~70% and
+   listeners' players kept reconnecting.
+
+``RealTimePacer`` releases by elapsed wall-clock time, so both cases come
+out at real time.
 """
 
 import sys
@@ -32,68 +36,86 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app_core.audio.icecast_pacing import ByteCreditPacer
+from app_core.audio.icecast_pacing import RealTimePacer
 
-_BYTES_PER_SEC = 48000 * 2  # mono int16 at 48 kHz
-_EAS_CHUNK = b"\x00" * int(_BYTES_PER_SEC * 0.050)    # injector: 50 ms
-_LIVE_CHUNK = b"\x00" * (4096 * 2)                    # stream source: ~85 ms
+_BPS = 48000 * 2  # mono int16 at 48 kHz
+_EAS_CHUNK = b"\x00" * int(_BPS * 0.050)   # injector: 50 ms
+_LIVE_CHUNK = b"\x00" * (4096 * 2)         # stream source: ~85.3 ms
 
 
-def _simulate(seconds: float) -> float:
-    """Feed live chunks for *seconds* with 17 s of EAS queued; return out/in."""
-    pacer = ByteCreditPacer()
-    buffer = deque([_EAS_CHUNK] * 349)
-    bytes_in = bytes_out = 0
-    for _ in range(int(seconds * _BYTES_PER_SEC / len(_LIVE_CHUNK))):
-        buffer.append(_LIVE_CHUNK)
-        pacer.earn(len(_LIVE_CHUNK))
-        bytes_in += len(_LIVE_CHUNK)
-        bytes_out += sum(len(c) for c in pacer.release(buffer))
-    return bytes_out / bytes_in
+class _Clock:
+    def __init__(self):
+        self.t = 0.0
+
+    def __call__(self):
+        return self.t
+
+
+def _pacer(clock):
+    return RealTimePacer(lambda: _BPS, clock=clock)
+
+
+def _run(buffer, clock, pacer, seconds, burst):
+    """Deliver live chunks in bursts of *burst* at the source's real rate."""
+    out = 0
+    period = len(_LIVE_CHUNK) / _BPS * burst
+    for _ in range(int(seconds / period)):
+        clock.t += period
+        buffer.extend([_LIVE_CHUNK] * burst)
+        out += sum(map(len, pacer.release(buffer)))
+    return out / (_BPS * seconds)
+
+
+def test_bursty_source_is_released_in_real_time():
+    clock = _Clock()
+    pacer = _pacer(clock)
+    buffer = deque([_LIVE_CHUNK] * 60)        # ~5 s prebuffer
+    pacer.release(buffer)
+    assert abs(_run(buffer, clock, pacer, 120.0, burst=4) - 1.0) < 0.01
 
 
 def test_eas_backlog_plays_in_real_time_despite_mismatched_chunk_sizes():
-    # One-in/one-out would give 50/85 = 0.59 over the alert window.
-    assert abs(_simulate(10.0) - 1.0) < 0.02
+    clock = _Clock()
+    pacer = _pacer(clock)
+    buffer = deque([_EAS_CHUNK] * 349)        # 17.45 s alert, below high water
+    pacer.release(buffer)
+    released = []
+    for _ in range(int(10 / 0.0853)):         # 10 s of live 85 ms reads
+        clock.t += len(_LIVE_CHUNK) / _BPS
+        buffer.append(_LIVE_CHUNK)
+        released.extend(pacer.release(buffer))
+    eas_seconds = sum(len(c) for c in released if c is _EAS_CHUNK) / _BPS
+    assert abs(eas_seconds - 10.0) < 0.1
 
 
-def test_long_run_output_matches_input():
-    assert abs(_simulate(120.0) - 1.0) < 0.01
+def test_long_backlog_drains_slightly_faster_than_real_time():
+    clock = _Clock()
+    pacer = _pacer(clock)
+    buffer = deque([_LIVE_CHUNK] * 600)       # ~51 s, above the 20 s high water
+    pacer.release(buffer)
+    rate = _run(buffer, clock, pacer, 10.0, burst=1)
+    assert 1.01 < rate < 1.03
 
 
 def test_idle_time_does_not_bank_credit_for_a_later_burst():
-    pacer = ByteCreditPacer()
+    clock = _Clock()
+    pacer = _pacer(clock)
     empty = deque()
-    for _ in range(100):
-        pacer.earn(len(_LIVE_CHUNK))
-        assert pacer.release(empty) == []
+    pacer.release(empty)
+    clock.t += 30.0
+    assert pacer.release(empty) == []
     buffer = deque([_EAS_CHUNK] * 50)
-    pacer.earn(len(_EAS_CHUNK))
-    assert len(pacer.release(buffer)) == 1
-
-
-def test_starved_read_releases_exactly_one_chunk():
-    pacer = ByteCreditPacer()
-    buffer = deque([_LIVE_CHUNK] * 10)
-    pacer.earn_one_chunk(buffer)
-    assert len(pacer.release(buffer)) == 1
-    assert len(buffer) == 9
-
-
-def test_starved_read_on_empty_buffer_is_a_no_op():
-    pacer = ByteCreditPacer()
-    buffer = deque()
-    pacer.earn_one_chunk(buffer)
-    assert pacer.release(buffer) == []
+    clock.t += 0.05
+    assert len(pacer.release(buffer)) <= 2   # not a 30 s burst
 
 
 def test_feed_loop_releases_through_the_pacer():
-    """The feed loop must not fall back to a fixed one-chunk-per-read write."""
+    """The feed loop must not fall back to chunk- or read-counted writes."""
     import inspect
 
     from app_core.audio.icecast_output import IcecastStreamer
 
     source = inspect.getsource(IcecastStreamer._feed_loop)
+    assert "RealTimePacer(" in source
     assert "pacer.release(buffer)" in source
-    assert "pacer.earn(len(pcm_bytes))" in source
     assert "chunk = buffer.popleft()" not in source

@@ -19,63 +19,74 @@ Repository: https://github.com/KR8MER/eas-station
 
 from __future__ import annotations
 
-"""Duration-based release of buffered PCM to the Icecast encoder.
+"""Real-time release of buffered PCM to the Icecast encoder.
 
 ``IcecastStreamer._feed_loop`` used to hand FFmpeg exactly one buffered
 chunk per chunk it read from the source -- one in, one out. That keeps
 real time only while every chunk is the same length. Injected EAS audio
-is always cut into 50 ms chunks (``eas_stream_injector``), but a stream
-source's live chunks are ``buffer_size`` frames: 4096 frames at 48 kHz
-is 85 ms. During an alert each 85 ms of live input therefore released
-only 50 ms of alert audio, so the alert reached listeners at ~59% of real
-time -- stretched over ~30 s with gaps that sounded like buffer
-underruns -- until the backlog drained.
+is cut into 50 ms chunks, but a stream source's live chunks are 4096
+frames (85 ms at 48 kHz), so an alert reached listeners at ~59% of real
+time, stretched over ~30 s with gaps.
 
-``ByteCreditPacer`` releases buffered audio by *duration* instead: every
-byte of PCM read in earns one byte of PCM out, whatever the chunk sizes
-on either side. The cushion of banked audio stays constant in time
-rather than in chunk count.
+Counting bytes read instead of chunks fixed alerts but not bursty
+sources: an HTTP stream delivers several chunks at once, the feed loop
+reads one and drains the rest, and only the first earned output -- WNCI
+ran at ~70% of real time and listeners' players kept dropping out.
+
+``RealTimePacer`` releases by the wall clock instead: each second that
+passes releases one second of audio, whatever the chunk sizes, bursts or
+injections on the input side. The local buffer is the jitter cushion.
+When the cushion grows past ``high_water_s`` (an injected alert banks its
+whole length at once) release runs ``catch_up`` faster so latency drains
+back down; listeners' players absorb a 2% faster feed without any audible
+change.
 """
 
+import time
 from collections import deque
+from typing import Callable, Optional
 
 
-class ByteCreditPacer:
-    """Track how many PCM bytes may be written for what has been read."""
+class RealTimePacer:
+    """Release buffered PCM chunks at the stream's real-time byte rate."""
 
-    def __init__(self) -> None:
-        self._credit = 0
-
-    def earn(self, n_bytes: int) -> None:
-        """Credit *n_bytes* of PCM that just arrived from the source."""
-        self._credit += max(0, int(n_bytes))
-
-    def earn_one_chunk(self, buffer: deque) -> None:
-        """Credit the next buffered chunk -- used when a read timed out.
-
-        Matches the old one-in/one-out behaviour on a starved source: a
-        timeout still lets one banked chunk through, so the cushion drains
-        gradually instead of the encoder stalling outright.
-        """
-        if buffer:
-            self._credit = max(self._credit, len(buffer[0]))
+    def __init__(
+        self,
+        bytes_per_second: Callable[[], float],
+        high_water_s: float = 20.0,
+        catch_up: float = 1.02,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._bytes_per_second = bytes_per_second
+        self._high_water_s = high_water_s
+        self._catch_up = catch_up
+        self._clock = clock
+        self._last: Optional[float] = None
+        self._credit = 0.0
 
     def release(self, buffer: deque) -> list:
-        """Pop and return the buffered chunks the current credit pays for.
+        """Pop and return the chunks the elapsed time pays for.
 
-        A chunk is released whenever any credit remains, so a partial
-        credit is carried as a (bounded) debt into the next read rather
-        than holding a chunk back. Credit never accumulates while the
-        buffer is empty, so an idle period cannot later turn into a burst.
+        Credit never accumulates while the buffer is empty, so a starved
+        period cannot later turn into a burst.
         """
+        now = self._clock()
+        rate = max(1.0, float(self._bytes_per_second()))
+        if self._last is not None:
+            elapsed = max(0.0, now - self._last)
+            if buffer and sum(map(len, buffer)) > self._high_water_s * rate:
+                rate *= self._catch_up
+            self._credit += elapsed * rate
+        self._last = now
+
         out = []
         while buffer and self._credit > 0:
             chunk = buffer.popleft()
             self._credit -= len(chunk)
             out.append(chunk)
         if not buffer and self._credit > 0:
-            self._credit = 0
+            self._credit = 0.0
         return out
 
 
-__all__ = ["ByteCreditPacer"]
+__all__ = ["RealTimePacer"]

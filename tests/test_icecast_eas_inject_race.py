@@ -83,19 +83,22 @@ def test_small_live_chunks_behind_an_alert_never_drop_alert_audio():
     The old deque(maxlen=600) hit its cap ~5 s in and silently dropped the
     oldest chunks -- the alert -- so the rest played at ~3.5x speed.
     """
-    from app_core.audio.icecast_pacing import ByteCreditPacer
+    from app_core.audio.icecast_pacing import RealTimePacer
 
     streamer, source = _streamer()
     streamer.config.sample_rate, streamer.config.channels = 48000, 2
+    now = [0.0]
+    pacer = RealTimePacer(lambda: 48000 * 4, clock=lambda: now[0])
     buffer = deque()
     source._eas_inject_seq += 1
     eas = [b"E" * 9600] * 280                      # 50 ms stereo int16 chunks
     for chunk in eas:
         streamer._bank_pcm(buffer, chunk)
-    pacer, released = ByteCreditPacer(), []
+    pacer.release(buffer)
+    released = []
     for _ in range(int(15 * 79)):                  # 15 s of 12.6 ms live chunks
+        now[0] += 2420 / (48000 * 4)
         streamer._bank_pcm(buffer, b"L" * 2420)
-        pacer.earn(2420)
         released.extend(pacer.release(buffer))
     assert released[:280] == eas
 
