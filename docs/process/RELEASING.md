@@ -7,8 +7,8 @@ are signed, and how anyone can verify a download before trusting it.
 
 Releases are cut by the
 [`release.yml`](https://github.com/KR8MER/eas-station/blob/main/.github/workflows/release.yml) GitHub Actions workflow,
-which is **triggered manually**. There is no manual tagging, uploading, or
-signing step — but publishing the release is a deliberate, on-demand action.
+which runs **automatically whenever a merge to `main` changes `VERSION`**.
+There is no manual tagging, uploading, or signing step.
 
 1. **Bump the version.** Update the root [`VERSION`](https://github.com/KR8MER/eas-station/blob/main/VERSION) file and
    move the corresponding notes in
@@ -16,11 +16,11 @@ signing step — but publishing the release is a deliberate, on-demand action.
    `## [X.Y.Z]` heading. The `tests/test_release_metadata.py` guardrail (run
    on every PR by `tests.yml`, and re-validated by `release.yml` itself
    before it builds anything) enforces that these stay aligned.
-2. **Merge to `main`.** Land the version bump on `main` as usual. Merging
-   does **not** publish a release on its own.
-3. **Run the release workflow manually.** When you are ready to publish, go to
-   *Actions → Release → Run workflow* and run it against `main`. The workflow
-   reads the current `VERSION` and releases that version.
+2. **Merge to `main`.** Landing the version bump on `main` publishes the
+   release: the push changes `VERSION`, which triggers `release.yml`.
+3. **Re-running by hand** (*Actions → Release → Run workflow*) is still
+   available, e.g. after a failed run. A version that already has a release
+   is skipped, so this is always safe.
 4. **The workflow then:**
    - re-validates the release metadata (`tests/test_release_metadata.py`);
    - builds two reproducible source tarballs with `git archive` from the
@@ -53,6 +53,14 @@ commits the follow-up work to that PR, so nothing needs editing by hand:
 repository with *Contents: Read and write*, and save it as a **Dependabot**
 secret named `DEPENDABOT_SYNC_TOKEN` (*Settings → Secrets and variables →
 Dependabot*). Without it the job fails with instructions instead of pushing.
+
+**Patch-only updates merge themselves.** `.github/workflows/dependabot-automerge.yml`
+turns on GitHub auto-merge when the highest change in a Dependabot PR is a
+patch release, so the PR merges once every required check passes on its final
+commit (after the sync commit) and `release.yml` then publishes the new version.
+Minor and major updates wait for review. Auto-merge is enabled with
+`DEPENDABOT_SYNC_TOKEN` (a merge done for `GITHUB_TOKEN` would not trigger
+`release.yml`), so that token also needs **Pull requests: Read and write**.
 
 **If the PR conflicts** after `main` moves, comment `@dependabot recreate`.
 Dependabot does not rebase a PR that someone else has pushed to, and the

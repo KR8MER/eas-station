@@ -1,0 +1,58 @@
+# Auto-merge Dependabot PRs whose every update is a patch release.
+#
+# When the highest semver change in a Dependabot PR is a patch (for the
+# weekly python-deps group: every package in it), this turns on GitHub
+# auto-merge. The PR still merges only after every required check passes
+# on its final commit -- including the commit dependabot-sync.yml pushes
+# with the synced docs and release. Minor and major updates are left for a
+# person to review: SQLAlchemy 2.0 -> 2.1 looked routine and would have
+# stopped every service from starting (see CHANGELOG 3.24.1).
+#
+# Auto-merge is enabled with DEPENDABOT_SYNC_TOKEN, not GITHUB_TOKEN: a merge
+# performed for GITHUB_TOKEN does not trigger other workflows, so release.yml
+# would never publish the version the PR bumps. The token therefore needs
+# "Pull requests: Read and write" in addition to "Contents: Read and write".
+# Without that permission this job fails with instructions and the PR simply
+# waits for a manual merge.
+
+name: Dependabot auto-merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  automerge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Enable auto-merge for patch-only updates
+        if: steps.meta.outputs.update-type == 'version-update:semver-patch'
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDABOT_SYNC_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::DEPENDABOT_SYNC_TOKEN is not available (Settings -> Secrets and variables -> Dependabot); leaving this PR for a manual merge."
+            exit 1
+          fi
+          if ! gh pr merge --auto --merge "$PR_URL"; then
+            echo "::error::Could not enable auto-merge. DEPENDABOT_SYNC_TOKEN needs 'Pull requests: Read and write' as well as 'Contents: Read and write'. Leaving this PR for a manual merge."
+            exit 1
+          fi
+          echo "Auto-merge enabled: patch-only update (${{ steps.meta.outputs.dependency-names }})."
+
+      - name: Leave minor/major updates for review
+        if: steps.meta.outputs.update-type != 'version-update:semver-patch'
+        run: echo "Highest update is '${{ steps.meta.outputs.update-type }}'; leaving for a manual review and merge."
