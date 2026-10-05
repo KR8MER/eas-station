@@ -179,7 +179,7 @@ s3fs==2026.7.0
 # 1.43.75 only once a newer aiobotocore release raises this ceiling --
 # check https://pypi.org/pypi/aiobotocore/json for its current botocore
 # upper bound first.
-aiobotocore==3.9.1
+aiobotocore==3.9.2
 botocore==1.43.75
 boto3==1.43.75  # Unencrypted, anonymous read access to NOAA's public Level II archive on AWS Open Data (no credentials needed)
 cartopy==0.26.0  # Geographic (Web Mercator) projection for plot_ppi_map, matching the OSM basemap tiles it composites onto
