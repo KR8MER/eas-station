@@ -47,6 +47,7 @@ def _get_or_create_settings() -> NotificationSettings:
             smtp_host='',
             smtp_port=587,
             smtp_username='',
+            smtp_from_address='',
             smtp_password='',
             smtp_security='starttls',
             compliance_alert_emails=[],
@@ -80,6 +81,7 @@ def _fallback_notification_settings():
         smtp_host='',
         smtp_port=587,
         smtp_username='',
+        smtp_from_address='',
         smtp_password='',
         smtp_security='starttls',
         compliance_alert_emails=[],
@@ -241,6 +243,14 @@ def update_notification_settings():
         settings.smtp_host = request.form.get('smtp_host', '').strip()
         settings.smtp_port = int(request.form.get('smtp_port', '587') or '587')
         settings.smtp_username = request.form.get('smtp_username', '').strip()
+        from_address = request.form.get('smtp_from_address', '').strip()
+        if from_address and not _looks_like_email(from_address):
+            return jsonify({
+                'success': False,
+                'error': 'From address must be an email address, e.g. alerts@example.com '
+                         '(or "EAS Station <alerts@example.com>").',
+            }), 400
+        settings.smtp_from_address = from_address
         settings.smtp_security = request.form.get('smtp_security', 'starttls').strip() or 'starttls'
         settings.email_attach_audio = (
             request.form.get('email_attach_audio', 'false').lower() == 'true'
@@ -381,8 +391,9 @@ def test_email():
 
         from app_core.notifications.email import test_email as _send_test
         logger.warning(
-            "Test email attempt: recipient=%s smtp=%s:%d security=%s",
+            "Test email attempt: recipient=%s from=%s smtp=%s:%d security=%s",
             recipient,
+            settings.smtp_from_address or settings.smtp_username or '(default)',
             settings.smtp_host or '(none)',
             settings.smtp_port or 587,
             settings.smtp_security or 'starttls',
@@ -395,6 +406,7 @@ def test_email():
             smtp_password=settings.smtp_password or '',
             smtp_security=settings.smtp_security or 'starttls',
             recipient=recipient,
+            from_address=settings.smtp_from_address or '',
         )
 
         if success:
@@ -568,3 +580,12 @@ def notification_status():
     except SQLAlchemyError as e:
         logger.error(f"Database error fetching notification status: {str(e)}")
         return jsonify({'success': False, 'error': 'Database error'}), 500
+
+
+def _looks_like_email(value: str) -> bool:
+    """Accept "addr@domain" or "Display Name <addr@domain>"."""
+    from email.utils import parseaddr
+
+    _, addr = parseaddr(value)
+    local, _, domain = addr.rpartition("@")
+    return bool(local) and "." in domain and " " not in addr

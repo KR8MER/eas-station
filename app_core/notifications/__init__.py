@@ -142,6 +142,7 @@ def send_alert_notifications(
                         smtp_username=settings.smtp_username or "",
                         smtp_password=settings.smtp_password or "",
                         smtp_security=settings.smtp_security or "starttls",
+                        from_address=getattr(settings, "smtp_from_address", "") or "",
                         audio_data=audio_data if settings.email_attach_audio else None,
                         audio_filename=audio_filename,
                         html=email_html,

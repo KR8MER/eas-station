@@ -993,6 +993,10 @@ class NotificationSettings(db.Model):
     smtp_username = db.Column(db.String(255), nullable=False, default='')
     # SMTP authentication username / login email
 
+    smtp_from_address = db.Column(db.String(255), nullable=False, default='', server_default='')
+    # From address for outgoing mail; blank = use smtp_username. Needed for
+    # relays like SMTP2GO whose logins are not the (verified) sender address.
+
     smtp_password = db.Column(EncryptedString, nullable=False, default='')
     # SMTP authentication password
 
@@ -1069,6 +1073,7 @@ class NotificationSettings(db.Model):
             "smtp_host": self.smtp_host or "",
             "smtp_port": self.smtp_port or 587,
             "smtp_username": self.smtp_username or "",
+            "smtp_from_address": self.smtp_from_address or "",
             # smtp_password intentionally omitted from API responses
             "smtp_security": self.smtp_security or "starttls",
             "compliance_alert_emails": self.compliance_alert_emails or [],

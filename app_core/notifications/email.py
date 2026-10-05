@@ -108,6 +108,19 @@ def _maybe_compress_audio(
     return audio_data, "audio", "wav", filename
 
 
+def resolve_sender(from_address: str = "", smtp_username: str = "") -> str:
+    """The From address for outgoing mail.
+
+    The configured From address wins; otherwise the SMTP username (the
+    behaviour before the setting existed, which works when the login is an
+    email address), then a local placeholder. Relays such as SMTP2GO reject
+    mail whose From address is not a verified sender, and their SMTP
+    usernames are often not email addresses at all, so the two must be
+    configurable separately.
+    """
+    return (from_address or "").strip() or (smtp_username or "").strip() or "alerts@localhost"
+
+
 def build_smtp_connection(host: str, port: int, security: str):
     """Return an active SMTP connection based on security mode.
 
@@ -143,6 +156,7 @@ def send_eas_alert_email(
     map_image: Optional[bytes] = None,
     audio_url: Optional[str] = None,
     compress_audio: bool = False,
+    from_address: str = "",
 ) -> bool:
     """Send an EAS alert notification email.
 
@@ -155,6 +169,7 @@ def send_eas_alert_email(
         smtp_username: SMTP login username (empty string for unauthenticated relay).
         smtp_password: SMTP login password.
         smtp_security: "none", "starttls", or "ssl".
+        from_address:  From address; defaults to smtp_username (see resolve_sender).
         audio_data:    Optional WAV bytes to attach to the email.
         audio_filename: Filename for the audio attachment.
         html:          When True, add a styled HTML body (multipart/alternative)
@@ -194,7 +209,7 @@ def send_eas_alert_email(
         name = fips_lookup.get(code)
         location_labels.append(name if name else code)
 
-    sender = smtp_username or "alerts@localhost"
+    sender = resolve_sender(from_address, smtp_username)
 
     msg = EmailMessage()
     msg["Subject"] = f"EAS Alert: {event_code} - {headline}"
@@ -307,6 +322,7 @@ def test_email(
     smtp_password: str,
     smtp_security: str,
     recipient: str,
+    from_address: str = "",
 ) -> Tuple[bool, str]:
     """Send a test email to verify the SMTP configuration.
 
@@ -317,6 +333,7 @@ def test_email(
         smtp_password: SMTP login password.
         smtp_security: "none", "starttls", or "ssl".
         recipient:     Destination email address for the test.
+        from_address:  From address; defaults to smtp_username (see resolve_sender).
 
     Returns:
         (success: bool, message: str)
@@ -327,7 +344,7 @@ def test_email(
     if not recipient:
         return False, "A recipient email address is required for testing"
 
-    sender = smtp_username or "alerts@localhost"
+    sender = resolve_sender(from_address, smtp_username)
 
     msg = EmailMessage()
     msg["Subject"] = "EAS Station - Test Email"
