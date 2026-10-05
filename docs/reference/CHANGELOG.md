@@ -7,6 +7,12 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.25.1] - 2026-10-05 - Let aiobotocore drive boto3/botocore; sync only on Dependabot-triggered runs
+
+### Changed
+- boto3/botocore are no longer pinned exactly. aiobotocore pins botocore to a narrow window (3.9.2: <1.43.107), and Dependabot's grouped PR #2711 bumped the exact pins to 1.43.107 and failed to install with ResolutionImpossible, the same trap as #2693/#2694. They now take a floor, pip installs the newest pair aiobotocore allows (1.43.106 today), and Dependabot ignores them.
+- `.github/workflows/dependabot-sync.yml` runs only when Dependabot triggered the event. GitHub exposes Dependabot secrets only to those runs, so a run caused by a person pushing to the PR always reported the token as missing.
+
 ## [3.25.0] - 2026-10-05 - Automate dependency-version docs and releases
 
 ### Added
