@@ -1513,6 +1513,12 @@ Before committing changes:
 3. **Update attribution** - Add to `docs/reference/dependency_attribution.md`
 4. **Document if needed** - Update README if it affects users
 5. **Keep minimal** - Only add if truly necessary
+6. **Sync documented versions** - Run `python scripts/sync_dependency_versions.py`
+   after changing any pin. It rewrites the README dependency tables, the
+   README/footer shields and `docs/reference/ABOUT.md` from `requirements.txt`;
+   `tests/test_tech_stack_badges.py` fails CI on drift. Dependabot PRs get this
+   (plus the patch release) automatically -- see
+   [Releasing → Dependency updates](../process/RELEASING.md#dependency-updates-automated).
 
 **Example:**
 ```txt

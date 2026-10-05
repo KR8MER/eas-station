@@ -35,6 +35,33 @@ signing step — but publishing the release is a deliberate, on-demand action.
 The workflow is idempotent: if a release for the current `VERSION` already
 exists, it exits without doing anything, so re-running it is safe.
 
+## Dependency updates (automated)
+
+Dependabot opens **one weekly PR** for all pip updates (the `python-deps` group
+in `.github/dependabot.yml`). `.github/workflows/dependabot-sync.yml` then
+commits the follow-up work to that PR, so nothing needs editing by hand:
+
+1. `scripts/sync_dependency_versions.py` rewrites every documented version from
+   `requirements.txt`: the README dependency tables, the README and footer
+   shields (`templates/partials/tech_stack_badges.html`, alt/title text
+   included) and `docs/reference/ABOUT.md`.
+2. The same script's `--release` cuts a patch release: `VERSION`, the README
+   version badge and a CHANGELOG heading. It is skipped when the PR already
+   bumped `VERSION` past `main`, so the bot's own push does not loop.
+
+**One-time setup:** create a fine-grained personal access token scoped to this
+repository with *Contents: Read and write*, and save it as a **Dependabot**
+secret named `DEPENDABOT_SYNC_TOKEN` (*Settings → Secrets and variables →
+Dependabot*). Without it the job fails with instructions instead of pushing.
+
+**If the PR conflicts** after `main` moves, comment `@dependabot recreate`.
+Dependabot does not rebase a PR that someone else has pushed to, and the
+workflow re-applies the sync to the recreated branch.
+
+**Changing `requirements.txt` by hand** (outside Dependabot): run
+`python scripts/sync_dependency_versions.py` before committing.
+`tests/test_tech_stack_badges.py` fails CI on any drift and names the command.
+
 ## Full vs. minimal tarball
 
 Every release publishes two source tarballs:

@@ -7,6 +7,15 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.25.0] - 2026-10-05 - Automate dependency-version docs and releases
+
+### Added
+- **`scripts/sync_dependency_versions.py`** rewrites every hand-copied dependency version from `requirements.txt`: README dependency tables, README/footer shields (alt/title text included) and `docs/reference/ABOUT.md`. `--check` reports drift and `--release TITLE` cuts a patch release (VERSION, README badge, CHANGELOG heading). `tests/test_tech_stack_badges.py` now gets its shield mapping from the script and fails CI on any drift, naming the command to run. `tests/test_sync_dependency_versions.py` covers the rewriting, the release cut and `--check`.
+- **`.github/workflows/dependabot-sync.yml`** runs the script on every Dependabot PR and commits the synced docs plus a patch release back to the PR. It skips the release when `VERSION` is already ahead of `main`, so its own push does not loop. It needs a Dependabot secret `DEPENDABOT_SYNC_TOKEN` (repo-scoped PAT, Contents read/write); without the secret it fails with instructions. Setup is described in `docs/process/RELEASING.md`.
+
+### Changed
+- Dependabot opens one weekly PR for all pip updates (`python-deps` group). That keeps the interlocked boto3/botocore/aiobotocore and s3fs/fsspec pins moving together, and leaves only one PR carrying a release commit at a time.
+
 ## [3.24.2] - 2026-10-05 - Sync documented dependency versions
 
 ### Fixed
