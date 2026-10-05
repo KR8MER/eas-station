@@ -418,7 +418,7 @@ class AudioArchiver:
         filepath = date_dir / filename
 
         # Concatenate this segment's buffered chunks
-        audio = np.concatenate(chunks).astype(np.float32)
+        audio = np.concatenate(_match_chunk_shapes(chunks)).astype(np.float32)
 
         duration_s = len(audio) / max(self.sample_rate, 1)
 
@@ -644,6 +644,27 @@ class AudioArchiver:
 # ---------------------------------------------------------------------------
 # Module-level utilities
 # ---------------------------------------------------------------------------
+
+def _match_chunk_shapes(chunks: List[np.ndarray]) -> List[np.ndarray]:
+    """Upmix 1-D chunks when a segment also holds 2-D (frames, channels) ones.
+
+    An SDR source publishes stereo as ``(frames, 2)`` arrays, but the EAS
+    stream injector (``eas_stream_injector``) publishes alert audio as mono
+    1-D arrays into the same broadcast queue. ``np.concatenate`` refuses to
+    mix the two, so every segment containing an alert raised in the flush
+    thread and was lost. Segments that are all 1-D or all 2-D pass through
+    untouched -- a 1-D chunk is only reinterpreted when 2-D chunks show what
+    the source's real layout is.
+    """
+    widths = {c.shape[1] for c in chunks if c.ndim == 2}
+    if not widths or all(c.ndim == 2 for c in chunks):
+        return chunks
+    width = max(widths)
+    return [
+        np.repeat(c.reshape(-1, 1), width, axis=1) if c.ndim == 1 else c
+        for c in chunks
+    ]
+
 
 def _dir_size(path: Path) -> int:
     """Recursively sum file sizes under *path*."""

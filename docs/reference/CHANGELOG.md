@@ -7,6 +7,11 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.23.6] - 2026-10-05 - Keep archive segments that contain an alert
+
+### Fixed
+- **Every archive segment of an SDR source that contained an alert was lost.** SDR sources publish stereo as `(frames, 2)` arrays, but the EAS stream injector publishes alert audio as mono 1-D arrays into the same broadcast queue. `AudioArchiver._flush_segment` concatenated them directly, and the flush thread died with `ValueError: all the input arrays must have same number of dimensions` (seen on `sdr-wbks` during an RWT). New `_match_chunk_shapes()` upmixes 1-D chunks only when the segment also holds 2-D ones. Segments that are all 1-D or all 2-D pass through untouched. Regression-guarded by `tests/test_audio_archiver_mixed_chunks.py`.
+
 ## [3.23.5] - 2026-10-05 - Stop alert audio stuttering on Icecast
 
 ### Fixed
