@@ -3,12 +3,12 @@
 [![Tests](https://github.com/KR8MER/eas-station/actions/workflows/tests.yml/badge.svg)](https://github.com/KR8MER/eas-station/actions/workflows/tests.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-3.25.1-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.25.2-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.1.3-000000?style=flat-square&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
-[![Werkzeug](https://img.shields.io/badge/Werkzeug-3.1.8-000000?style=flat-square)](https://werkzeug.palletsprojects.com/)
+[![Werkzeug](https://img.shields.io/badge/Werkzeug-3.1.9-000000?style=flat-square)](https://werkzeug.palletsprojects.com/)
 [![Jinja2](https://img.shields.io/badge/Jinja2-3.1.6-B41717?style=flat-square&logo=jinja&logoColor=white)](https://jinja.palletsprojects.com/)
 [![Socket.IO](https://img.shields.io/badge/Socket.IO-5.17.0-010101?style=flat-square&logo=socketdotio&logoColor=white)](https://socket.io/)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.1.2-CA2C39?style=flat-square&logo=sqlalchemy&logoColor=white)](https://www.sqlalchemy.org/)
@@ -474,7 +474,7 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 | Library | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
 | Flask | 3.1.3 | BSD‑3‑Clause | The web framework. Every dashboard, admin page, and JSON endpoint is a Flask route. | https://flask.palletsprojects.com/ |
-| Werkzeug | 3.1.8 | BSD‑3‑Clause | WSGI request/response plumbing under Flask — URL routing, cookies, exceptions, request parsing. | https://werkzeug.palletsprojects.com/ |
+| Werkzeug | 3.1.9 | BSD‑3‑Clause | WSGI request/response plumbing under Flask — URL routing, cookies, exceptions, request parsing. | https://werkzeug.palletsprojects.com/ |
 | Jinja2 | 3.1.6 | BSD‑3‑Clause | Server‑side HTML templates (`templates/*.html`), including the footer badge partial. | https://jinja.palletsprojects.com/ |
 | itsdangerous | 2.2.0 | BSD‑3‑Clause | Cryptographic signing for session cookies, CSRF tokens, and one‑use download URLs. | https://itsdangerous.palletsprojects.com/ |
 | Flask‑SQLAlchemy | 3.1.1 | BSD‑3‑Clause | Thin Flask integration over SQLAlchemy — wires the engine to the app and request scope. | https://flask-sqlalchemy.palletsprojects.com/ |
