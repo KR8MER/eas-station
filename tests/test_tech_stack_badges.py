@@ -68,6 +68,11 @@ CURATED_VERSIONED = {
     "Pillow": "Pillow",
     "pydub": "pydub",
     "pyotp": "PyOTP",
+    # Range/floor pins: the shield shows the floor version (e.g.
+    # "Numba-0.68.0%2B" for numba>=0.68.0,<0.69.0).
+    "numba": "Numba",
+    "gevent": "gevent",
+    "cryptography": "cryptography",
 }
 
 # These libraries / system packages are versionless badges (system-managed
@@ -80,15 +85,13 @@ CURATED_UNVERSIONED = (
     "eSpeak",        # may render as "eSpeak NG" — substring match
     "Raspberry Pi",
     "Systemd",
-    "Redis",         # server is system-managed; Python client version
-                     # (requirements.txt redis==7.1.0) is intentionally not
-                     # cross-checked here because the badge advertises the
-                     # server major.minor, not the client patch.
+    "Redis",         # server is system-managed; the redis-py client pin
+                     # is intentionally not cross-checked here because the
+                     # badge advertises the server major.minor, not the
+                     # client version.
     "chrony",
     "gpsd",
     "Twilio",
-    "Numba",         # version pinned as a range (>=0.61,<0.64) — string "Numba" must appear
-    "gevent",        # also a range pin
 )
 
 
@@ -284,3 +287,36 @@ def test_attributions_section_present_in_readme() -> None:
         "This is the canonical attribution surface for the long tail of "
         "libraries that don't warrant a top-level shield."
     )
+
+
+def test_readme_dependency_table_matches_requirements_txt() -> None:
+    """Every row of the README dependency table that names a package pinned
+    in requirements.txt must show that pin: the exact version for ``==``
+    pins, ``<floor>+`` for ``>=`` pins. Rows for redis, hiredis, pytz,
+    greenlet, ujson, pyproj, gevent and geoip2 had all drifted before this
+    check existed."""
+    exact: dict[str, str] = {}
+    floor: dict[str, str] = {}
+    pattern = re.compile(r"^\s*([A-Za-z0-9_.\-]+)(?:\[[^\]]*\])?\s*(==|>=)\s*([0-9][^\s,;#]*)")
+    for raw in REQS.read_text(encoding="utf-8").splitlines():
+        m = pattern.match(raw.split("#", 1)[0])
+        if m:
+            key = m.group(1).lower().replace("_", "-")
+            (exact if m.group(2) == "==" else floor)[key] = m.group(3)
+
+    failures: list[str] = []
+    for line in README.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 2 or not re.match(r"^[0-9]", cells[1]):
+            continue
+        name = re.sub(r"\s*\(python\)", "", cells[0], flags=re.I)
+        key = name.strip("*` ").lower().replace("_", "-").replace(" ", "-")
+        shown = cells[1]
+        if key in exact and shown != exact[key]:
+            failures.append(f"{cells[0]}: README shows {shown}, requirements.txt pins =={exact[key]}")
+        elif key in floor and shown not in (floor[key], floor[key] + "+"):
+            failures.append(f"{cells[0]}: README shows {shown}, requirements.txt pins >={floor[key]}")
+
+    assert not failures, "README dependency table drift:\n  - " + "\n  - ".join(failures)

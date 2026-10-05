@@ -7,6 +7,12 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.24.2] - 2026-10-05 - Sync documented dependency versions
+
+### Fixed
+- **README, footer shields and the About page listed stale dependency versions.** The README dependency table showed redis 8.1.0 (now 7.4.1), hiredis 3.4.1, pytz 2026.3.post1, greenlet 3.5.5, ujson 5.13.0, pyproj 3.7.2, gevent 26.8.0+ and geoip2 4.8.0+. The README and footer shields showed cryptography 46.0.5, gevent 26.8.0 and Numba 0.67+. `docs/reference/ABOUT.md` listed pytz 2026.3.post1. The redis row now notes why the client is held at 7.4.x.
+  - `tests/test_tech_stack_badges.py` now checks the Numba, gevent and cryptography shields (previously versionless in the check) and every row of the README dependency table against `requirements.txt`. Both checks fail on the previous README.
+
 ## [3.24.1] - 2026-10-05 - Dependency updates (SQLAlchemy 2.1, numba 0.68, AWS/s3fs group)
 
 ### Changed

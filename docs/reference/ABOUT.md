@@ -55,7 +55,7 @@ The application combines open-source tooling and optional cloud integrations. Ve
 
 ### System and Utilities
 - requests 2.34.2 for CAP feed retrieval and IPAWS integration
-- pytz 2026.3.post1 timezone utilities
+- pytz 2026.4 timezone utilities
 - psutil 7.2.2 system health and receiver monitoring
 - python-dotenv 1.2.3 configuration loading
 - cryptography — Ed25519 signing and SHA-256 hashing backing the tamper-evident `audit_logs` chain (see `app_core/auth/audit.py::AuditLogger.verify_chain`)

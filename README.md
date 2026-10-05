@@ -3,7 +3,7 @@
 [![Tests](https://github.com/KR8MER/eas-station/actions/workflows/tests.yml/badge.svg)](https://github.com/KR8MER/eas-station/actions/workflows/tests.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-3.24.1-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.24.2-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -16,7 +16,7 @@
 [![PostgreSQL + PostGIS](https://img.shields.io/badge/PostgreSQL-17%20%2B%20PostGIS-0093D0?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-8.0-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
 [![Gunicorn](https://img.shields.io/badge/Gunicorn-26.2.0-499848?style=flat-square&logo=gunicorn&logoColor=white)](https://gunicorn.org/)
-[![gevent](https://img.shields.io/badge/gevent-26.8.0-1F8B4C?style=flat-square)](https://www.gevent.org/)
+[![gevent](https://img.shields.io/badge/gevent-26.9.0-1F8B4C?style=flat-square)](https://www.gevent.org/)
 [![Nginx](https://img.shields.io/badge/Nginx-system-009639?style=flat-square&logo=nginx&logoColor=white)](https://nginx.org/)
 [![Let's Encrypt](https://img.shields.io/badge/Let's%20Encrypt-Certbot-003A70?style=flat-square&logo=letsencrypt&logoColor=white)](https://letsencrypt.org/)
 [![Systemd](https://img.shields.io/badge/Systemd-Services-33A9DC?style=flat-square&logo=systemd&logoColor=white)](https://systemd.io/)
@@ -27,7 +27,7 @@
 [![eSpeak NG](https://img.shields.io/badge/eSpeak%20NG-TTS-5C2D91?style=flat-square)](https://github.com/espeak-ng/espeak-ng)
 [![NumPy](https://img.shields.io/badge/NumPy-2.5.3-013243?style=flat-square&logo=numpy&logoColor=white)](https://numpy.org/)
 [![SciPy](https://img.shields.io/badge/SciPy-1.18.1-8CAAE6?style=flat-square&logo=scipy&logoColor=white)](https://scipy.org/)
-[![Numba](https://img.shields.io/badge/Numba-0.67%2B-00A3E0?style=flat-square&logo=numba&logoColor=white)](https://numba.pydata.org/)
+[![Numba](https://img.shields.io/badge/Numba-0.68.0%2B-00A3E0?style=flat-square&logo=numba&logoColor=white)](https://numba.pydata.org/)
 [![lxml](https://img.shields.io/badge/lxml-6.1.3-4A7EBB?style=flat-square)](https://lxml.de/)
 [![Pillow](https://img.shields.io/badge/Pillow-12.3.0-3776AB?style=flat-square)](https://python-pillow.org/)
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3.0-7952B3?style=flat-square&logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
@@ -35,7 +35,7 @@
 [![Leaflet](https://img.shields.io/badge/Leaflet-1.9.4-199900?style=flat-square&logo=leaflet&logoColor=white)](https://leafletjs.com/)
 [![Chart.js](https://img.shields.io/badge/Chart.js-3.9%20%26%204.4-FF6384?style=flat-square&logo=chartdotjs&logoColor=white)](https://www.chartjs.org/)
 [![PyOTP](https://img.shields.io/badge/PyOTP-2.10.0-2E7D32?style=flat-square)](https://pyauth.github.io/pyotp/)
-[![cryptography](https://img.shields.io/badge/cryptography-46.0.5-2c5282?style=flat-square)](https://cryptography.io/)
+[![cryptography](https://img.shields.io/badge/cryptography-50.0.2-2c5282?style=flat-square)](https://cryptography.io/)
 [![Twilio](https://img.shields.io/badge/Twilio-SMS-F22F46?style=flat-square&logo=twilio&logoColor=white)](https://www.twilio.com/)
 [![chrony](https://img.shields.io/badge/chrony-NTP-1F4E79?style=flat-square)](https://chrony-project.org/)
 [![gpsd](https://img.shields.io/badge/gpsd-3.x-2E86AB?style=flat-square)](https://gpsd.gitlab.io/gpsd/)
@@ -494,17 +494,17 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 | GeoAlchemy2 | 0.20.0 | MIT | SQLAlchemy types and ST_* function bindings for PostGIS geometry/geography columns. | https://geoalchemy-2.readthedocs.io/ |
 | PostgreSQL | 17 | PostgreSQL | Primary database (alerts, users, audit, configuration). | https://www.postgresql.org/ |
 | PostGIS | 3.5 | GPL‑2.0+ | Spatial extension — county/zone boundary matching, polygon containment, alert geo‑filtering. | https://postgis.net/ |
-| greenlet | 3.5.5 | MIT / PSF | Required for SQLAlchemy 2.0 sync I/O when running under the gevent worker. | https://greenlet.readthedocs.io/ |
+| greenlet | 3.5.6 | MIT / PSF | Required for SQLAlchemy 2.0 sync I/O when running under the gevent worker. | https://greenlet.readthedocs.io/ |
 
 ### Caching, queueing & runtime servers
 
 | Component | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
 | Redis (server) | 8.0 | RSAL/SSPL/AGPL (per upstream) | Pub/sub bus between the web app and the SDR / hardware services; cache; rate‑limit store; capture registry; live spectrum + waterfall feed. | https://redis.io/ |
-| redis (Python) | 8.1.0 | MIT | Python client for the Redis server. | https://github.com/redis/redis-py |
-| hiredis | 3.4.1 | BSD‑3‑Clause | C parser accelerator for `redis‑py` (faster pub/sub fan‑out). | https://github.com/redis/hiredis-py |
+| redis (Python) | 7.4.1 | MIT | Python client for the Redis server. Held at 7.4.x: redis-py 8.x leaks memory per pub/sub message (CHANGELOG 3.23.4). | https://github.com/redis/redis-py |
+| hiredis | 3.4.2 | BSD‑3‑Clause | C parser accelerator for `redis‑py` (faster pub/sub fan‑out). | https://github.com/redis/hiredis-py |
 | Gunicorn | 26.2.0 | MIT | Production WSGI server fronting the Flask app. | https://gunicorn.org/ |
-| gevent | 26.8.0+ | MIT | Async worker class for Gunicorn so Flask‑SocketIO can hold thousands of concurrent WebSocket connections. | https://www.gevent.org/ |
+| gevent | 26.9.0+ | MIT | Async worker class for Gunicorn so Flask‑SocketIO can hold thousands of concurrent WebSocket connections. | https://www.gevent.org/ |
 | Nginx | system (apt) | BSD‑2‑Clause | Reverse proxy / TLS terminator / static file server in front of Gunicorn and Icecast. Installed via `install.sh`'s `apt-get install nginx` — no version pin, and no Docker/Alpine image is involved despite this table's earlier claim. | https://nginx.org/ |
 | systemd | system | LGPL‑2.1+ | Process supervisor for `eas-station`, `sdr_hardware_service`, `hardware_service`, `gps_manager`, Icecast, Redis. | https://systemd.io/ |
 | Let's Encrypt / Certbot | — | Apache‑2.0 / ISRG | Automated TLS certificate issuance and renewal for the public HTTPS endpoint. | https://letsencrypt.org/ |
@@ -518,12 +518,12 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 | certifi | 2026.7.22 | MPL‑2.0 | Up‑to‑date CA bundle for SSL verification (mandatory for IPAWS over TLS). | https://github.com/certifi/python-certifi |
 | feedparser | 6.0.14 | BSD‑2‑Clause | Parses RSS/Atom feeds used by the LED‑sign news ticker. | https://github.com/kurtmckee/feedparser |
 | orjson | 3.12.0 | Apache‑2.0 / MIT | Fast C‑backed JSON encoder/decoder for the live data feeds and Redis payloads. | https://github.com/ijl/orjson |
-| ujson | 5.13.0 | BSD‑3‑Clause | Fallback fast JSON parser when `orjson` is unavailable. | https://github.com/ultrajson/ultrajson |
+| ujson | 6.0.0 | BSD‑3‑Clause | Fallback fast JSON parser when `orjson` is unavailable. | https://github.com/ultrajson/ultrajson |
 | PyYAML | 6.0.3 | MIT | Reads screen editor definitions and config templates. | https://pyyaml.org/ |
 | lxml | 6.1.3 | BSD‑3‑Clause | High‑performance XML parser for CAP alert ingestion (5–10× faster than stdlib). | https://lxml.de/ |
 | mistune | 3.3.4 | BSD‑3‑Clause | Renders the in‑app documentation viewer (`/docs/*`) from project markdown. | https://mistune.lepture.com/ |
 | python‑dateutil | 2.9.0.post0 | Apache‑2.0 / BSD‑3 | Robust parsing of CAP timestamp fields with mixed offsets and tz abbreviations. | https://dateutil.readthedocs.io/ |
-| pytz | 2026.3.post1 | MIT | Time‑zone database for local display of alert effective/expire times and audit logs. | https://pythonhosted.org/pytz/ |
+| pytz | 2026.4 | MIT | Time‑zone database for local display of alert effective/expire times and audit logs. | https://pythonhosted.org/pytz/ |
 | python‑dotenv | 1.2.1 | BSD‑3‑Clause | Loads `.env` configuration at startup. | https://github.com/theskumar/python-dotenv |
 | psutil | 7.2.2 | BSD‑3‑Clause | System‑health snapshot: CPU/mem/disk/load/temperature shields and the System Health dashboard. | https://github.com/giampaolo/psutil |
 | openpyxl | 3.1.5 | MIT | XLSX export of alert history and audit reports. | https://openpyxl.readthedocs.io/ |
@@ -578,8 +578,8 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 | Library | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
 | pyshp | 3.1.6 | MIT | Reads ESRI shapefiles when importing custom county/zone boundaries into PostGIS. | https://github.com/GeospatialPython/pyshp |
-| pyproj | 3.7.2 | MIT | Reprojects shapefile CRSes to WGS84 during boundary import. | https://pyproj4.github.io/pyproj/ |
-| geoip2 | 4.8.0+ | Apache-2.0 | Resolves public visitor IPs to countries/flags on the Traffic Analytics dashboard from an operator-supplied MaxMind GeoLite2 database (pulls in the `maxminddb` reader). | https://github.com/maxmind/GeoIP2-python |
+| pyproj | 3.8.0 | MIT | Reprojects shapefile CRSes to WGS84 during boundary import. | https://pyproj4.github.io/pyproj/ |
+| geoip2 | 5.3.0+ | Apache-2.0 | Resolves public visitor IPs to countries/flags on the Traffic Analytics dashboard from an operator-supplied MaxMind GeoLite2 database (pulls in the `maxminddb` reader). | https://github.com/maxmind/GeoIP2-python |
 | MaxMind GeoLite2 (data) | n/a | GeoLite2 EULA (CC BY-SA 4.0) | Optional, operator-supplied IP→country/city/ASN database read by `geoip2`. Not bundled. *This product includes GeoLite2 data created by MaxMind, available from [https://www.maxmind.com](https://www.maxmind.com).* | https://www.maxmind.com |
 
 ### Testing & QA
