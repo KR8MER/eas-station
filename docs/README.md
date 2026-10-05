@@ -36,6 +36,7 @@ Welcome to the documentation for EAS Station™ - an Emergency Alert System plat
 | [Firewall Requirements](troubleshooting/FIREWALL_REQUIREMENTS.md) | Network port configuration |
 | [Application Settings](guides/APPLICATION_SETTINGS.md) | Logging, storage paths, branding, password policy |
 | [Health Monitoring Endpoints](guides/HEALTH_MONITORING.md) | REST health checks for external monitoring |
+| [Air-Check Verification](guides/AIR_CHECK_VERIFICATION.md) | Confirm every alert sent is heard back off the air by an SDR on your own transmitter |
 
 ### For Developers
 

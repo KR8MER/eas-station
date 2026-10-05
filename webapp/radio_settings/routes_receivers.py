@@ -72,6 +72,10 @@ def register(app: Flask, route_logger) -> None:
             ...plus optional tuning parameters (gain, audio_sample_rate,
             external_lna_db, channel, auto_start, enabled, notes, and more)
             -- see _parse_receiver_payload() for the full accepted set.
+            role (str, optional): "monitor" (default; decodes may be
+                relayed) or "air_check" (tuned to this station's own
+                transmitter; decodes verify our transmissions and are never
+                relayed).
 
         Returns:
             201 with {receiver: <receiver dict>, radio_manager: <sync
@@ -153,7 +157,8 @@ def register(app: Flask, route_logger) -> None:
             Any subset of the fields accepted by POST /api/radio/receivers
             (identifier, display_name, driver, frequency_hz, sample_rate,
             gain, audio_sample_rate, external_lna_db, channel, auto_start,
-            enabled, notes, ...). Unspecified fields are left unchanged.
+            enabled, notes, role, ...). Unspecified fields are left
+            unchanged.
 
         Returns:
             200 with {receiver: <receiver dict>, radio_manager: <sync

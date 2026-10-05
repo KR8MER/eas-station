@@ -780,6 +780,9 @@ class HealthAlertWorker:
         for message in backup_status.get("issues", []):
             issues.append(f"Backup verification: {message}")
 
+        from app_core.air_check import collect_air_check_issues
+        issues.extend(collect_air_check_issues())
+
         clock_status = _collect_clock_sync(self._logger)
         if clock_status.get("available"):
             if clock_status.get("synchronized") is False:

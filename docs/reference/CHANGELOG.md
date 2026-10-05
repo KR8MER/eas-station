@@ -7,6 +7,40 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.24.0] - 2026-10-05 - Add SDR receiver roles and off-air air-check verification
+
+### Added
+- **Receiver roles and off-air self-monitoring ("air-check").** The README described SDR verification as proving "that what went out of the transmitter is what the encoder commanded", but no code compared a received header with a transmitted one. The SDR path only decoded, logged and FIPS-filtered/relayed upstream alerts. The Alert Verification dashboard's delivery status read `playout_events` metadata that nothing wrote, and the Theory of Operation diagram showed a "Match with transmitted" step that did not exist. This release implements that check.
+  - **Receiver role** (`radio_receivers.role`, migration `20260928_add_air_check`): *Monitor* (default; upstream source, decodes may be relayed) or *Air-check* (tuned to the station's own transmitter). Set on Monitor → Receivers → edit → **Role**. Air-check receivers get a badge in the receiver table.
+  - **Every transmit path opens an air-check** with the exact SAME header as playout starts: automatic CAP / relayed broadcasts (`EASBroadcaster.handle_alert`), manual Broadcast Builder sends, automated and manual RWTs, and resends (the Resend button and the GPIO "Forward Last Alert" input). The deadline is playout plus relay lead-in/lead-out plus a configurable grace period (default 60 s). Nothing is recorded while no Air-check receiver exists, so there are no false alarms.
+  - **Decodes from an Air-check receiver are matched, never relayed.** The header is compared field by field (originator, event, location set, purge, issue time, station ID) and the record becomes **verified**, **mismatch** (differing fields listed, ERROR logged) or, for a header the station never sent, **unexpected** (WARNING logged). Pending records past their deadline are swept to **missed** every 30 s by the audio-service watchdog and logged as ERROR. Open problems feed the existing compliance health-alert email/SNMP worker. Matching works in both directions: the decoder only reports at EOM and the manual-send path records its activation after playout, so an early decode is adopted when the transmission registers. A resend of an identical header closes its own record rather than the original's.
+  - **Diagnostics → Air-Check** (`/air-check`): 24-hour status tiles, filterable results with sent/heard headers side by side, latency and decode confidence, per-row **Acknowledge**, the list of air-check receivers and the grace-period setting. API: `GET /api/air-check/records`, `POST /api/air-check/records/<id>/acknowledge`, `POST /api/air-check/settings`.
+  - Code in `app_core/air_check/` (`matching.py`, `roles.py`, `service.py`, `reporting.py`); tests in `tests/test_air_check.py`. The README SDR section, Theory of Operation §6, `/help`, `/about` and the new guide `docs/guides/AIR_CHECK_VERIFICATION.md` now describe what the code does.
+
+## [3.23.8] - 2026-10-05 - Pace Icecast feeds against the wall clock
+
+### Fixed
+- **WNCI's Icecast stream kept cutting out after 3.23.5.** 3.23.5's `ByteCreditPacer` released one byte out per byte read, but only the *first* chunk of each read earned credit. An HTTP stream source delivers chunks in bursts, and the rest of each burst is drained without earning. `/wnci.mp3` therefore ran at 66–70% of real time continuously, and listeners' players kept reconnecting. `RealTimePacer` (`app_core/audio/icecast_pacing.py`) replaces it and releases by elapsed wall-clock time: one second of audio per second, whatever the chunk sizes, bursts or injections on the input side. When the local cushion exceeds 20 s (an injected alert banks its whole length at once), release runs 2% faster so latency drains back down.
+  - Verified on the lab box: both mounts deliver about 100% of real time before, during and after an injected 12 s test tone, which decodes as 12 × 0.50 s bursts exactly 1.00 s apart on `/wnci.mp3` and `/sdr-wbks.mp3`.
+  - `tests/test_icecast_pacing.py` now covers a bursty source (real time ±1%), the 50/85 ms alert case, the 2% catch-up above high water, and that idle time cannot bank a burst.
+
+## [3.23.7] - 2026-10-05 - Stop an injected alert being wiped from an Icecast mount
+
+### Fixed
+- **An injected alert could vanish entirely from an Icecast mount.** The injector bumps `_eas_inject_seq` and then queues the whole alert within a few milliseconds. `IcecastStreamer._feed_loop` drains everything queued into its local buffer, but checked the sequence only at the top of the next iteration, where it cleared the buffer, alert included. A 12 s injected test tone never reached `/sdr-wbks.mp3` (32 ms chunks, so the streamer cycles fast enough to drain it all), and the first ~140 ms was cut on `/wnci.mp3` (85 ms chunks). The check now runs per chunk in `_bank_pcm()`. Because the injector bumps the sequence before it publishes, every alert chunk is banked after the flush it caused.   - Once the alert reached the mount, a second bug cut it short. The local buffer was a `deque(maxlen=600)`, a cap counted in chunks. An SDR mount receives about 79 live chunks/s of 8–16 ms. Behind a byte-paced 50 ms-chunk alert they piled up to 600 about 5 s in, and from then on every append silently dropped the oldest chunk, which was the alert audio about to play. On the capture, the second half of a 12 s tone went out at about 3.5× speed. The buffer is now capped by duration (360 s, `_MAX_BUFFER_SECONDS`). Byte-paced output keeps the banked duration constant, so the cap only trips if the encoder stops consuming.
+  - Regression-guarded by `tests/test_icecast_eas_inject_race.py`.
+
+## [3.23.6] - 2026-10-05 - Keep archive segments that contain an alert
+
+### Fixed
+- **Every archive segment of an SDR source that contained an alert was lost.** SDR sources publish stereo as `(frames, 2)` arrays, but the EAS stream injector publishes alert audio as mono 1-D arrays into the same broadcast queue. `AudioArchiver._flush_segment` concatenated them directly, and the flush thread died with `ValueError: all the input arrays must have same number of dimensions` (seen on `sdr-wbks` during an RWT). New `_match_chunk_shapes()` upmixes 1-D chunks only when the segment also holds 2-D ones. Segments that are all 1-D or all 2-D pass through untouched. Regression-guarded by `tests/test_audio_archiver_mixed_chunks.py`.
+
+## [3.23.5] - 2026-10-05 - Stop alert audio stuttering on Icecast
+
+### Fixed
+- **Alerts stuttered on Icecast as if the buffer had underrun.** `IcecastStreamer._feed_loop` handed FFmpeg exactly one buffered chunk per chunk it read from the source. That only keeps real time while every chunk is the same length. The EAS injector queues alert audio as 50 ms chunks, but a stream source's live chunks are `buffer_size` frames (4096 at 48 kHz = 85 ms). During an alert, each 85 ms of live input therefore released only 50 ms of alert audio, and the alert reached listeners at about 59% of real time, smeared over about 30 s with gaps. A capture of `/wnci.mp3` during an RWT measured 48–64% of real time for 30 s, then back to about 100%. The loop now releases buffered audio by duration through `ByteCreditPacer` (`app_core/audio/icecast_pacing.py`): each byte of PCM read earns one byte of PCM out, whatever the chunk sizes. A starved read still lets one banked chunk through, as before, and idle time cannot bank credit for a later burst.
+  - Regression-guarded by `tests/test_icecast_pacing.py`, which replays the 50 ms/85 ms case (real time ±2%) and checks the feed loop releases through the pacer.
+
 ## [3.23.4] - 2026-10-05 - Fix redis-py 8.x pub/sub memory leak
 
 ### Fixed

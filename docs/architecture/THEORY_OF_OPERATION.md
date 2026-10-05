@@ -113,14 +113,17 @@ flowchart TD
     H -->|eas-station-gpio<br/>GPIO Control| I[Broadcast Output]
     
     subgraph Verification["Verification Loop"]
-        J[eas-station-sdr +<br/>eas-station-demod<br/>RF Capture]
+        J[eas-station-sdr +<br/>eas-station-demod<br/>RF Capture<br/>role = air_check]
         K[streaming_same_decoder.py<br/>Real-time Decode<br/>eas-station-audio]
-        L[Compliance Dashboard]
+        M[app_core/air_check<br/>match sent vs heard]
+        L[Air-Check page<br/>/air-check]
     end
     
+    H -->|register_transmission<br/>expected header| M
     I -->|RF Signal| J
     J --> K
-    K --> D
+    K -->|record_off_air_decode| M
+    M --> D
     D --> L
     L --> F
 
@@ -361,39 +364,62 @@ flowchart LR
 
 ### 6. Verification & Compliance
 
+Every receiver has a **role** (`radio_receivers.role`, set on
+**Monitor → Receivers**). A `monitor` receiver listens to upstream sources and
+its decodes go through FIPS filtering and may be relayed. An `air_check`
+receiver is tuned to the station's **own transmitter**; its decodes are matched
+against what the station sent and are **never relayed** (relaying them would
+loop the station's own output).
+
 ```mermaid
 sequenceDiagram
-    participant TX as Transmitter
-    participant SDR as eas-station-sdr
-    participant DEMOD as eas-station-demod
+    participant TX as Transmit path<br/>(broadcaster / manual / RWT / resend)
+    participant AC as app_core/air_check
+    participant RF as Transmitter
+    participant SDR as eas-station-sdr + demod<br/>(air_check receiver)
     participant DECODE as Streaming Decoder<br/>(eas-station-audio)
     participant DB as Database
-    participant UI as Compliance Dashboard
+    participant UI as Air-Check page / health alerts
 
-    TX->>TX: Broadcast EAS
-    TX-->>SDR: RF Signal (162.x MHz)
-    SDR->>SDR: Capture IQ samples
-    SDR->>DEMOD: IQ samples via Redis
-    DEMOD->>DEMOD: FM Demodulate
-    DEMOD->>DECODE: PCM audio via Redis
-    
-    DECODE->>DECODE: Detect SAME preamble
-    DECODE->>DECODE: FSK decode header
-    DECODE->>DECODE: Validate checksum
-    
-    alt Valid SAME Header
-        DECODE->>DB: Store verification record
-        DECODE->>DB: Match with transmitted
-        DB->>UI: Verification status
+    TX->>AC: register_transmission(header, playout)
+    AC->>DB: AirCheckRecord status=pending,<br/>deadline = playout + lead-in/out + grace
+    TX->>RF: Play SAME + tones + EOM
+    RF-->>SDR: RF signal
+    SDR->>DECODE: PCM audio via Redis
+    DECODE->>DECODE: Detect preamble, FSK decode, hold until EOM
+    DECODE->>AC: record_off_air_decode(header)<br/>(source role = air_check, not relayed)
+
+    alt Every field matches
+        AC->>DB: status=verified
+    else Same transmission, some field differs
+        AC->>DB: status=mismatch (+ fields), ERROR logged
+    else No transmission matches
+        AC->>DB: status=unexpected, WARNING logged
     end
-    
-    UI->>DB: Query verification history
-    DB-->>UI: Compliance report data
+
+    loop Every 30 s (audio service watchdog)
+        AC->>DB: pending past deadline → status=missed, ERROR logged
+    end
+    DB-->>UI: Results, 24 h summary, email/SNMP health alert
 ```
 
-- **SDR Capture** via SoapySDR drivers (`app_core/radio/drivers.py`)
-- **Alert Verification** supports WAV/MP3 uploads and automated SDR captures
-- **Compliance Dashboard** reconciles alerts for FCC reporting
+- **Comparison** (`app_core/air_check/matching.py`) — originator, event code,
+  location set, purge time, issue time and station ID. A decode must agree on at
+  least three fields to be treated as the same transmission; otherwise it is
+  *unexpected*.
+- **Ordering** — the decoder only reports a header at EOM, and the manual-send
+  path records its activation after playout, so matching works both ways: an
+  early decode is kept as *unexpected* and adopted when the transmission is
+  registered.
+- **Resends** of an identical header close their own pending record, not the
+  original's already-verified one.
+- **No air-check receiver configured** → nothing is registered, so no false
+  *missed* errors.
+- **Alert Verification** (`/admin/alert-verification`) is a separate lab tool
+  that decodes uploaded WAV/MP3 files.
+- **Compliance Dashboard** reconciles received and relayed alerts for FCC
+  reporting.
+
 ## SAME Protocol Deep Dive
 
 The Specific Area Message Encoding protocol is the broadcast payload EAS Station™ produces for on-air activation. Key characteristics:
@@ -433,7 +459,7 @@ When deploying or evaluating the system:
 3. **Map Boundaries** – Populate counties and polygons through the admin interface (`/settings/geo`) or import via the CLI tools in `tools/`.
 4. **Configure Broadcast Outputs** – Set the station identifier, text-to-speech provider, GPIO pinout, and LED sign parameters in `/settings`.
 5. **Exercise the Workflow** – Use `/eas/workflow` to run a Required Weekly Test (RWT) and inspect stored WAV files under `static/audio/`.
-6. **Validate Verification Loop** – Upload the generated WAV to the decoder lab to confirm headers decode as issued.
+6. **Validate Verification Loop** – Set an SDR tuned to your transmitter to the *Air-check* role, send an RWT, and confirm it shows **verified** on **Diagnostics → Air-Check**. For bench work without RF, upload the generated WAV to the decoder lab to confirm headers decode as issued.
 
 Refer back to this document whenever you need a grounded explanation of what happens between CAP ingestion and verified broadcast.
 

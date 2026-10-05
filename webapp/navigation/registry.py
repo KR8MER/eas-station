@@ -336,6 +336,14 @@ _DIAGNOSTICS = NavSection(
                     description="Verify decoded alerts against the originating CAP feed.",
                     permissions=(ALERTS_VIEW,),
                 ),
+                NavItem(
+                    label="Air-Check",
+                    icon="fas fa-tower-broadcast",
+                    endpoint="air_check.air_check_page",
+                    description="Confirm every alert this station sends is heard back off the air "
+                    "by an SDR tuned to its own transmitter.",
+                    permissions=(RECEIVERS_VIEW,),
+                ),
             ),
         ),
         NavGroup(

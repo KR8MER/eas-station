@@ -337,6 +337,14 @@
                             <small class="form-text text-muted">⚠ A short on the antenna feed will fault the SDR's bias regulator. Verify your antenna before enabling.</small>
                         </div>
                         <div class="col-md-4">
+                            <label for="receiverRole" class="form-label">Role</label>
+                            <select class="form-select" id="receiverRole" name="role">
+                                <option value="monitor">Monitor (upstream)</option>
+                                <option value="air_check">Air-check (own transmitter)</option>
+                            </select>
+                            <small class="form-text text-muted">Monitor: upstream source, may be relayed. Air-check: tuned to this station's transmitter to confirm each alert sent is heard on air — never relayed. Results: <a href="/air-check">Air-Check</a>.</small>
+                        </div>
+                        <div class="col-md-4">
                             <label for="receiverNotes" class="form-label">Notes</label>
                             <textarea class="form-control" id="receiverNotes" name="notes" rows="2" placeholder="Optional notes about this receiver"></textarea>
                         </div>
@@ -843,8 +851,11 @@ function initRadioReceiversPage() {
                 return;
             }
 
+            const roleBadge = receiver.role === 'air_check'
+                ? ' <span class="badge bg-info text-dark ms-1" title="Tuned to this station\'s own transmitter: verifies what we send, never relays">Air-check</span>'
+                : '';
             row.innerHTML = `
-                <td data-label="Name" class="fw-semibold">${displayName}</td>
+                <td data-label="Name" class="fw-semibold">${displayName}${roleBadge}</td>
                 <td data-label="Identifier"><code>${identifier}</code></td>
                 <td data-label="Driver">${driver}</td>
                 <td data-label="Frequency (MHz)" class="text-end">${frequency}</td>
@@ -1871,6 +1882,7 @@ function initRadioReceiversPage() {
             document.getElementById('receiverExternalLna').value = receiver.external_lna_db ?? 0;
             document.getElementById('receiverBiasT').checked = receiver.bias_t_enabled === true;
             document.getElementById('receiverNotes').value = receiver.notes ?? '';
+            document.getElementById('receiverRole').value = receiver.role || 'monitor';
             document.getElementById('receiverModulation').value = receiver.modulation_type ?? 'IQ';
             document.getElementById('receiverDeemphasis').value = receiver.deemphasis_us ?? '75';
             document.getElementById('receiverAudioOutput').checked = receiver.audio_output === true;

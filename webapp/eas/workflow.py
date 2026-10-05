@@ -43,6 +43,7 @@ from flask import (
     url_for,
 )
 
+from app_core.air_check import register_transmission
 from app_core.auth.roles import require_permission
 from app_core.auth.audit import AuditLogger, AuditAction
 from app_core.extensions import db
@@ -1371,6 +1372,17 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
 
             alert_id = activation.identifier
             event_code = activation.event_code
+
+            # Expect this header back off the air on any air-check receiver
+            # (no-op when none is configured). Never raises.
+            register_transmission(
+                activation.same_header,
+                origin_type='manual',
+                origin_id=activation.id,
+                alert_identifier=alert_id,
+                event_code=event_code,
+                playout_seconds=playback_duration,
+            )
 
             # Set broadcast state before playout — this fires the global
             # countdown timer and stack light on every page AND is the rising

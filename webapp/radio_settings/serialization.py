@@ -146,6 +146,7 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
         "stereo_enabled": receiver.stereo_enabled,
         "deemphasis_us": receiver.deemphasis_us,
         "enable_rbds": receiver.enable_rbds,
+        "role": receiver.role or "monitor",
         "latest_status": status_data,
     }
 

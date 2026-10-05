@@ -262,6 +262,18 @@ def _drive_rwt_airchain(
     event_code = activation_record.event_code or 'RWT'
     tmp_file = None
 
+    # Expect this header back off the air on any air-check receiver (no-op
+    # when none is configured). Never raises.
+    from app_core.air_check import register_transmission
+    register_transmission(
+        getattr(activation_record, 'same_header', None),
+        origin_type='rwt',
+        origin_id=getattr(activation_record, 'id', None),
+        alert_identifier=alert_id,
+        event_code=event_code,
+        playout_seconds=playback_duration,
+    )
+
     try:
         # Re-anchor the broadcast-state marker to the *actual* playout start.
         # trigger_rwt_broadcast sets it synchronously so the air-chain overlay

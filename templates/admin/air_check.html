@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}Air-Check - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    .air-check-tile { border: 1px solid var(--border-color); border-radius: var(--radius-md, 8px);
+        background: var(--surface-color); padding: 0.75rem 1rem; height: 100%; }
+    .air-check-tile .value { font-size: 1.75rem; font-weight: 700; line-height: 1.1; }
+    .air-check-tile .label { color: var(--text-secondary); font-size: 0.85rem; }
+    .air-check-header { font-family: var(--bs-font-monospace, monospace); font-size: 0.8rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set header_icon = 'fas fa-tower-broadcast' %}
+{% set header_title = 'Air-Check' %}
+{% set header_subtitle = 'Did what this station sent actually make it onto the air?' %}
+{% set header_actions %}
+    <a href="/admin/radio" class="btn btn-outline-light"><i class="fas fa-satellite-dish me-1"></i>Receivers</a>
+{% endset %}
+{% include 'components/page_header.html' %}
+
+<div class="container-fluid">
+    <div class="alert alert-info">
+        <i class="fas fa-circle-info"></i>
+        An <strong>air-check receiver</strong> is an SDR tuned to this station's <em>own</em> transmitter.
+        Every alert the station sends (automatic, relayed, manual, RWT or resend) opens an air-check with
+        the exact SAME header that went out. When the air-check receiver decodes that header back off the
+        air, the check is <strong>verified</strong> — or flagged as a <strong>mismatch</strong> if any
+        header field differs. If nothing is heard by the deadline, the check is <strong>missed</strong>
+        and an error is logged and emailed to the compliance contacts. Decodes from air-check receivers
+        are never relayed.
+    </div>
+
+    {% if not receivers %}
+    <div class="alert alert-warning">
+        <i class="fas fa-triangle-exclamation"></i>
+        No air-check receiver is configured, so transmissions are not being verified.
+        Open <a href="/admin/radio">Receivers</a>, edit the SDR tuned to this station's transmitter and
+        set its <strong>Role</strong> to <em>Air-check</em>.
+    </div>
+    {% endif %}
+
+    <div class="row g-3 mb-3" id="airCheckTiles">
+        {% for key, label, cls in [('verified', 'Verified', 'text-success'), ('mismatch', 'Mismatch', 'text-warning'),
+                                   ('missed', 'Missed', 'text-danger'), ('unexpected', 'Unexpected', 'text-info'),
+                                   ('pending', 'Pending', 'text-secondary')] %}
+        <div class="col-6 col-md-4 col-xl">
+            <div class="air-check-tile">
+                <div class="value {{ cls }}" data-count="{{ key }}">—</div>
+                <div class="label">{{ label }} (24h)</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-8">
+            <div class="card mb-3">
+                <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+                    <h2 class="mb-0 h5"><i class="fas fa-list-check"></i> Recent Air-Checks</h2>
+                    <div class="d-flex gap-2">
+                        <select class="form-select form-select-sm" id="airCheckStatus" aria-label="Status filter" style="min-width: 9.5rem;">
+                            <option value="">All statuses</option>
+                            {% for s in statuses %}<option value="{{ s }}">{{ s|capitalize }}</option>{% endfor %}
+                        </select>
+                        <select class="form-select form-select-sm" id="airCheckDays" aria-label="Time window">
+                            <option value="1">24 hours</option>
+                            <option value="7" selected>7 days</option>
+                            <option value="30">30 days</option>
+                            <option value="90">90 days</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>When</th>
+                                    <th>Status</th>
+                                    <th>Headers (sent / heard)</th>
+                                    <th class="d-none d-md-table-cell">Receiver</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="airCheckRows">
+                                <tr><td colspan="5" class="text-muted p-3">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h2 class="mb-0 h5"><i class="fas fa-satellite-dish"></i> Air-Check Receivers</h2>
+                </div>
+                <ul class="list-group list-group-flush">
+                    {% for r in receivers %}
+                    <li class="list-group-item">
+                        <strong>{{ r.display_name }}</strong>
+                        <code class="text-break-anywhere">{{ r.identifier }}</code><br>
+                        <small class="text-muted">{{ '%.4f'|format((r.frequency_hz or 0) / 1000000) }} MHz · {{ r.modulation_type }}</small>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-muted">None configured.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h2 class="mb-0 h5"><i class="fas fa-stopwatch"></i> Deadline</h2>
+                </div>
+                <div class="card-body">
+                    <form id="airCheckSettingsForm">
+                        <label for="graceSeconds" class="form-label">Grace period (seconds)</label>
+                        <input type="number" class="form-control" id="graceSeconds" name="grace_seconds"
+                               min="{{ min_grace }}" max="{{ max_grace }}" step="1" value="{{ grace_seconds }}" required>
+                        <small class="form-text text-muted d-block mb-2">
+                            Time allowed after playout ends for the header to be decoded off the air before the
+                            check is declared missed. Raise it if your transmitter chain has a long delay.
+                        </small>
+                        <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save me-1"></i>Save</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const BADGES = {
+        verified: 'bg-success', mismatch: 'bg-warning text-dark', missed: 'bg-danger',
+        unexpected: 'bg-info text-dark', pending: 'bg-secondary',
+    };
+    const PROBLEMS = new Set(['mismatch', 'missed', 'unexpected']);
+    const rows = document.getElementById('airCheckRows');
+    const statusSel = document.getElementById('airCheckStatus');
+    const daysSel = document.getElementById('airCheckDays');
+
+    function esc(value) {
+        const div = document.createElement('div');
+        div.textContent = value == null ? '' : String(value);
+        return div.innerHTML;
+    }
+
+    function when(iso) {
+        return iso ? new Date(iso).toLocaleString() : '—';
+    }
+
+    function renderRecord(r) {
+        const origin = r.origin_type ? `${esc(r.origin_type)}${r.origin_id ? ' #' + esc(r.origin_id) : ''}` : 'not sent by us';
+        const latency = r.latency_seconds != null ? ` · heard after ${r.latency_seconds.toFixed(0)}s` : '';
+        const conf = r.decode_confidence != null ? ` · ${(r.decode_confidence * 100).toFixed(0)}% confidence` : '';
+        const ack = r.acknowledged_at
+            ? `<small class="text-muted">Ack'd by ${esc(r.acknowledged_by || '—')}</small>`
+            : (PROBLEMS.has(r.status)
+                ? `<button class="btn btn-sm btn-outline-secondary" data-ack="${r.id}">Acknowledge</button>` : '');
+        return `<tr>
+            <td class="small">${when(r.sent_at || r.received_at)}<br><span class="text-muted">${origin}</span></td>
+            <td><span class="badge ${BADGES[r.status] || 'bg-secondary'}">${esc(r.status)}</span></td>
+            <td class="air-check-header text-break-anywhere">
+                <div title="Sent">↑ ${esc(r.expected_header || '—')}</div>
+                <div title="Heard">↓ ${esc(r.received_header || '—')}</div>
+                ${r.detail ? `<div class="text-muted small mt-1">${esc(r.detail)}</div>` : ''}
+                <div class="text-muted small">${latency}${conf}</div>
+            </td>
+            <td class="d-none d-md-table-cell small text-break-anywhere">${esc(r.receiver_identifier || r.receiver_source || '—')}</td>
+            <td class="text-end">${ack}</td>
+        </tr>`;
+    }
+
+    async function load() {
+        const params = new URLSearchParams({ days: daysSel.value });
+        if (statusSel.value) params.set('status', statusSel.value);
+        try {
+            const response = await fetch(`/api/air-check/records?${params}`);
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.error || 'Request failed');
+            Object.entries(data.summary.counts).forEach(([key, count]) => {
+                const el = document.querySelector(`[data-count="${key}"]`);
+                if (el) el.textContent = count;
+            });
+            rows.innerHTML = data.records.length
+                ? data.records.map(renderRecord).join('')
+                : '<tr><td colspan="5" class="text-muted p-3">No air-checks in this window.</td></tr>';
+        } catch (err) {
+            rows.innerHTML = `<tr><td colspan="5" class="text-danger p-3">Could not load air-checks: ${esc(err.message)}</td></tr>`;
+        }
+    }
+
+    rows.addEventListener('click', async (event) => {
+        const id = event.target.getAttribute('data-ack');
+        if (!id) return;
+        event.target.disabled = true;
+        const response = await fetch(`/api/air-check/records/${id}/acknowledge`, {
+            method: 'POST', headers: { 'X-CSRF-Token': window.CSRF_TOKEN },
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success) {
+            showToast(data.error || 'Could not acknowledge', 'danger');
+            event.target.disabled = false;
+            return;
+        }
+        load();
+    });
+
+    document.getElementById('airCheckSettingsForm').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const grace = parseInt(document.getElementById('graceSeconds').value, 10);
+        const response = await fetch('/api/air-check/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN },
+            body: JSON.stringify({ grace_seconds: grace }),
+        });
+        const data = await response.json().catch(() => ({}));
+        showToast(response.ok && data.success ? 'Grace period saved' : (data.error || 'Save failed'),
+                  response.ok && data.success ? 'success' : 'danger');
+    });
+
+    statusSel.addEventListener('change', load);
+    daysSel.addEventListener('change', load);
+    load();
+    setInterval(load, 15000);
+})();
+</script>
+{% endblock %}

@@ -130,6 +130,7 @@ nav:
       - Setup Instructions: guides/SETUP_INSTRUCTIONS.md
       - Help & Operations: guides/HELP.md
       - Hardware Quickstart: guides/HARDWARE_QUICKSTART.md
+      - Air-Check Verification: guides/AIR_CHECK_VERIFICATION.md
       - One-Button Upgrade: guides/one_button_upgrade.md
       - IPAWS Feed Integration: guides/ipaws_feed_integration.md
       - Manual EAS Events & Broadcast Builder: guides/MANUAL_EAS_EVENTS.md

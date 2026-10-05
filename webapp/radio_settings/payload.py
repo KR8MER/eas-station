@@ -233,6 +233,15 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
     if "enabled" in payload or not partial:
         data["enabled"] = _coerce_bool(payload.get("enabled"), True)
 
+    if not partial or "role" in payload:
+        from app_core.air_check import RECEIVER_ROLES, ROLE_MONITOR
+
+        role_raw = payload.get("role")
+        role = str(role_raw).strip().lower() if role_raw not in (None, "") else ROLE_MONITOR
+        if role not in RECEIVER_ROLES:
+            return None, "Invalid receiver role."
+        data["role"] = role
+
     if "notes" in payload:
         notes = payload.get("notes")
         data["notes"] = str(notes).strip() if notes not in (None, "") else None

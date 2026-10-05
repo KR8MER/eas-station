@@ -48,10 +48,15 @@ import numpy as np
 import requests
 from requests import exceptions as requests_exceptions
 
+from .icecast_pacing import RealTimePacer
 from .now_playing_metadata import extract_now_playing_fields
 from .stream_profiles import StreamFormat
 
 logger = logging.getLogger(__name__)
+
+#: Upper bound on audio banked locally ahead of the encoder -- the 300 s
+#: max activation plus headroom (see IcecastStreamer._bank_pcm).
+_MAX_BUFFER_SECONDS = 360
 
 # Delay before restarting FFmpeg after a failure (seconds)
 ICECAST_RESTART_DELAY = 5.0
@@ -474,7 +479,7 @@ class IcecastStreamer:
         Prioritize getting some audio over waiting for perfect buffer.
         """
         from collections import deque
-        buffer = deque(maxlen=600)
+        buffer = deque()
         
         start_time = time.time()
         min_acceptable_chunks = 50  # Accept buffer with 50 chunks (2.5s) minimum
@@ -584,7 +589,7 @@ class IcecastStreamer:
 
         if buffer is None:
              # If prebuffering failed completely, start with empty buffer but warn
-             buffer = deque(maxlen=600)
+             buffer = deque()
              logger.warning("Starting Icecast stream with empty buffer due to prebuffer failure")
 
         # After prebuffering the source has been producing audio for
@@ -600,6 +605,12 @@ class IcecastStreamer:
                 time.sleep(1.0)
 
         buffer_low_watermark = 150  # Warn if buffer drops below 7.5 seconds (25% of max)
+        # Release buffered audio against the wall clock -- see
+        # icecast_pacing.py for the alert slowdown and bursty-source
+        # starvation that chunk- and byte-counting each caused.
+        pacer = RealTimePacer(
+            lambda: self.config.sample_rate * max(1, int(self.config.channels)) * 2
+        )
 
         # Diagnostic: Check audio source type and status
         source_type = type(self.audio_source).__name__
@@ -615,18 +626,6 @@ class IcecastStreamer:
                     time.sleep(1.0)
                 continue
 
-            # Detect a new EAS injection and flush the local pre-buffer so
-            # EAS audio reaches FFmpeg immediately rather than after the
-            # ~7.5 s worth of live audio that was pre-buffered at startup.
-            current_eas_seq = getattr(self.audio_source, '_eas_inject_seq', 0)
-            if current_eas_seq != self._last_eas_inject_seq:
-                self._last_eas_inject_seq = current_eas_seq
-                buffer.clear()
-                logger.debug(
-                    "Icecast %s: flushed local pre-buffer for EAS injection (seq=%d)",
-                    self.config.mount, current_eas_seq,
-                )
-
             try:
                 wrote_chunk = False
                 # Read audio from subscription queue (non-destructive) using adaptive timeout
@@ -635,7 +634,7 @@ class IcecastStreamer:
 
                 if samples is not None:
                     pcm_bytes = self._samples_to_pcm_bytes(samples)
-                    buffer.append(pcm_bytes)
+                    self._bank_pcm(buffer, pcm_bytes)
                     self._consecutive_empty_reads = 0  # Reset counter on successful read
 
                     # Opportunistically drain any further chunks already
@@ -648,20 +647,20 @@ class IcecastStreamer:
                     # chunk it immediately hands to FFmpeg -- so a source
                     # that stalls and later catches up (a burst of chunks
                     # already queued) could never recover the depth the
-                    # stall cost it. Draining that burst here, capped at the
-                    # deque's own maxlen, lets it recover.
-                    while len(buffer) < buffer.maxlen:
+                    # stall cost it. Draining that burst here lets it
+                    # recover; _bank_pcm bounds the total by duration.
+                    while True:
                         extra = self._get_audio_from_subscription(timeout=0)
                         if extra is None:
                             break
-                        buffer.append(self._samples_to_pcm_bytes(extra))
+                        self._bank_pcm(buffer, self._samples_to_pcm_bytes(extra))
                 else:
                     # Track consecutive empty reads to diagnose source issues
                     self._consecutive_empty_reads += 1
                     if self._consecutive_empty_reads == 20: 
                         logger.error(
                             f"Audio source for mount {self.config.mount} has not provided data for ~20 reads. "
-                            f"Buffer: {len(buffer)}/{buffer.maxlen} chunks. "
+                            f"Buffer: {len(buffer)} chunks. "
                             "Check if audio source is running and configured correctly."
                         )
                     elif self._consecutive_empty_reads == 100:
@@ -680,25 +679,28 @@ class IcecastStreamer:
                     # -- that made the low-buffer/empty-buffer warnings below
                     # fire constantly on every mount regardless of real health.
                     buffer_level = len(buffer)
+                    pending = pacer.release(buffer)
                     try:
-                        chunk = buffer.popleft()
-                        self._ffmpeg_process.stdin.write(chunk)
-                        self._bytes_sent += len(chunk)
+                        while pending:
+                            chunk = pending[0]
+                            self._ffmpeg_process.stdin.write(chunk)
+                            pending.pop(0)
+                            self._bytes_sent += len(chunk)
 
-                        # Only flush periodically, not every write (reduces pipe pressure)
-                        # Track chunks written instead of bytes for efficiency
-                        if not hasattr(self, '_chunks_written'):
-                            self._chunks_written = 0
-                        self._chunks_written += 1
-                        if self._chunks_written % 16 == 0:  # Flush every 16 chunks (~800ms of audio)
-                            self._ffmpeg_process.stdin.flush()
+                            # Only flush periodically, not every write (reduces pipe pressure)
+                            # Track chunks written instead of bytes for efficiency
+                            if not hasattr(self, '_chunks_written'):
+                                self._chunks_written = 0
+                            self._chunks_written += 1
+                            if self._chunks_written % 16 == 0:  # Flush every 16 chunks (~800ms of audio)
+                                self._ffmpeg_process.stdin.flush()
 
-                        wrote_chunk = True
+                            wrote_chunk = True
                     except (BrokenPipeError, OSError) as pipe_err:
                         # Don't log as error here - will be caught below and trigger restart
                         logger.debug(f"Pipe write failed for mount {self.config.mount}: {pipe_err}")
-                        # Put chunk back in buffer
-                        buffer.appendleft(chunk)
+                        # Put unwritten chunks back in buffer, in order
+                        buffer.extendleft(reversed(pending))
                         raise  # Re-raise to trigger restart logic below
 
                     # Monitor buffer health
@@ -707,7 +709,7 @@ class IcecastStreamer:
                         if now_warn - self._last_buffer_warning > 30.0:
                             logger.warning(
                                 f"Icecast buffer running low for mount {self.config.mount}: "
-                                f"{buffer_level}/{buffer.maxlen} chunks. "
+                                f"{buffer_level} chunks. "
                                 "Audio source may be blocking or too slow."
                             )
                             self._last_buffer_warning = now_warn
@@ -826,6 +828,43 @@ class IcecastStreamer:
 
         logger.error(f"Failed to restart FFmpeg for mount {self.config.mount} ({reason})")
         return False
+
+    def _bank_pcm(self, buffer, pcm_bytes: bytes) -> None:
+        """Append a chunk to the local buffer, flushing it first on a new EAS injection.
+
+        A new injection drops the banked live audio so the alert reaches
+        FFmpeg immediately instead of after the pre-buffer. The check
+        must run here, per chunk, not once per loop iteration: the
+        injector bumps ``_eas_inject_seq`` before it publishes, then
+        queues the whole alert in a few milliseconds, and the drain below
+        can pull every alert chunk into the buffer in one iteration. A
+        check at the top of the next iteration then cleared the alert
+        itself -- all of it on a 32 ms-chunk SDR mount, ~140 ms of it on
+        an 85 ms-chunk stream mount. Checked per chunk, any alert chunk
+        is banked only after the flush it caused.
+        """
+        current_eas_seq = getattr(self.audio_source, '_eas_inject_seq', 0)
+        if current_eas_seq != self._last_eas_inject_seq:
+            self._last_eas_inject_seq = current_eas_seq
+            buffer.clear()
+            logger.debug(
+                "Icecast %s: flushed local pre-buffer for EAS injection (seq=%d)",
+                self.config.mount, current_eas_seq,
+            )
+        buffer.append(pcm_bytes)
+        # Cap by duration, not chunk count. A chunk-count cap (the old
+        # deque(maxlen=600)) silently dropped the oldest chunk -- the alert
+        # audio about to play -- whenever small live chunks piled up behind
+        # an injected alert: an SDR mount gets ~79 chunks/s of 8-16 ms, so
+        # 600 was reached ~5 s into an alert and the rest went out at ~3.5x
+        # speed. Byte-paced output keeps the banked duration constant, so
+        # this only trips if the encoder stops consuming altogether.
+        if len(buffer) > 600 and len(buffer) % 50 == 0:
+            limit = (_MAX_BUFFER_SECONDS * self.config.sample_rate
+                     * max(1, int(self.config.channels)) * 2)
+            total = sum(map(len, buffer))
+            while total > limit and len(buffer) > 1:
+                total -= len(buffer.popleft())
 
     def _samples_to_pcm_bytes(self, samples: np.ndarray) -> bytes:
         """Convert audio samples into interleaved int16 PCM bytes."""
