@@ -7,6 +7,12 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.23.7] - 2026-10-05 - Stop an injected alert being wiped from an Icecast mount
+
+### Fixed
+- **An injected alert could vanish entirely from an Icecast mount.** The injector bumps `_eas_inject_seq` and then queues the whole alert within a few milliseconds. `IcecastStreamer._feed_loop` drains everything queued into its local buffer, but checked the sequence only at the top of the next iteration, where it cleared the buffer, alert included. A 12 s injected test tone never reached `/sdr-wbks.mp3` (32 ms chunks, so the streamer cycles fast enough to drain it all), and the first ~140 ms was cut on `/wnci.mp3` (85 ms chunks). The check now runs per chunk in `_bank_pcm()`. Because the injector bumps the sequence before it publishes, every alert chunk is banked after the flush it caused.   - Once the alert reached the mount, a second bug cut it short. The local buffer was a `deque(maxlen=600)`, a cap counted in chunks. An SDR mount receives about 79 live chunks/s of 8–16 ms. Behind a byte-paced 50 ms-chunk alert they piled up to 600 about 5 s in, and from then on every append silently dropped the oldest chunk, which was the alert audio about to play. On the capture, the second half of a 12 s tone went out at about 3.5× speed. The buffer is now capped by duration (360 s, `_MAX_BUFFER_SECONDS`). Byte-paced output keeps the banked duration constant, so the cap only trips if the encoder stops consuming.
+  - Regression-guarded by `tests/test_icecast_eas_inject_race.py`.
+
 ## [3.23.6] - 2026-10-05 - Keep archive segments that contain an alert
 
 ### Fixed
