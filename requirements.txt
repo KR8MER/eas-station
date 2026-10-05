@@ -174,17 +174,16 @@ arm_pyart==2.3.0  # NEXRAD Archive II decode; RadarMapDisplay.plot_ppi_map rende
 # Pinned to the versions already verified working together in production.
 fsspec==2026.9.0
 s3fs==2026.9.0
-# s3fs's own dependency, aiobotocore, lags boto3/botocore releases and
-# caps botocore tightly (3.9.2: >=1.43.101,<1.43.107), while each boto3
-# release requires its own botocore -- so a lone boto3/botocore bump fails
-# with "ResolutionImpossible" (the same failure mode as the fsspec/s3fs
-# pin above, one dependency layer deeper). Pin all three together, with
-# boto3/botocore at the newest release under aiobotocore's ceiling, and
-# check https://pypi.org/pypi/aiobotocore/json for that ceiling before
-# bumping. Dependabot bumps these five as one group (.github/dependabot.yml).
+# s3fs's own dependency, aiobotocore, pins botocore to a narrow window
+# (3.9.2: >=1.43.101,<1.43.107) and each boto3 release requires its own
+# botocore. Exact boto3/botocore pins therefore broke every week:
+# Dependabot bumps them past aiobotocore's ceiling and the install fails
+# with "ResolutionImpossible". aiobotocore stays pinned exactly; boto3 and
+# botocore take a floor only, so pip installs the newest pair inside
+# aiobotocore's window, and Dependabot ignores them (.github/dependabot.yml).
 aiobotocore==3.9.2
-botocore==1.43.106
-boto3==1.43.106  # Unencrypted, anonymous read access to NOAA's public Level II archive on AWS Open Data (no credentials needed)
+botocore>=1.43.0
+boto3>=1.43.0  # Unencrypted, anonymous read access to NOAA's public Level II archive on AWS Open Data (no credentials needed)
 cartopy==0.26.0  # Geographic (Web Mercator) projection for plot_ppi_map, matching the OSM basemap tiles it composites onto
 cmweather==0.3.2  # Registers the 'NWSRef' reflectivity colormap (the standard ~15-band NWS scale most radar apps use, not a hand-rolled ramp)
 matplotlib==3.11.2  # plot_ppi_map's rendering backend (Agg, headless) -- pcolormesh draws each gate's true polar footprint

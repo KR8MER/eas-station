@@ -20,6 +20,11 @@ updates:
         patterns:
           - "*"
     ignore:
+      # boto3/botocore float inside aiobotocore's pinned botocore window
+      # (see requirements.txt); bumping them directly can only break the
+      # install. aiobotocore bumps move them.
+      - dependency-name: "boto3"
+      - dependency-name: "botocore"
       # redis-py 8.x leaks one list per pub/sub message with hiredis (see
       # requirements.txt). Re-test with tests/test_redis_pubsub_leak_pin.py
       # before lifting this.

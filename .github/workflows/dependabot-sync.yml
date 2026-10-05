@@ -17,6 +17,12 @@
 # read-only; a push made with GITHUB_TOKEN would also not re-trigger CI.
 # Without the secret the job only reports what is out of date.
 #
+# The job runs only when Dependabot itself triggered the event: GitHub
+# exposes Dependabot secrets solely to Dependabot-triggered runs, so a run
+# caused by a person pushing to the PR could never see the token. If you
+# push to a Dependabot PR by hand, run the script yourself (CI's
+# tests/test_tech_stack_badges.py names the command if docs drift).
+#
 # If the PR later conflicts (main moved), comment "@dependabot recreate";
 # Dependabot will not rebase a PR someone else has pushed to, and this
 # workflow re-applies the sync to the recreated branch.
@@ -37,7 +43,7 @@ concurrency:
 
 jobs:
   sync:
-    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     env:
       SYNC_TOKEN: ${{ secrets.DEPENDABOT_SYNC_TOKEN }}
@@ -81,7 +87,7 @@ jobs:
           fi
           git --no-pager diff --stat
           if [ -z "$SYNC_TOKEN" ]; then
-            echo "::error::DEPENDABOT_SYNC_TOKEN is not set (Settings -> Secrets and variables -> Dependabot); cannot push the sync above. Run 'python scripts/sync_dependency_versions.py --release \"<title>\"' and push it by hand."
+            echo "::error::DEPENDABOT_SYNC_TOKEN is not available (add it under Settings -> Secrets and variables -> Dependabot); cannot push the sync above. Run 'python scripts/sync_dependency_versions.py --release \"<title>\"' and push it by hand."
             exit 1
           fi
           git config user.name "eas-station-dependabot-sync"
