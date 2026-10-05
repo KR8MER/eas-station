@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from app_utils.event_codes import EVENT_CODE_REGISTRY
+from app_utils.system.sd_notify import watchdog_keepalive
 
 from .broadcast_pid import _run_command
 from .generator import EASAudioGenerator
@@ -40,6 +41,10 @@ from .indicators import (
 from .same_header_build import build_same_header
 from .wav_io import _wav_duration_seconds
 
+# Upper bound on audio generation (SAME + attention + TTS synthesis, which can
+# wait on a network TTS provider) before playout starts.  Together with
+# max_activation_seconds it bounds the watchdog keepalive around handle_alert.
+GENERATION_BUDGET_SECONDS = 120.0
 
 
 class EASBroadcaster:
@@ -175,6 +180,22 @@ class EASBroadcaster:
         return blocked
 
     def handle_alert(self, alert: object, payload: Dict[str, object]) -> Dict[str, object]:
+        # Generation plus playout blocks the caller for the whole broadcast --
+        # 165 s of audio + ~18 s of generation already exceeds the poller's
+        # 180 s WatchdogSec.  Without a keepalive systemd killed the poller
+        # mid-playout, before eas_forwarded was recorded, and the restart's
+        # catch-up sweep aired the alert again: 19 times in one hour on
+        # 2026-09-24.  The keepalive is bounded, so a genuine hang is still
+        # caught.
+        max_activation = float(self.config.get('max_activation_seconds', 300) or 300)
+        budget = (
+            GENERATION_BUDGET_SECONDS + BROADCAST_LEAD_IN_SECONDS
+            + max_activation + BROADCAST_LEAD_OUT_SECONDS
+        )
+        with watchdog_keepalive(budget):
+            return self._handle_alert(alert, payload)
+
+    def _handle_alert(self, alert: object, payload: Dict[str, object]) -> Dict[str, object]:
         result: Dict[str, object] = {"same_triggered": False}
         if not self.enabled or not alert:
             result["reason"] = "Broadcasting disabled"

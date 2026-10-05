@@ -307,10 +307,20 @@ def is_duplicate_broadcast(
     incoming = _parse_same_header(raw_same_header)
 
     try:
+        from sqlalchemy.orm import load_only
+
         from app_core.models import EASMessage
+        # load_only: the rows carry up to ~10 MB of bytea audio each and
+        # only the header/metadata are compared here.
         recent_messages = (
             db_session.query(EASMessage)
             .filter(EASMessage.created_at >= cutoff)
+            .options(load_only(
+                EASMessage.id,
+                EASMessage.same_header,
+                EASMessage.metadata_payload,
+                EASMessage.created_at,
+            ))
             .all()
         )
         for msg in recent_messages:
@@ -762,6 +772,22 @@ def auto_forward_cap_alert(
         else:
             fips_codes_for_dedup = fips_codes
 
+        # The broadcast records only the codes inside our coverage area (see
+        # build_same_header), so the full-FIPS dedup match must compare that
+        # same filtered set.  With the alert's full set, a warning spanning
+        # counties outside our area never equalled its own earlier broadcast
+        # and dedup could not suppress a repeat.
+        # (The advisory-lock key below stays on the unfiltered set so it keeps
+        # matching the key the OTA path computes.)
+        fips_codes_broadcast_match = fips_codes_for_dedup
+        if fips_codes_for_dedup and location_settings:
+            from app_utils.eas.same_header_build import filter_same_codes_to_coverage
+
+            fips_codes_broadcast_match = (
+                filter_same_codes_to_coverage(fips_codes_for_dedup, location_settings)
+                or fips_codes_for_dedup
+            )
+
         # ── Gated-alerts hold-off timer ────────────────────────────────────
         # Immediate urgency / Extreme severity always bypass the gate.
         # Everything else, if gating is enabled, is held for operator review
@@ -814,7 +840,7 @@ def auto_forward_cap_alert(
             _cross_source_window = eas_config.get('cross_source_dedup_minutes', CROSS_SOURCE_DEDUP_WINDOW_MINUTES)
             _header_key_window = eas_config.get('header_key_dedup_minutes', HEADER_KEY_DEDUP_WINDOW_MINUTES)
             if is_duplicate_broadcast(
-                event_code, fips_codes_for_dedup, db_session,
+                event_code, fips_codes_broadcast_match, db_session,
                 window_minutes=_cross_source_window,
                 header_window_minutes=_header_key_window,
             ):

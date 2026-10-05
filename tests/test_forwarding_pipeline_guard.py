@@ -67,27 +67,41 @@ class _FakeSession:
 
 
 class _FakeQuery:
-    def __init__(self, items):
+    def __init__(self, items, scalar=None):
         self._items = items
+        self._scalar = scalar
 
     def filter(self, *args, **kwargs):
         return self
 
+    def order_by(self, *args, **kwargs):
+        return self
+
+    def limit(self, *args, **kwargs):
+        return self
+
     def all(self):
         return list(self._items)
+
+    def scalar(self):
+        return self._scalar
 
 
 class _FakeSweepSession(_FakeSession):
     """The sweep issues two queries per invocation: missed (expired,
     never-evaluated) first, then pending (unexpired, never-evaluated)."""
 
-    def __init__(self, pending, missed=None):
+    def __init__(self, pending, missed=None, aired_message_ids=None):
         super().__init__()
         self._results = [list(missed or []), list(pending)]
+        # After those two, each pending alert gets one "already aired?"
+        # EASMessage lookup, answered in order from this list (None = no row).
+        self._aired = list(aired_message_ids or [])
 
     def query(self, model):
-        items = self._results.pop(0) if self._results else []
-        return _FakeQuery(items)
+        if self._results:
+            return _FakeQuery(self._results.pop(0))
+        return _FakeQuery([], scalar=self._aired.pop(0) if self._aired else None)
 
 
 def _aware(offset_minutes: int) -> datetime:
@@ -196,6 +210,7 @@ def test_retry_unevaluated_forwards_reevaluates_pending_alert(monkeypatch):
     """An alert with eas_forwarded=False and a NULL reason must be pushed
     back through auto_forward_cap_alert by the catch-up sweep."""
     pending = SimpleNamespace(
+        id=14329,
         identifier="CAPNET-1-14329-20260610034200",
         raw_json={"properties": {"geocode": {"SAME": ["039000"]}}},
         eas_forwarded=False,
@@ -300,8 +315,8 @@ def test_retry_unevaluated_forwards_noop_when_nothing_pending(monkeypatch):
 def test_retry_survives_auto_forward_exception(monkeypatch):
     """One alert blowing up must not abort the sweep or the poll cycle."""
     pending = [
-        SimpleNamespace(identifier="A-1", raw_json={}, created_at=_aware(-5), expires=_aware(30)),
-        SimpleNamespace(identifier="A-2", raw_json={}, created_at=_aware(-5), expires=_aware(30)),
+        SimpleNamespace(id=1, identifier="A-1", raw_json={}, created_at=_aware(-5), expires=_aware(30)),
+        SimpleNamespace(id=2, identifier="A-2", raw_json={}, created_at=_aware(-5), expires=_aware(30)),
     ]
     poller = object.__new__(CAPPoller)
     poller.logger = logging.getLogger("test_forwarding_pipeline_guard")
@@ -328,6 +343,42 @@ def test_retry_survives_auto_forward_exception(monkeypatch):
     # Both were attempted; only the successful evaluation is counted.
     assert seen == ["A-1", "A-2"]
     assert evaluated == 1
+
+
+def test_retry_does_not_reair_alert_whose_broadcast_already_started(monkeypatch):
+    """Regression (2026-09-24): a 165 s broadcast outlasted the poller's
+    180 s WatchdogSec, systemd killed it mid-playout before eas_forwarded was
+    written, and every restart's catch-up sweep aired the alert again -- 19
+    times in an hour.  An EASMessage row means playout already began, so the
+    sweep must record the broadcast, not re-run the forwarding decision."""
+    pending = SimpleNamespace(
+        id=1144,
+        identifier="urn:oid:2.49.0.1.840.0.917c5391.002.1",
+        raw_json={"properties": {"geocode": {"SAME": ["039161"]}}},
+        eas_forwarded=False,
+        eas_forwarding_reason=None,
+        created_at=_aware(-3),
+        expires=_aware(600),
+    )
+    poller = object.__new__(CAPPoller)
+    poller.logger = logging.getLogger("test_forwarding_pipeline_guard")
+    poller.db_session = _FakeSweepSession([pending], aired_message_ids=[323])
+    poller.eas_config = {"enabled": True}
+    poller.location_settings = {}
+    poller.log_system_event = lambda level, message, details=None: None
+    monkeypatch.setattr(
+        cp, "load_eas_config", lambda db_session=None: {"enabled": True}
+    )
+
+    def _must_not_run(**kwargs):
+        raise AssertionError("an alert that already aired must not be re-forwarded")
+
+    monkeypatch.setattr(cp, "auto_forward_cap_alert", _must_not_run)
+
+    assert poller.retry_unevaluated_forwards() == 0
+    assert pending.eas_forwarded is True
+    assert "EASMessage 323" in pending.eas_forwarding_reason
+    assert poller.db_session.commits == 1
 
 
 # ---------------------------------------------------------------------------
