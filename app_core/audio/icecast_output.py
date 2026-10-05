@@ -48,6 +48,7 @@ import numpy as np
 import requests
 from requests import exceptions as requests_exceptions
 
+from .icecast_pacing import ByteCreditPacer
 from .now_playing_metadata import extract_now_playing_fields
 from .stream_profiles import StreamFormat
 
@@ -600,6 +601,9 @@ class IcecastStreamer:
                 time.sleep(1.0)
 
         buffer_low_watermark = 150  # Warn if buffer drops below 7.5 seconds (25% of max)
+        # Release buffered audio by duration, not chunk count -- see
+        # icecast_pacing.py for the EAS-injection slowdown this prevents.
+        pacer = ByteCreditPacer()
 
         # Diagnostic: Check audio source type and status
         source_type = type(self.audio_source).__name__
@@ -636,6 +640,7 @@ class IcecastStreamer:
                 if samples is not None:
                     pcm_bytes = self._samples_to_pcm_bytes(samples)
                     buffer.append(pcm_bytes)
+                    pacer.earn(len(pcm_bytes))
                     self._consecutive_empty_reads = 0  # Reset counter on successful read
 
                     # Opportunistically drain any further chunks already
@@ -658,6 +663,7 @@ class IcecastStreamer:
                 else:
                     # Track consecutive empty reads to diagnose source issues
                     self._consecutive_empty_reads += 1
+                    pacer.earn_one_chunk(buffer)
                     if self._consecutive_empty_reads == 20: 
                         logger.error(
                             f"Audio source for mount {self.config.mount} has not provided data for ~20 reads. "
@@ -680,25 +686,28 @@ class IcecastStreamer:
                     # -- that made the low-buffer/empty-buffer warnings below
                     # fire constantly on every mount regardless of real health.
                     buffer_level = len(buffer)
+                    pending = pacer.release(buffer)
                     try:
-                        chunk = buffer.popleft()
-                        self._ffmpeg_process.stdin.write(chunk)
-                        self._bytes_sent += len(chunk)
+                        while pending:
+                            chunk = pending[0]
+                            self._ffmpeg_process.stdin.write(chunk)
+                            pending.pop(0)
+                            self._bytes_sent += len(chunk)
 
-                        # Only flush periodically, not every write (reduces pipe pressure)
-                        # Track chunks written instead of bytes for efficiency
-                        if not hasattr(self, '_chunks_written'):
-                            self._chunks_written = 0
-                        self._chunks_written += 1
-                        if self._chunks_written % 16 == 0:  # Flush every 16 chunks (~800ms of audio)
-                            self._ffmpeg_process.stdin.flush()
+                            # Only flush periodically, not every write (reduces pipe pressure)
+                            # Track chunks written instead of bytes for efficiency
+                            if not hasattr(self, '_chunks_written'):
+                                self._chunks_written = 0
+                            self._chunks_written += 1
+                            if self._chunks_written % 16 == 0:  # Flush every 16 chunks (~800ms of audio)
+                                self._ffmpeg_process.stdin.flush()
 
-                        wrote_chunk = True
+                            wrote_chunk = True
                     except (BrokenPipeError, OSError) as pipe_err:
                         # Don't log as error here - will be caught below and trigger restart
                         logger.debug(f"Pipe write failed for mount {self.config.mount}: {pipe_err}")
-                        # Put chunk back in buffer
-                        buffer.appendleft(chunk)
+                        # Put unwritten chunks back in buffer, in order
+                        buffer.extendleft(reversed(pending))
                         raise  # Re-raise to trigger restart logic below
 
                     # Monitor buffer health

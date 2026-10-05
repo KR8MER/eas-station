@@ -7,6 +7,12 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.23.5] - 2026-10-05 - Stop alert audio stuttering on Icecast
+
+### Fixed
+- **Alerts stuttered on Icecast as if the buffer had underrun.** `IcecastStreamer._feed_loop` handed FFmpeg exactly one buffered chunk per chunk it read from the source. That only keeps real time while every chunk is the same length. The EAS injector queues alert audio as 50 ms chunks, but a stream source's live chunks are `buffer_size` frames (4096 at 48 kHz = 85 ms). During an alert, each 85 ms of live input therefore released only 50 ms of alert audio, and the alert reached listeners at about 59% of real time, smeared over about 30 s with gaps. A capture of `/wnci.mp3` during an RWT measured 48–64% of real time for 30 s, then back to about 100%. The loop now releases buffered audio by duration through `ByteCreditPacer` (`app_core/audio/icecast_pacing.py`): each byte of PCM read earns one byte of PCM out, whatever the chunk sizes. A starved read still lets one banked chunk through, as before, and idle time cannot bank credit for a later burst.
+  - Regression-guarded by `tests/test_icecast_pacing.py`, which replays the 50 ms/85 ms case (real time ±2%) and checks the feed loop releases through the pacer.
+
 ## [3.23.4] - 2026-10-05 - Fix redis-py 8.x pub/sub memory leak
 
 ### Fixed
