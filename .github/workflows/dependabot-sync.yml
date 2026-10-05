@@ -1,0 +1,90 @@
+# Keep documented dependency versions and the release number in step with
+# every Dependabot PR, so a dependency bump never needs a manual follow-up.
+#
+# On a Dependabot pip PR this:
+#   1. rewrites the README dependency tables, README/footer shields and
+#      docs/reference/ABOUT.md from requirements.txt
+#      (scripts/sync_dependency_versions.py), and
+#   2. cuts a patch release -- VERSION, README version badge, CHANGELOG
+#      heading -- unless the PR already bumped VERSION past main,
+# then commits the result back to the PR branch.
+#
+# Setup (once): create a fine-grained personal access token limited to this
+# repository with "Contents: Read and write", and store it as a
+# **Dependabot** secret named DEPENDABOT_SYNC_TOKEN
+# (Settings -> Secrets and variables -> Dependabot). Dependabot-triggered
+# workflows only see Dependabot secrets, and their default GITHUB_TOKEN is
+# read-only; a push made with GITHUB_TOKEN would also not re-trigger CI.
+# Without the secret the job only reports what is out of date.
+#
+# If the PR later conflicts (main moved), comment "@dependabot recreate";
+# Dependabot will not rebase a PR someone else has pushed to, and this
+# workflow re-applies the sync to the recreated branch.
+
+name: Dependabot sync
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-sync-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    env:
+      SYNC_TOKEN: ${{ secrets.DEPENDABOT_SYNC_TOKEN }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.DEPENDABOT_SYNC_TOKEN || github.token }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Sync documented versions
+        run: python scripts/sync_dependency_versions.py
+
+      - name: Cut a patch release unless this PR already has one
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          base_version=$(git show "origin/$BASE_REF:VERSION" | tr -d '[:space:]')
+          if [ "$(tr -d '[:space:]' < VERSION)" = "$base_version" ]; then
+            python scripts/sync_dependency_versions.py \
+              --release "$PR_TITLE" \
+              --note "$PR_TITLE (Dependabot #$PR_NUMBER); documented versions synced by scripts/sync_dependency_versions.py."
+          else
+            echo "VERSION already bumped past $base_version; not cutting another release."
+          fi
+
+      - name: Commit and push
+        run: |
+          if git diff --quiet; then
+            echo "Nothing to sync."
+            exit 0
+          fi
+          git --no-pager diff --stat
+          if [ -z "$SYNC_TOKEN" ]; then
+            echo "::error::DEPENDABOT_SYNC_TOKEN is not set (Settings -> Secrets and variables -> Dependabot); cannot push the sync above. Run 'python scripts/sync_dependency_versions.py --release \"<title>\"' and push it by hand."
+            exit 1
+          fi
+          git config user.name "eas-station-dependabot-sync"
+          git config user.email "eas-station-dependabot-sync@users.noreply.github.com"
+          git commit -am "Sync documented versions and cut release for Dependabot update"
+          git push origin "HEAD:$HEAD_REF"

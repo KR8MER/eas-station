@@ -40,6 +40,7 @@ not version-pinned here because they are managed by the host OS package
 manager rather than by pip; we only verify they're *mentioned*.
 """
 
+import importlib.util
 import re
 from pathlib import Path
 
@@ -51,29 +52,15 @@ BASE_TEMPLATE = ROOT / "templates" / "base.html"
 ABOUT_TEMPLATE = ROOT / "templates" / "about.html"
 
 # Curated subset: dist-name in requirements.txt -> human label used in the
-# alt/text of the shield. The version pinned in requirements.txt must appear
-# verbatim in both the README badge block and the tech_stack_badges.html
-# partial. Keep this list in lock-step with the canonical badge set.
-CURATED_VERSIONED = {
-    "Flask": "Flask",
-    "Werkzeug": "Werkzeug",
-    "jinja2": "Jinja2",
-    "python-socketio": "Socket.IO",
-    "SQLAlchemy": "SQLAlchemy",
-    "Alembic": "Alembic",
-    "gunicorn": "Gunicorn",
-    "numpy": "NumPy",
-    "scipy": "SciPy",
-    "lxml": "lxml",
-    "Pillow": "Pillow",
-    "pydub": "pydub",
-    "pyotp": "PyOTP",
-    # Range/floor pins: the shield shows the floor version (e.g.
-    # "Numba-0.68.0%2B" for numba>=0.68.0,<0.69.0).
-    "numba": "Numba",
-    "gevent": "gevent",
-    "cryptography": "cryptography",
-}
+# alt/text of the shield. Owned by scripts/sync_dependency_versions.py, which
+# rewrites these shields from requirements.txt; the version pinned there must
+# appear verbatim in both the README badge block and the footer partial.
+_spec = importlib.util.spec_from_file_location(
+    "sync_dependency_versions", ROOT / "scripts" / "sync_dependency_versions.py"
+)
+sync_dependency_versions = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(sync_dependency_versions)
+CURATED_VERSIONED = sync_dependency_versions.SHIELDS
 
 # These libraries / system packages are versionless badges (system-managed
 # or floating); we only assert they're attributed in both surfaces.
@@ -289,34 +276,13 @@ def test_attributions_section_present_in_readme() -> None:
     )
 
 
-def test_readme_dependency_table_matches_requirements_txt() -> None:
-    """Every row of the README dependency table that names a package pinned
-    in requirements.txt must show that pin: the exact version for ``==``
-    pins, ``<floor>+`` for ``>=`` pins. Rows for redis, hiredis, pytz,
-    greenlet, ujson, pyproj, gevent and geoip2 had all drifted before this
-    check existed."""
-    exact: dict[str, str] = {}
-    floor: dict[str, str] = {}
-    pattern = re.compile(r"^\s*([A-Za-z0-9_.\-]+)(?:\[[^\]]*\])?\s*(==|>=)\s*([0-9][^\s,;#]*)")
-    for raw in REQS.read_text(encoding="utf-8").splitlines():
-        m = pattern.match(raw.split("#", 1)[0])
-        if m:
-            key = m.group(1).lower().replace("_", "-")
-            (exact if m.group(2) == "==" else floor)[key] = m.group(3)
-
-    failures: list[str] = []
-    for line in README.read_text(encoding="utf-8").splitlines():
-        if not line.startswith("|"):
-            continue
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) < 2 or not re.match(r"^[0-9]", cells[1]):
-            continue
-        name = re.sub(r"\s*\(python\)", "", cells[0], flags=re.I)
-        key = name.strip("*` ").lower().replace("_", "-").replace(" ", "-")
-        shown = cells[1]
-        if key in exact and shown != exact[key]:
-            failures.append(f"{cells[0]}: README shows {shown}, requirements.txt pins =={exact[key]}")
-        elif key in floor and shown not in (floor[key], floor[key] + "+"):
-            failures.append(f"{cells[0]}: README shows {shown}, requirements.txt pins >={floor[key]}")
-
-    assert not failures, "README dependency table drift:\n  - " + "\n  - ".join(failures)
+def test_documented_versions_match_requirements_txt() -> None:
+    """README dependency tables, README/footer shields and ABOUT.md must show
+    the versions pinned in requirements.txt. On failure run
+    ``python scripts/sync_dependency_versions.py`` -- it rewrites them."""
+    drifted = sync_dependency_versions.sync(write=False)
+    assert not drifted, (
+        "Documented dependency versions drifted from requirements.txt in: "
+        + ", ".join(str(p.relative_to(ROOT)) for p in drifted)
+        + ". Run: python scripts/sync_dependency_versions.py"
+    )

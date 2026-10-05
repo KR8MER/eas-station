@@ -11,15 +11,14 @@ updates:
     labels:
       - "dependencies"
     groups:
-      # boto3/botocore/aiobotocore and s3fs/fsspec pin each other's exact
-      # versions; bumped one at a time every PR fails to resolve.
-      aws-s3fs:
+      # One weekly PR for every pip bump. boto3/botocore/aiobotocore and
+      # s3fs/fsspec pin each other's exact versions, so bumped one at a
+      # time each PR fails to resolve; and every PR gets a release commit
+      # (VERSION + CHANGELOG) from .github/workflows/dependabot-sync.yml,
+      # so two open Dependabot PRs would conflict with each other.
+      python-deps:
         patterns:
-          - "boto3"
-          - "botocore"
-          - "aiobotocore"
-          - "s3fs"
-          - "fsspec"
+          - "*"
     ignore:
       # redis-py 8.x leaks one list per pub/sub message with hiredis (see
       # requirements.txt). Re-test with tests/test_redis_pubsub_leak_pin.py
