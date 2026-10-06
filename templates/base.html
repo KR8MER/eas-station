@@ -1,10 +1,16 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="cosmo">
+<html lang="en" data-theme="lightning" data-theme-mode="dark">
 <head>
     <!-- Immediately apply saved theme to prevent flash of wrong theme -->
     <script>
         (function() {
-            const savedTheme = localStorage.getItem('theme') || 'cosmo';
+            let savedTheme = localStorage.getItem('theme') || 'lightning';
+            // Cosmo was retired in 3.30.0; move anyone still on it to the new
+            // default before first paint rather than flashing unstyled.
+            if (savedTheme === 'cosmo') {
+                savedTheme = 'lightning';
+                try { localStorage.setItem('theme', savedTheme); } catch (e) {}
+            }
             document.documentElement.setAttribute('data-theme', savedTheme);
             // data-theme-mode is normally stamped by theme.js on DOMContentLoaded,
             // which is too late for rules keyed on it (the Leaflet basemap tone in

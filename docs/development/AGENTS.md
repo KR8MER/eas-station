@@ -482,9 +482,11 @@ def downgrade() -> None:
 
 - **Extend base.html** - All templates should use `{% extends "base.html" %}`
 - **Use theme variables** - Reference CSS variables: `var(--primary-color)`, `var(--text-color)`, `var(--bg-color)`
-- **Support all themes** - EAS Station™ has multiple built-in themes (Cosmo, Dark, Coffee, Spring, and color-based themes)
-- **Test in multiple themes** - Always test in both light (Cosmo) and dark themes at minimum
-- **Run the contrast audit when touching colours** - `python3 scripts/diagnostics/check_theme_contrast.py` checks text/background contrast for key surfaces across all 35 themes (20 built-in + 15 Bootswatch) and exits non-zero on a regression. Beware the trap it was written for: a `background:` shorthand carrying a gradient sets background-*image*, which a later `background-color` cannot override — the gradient keeps painting on top and can leave dark text on a dark surface.
+- **Support all themes** - EAS Station™ has multiple built-in themes (Lightning — the default — Dark, Coffee, Spring, and color-based themes) plus 15 Bootswatch themes
+- **Test in multiple themes** - Always test in the default (Lightning, dark) and a light theme (Blue) at minimum
+- **Never hand-pick text colour for a solid status fill** - `.bg-*`, `.text-bg-*` and solid badges get black or white text computed from the fill (`styles.css`, "SOLID STATUS FILLS"); outline buttons use the theme's `--*-ink` at rest and the same computed text colour on hover ("OUTLINE BUTTONS"). Don't add per-theme `color:` overrides for them; that pattern is what left solid badges at 1.5–3.9:1 in most themes.
+- **Dark-theme fix lists must include every dark theme** - many rules in `styles.css` list the dark themes by name, and a theme added later (as Lightning was) silently misses them. Prefer rules that derive from the theme's variables, or key on `[data-theme-mode="dark"]`.
+- **Run the contrast audit when touching colours** - `python3 scripts/diagnostics/check_theme_contrast.py` checks text/background contrast for key surfaces across all 34 themes (19 built-in + 15 Bootswatch) and exits non-zero on a regression. Beware the trap it was written for: a `background:` shorthand carrying a gradient sets background-*image*, which a later `background-color` cannot override — the gradient keeps painting on top and can leave dark text on a dark surface.
 - **Be responsive** - Use Bootstrap 5 grid classes for mobile support
 - **Mobile-friendly is required** - Every page MUST render without horizontal scrolling at viewport widths ≥320px. Specifically:
   - **Wrap every `<table>` in `<div class="table-responsive">`** — including JS-injected tables built from template strings. The global mobile safety-net CSS in `static/css/styles.css` provides a fallback, but explicit wrappers are required.
@@ -677,7 +679,7 @@ Before editing any template file:
 
 ### Overview
 
-EAS Station™ features a comprehensive theme system with 20 built-in themes, 15 Bootswatch themes, and support for custom theme import/export.
+EAS Station™ features a comprehensive theme system with 19 built-in themes (Lightning is the default), 15 Bootswatch themes, and support for custom theme import/export.
 
 ### Bootswatch Themes
 
@@ -693,7 +695,7 @@ EAS Station™ features a comprehensive theme system with 20 built-in themes, 15
 
 | Theme | Mode | Description | Primary Use Case |
 |-------|------|-------------|------------------|
-| **Cosmo** | Light | Default vibrant blue/purple theme | General use, professional |
+| **Lightning** | Dark | **Default.** Stormcloud sky with electric-yellow bolts (animated; off under reduced motion) | General use |
 | **Dark** | Dark | Enhanced dark mode with high contrast | Night use, reduced eye strain |
 | **Coffee** | Dark | Warm coffee-inspired browns | Cozy, warm aesthetic |
 | **Spring** | Light | Fresh green nature-inspired | Bright, energetic feel |
@@ -710,8 +712,9 @@ EAS Station™ features a comprehensive theme system with 20 built-in themes, 15
 **Core Files:**
 - `static/js/core/theme.js` - Theme management, switching, import/export
 - `static/css/base.css` - All theme color definitions (CSS variables)
-- `templates/base.html` - Theme initialization (`data-theme="cosmo"`, plus the
-  anti-flash script that also stamps `data-theme-mode` before first paint)
+- `templates/base.html` - Theme initialization (`data-theme="lightning"`, plus the
+  anti-flash script that also stamps `data-theme-mode` before first paint and
+  migrates browsers that still have the retired `cosmo` saved)
 - `templates/components/navbar.html` - Theme selector UI (palette icon + quick toggle)
 - `static/css/map.css` + `static/js/core/map_theme.js` - Theme-aware Leaflet skin
   (see [Maps](#maps-always-go-through-easmap))
@@ -815,7 +818,7 @@ Users can create custom themes and share them:
 
 **Export:**
 ```javascript
-window.downloadTheme('cosmo');  // Downloads theme-cosmo.json
+window.downloadTheme('lightning');  // Downloads theme-lightning.json
 ```
 
 **Import:**
@@ -853,7 +856,7 @@ window.downloadTheme('cosmo');  // Downloads theme-cosmo.json
    
 2. **Sun/Moon Icon** (`<i class="fas fa-sun/moon">`) - Quick toggle
    - Toggles between light and dark modes
-   - Switches between Cosmo (light) and Dark (dark)
+   - Switches between Lightning (`DEFAULT_THEME`, dark) and Blue (`DEFAULT_LIGHT_THEME`, light)
 
 ### Dark Mode Best Practices
 
