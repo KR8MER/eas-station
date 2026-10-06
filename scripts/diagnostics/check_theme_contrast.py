@@ -52,6 +52,15 @@ THEMES = [
     "purple", "red", "slate", "spring", "sunset", "tide", "yellow",
 ]
 
+# Bootswatch themes ("bw-<name>") also swap the Bootstrap stylesheet for
+# static/vendor/bootswatch/<name>/; keep in step with static/js/core/theme.js.
+BOOTSWATCH_THEMES = [
+    "cerulean", "flatly", "litera", "lux", "minty", "sandstone", "united",
+    "yeti", "zephyr", "darkly", "cyborg", "slate", "solar", "superhero",
+    "vapor",
+]
+THEMES += [f"bw-{name}" for name in BOOTSWATCH_THEMES]
+
 # Selector -> (label, strict). Add a probe whenever a themed surface pairs
 # its own text colour with its own background.
 #
@@ -96,8 +105,9 @@ PROBES = {
 
 FIXTURE = """<!DOCTYPE html>
 <html lang="en" data-theme="cosmo"><head><meta charset="utf-8">
-<link rel="stylesheet" href="/static/css/vendor.css">
-<link rel="stylesheet" href="/static/css/styles.css"></head>
+<link id="bootstrap-css" rel="stylesheet" href="/static/css/vendor.css">
+<link rel="stylesheet" href="/static/css/styles.css">
+<link rel="stylesheet" href="/static/css/bootswatch.css"></head>
 <body><main class="page-shell"><div class="container py-4">
   <div class="page-header"><div class="container-fluid">
     <div class="header-content"><div class="header-text">
@@ -174,6 +184,22 @@ window.__restoreText = function (sel) {
     el.setAttribute('style', el.dataset.prevStyle || '');
     delete el.dataset.prevStyle;
 };
+"""
+
+
+# Applies a theme the way theme.js does: set data-theme and, for a Bootswatch
+# theme, point the Bootstrap <link> at its build and wait for it to load.
+SET_THEME_JS = """
+t => new Promise(resolve => {
+    document.documentElement.setAttribute('data-theme', t);
+    const link = document.getElementById('bootstrap-css');
+    const href = new URL(t.startsWith('bw-')
+        ? '/static/vendor/bootswatch/' + t.slice(3) + '/bootstrap.min.css'
+        : '/static/css/vendor.css', location.href).href;
+    if (link.href === href) return resolve();
+    link.onload = link.onerror = () => resolve();
+    link.href = href;
+})
 """
 
 
@@ -333,10 +359,7 @@ def main() -> int:
                 page.add_script_tag(content=PROBE_JS)
 
                 for theme in THEMES:
-                    page.evaluate(
-                        "t => document.documentElement.setAttribute('data-theme', t)",
-                        theme,
-                    )
+                    page.evaluate(SET_THEME_JS, theme)
                     page.wait_for_timeout(80)
                     for selector, (label, strict) in PROBES.items():
                         probed = _probe_ratio(page, selector)

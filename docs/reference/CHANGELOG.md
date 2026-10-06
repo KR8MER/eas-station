@@ -7,6 +7,19 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.29.0] - 2026-10-05 - Bootswatch themes
+
+### Added
+- **15 Bootswatch themes in the theme selector**, next to the 20 built-in ones. Light: Cerulean, Flatly, Litera, Lux, Minty, Sandstone, United, Yeti, Zephyr. Dark: Darkly, Cyborg, Slate, Solar, Superhero, Vapor. They are registered as `bw-<name>` in `static/js/core/theme.js`, carry a "Bootswatch" badge in the selector, and import/export like any other theme.
+  - A Bootswatch theme replaces the Bootstrap stylesheet. The files are Bootswatch 5.3.8 (MIT), stored in `static/vendor/bootswatch/<name>/`. Their Google Fonts `@import` is removed because the CSP blocks it and it would make an off-box request, so text keeps the app's system font stack.
+  - `base.html` switches the `<link id="bootstrap-css">` before first paint, so there is no flash of stock Bootstrap. On a live switch, `theme.js` loads the new sheet next to the old one and removes the old one only after the new one has loaded.
+  - The new `static/css/bootswatch.css` sets EAS Station's own variables (`--primary-color`, `--surface-color`, `--text-color`, the inks, and the `--vibrant-*` palette behind the navbar and card-header gradients) from the active Bootswatch theme, so the custom UI matches the Bootstrap components. Dark Bootswatch builds leave Bootstrap's *light* `--bs-secondary-bg` on `:root`, so each dark theme lists its surfaces explicitly.
+  - Several Bootswatch palettes fall below WCAG AA as shipped. Minty's body grey `#888` measures 3.37:1 and Solarized's base0 2.94:1. Those themes get text/ink corrections, and each override records the ratio it replaces. In the dark Bootswatch themes, alerts, `.text-dark` and `.btn-outline-dark` are rebuilt from the theme's inks; they measured 1.0–1.7:1 before.
+  - `scripts/diagnostics/check_theme_contrast.py` now audits all 35 themes, swapping the stylesheet for each Bootswatch one. `tests/test_bootswatch_themes.py` keeps the theme list, the stored files, the dark surfaces and the audit list in sync. The `DARK_THEMES` sync check in `tests/test_map_theme.py` only matched `[a-z]+` names and would have skipped every hyphenated `bw-*` theme without a warning; it now matches them.
+
+### Fixed
+- **The dashboard map's refresh pill ("INITIAL LOAD") used `--primary-color` for its text** and was nearly invisible wherever the brand colour is dark, e.g. Slate's gunmetal. It now uses `--primary-ink`, the AA-tuned text version of that colour (`templates/index.html`).
+
 ## [3.28.0] - 2026-10-05 - SMTP From address (SMTP2GO, SendGrid, Resend, Mailgun)
 
 ### Added

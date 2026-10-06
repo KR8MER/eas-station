@@ -152,7 +152,7 @@ def _dark_themes_from_theme_js() -> set[str]:
     return {
         name
         for name, body in re.findall(
-            r"'([a-z]+)':\s*\{(.*?)\}", block.group(1), re.S
+            r"'([a-z-]+)':\s*\{(.*?)\}", block.group(1), re.S
         )
         if "mode: 'dark'" in body
     }
@@ -170,7 +170,7 @@ def test_base_html_dark_theme_list_matches_theme_js():
     listed = re.search(r"const DARK_THEMES\s*=\s*\[(.*?)\];", base, re.S)
     assert listed, "base.html must declare DARK_THEMES for the anti-flash script"
 
-    declared = set(re.findall(r"'([a-z]+)'", listed.group(1)))
+    declared = set(re.findall(r"'([a-z-]+)'", listed.group(1)))
     assert declared == _dark_themes_from_theme_js(), (
         "base.html's DARK_THEMES has drifted from theme.js:\n"
         f"  only in base.html: {sorted(declared - _dark_themes_from_theme_js())}\n"

@@ -153,6 +153,7 @@ licenses at the time of writing; consult each project for authoritative terms.
 | Asset | Purpose | License |
 | --- | --- | --- |
 | **Bootstrap 5** | Mobile-first responsive UI framework | MIT |
+| **Bootswatch 5.3.8** | Optional Bootstrap themes in the theme selector (`static/vendor/bootswatch/`) | MIT |
 | **Font Awesome (Free)** | UI iconography | CC BY 4.0 / SIL OFL 1.1 / MIT |
 | **Socket.IO client** | Browser WebSocket client | MIT |
 | **Chart.js** | Analytics charts & sparklines | MIT |

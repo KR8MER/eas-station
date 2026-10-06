@@ -484,7 +484,7 @@ def downgrade() -> None:
 - **Use theme variables** - Reference CSS variables: `var(--primary-color)`, `var(--text-color)`, `var(--bg-color)`
 - **Support all themes** - EAS Station™ has multiple built-in themes (Cosmo, Dark, Coffee, Spring, and color-based themes)
 - **Test in multiple themes** - Always test in both light (Cosmo) and dark themes at minimum
-- **Run the contrast audit when touching colours** - `python3 scripts/diagnostics/check_theme_contrast.py` checks text/background contrast for key surfaces across all 20 themes and exits non-zero on a regression. Beware the trap it was written for: a `background:` shorthand carrying a gradient sets background-*image*, which a later `background-color` cannot override — the gradient keeps painting on top and can leave dark text on a dark surface.
+- **Run the contrast audit when touching colours** - `python3 scripts/diagnostics/check_theme_contrast.py` checks text/background contrast for key surfaces across all 35 themes (20 built-in + 15 Bootswatch) and exits non-zero on a regression. Beware the trap it was written for: a `background:` shorthand carrying a gradient sets background-*image*, which a later `background-color` cannot override — the gradient keeps painting on top and can leave dark text on a dark surface.
 - **Be responsive** - Use Bootstrap 5 grid classes for mobile support
 - **Mobile-friendly is required** - Every page MUST render without horizontal scrolling at viewport widths ≥320px. Specifically:
   - **Wrap every `<table>` in `<div class="table-responsive">`** — including JS-injected tables built from template strings. The global mobile safety-net CSS in `static/css/styles.css` provides a fallback, but explicit wrappers are required.
@@ -677,7 +677,17 @@ Before editing any template file:
 
 ### Overview
 
-EAS Station™ features a comprehensive theme system with 20 built-in themes and support for custom theme import/export.
+EAS Station™ features a comprehensive theme system with 20 built-in themes, 15 Bootswatch themes, and support for custom theme import/export.
+
+### Bootswatch Themes
+
+`bw-<name>` entries in `theme.js` (with a `bootswatch: '<name>'` key) replace the Bootstrap stylesheet with `static/vendor/bootswatch/<name>/bootstrap.min.css`. Bootstrap components then take the Bootswatch look, and `static/css/bootswatch.css` sets the app's own variables from the theme's `--bs-*` values so the custom UI matches. To add one:
+
+1. Vendor its `bootstrap.min.css` into `static/vendor/bootswatch/<name>/` and **strip the Google Fonts `@import`** (CSP blocks it).
+2. Add the `bw-<name>` entry to `theme.js`; if dark, also to `DARK_THEMES` in `base.html`, and give it a surface block in `bootswatch.css` (dark builds keep Bootstrap's light `--bs-secondary-bg` on `:root`).
+3. Add it to `BOOTSWATCH_THEMES` in `check_theme_contrast.py`, run the audit, and add per-theme ink corrections for anything below AA.
+
+`tests/test_bootswatch_themes.py` checks steps 1–3.
 
 ### Built-in Themes
 
