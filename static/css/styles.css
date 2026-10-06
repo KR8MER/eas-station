@@ -50,9 +50,11 @@
     --mesh-4: #f5576c;
 }
 
-/* Cosmo Theme (Default Light Theme) - Professional Palette */
-:root,
-[data-theme="cosmo"] {
+/* Base palette. Every theme starts from these values and overrides what it
+   needs. (This was the Cosmo theme's palette; Cosmo was retired in 3.30.0 and
+   Lightning is now the default, but the base set is still what the other
+   themes inherit.) */
+:root {
     /* Primary Brand Colors - Refined for professionalism */
     --primary-color: #1e3a8a;
     --primary-soft: #3b82f6;
@@ -929,14 +931,12 @@
 [data-theme="slate"]    { --danger-ink: #ff9696;     /* #ff5252 3.02 -> 4.62 */
                           --primary-ink: #aab2de; }  /* #5c6bc0 1.98 -> 4.65 */
 
-/* Muted ink that fell below AA on its own surface. Cosmo is the default
-   theme, so its 2.56:1 muted text affected every out-of-the-box install.
-   Deliberately NOT written as `:root, [data-theme="cosmo"]`: `:root` carries
-   the same specificity as `[data-theme="dark"]` but sits later in the file,
-   so it would win over every dark theme's own muted ink and repaint it. The
-   bare-`:root` arm is guarded to the no-attribute case only. */
-:root:not([data-theme]),
-[data-theme="cosmo"] { --text-muted: #627693; }  /* #94a3b8 2.56 -> 4.63 */
+/* Muted ink that fell below AA on its own surface. The base :root muted
+   (#94a3b8) is only 2.56:1 on white. Deliberately scoped to the
+   no-attribute case: a bare `:root` would carry the same specificity as
+   `[data-theme="dark"]` while sitting later in the file, and repaint every
+   dark theme's own muted ink. */
+:root:not([data-theme]) { --text-muted: #627693; }  /* #94a3b8 2.56 -> 4.63 */
 [data-theme="spring"] { --text-muted: #4f822c; } /* #558b2f 4.10 -> 4.60 */
 [data-theme="nebula"] { --text-muted: #bc6bc9; } /* #ba68c8 4.47 -> 4.61 */
 [data-theme="slate"]  { --text-muted: #aab2de; } /* #9fa8da 4.18 -> 4.65 */
@@ -2177,7 +2177,6 @@ small,
 }
 
 /* Light theme navbar adjustments - use dark text on light backgrounds */
-[data-theme="cosmo"] .navbar,
 [data-theme="spring"] .navbar,
 [data-theme="red"] .navbar,
 [data-theme="green"] .navbar,
@@ -2200,7 +2199,6 @@ small,
 }
 
 /* When scrolled, lean further into the frosted-glass look on light themes */
-[data-theme="cosmo"] .navbar.scrolled,
 [data-theme="spring"] .navbar.scrolled,
 [data-theme="red"] .navbar.scrolled,
 [data-theme="green"] .navbar.scrolled,
@@ -2216,7 +2214,6 @@ small,
         color-mix(in srgb, var(--secondary-color) 82%, transparent)) !important;
 }
 
-[data-theme="cosmo"] .navbar .navbar-brand,
 [data-theme="spring"] .navbar .navbar-brand,
 [data-theme="red"] .navbar .navbar-brand,
 [data-theme="green"] .navbar .navbar-brand,
@@ -2230,7 +2227,6 @@ small,
     color: var(--text-color);
 }
 
-[data-theme="cosmo"] .navbar .nav-link,
 [data-theme="spring"] .navbar .nav-link,
 [data-theme="red"] .navbar .nav-link,
 [data-theme="green"] .navbar .nav-link,
@@ -2244,7 +2240,6 @@ small,
     color: rgba(0, 0, 0, 0.75);
 }
 
-[data-theme="cosmo"] .navbar .nav-link:hover,
 [data-theme="spring"] .navbar .nav-link:hover,
 [data-theme="red"] .navbar .nav-link:hover,
 [data-theme="green"] .navbar .nav-link:hover,
@@ -2255,7 +2250,6 @@ small,
 [data-theme="yellow"] .navbar .nav-link:hover,
 [data-theme="sunset"] .navbar .nav-link:hover,
 [data-theme="tide"] .navbar .nav-link:hover,
-[data-theme="cosmo"] .navbar .nav-link:focus,
 [data-theme="spring"] .navbar .nav-link:focus,
 [data-theme="red"] .navbar .nav-link:focus,
 [data-theme="green"] .navbar .nav-link:focus,
@@ -2270,7 +2264,6 @@ small,
     background: rgba(0, 0, 0, 0.08);
 }
 
-[data-theme="cosmo"] .navbar .nav-link.active,
 [data-theme="spring"] .navbar .nav-link.active,
 [data-theme="red"] .navbar .nav-link.active,
 [data-theme="green"] .navbar .nav-link.active,
@@ -2285,7 +2278,6 @@ small,
     background: rgba(0, 0, 0, 0.12);
 }
 
-[data-theme="cosmo"] .navbar .theme-toggle-button,
 [data-theme="spring"] .navbar .theme-toggle-button,
 [data-theme="red"] .navbar .theme-toggle-button,
 [data-theme="green"] .navbar .theme-toggle-button,
@@ -2299,7 +2291,6 @@ small,
     color: rgba(0, 0, 0, 0.6);
 }
 
-[data-theme="cosmo"] .navbar .theme-toggle-button:hover,
 [data-theme="spring"] .navbar .theme-toggle-button:hover,
 [data-theme="red"] .navbar .theme-toggle-button:hover,
 [data-theme="green"] .navbar .theme-toggle-button:hover,
@@ -2392,6 +2383,19 @@ small,
                 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
     position: relative;
     overflow: hidden;
+}
+
+/* White header text needs a deep enough backdrop in every theme. The
+   brand gradient alone left the subtitle at 3.06-4.49:1 in 15 themes
+   (Cyborg, Spring, Solar, Charcoal, Tide, ...), and the ::before glow
+   lightens it further. An inset shadow paints over whatever background a
+   theme gives the header but under its content and glow, so one scrim
+   covers them all. Lightning and Yellow are excluded: they put dark ink on
+   a bright header. */
+:root[data-theme]:not([data-theme="lightning"], [data-theme="yellow"]) .page-header {
+    box-shadow: var(--shadow-xl),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                inset 0 0 0 100vmax rgb(0 0 0 / 0.22);
 }
 
 .page-header::before {
@@ -3772,84 +3776,6 @@ a.footer-health-widget:hover {
 }
 
 /* Outline button variants with glass effect */
-.btn-outline-primary {
-    background: transparent;
-    border: 2px solid var(--vibrant-blue);
-    color: var(--vibrant-blue);
-    box-shadow: none;
-}
-
-.btn-outline-primary:hover {
-    background: var(--vibrant-blue);
-    color: white;
-    box-shadow: 0 8px 25px color-mix(in srgb, var(--vibrant-blue) 40%, transparent);
-}
-
-.btn-outline-secondary {
-    background: transparent;
-    border: 2px solid var(--secondary-color);
-    color: var(--secondary-color);
-    box-shadow: none;
-}
-
-.btn-outline-secondary:hover {
-    background: var(--secondary-color);
-    color: white;
-    box-shadow: 0 8px 25px color-mix(in srgb, var(--secondary-color) 40%, transparent);
-}
-
-.btn-outline-success {
-    background: transparent;
-    border: 2px solid var(--success-color);
-    color: var(--success-color);
-    box-shadow: none;
-}
-
-.btn-outline-success:hover {
-    background: var(--success-color);
-    color: white;
-    box-shadow: 0 8px 25px color-mix(in srgb, var(--success-color) 40%, transparent);
-}
-
-.btn-outline-danger {
-    background: transparent;
-    border: 2px solid var(--danger-color);
-    color: var(--danger-color);
-    box-shadow: none;
-}
-
-.btn-outline-danger:hover {
-    background: var(--danger-color);
-    color: white;
-    box-shadow: 0 8px 25px color-mix(in srgb, var(--danger-color) 40%, transparent);
-}
-
-.btn-outline-warning {
-    background: transparent;
-    border: 2px solid var(--warning-color);
-    color: var(--warning-color);
-    box-shadow: none;
-}
-
-.btn-outline-warning:hover {
-    background: var(--warning-color);
-    color: #1a1a1a;
-    box-shadow: 0 8px 25px color-mix(in srgb, var(--warning-color) 40%, transparent);
-}
-
-.btn-outline-info {
-    background: transparent;
-    border: 2px solid var(--info-color);
-    color: var(--info-color);
-    box-shadow: none;
-}
-
-.btn-outline-info:hover {
-    background: var(--info-color);
-    color: white;
-    box-shadow: 0 8px 25px color-mix(in srgb, var(--info-color) 40%, transparent);
-}
-
 .btn-outline-light {
     background: transparent;
     border: 2px solid var(--light-color);
@@ -3861,19 +3787,6 @@ a.footer-health-widget:hover {
     background: var(--light-color);
     color: #1a1a1a;
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-}
-
-.btn-outline-dark {
-    background: transparent;
-    border: 2px solid var(--dark-color);
-    color: var(--text-color);
-    box-shadow: none;
-}
-
-.btn-outline-dark:hover {
-    background: var(--dark-color);
-    color: white;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
 }
 
 /* Button Liquid Effect */
@@ -5569,7 +5482,6 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 }
 
 /* Light themes - stronger shadows for maximum contrast on colored backgrounds */
-[data-theme="cosmo"] .logo-wordmark .logo-text-primary,
 [data-theme="spring"] .logo-wordmark .logo-text-primary,
 [data-theme="red"] .logo-wordmark .logo-text-primary,
 [data-theme="green"] .logo-wordmark .logo-text-primary,
@@ -5580,7 +5492,6 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 [data-theme="yellow"] .logo-wordmark .logo-text-primary,
 [data-theme="sunset"] .logo-wordmark .logo-text-primary,
 [data-theme="tide"] .logo-wordmark .logo-text-primary,
-[data-theme="cosmo"] .brand-logo .logo-text-primary,
 [data-theme="spring"] .brand-logo .logo-text-primary,
 [data-theme="red"] .brand-logo .logo-text-primary,
 [data-theme="green"] .brand-logo .logo-text-primary,
@@ -5597,7 +5508,6 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
             drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));
 }
 
-[data-theme="cosmo"] .logo-wordmark .logo-text-secondary,
 [data-theme="spring"] .logo-wordmark .logo-text-secondary,
 [data-theme="red"] .logo-wordmark .logo-text-secondary,
 [data-theme="green"] .logo-wordmark .logo-text-secondary,
@@ -5608,7 +5518,6 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 [data-theme="yellow"] .logo-wordmark .logo-text-secondary,
 [data-theme="sunset"] .logo-wordmark .logo-text-secondary,
 [data-theme="tide"] .logo-wordmark .logo-text-secondary,
-[data-theme="cosmo"] .brand-logo .logo-text-secondary,
 [data-theme="spring"] .brand-logo .logo-text-secondary,
 [data-theme="red"] .brand-logo .logo-text-secondary,
 [data-theme="green"] .brand-logo .logo-text-secondary,
@@ -5625,7 +5534,6 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
             drop-shadow(0 0.5px 2px rgba(0, 0, 0, 0.65));
 }
 
-[data-theme="cosmo"] .logo-wordmark .logo-bar,
 [data-theme="spring"] .logo-wordmark .logo-bar,
 [data-theme="red"] .logo-wordmark .logo-bar,
 [data-theme="green"] .logo-wordmark .logo-bar,
@@ -5636,7 +5544,6 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 [data-theme="yellow"] .logo-wordmark .logo-bar,
 [data-theme="sunset"] .logo-wordmark .logo-bar,
 [data-theme="tide"] .logo-wordmark .logo-bar,
-[data-theme="cosmo"] .brand-logo .logo-bar,
 [data-theme="spring"] .brand-logo .logo-bar,
 [data-theme="red"] .brand-logo .logo-bar,
 [data-theme="green"] .brand-logo .logo-bar,
@@ -6947,6 +6854,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 /* === DARK THEME BUTTON FIXES === */
 
 /* Fix .btn-light on dark themes - must have dark text on light background */
+[data-theme="lightning"] .btn-light,
 [data-theme="dark"] .btn-light,
 [data-theme="coffee"] .btn-light,
 [data-theme="aurora"] .btn-light,
@@ -6962,6 +6870,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
+[data-theme="lightning"] .btn-light:hover,
 [data-theme="dark"] .btn-light:hover,
 [data-theme="coffee"] .btn-light:hover,
 [data-theme="aurora"] .btn-light:hover,
@@ -6977,7 +6886,6 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 }
 
 /* Fix .btn-dark on light themes - ensure proper contrast */
-[data-theme="cosmo"] .btn-dark,
 [data-theme="spring"] .btn-dark,
 [data-theme="red"] .btn-dark,
 [data-theme="green"] .btn-dark,
@@ -6994,76 +6902,6 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 
 /* === OUTLINE BUTTON VARIANTS - All themes === */
 
-/* Outline Secondary */
-.btn-outline-secondary {
-    background: transparent;
-    border: 2px solid var(--secondary-color);
-    color: var(--secondary-color);
-    box-shadow: none;
-}
-
-.btn-outline-secondary:hover {
-    background: var(--secondary-color);
-    color: white;
-    box-shadow: 0 8px 25px color-mix(in srgb, var(--secondary-color) 40%, transparent);
-}
-
-/* Outline Success */
-.btn-outline-success {
-    background: transparent;
-    border: 2px solid var(--success-color);
-    color: var(--success-color);
-    box-shadow: none;
-}
-
-.btn-outline-success:hover {
-    background: var(--success-color);
-    color: white;
-    box-shadow: 0 8px 25px color-mix(in srgb, var(--success-color) 40%, transparent);
-}
-
-/* Outline Danger */
-.btn-outline-danger {
-    background: transparent;
-    border: 2px solid var(--danger-color);
-    color: var(--danger-color);
-    box-shadow: none;
-}
-
-.btn-outline-danger:hover {
-    background: var(--danger-color);
-    color: white;
-    box-shadow: 0 8px 25px color-mix(in srgb, var(--danger-color) 40%, transparent);
-}
-
-/* Outline Warning */
-.btn-outline-warning {
-    background: transparent;
-    border: 2px solid var(--warning-color);
-    color: var(--warning-color);
-    box-shadow: none;
-}
-
-.btn-outline-warning:hover {
-    background: var(--warning-color);
-    color: #1a1a1a;
-    box-shadow: 0 8px 25px color-mix(in srgb, var(--warning-color) 40%, transparent);
-}
-
-/* Outline Info */
-.btn-outline-info {
-    background: transparent;
-    border: 2px solid var(--info-color);
-    color: var(--info-color);
-    box-shadow: none;
-}
-
-.btn-outline-info:hover {
-    background: var(--info-color);
-    color: white;
-    box-shadow: 0 8px 25px color-mix(in srgb, var(--info-color) 40%, transparent);
-}
-
 /* Outline Light - needs special handling */
 .btn-outline-light {
     background: transparent;
@@ -7078,21 +6916,8 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     box-shadow: 0 8px 25px color-mix(in srgb, var(--light-color) 40%, transparent);
 }
 
-/* Outline Dark */
-.btn-outline-dark {
-    background: transparent;
-    border: 2px solid var(--dark-color);
-    color: var(--dark-color);
-    box-shadow: none;
-}
-
-.btn-outline-dark:hover {
-    background: var(--dark-color);
-    color: white;
-    box-shadow: 0 8px 25px color-mix(in srgb, var(--dark-color) 40%, transparent);
-}
-
 /* Dark theme outline button fixes */
+[data-theme="lightning"] .btn-outline-light,
 [data-theme="dark"] .btn-outline-light,
 [data-theme="coffee"] .btn-outline-light,
 [data-theme="aurora"] .btn-outline-light,
@@ -7105,6 +6930,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     color: rgba(255, 255, 255, 0.9);
 }
 
+[data-theme="lightning"] .btn-outline-light:hover,
 [data-theme="dark"] .btn-outline-light:hover,
 [data-theme="coffee"] .btn-outline-light:hover,
 [data-theme="aurora"] .btn-outline-light:hover,
@@ -7115,30 +6941,6 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 [data-theme="slate"] .btn-outline-light:hover {
     background: rgba(255, 255, 255, 0.95);
     color: #1a1a2e !important;
-}
-
-[data-theme="dark"] .btn-outline-dark,
-[data-theme="coffee"] .btn-outline-dark,
-[data-theme="aurora"] .btn-outline-dark,
-[data-theme="nebula"] .btn-outline-dark,
-[data-theme="midnight"] .btn-outline-dark,
-[data-theme="charcoal"] .btn-outline-dark,
-[data-theme="obsidian"] .btn-outline-dark,
-[data-theme="slate"] .btn-outline-dark {
-    border-color: var(--border-color);
-    color: var(--text-color);
-}
-
-[data-theme="dark"] .btn-outline-dark:hover,
-[data-theme="coffee"] .btn-outline-dark:hover,
-[data-theme="aurora"] .btn-outline-dark:hover,
-[data-theme="nebula"] .btn-outline-dark:hover,
-[data-theme="midnight"] .btn-outline-dark:hover,
-[data-theme="charcoal"] .btn-outline-dark:hover,
-[data-theme="obsidian"] .btn-outline-dark:hover,
-[data-theme="slate"] .btn-outline-dark:hover {
-    background: var(--surface-color);
-    color: var(--text-color);
 }
 
 /* === BACKGROUND UTILITY CLASS FIXES === */
@@ -7164,9 +6966,17 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     color: var(--text-color) !important;
 }
 
+/* The global `.bg-light` descendant rule forces near-black ink onto plain
+   text inside, assuming a pale --light-color. Here that measured 1.9-2.2:1;
+   re-ink the same descendants (same exclusions, plus .text-muted). */
+:is([data-theme="dark"], [data-theme="coffee"]) :is(.bg-light, .card.bg-light, .card-header.bg-light, .card-body.bg-light, .card-footer.bg-light) :not(.btn, .badge, .alert, [class*="bg-primary"], [class*="bg-success"], [class*="bg-info"], [class*="bg-warning"], [class*="bg-danger"], [class*="bg-secondary"], [class*="bg-dark"], .btn *, .badge *, .alert *, .text-muted) {
+    color: var(--text-color) !important;
+}
+
+/* --text-secondary was 2.78:1 on Dark's --light-color (#455169). */
 [data-theme="dark"] .bg-light .text-muted,
 [data-theme="coffee"] .bg-light .text-muted {
-    color: var(--text-secondary) !important;
+    color: color-mix(in srgb, var(--text-color) 80%, var(--light-color)) !important;
 }
 
 /* .bg-dark must always have light text */
@@ -7198,6 +7008,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 /* === TEXT CLASS FIXES FOR DARK THEMES === */
 
 /* .text-dark should be visible on dark themes */
+[data-theme="lightning"] .text-dark,
 [data-theme="dark"] .text-dark,
 [data-theme="coffee"] .text-dark,
 [data-theme="aurora"] .text-dark,
@@ -7210,7 +7021,6 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 }
 
 /* .text-light should be visible on light themes */
-[data-theme="cosmo"] .text-light,
 [data-theme="spring"] .text-light,
 [data-theme="red"] .text-light,
 [data-theme="green"] .text-light,
@@ -7227,21 +7037,8 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 /* === BADGE READABILITY FIXES === */
 
 /* Ensure all badges have proper text colors */
-.badge.bg-primary,
-.badge.bg-secondary,
-.badge.bg-success,
-.badge.bg-danger,
-.badge.bg-info,
-.badge.bg-dark {
-    color: white !important;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-.badge.bg-warning {
-    color: #1a1a1a !important;
-    text-shadow: none;
-}
-
+/* Solid status badges take their ink from the fill; see "SOLID STATUS
+   FILLS" further down. */
 .badge.bg-light {
     color: #1a1a1a !important;
     text-shadow: none;
@@ -7249,6 +7046,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 }
 
 /* Dark theme badge fixes */
+[data-theme="lightning"] .badge.bg-light,
 [data-theme="dark"] .badge.bg-light,
 [data-theme="coffee"] .badge.bg-light,
 [data-theme="aurora"] .badge.bg-light,
@@ -7284,7 +7082,11 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     color: #1e40af;
 }
 
-/* Dark theme alert text fixes */
+/* Dark theme alert text: a pastel of the theme's own status colour (40%
+   colour, 60% white) on a light 12% tint. Fixed Tailwind pastels on a 20%
+   tint used to land at 3.6-4.4:1 in Charcoal, Coffee and Slate, whose
+   status colours are vivid enough to lift the tint; the --*-ink set is tuned
+   for plain cards and fell short on the tint in Aurora and Nebula. */
 [data-theme="dark"] .alert-success,
 [data-theme="coffee"] .alert-success,
 [data-theme="aurora"] .alert-success,
@@ -7294,8 +7096,8 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 [data-theme="obsidian"] .alert-success,
 [data-theme="slate"] .alert-success,
 [data-theme="lightning"] .alert-success {
-    color: #6ee7b7;
-    background-color: color-mix(in srgb, var(--success-color) 20%, var(--surface-color));
+    color: color-mix(in srgb, var(--success-color) 40%, #fff);
+    background-color: color-mix(in srgb, var(--success-color) 12%, var(--surface-color));
 }
 
 [data-theme="dark"] .alert-danger,
@@ -7307,8 +7109,8 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 [data-theme="obsidian"] .alert-danger,
 [data-theme="slate"] .alert-danger,
 [data-theme="lightning"] .alert-danger {
-    color: #fca5a5;
-    background-color: color-mix(in srgb, var(--danger-color) 20%, var(--surface-color));
+    color: color-mix(in srgb, var(--danger-color) 40%, #fff);
+    background-color: color-mix(in srgb, var(--danger-color) 12%, var(--surface-color));
 }
 
 [data-theme="dark"] .alert-warning,
@@ -7320,8 +7122,8 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 [data-theme="obsidian"] .alert-warning,
 [data-theme="slate"] .alert-warning,
 [data-theme="lightning"] .alert-warning {
-    color: #fcd34d;
-    background-color: color-mix(in srgb, var(--warning-color) 20%, var(--surface-color));
+    color: color-mix(in srgb, var(--warning-color) 40%, #fff);
+    background-color: color-mix(in srgb, var(--warning-color) 12%, var(--surface-color));
 }
 
 [data-theme="dark"] .alert-info,
@@ -7333,8 +7135,8 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 [data-theme="obsidian"] .alert-info,
 [data-theme="slate"] .alert-info,
 [data-theme="lightning"] .alert-info {
-    color: #93c5fd;
-    background-color: color-mix(in srgb, var(--info-color) 20%, var(--surface-color));
+    color: color-mix(in srgb, var(--info-color) 40%, #fff);
+    background-color: color-mix(in srgb, var(--info-color) 12%, var(--surface-color));
 }
 
 /* === CARD HEADER FIXES === */
@@ -7392,6 +7194,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 }
 
 /* Form switch track visibility on dark themes */
+[data-theme="lightning"] .form-check-input:not(:checked),
 [data-theme="dark"] .form-check-input:not(:checked),
 [data-theme="coffee"] .form-check-input:not(:checked),
 [data-theme="aurora"] .form-check-input:not(:checked),
@@ -7413,6 +7216,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23999999'/%3e%3c/svg%3e");
 }
 
+[data-theme="lightning"] .form-switch .form-check-input:not(:checked),
 [data-theme="dark"] .form-switch .form-check-input:not(:checked),
 [data-theme="coffee"] .form-switch .form-check-input:not(:checked),
 [data-theme="aurora"] .form-switch .form-check-input:not(:checked),
@@ -7436,6 +7240,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
 }
 
+[data-theme="lightning"] .form-select,
 [data-theme="dark"] .form-select,
 [data-theme="coffee"] .form-select,
 [data-theme="aurora"] .form-select,
@@ -7733,6 +7538,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23212529'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
 }
 
+[data-theme="lightning"] .accordion-button::after,
 [data-theme="dark"] .accordion-button::after,
 [data-theme="coffee"] .accordion-button::after,
 [data-theme="aurora"] .accordion-button::after,
@@ -7799,6 +7605,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
    here so every Bootstrap component (cards, tables, alerts, accordions, etc.)
    adapts to the active theme palette. */
 
+[data-theme="lightning"],
 [data-theme="dark"],
 [data-theme="coffee"],
 [data-theme="aurora"],
@@ -7973,10 +7780,12 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 [data-theme="obsidian"] .alert-secondary,
 [data-theme="slate"] .alert-secondary,
 [data-theme="lightning"] .alert-secondary {
-    --bs-alert-color: var(--text-secondary);
+    /* --text-color, not --text-secondary: secondary ink on a secondary tint
+       measured 3.39:1 in Dark. */
+    --bs-alert-color: var(--text-color);
     --bs-alert-bg: color-mix(in srgb, var(--secondary-color) 15%, var(--surface-color));
     --bs-alert-border-color: color-mix(in srgb, var(--secondary-color) 30%, var(--border-color));
-    color: var(--text-secondary);
+    color: var(--text-color);
     background-color: color-mix(in srgb, var(--secondary-color) 15%, var(--surface-color));
     border-color: color-mix(in srgb, var(--secondary-color) 30%, var(--border-color));
 }
@@ -7986,43 +7795,6 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
    danger=#ffafbf) that are too light for white text to meet WCAG AA contrast (4.5:1).
    Override text color to dark for all semantic bg-* classes and card-header variants
    across every dark theme. */
-
-/* Dark themes: badges with success/info/danger/secondary backgrounds need dark text */
-[data-theme="dark"] .badge.bg-success,
-[data-theme="coffee"] .badge.bg-success,
-[data-theme="aurora"] .badge.bg-success,
-[data-theme="nebula"] .badge.bg-success,
-[data-theme="midnight"] .badge.bg-success,
-[data-theme="charcoal"] .badge.bg-success,
-[data-theme="obsidian"] .badge.bg-success,
-[data-theme="slate"] .badge.bg-success,
-[data-theme="dark"] .badge.bg-info,
-[data-theme="coffee"] .badge.bg-info,
-[data-theme="aurora"] .badge.bg-info,
-[data-theme="nebula"] .badge.bg-info,
-[data-theme="midnight"] .badge.bg-info,
-[data-theme="charcoal"] .badge.bg-info,
-[data-theme="obsidian"] .badge.bg-info,
-[data-theme="slate"] .badge.bg-info,
-[data-theme="dark"] .badge.bg-danger,
-[data-theme="coffee"] .badge.bg-danger,
-[data-theme="aurora"] .badge.bg-danger,
-[data-theme="nebula"] .badge.bg-danger,
-[data-theme="midnight"] .badge.bg-danger,
-[data-theme="charcoal"] .badge.bg-danger,
-[data-theme="obsidian"] .badge.bg-danger,
-[data-theme="slate"] .badge.bg-danger,
-[data-theme="dark"] .badge.bg-secondary,
-[data-theme="coffee"] .badge.bg-secondary,
-[data-theme="aurora"] .badge.bg-secondary,
-[data-theme="nebula"] .badge.bg-secondary,
-[data-theme="midnight"] .badge.bg-secondary,
-[data-theme="charcoal"] .badge.bg-secondary,
-[data-theme="obsidian"] .badge.bg-secondary,
-[data-theme="slate"] .badge.bg-secondary {
-    color: #0f172a !important;
-    text-shadow: none;
-}
 
 /* Dark themes: card-headers with semantic bg-* need dark text + children */
 [data-theme="dark"] .card-header.bg-success,
@@ -8095,60 +7867,84 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     color: #0f172a !important;
 }
 
-/* Dark themes: general bg-success/info/danger/secondary utility classes */
-[data-theme="dark"] .bg-success,
-[data-theme="coffee"] .bg-success,
-[data-theme="aurora"] .bg-success,
-[data-theme="nebula"] .bg-success,
-[data-theme="midnight"] .bg-success,
-[data-theme="charcoal"] .bg-success,
-[data-theme="obsidian"] .bg-success,
-[data-theme="slate"] .bg-success,
-[data-theme="dark"] .bg-info,
-[data-theme="coffee"] .bg-info,
-[data-theme="aurora"] .bg-info,
-[data-theme="nebula"] .bg-info,
-[data-theme="midnight"] .bg-info,
-[data-theme="charcoal"] .bg-info,
-[data-theme="obsidian"] .bg-info,
-[data-theme="slate"] .bg-info,
-[data-theme="dark"] .bg-danger,
-[data-theme="coffee"] .bg-danger,
-[data-theme="aurora"] .bg-danger,
-[data-theme="nebula"] .bg-danger,
-[data-theme="midnight"] .bg-danger,
-[data-theme="charcoal"] .bg-danger,
-[data-theme="obsidian"] .bg-danger,
-[data-theme="slate"] .bg-danger {
-    color: #0f172a !important;
+/* === SOLID STATUS FILLS: TEXT COLOUR DERIVED FROM THE FILL ===
+   Every solid status fill paints with its theme's --*-color, but the text on
+   it used to be chosen by hand: white by default, then dark-ink exception
+   lists for the dark themes and for Lightning. Any theme left off a list got
+   white on a light fill. A sweep in 3.30.0 measured solid badges at
+   1.5-3.9:1 in most themes (Cosmo's success badge was 2.54:1), and
+   `.text-dark` on Cerulean's and Solar's dark-orange warning fill at 3.97
+   and 3.35.
+
+   Instead, the ink is computed from the fill. The relative-colour expression
+   pushes the fill's CIE L* to 0 or 100 on either side of 49.44, the
+   lightness at which black and white contrast equally. That yields pure black
+   or pure white, whichever reads better, and one of the two always clears
+   4.58:1 against any colour. This supersedes the per-theme ink lists, which
+   have been removed. Card headers keep their own rules (they paint gradients,
+   not flat fills), as does .bg-light (its descendant-ink rules live with the
+   Cyborg/dark-theme handling).
+
+   The plain `color: #fff` line is only a fallback for browsers without
+   relative colour syntax (pre-2024). */
+:root[data-theme] :is(.bg-primary, .text-bg-primary) { --fill-ink-source: var(--primary-color); }
+:root[data-theme] :is(.bg-secondary, .text-bg-secondary) { --fill-ink-source: var(--secondary-color); }
+:root[data-theme] :is(.bg-success, .text-bg-success) { --fill-ink-source: var(--success-color); }
+:root[data-theme] :is(.bg-danger, .text-bg-danger) { --fill-ink-source: var(--danger-color); }
+:root[data-theme] :is(.bg-warning, .text-bg-warning) { --fill-ink-source: var(--warning-color); }
+:root[data-theme] :is(.bg-info, .text-bg-info) { --fill-ink-source: var(--info-color); }
+:root[data-theme] :is(.bg-dark, .text-bg-dark) { --fill-ink-source: var(--dark-color); }
+
+:root[data-theme] :is(
+    .bg-primary, .text-bg-primary, .bg-secondary, .text-bg-secondary,
+    .bg-success, .text-bg-success, .bg-danger, .text-bg-danger,
+    .bg-warning, .text-bg-warning, .bg-info, .text-bg-info,
+    .bg-dark, .text-bg-dark
+):not(.card-header) {
+    color: #fff !important;
+    color: lch(from var(--fill-ink-source) calc((49.44 - l) * infinity) 0 0) !important;
+    text-shadow: none !important;
 }
 
-/* Dark themes: text-bg-* utility pairs */
-[data-theme="dark"] .text-bg-success,
-[data-theme="coffee"] .text-bg-success,
-[data-theme="aurora"] .text-bg-success,
-[data-theme="nebula"] .text-bg-success,
-[data-theme="midnight"] .text-bg-success,
-[data-theme="charcoal"] .text-bg-success,
-[data-theme="obsidian"] .text-bg-success,
-[data-theme="slate"] .text-bg-success,
-[data-theme="dark"] .text-bg-info,
-[data-theme="coffee"] .text-bg-info,
-[data-theme="aurora"] .text-bg-info,
-[data-theme="nebula"] .text-bg-info,
-[data-theme="midnight"] .text-bg-info,
-[data-theme="charcoal"] .text-bg-info,
-[data-theme="obsidian"] .text-bg-info,
-[data-theme="slate"] .text-bg-info,
-[data-theme="dark"] .text-bg-danger,
-[data-theme="coffee"] .text-bg-danger,
-[data-theme="aurora"] .text-bg-danger,
-[data-theme="nebula"] .text-bg-danger,
-[data-theme="midnight"] .text-bg-danger,
-[data-theme="charcoal"] .text-bg-danger,
-[data-theme="obsidian"] .text-bg-danger,
-[data-theme="slate"] .text-bg-danger {
-    color: #0f172a !important;
+/* `.text-dark` / `.text-white` inside a fill assumed a light or dark fill
+   respectively; defer to the fill's computed ink instead. (On the fill
+   element itself the rule above already wins.) */
+:root[data-theme] :is(.bg-primary, .bg-secondary, .bg-success, .bg-danger,
+                      .bg-warning, .bg-info, .bg-dark) :is(.text-dark, .text-white) {
+    color: inherit !important;
+}
+
+/* === OUTLINE BUTTONS ===
+   At rest an outline button's label is the theme's AA-tuned ink for that
+   colour (the `--*-ink` set, text-secondary for secondary, text-color for
+   dark). Before 3.30.0 the label was the raw fill colour, which can't be
+   readable as text in every theme: outline-secondary measured 1.22:1 on
+   Yellow, outline-primary 2.31:1 on Charcoal, and every built-in light
+   theme sat at 4.02. On hover the button fills with the colour and the
+   label gets black or white computed from the fill, as with SOLID STATUS
+   FILLS above. Previously the hover label was hard-coded white, which
+   disappeared on light fills like Lightning's yellow. */
+:root[data-theme] .btn-outline-primary { --outline-ink: var(--primary-ink); --outline-fill: var(--primary-color); }
+:root[data-theme] .btn-outline-secondary { --outline-ink: var(--text-secondary); --outline-fill: var(--secondary-color); }
+:root[data-theme] .btn-outline-success { --outline-ink: var(--success-ink); --outline-fill: var(--success-color); }
+:root[data-theme] .btn-outline-danger { --outline-ink: var(--danger-ink); --outline-fill: var(--danger-color); }
+:root[data-theme] .btn-outline-warning { --outline-ink: var(--warning-ink); --outline-fill: var(--warning-color); }
+:root[data-theme] .btn-outline-info { --outline-ink: var(--info-ink); --outline-fill: var(--info-color); }
+:root[data-theme] .btn-outline-dark { --outline-ink: var(--text-color); --outline-fill: var(--dark-color); }
+
+:root[data-theme] :is(.btn-outline-primary, .btn-outline-secondary, .btn-outline-success, .btn-outline-danger, .btn-outline-warning, .btn-outline-info, .btn-outline-dark) {
+    color: var(--outline-ink) !important;
+    border: 2px solid var(--outline-ink) !important;
+    background: transparent;
+    box-shadow: none;
+    text-shadow: none;
+}
+
+:root[data-theme] :is(.btn-outline-primary, .btn-outline-secondary, .btn-outline-success, .btn-outline-danger, .btn-outline-warning, .btn-outline-info, .btn-outline-dark):is(:hover, :focus-visible, :active, .active) {
+    background: var(--outline-fill) !important;
+    border-color: var(--outline-fill) !important;
+    color: #fff !important;
+    color: lch(from var(--outline-fill) calc((49.44 - l) * infinity) 0 0) !important;
 }
 
 /* =========================================================================
@@ -8174,10 +7970,15 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     border-radius: var(--radius-2xl);
     overflow: hidden;
     position: relative;
-    background: linear-gradient(135deg,
-        var(--vibrant-indigo) 0%,
-        var(--vibrant-purple) 45%,
-        color-mix(in srgb, var(--vibrant-pink) 85%, var(--vibrant-orange)) 100%);
+    /* The scrim (first layer) deepens the whole gradient just enough for the
+       white title and lead: the pink/orange end stop alone measured ~3.85:1
+       against white in every theme. */
+    background:
+        linear-gradient(rgb(0 0 0 / 0.24), rgb(0 0 0 / 0.24)),
+        linear-gradient(135deg,
+            var(--vibrant-indigo) 0%,
+            var(--vibrant-purple) 45%,
+            color-mix(in srgb, var(--vibrant-pink) 85%, var(--vibrant-orange)) 100%);
     color: #fff;
     box-shadow: var(--shadow-xl),
                 0 0 0 1px rgba(255, 255, 255, 0.12) inset,
@@ -8233,9 +8034,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 }
 .eas-hero-lead {
     font-size: 1.05rem; font-weight: 500;
-    /* Full-opacity white: the hero gradient is theme-independent, so this
-       lead measured the same ~3.85:1 in all 20 themes. The shadow below is
-       what carries the remainder of the separation. */
+    /* Full-opacity white on the scrimmed hero gradient (see .eas-hero). */
     color: #ffffff;
     max-width: 720px; margin: 0 auto;
     text-shadow: 0 1px 3px rgba(0,0,0,0.35);
@@ -9175,8 +8974,8 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     border-radius: 10px;
     /* Use the theme's defined surface colour.  --bg-secondary is undefined in
        every palette, so this previously fell back to a fixed dark-navy on ALL
-       themes — dark popover + light-theme dark text = unreadable on Cosmo and
-       the other light themes. --surface-color tracks the active theme. */
+       themes — dark popover + light-theme dark text = unreadable on every light
+       theme. --surface-color tracks the active theme. */
     background: var(--surface-color, rgba(20, 24, 36, 0.96));
     border: 1px solid var(--border-color, rgba(127, 127, 127, 0.3));
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);

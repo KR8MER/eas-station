@@ -5,12 +5,12 @@
    drop-in replacement for Bootstrap, so swapping it in restyles every
    Bootstrap component. The rest of the UI, though, paints from EAS Station's
    own variables (--primary-color, --surface-color, --text-color, ...), and
-   would keep the Cosmo palette on its own. This file derives those variables
+   would keep the base palette on its own. This file derives those variables
    from the loaded Bootswatch theme so the two halves agree.
 
    theme.js swaps the stylesheet; this file only maps variables. Every rule is
    scoped to `:root[data-theme^="bw-"]` — specificity (0,2,0) — so it beats
-   the `:root, [data-theme="cosmo"]` defaults in styles.css and can never leak
+   the `:root` defaults in styles.css and can never leak
    into the 20 hand-built themes.
 
    Brand and status colours sit on :root in every Bootswatch build, so they
@@ -53,7 +53,7 @@
     --text-muted: color-mix(in srgb, var(--text-color) 85%, var(--surface-color));
     --border-color: var(--bs-border-color);
 
-    /* Cosmo's iOS-style accent palette paints the app chrome — the navbar
+    /* The base iOS-style accent palette paints the app chrome — the navbar
        and card-header gradients — so without this every Bootswatch theme
        keeps a purple/indigo navbar. The three gradient hues become shades of
        the brand colour, deep enough to carry white text even for light
@@ -73,7 +73,7 @@
 }
 
 /* Plain card headers paint the same --vibrant-* gradient but set their text
-   in --text-color, which is dark in a light theme. Cosmo's bright accents
+   in --text-color, which is dark in a light theme. The base bright accents
    just about carry that; the deep brand shades above do not (Flatly's map
    header went near-black on navy), and in a dark theme a bright brand
    colour leaves light text on a mid-tone (Solar's gold). Either way the
@@ -255,35 +255,22 @@
 }
 
 /* Not on (or inside) a `bg-*` fill: `badge bg-light text-dark` and friends
-   must keep their dark ink, or it lands on Vapor's cyan --bs-light. */
+   must keep their dark ink, or it lands on Vapor's cyan --bs-light. Text
+   on solid status fills is derived from the fill in styles.css ("SOLID
+   STATUS FILLS"). */
 :root[data-theme^="bw-"] .text-dark:not(.badge, [class*="bg-"], [class*="bg-"] *) {
     color: var(--text-color) !important;
 }
-/* ...and on a fill it means stock Bootstrap's near-black, which several
-   Bootswatch builds redefine (Flatly's "dark" is grey, Cyborg's is light). */
-:root[data-theme^="bw-"] :is(.text-dark[class*="bg-"], [class*="bg-"] .text-dark) {
+/* ...and on a non-status fill (bg-light, bg-white, bg-body) it means stock
+   Bootstrap's near-black, which several Bootswatch builds redefine (Flatly's
+   "dark" is grey, Cyborg's is light). */
+:root[data-theme^="bw-"] :is(.text-dark[class*="bg-"], [class*="bg-"] .text-dark):not(
+        .bg-primary *, .bg-secondary *, .bg-success *, .bg-danger *,
+        .bg-warning *, .bg-info *, .bg-dark *,
+        .bg-primary, .bg-secondary, .bg-success, .bg-danger,
+        .bg-warning, .bg-info, .bg-dark) {
     color: #212529 !important;
 }
-:root[data-theme^="bw-"] .btn-outline-dark {
-    --bs-btn-color: var(--text-color);
-    --bs-btn-border-color: var(--text-color);
-    color: var(--text-color);
-    border-color: var(--text-color);
-}
-:root[data-theme^="bw-"] .btn-outline-secondary {
-    --bs-btn-color: var(--text-secondary);
-    --bs-btn-border-color: var(--border-color);
-    color: var(--text-secondary);
-    border-color: var(--text-secondary);
-}
-:root[data-theme^="bw-"] .btn-outline-primary {
-    color: var(--primary-ink);
-    border-color: var(--primary-ink);
-}
-:root[data-theme^="bw-"] :is(.btn-outline-dark, .btn-outline-secondary, .btn-outline-primary):hover {
-    color: var(--surface-color);
-}
-
 /* Bootstrap's own secondary text (.text-body-secondary, form help text). */
 :root[data-theme="bw-minty"],
 :root[data-theme="bw-solar"] {

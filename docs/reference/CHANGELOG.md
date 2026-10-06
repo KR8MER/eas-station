@@ -7,6 +7,25 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.30.0] - 2026-10-06 - Lightning is the default theme; Cosmo retired; readable status fills
+
+### Changed
+- **Lightning is now the default theme, and Cosmo has been removed.** `DEFAULT_THEME` in `theme.js`, the server-rendered `<html data-theme>` and the anti-flash fallback in `base.html` all say `lightning`. A browser that still has `cosmo` saved is switched to Lightning before first paint. Lightning is a dark theme, so the sun/moon quick toggle now flips between Lightning and **Blue** (`DEFAULT_LIGHT_THEME`), the closest remaining palette to Cosmo. Lightning's storm-flash animation still turns off under `prefers-reduced-motion`.
+  - Cosmo's palette block was also the base set of variables every theme inherits. It stays as plain `:root`; only the 17 `[data-theme="cosmo"]` selectors and the theme entry were removed.
+  - `tests/test_default_theme.py` keeps the three copies of the default in agreement, checks that the toggle's light target is a light theme, and checks that the Cosmo migration exists.
+
+### Fixed
+- **Solid status fills now pick black or white text from the fill colour.** This covers solid badges, `.bg-*` and `.text-bg-*` for primary/secondary/success/danger/warning/info/dark. Their text had been chosen by hand: white by default, plus per-theme dark-ink exception lists. Run against the previous CSS, the contrast audit's new probes found **218 failures**; e.g. the success badge was 2.54:1 in Cosmo and 1.48:1 in Vapor. A single rule in `styles.css` ("SOLID STATUS FILLS") now computes pure black or pure white from the fill's CIE lightness. One of the two always clears 4.58:1, in every theme including future ones. The dark-theme badge / `bg-*` / `text-bg-*` ink lists it replaces were deleted.
+- **`.text-dark` inside a solid fill now uses the fill's computed text colour.** Dark text on Cerulean's and Solar's dark-orange warning fill measured 3.97 and 3.35.
+- **Outline buttons (all seven variants) are readable at rest and on hover in every theme.** At rest the label used the raw fill colour, which can't work as text everywhere (outline-secondary measured 1.22:1 on Yellow, outline-primary 2.31:1 on Charcoal, and every light theme sat around 4.02). It now uses the theme's AA-tuned ink. On hover the label was hard-coded white, which disappeared on light fills such as Lightning's yellow; it now uses the same black-or-white-from-the-fill rule as solid fills. One rule set ("OUTLINE BUTTONS" in `styles.css`) replaces 28 older per-variant and per-theme rules.
+- **Lightning had been left out of 13 dark-theme fix lists** (light and outline buttons, `.text-dark`, `badge bg-light`, unchecked checkboxes and switches, `form-select`, the accordion arrow, and the block mapping Bootstrap's `--bs-*` variables). As the new default this showed: `.text-dark` and `.text-body-secondary` measured 1.0:1 and `alert-primary` 1.31. It is now in those lists.
+- **Dark-theme alerts.** Fixed pastel text on a 20% tint measured 3.6–4.4:1 in Charcoal, Coffee and Slate. The text is now a pastel of the theme's own status colour on a 12% tint. `alert-secondary` in Dark (3.39) now uses the body text colour.
+- **Text inside `.bg-light` in Dark and Coffee**, whose "light" colour is actually dark, was forced to near-black by a global rule (1.9–2.2:1, muted text 2.78). Re-inked.
+- **Page headers and the hero banner.** White subtitle text on the brand gradient measured 3.06–4.49:1 in 15 themes, and the hero lead ~3.85:1 in every theme. Both now have a dark scrim under the text: an inset shadow on `.page-header`, which covers every theme's background rule, and an overlay layer on `.eas-hero`. Lightning and Yellow are excluded from the header scrim because they use dark header text.
+- **Contrast audit.** It now probes 51 strict surfaces across 34 themes, all passing (it was 15). The new probes cover solid fills, `text-bg-*`, alerts, outline buttons, `.text-dark`, `.text-body-secondary` and `.bg-light` text. The page-header and hero probes, previously advisory, are now strict. Two gaps in the audit's own test page are fixed:
+  - It never set `data-theme-mode`, so rules keyed on dark mode were never measured.
+  - It sampled buttons part-way through their 300ms colour transition, 80ms after a theme switch.
+
 ## [3.29.0] - 2026-10-05 - Bootswatch themes
 
 ### Added

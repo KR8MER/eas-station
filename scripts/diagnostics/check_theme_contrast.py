@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Audit text/background contrast of key UI surfaces across every theme.
 
-EAS Station™ ships 20 themes that all derive from the same CSS custom
-properties, so a rule that looks fine in the default (Cosmo) theme can be
+EAS Station™ ships 34 themes (19 built-in, 15 Bootswatch) that all derive from the same CSS custom
+properties, so a rule that looks fine in the default (Lightning) theme can be
 unreadable in another. Three such bugs shipped before this check existed:
 
   * hero banner titles rendered near-black on the purple gradient in every
@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import http.server
 import socketserver
 import sys
@@ -47,7 +48,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 AA_THRESHOLD = 4.5
 
 THEMES = [
-    "aurora", "blue", "charcoal", "coffee", "cosmo", "dark", "green",
+    "aurora", "blue", "charcoal", "coffee", "dark", "green",
     "lightning", "midnight", "nebula", "obsidian", "orange", "pink",
     "purple", "red", "slate", "spring", "sunset", "tide", "yellow",
 ]
@@ -71,13 +72,15 @@ THEMES += [f"bw-{name}" for name in BOOTSWATCH_THEMES]
 #                 models neither the shadow nor the eye's tolerance for a
 #                 gradient, so it reads pessimistically. Worth a human look
 #                 when a number is far below target, but not a build gate.
+# The four gradient surfaces (page header, hero) were advisory until 3.30.0,
+# when a scrim brought every theme over the line; they are strict since.
 PROBES = {
     ".table thead th": ("Bootstrap table header", True),
     ".eas-table thead th": ("Design-system table header", True),
-    ".page-header .page-title": ("Page header title", False),
-    ".page-header .page-subtitle": ("Page header subtitle", False),
-    ".eas-hero-title": ("Hero title", False),
-    ".eas-hero-lead": ("Hero lead", False),
+    ".page-header .page-title": ("Page header title", True),
+    ".page-header .page-subtitle": ("Page header subtitle", True),
+    ".eas-hero-title": ("Hero title", True),
+    ".eas-hero-lead": ("Hero lead", True),
     # Semantic text utilities on a plain card. These are flat surfaces, so
     # the WCAG formula applies exactly and a shortfall is a real failure.
     # They went unprobed until the `--*-ink` split, which is how
@@ -101,13 +104,57 @@ PROBES = {
     ".status-badge.danger": ("Status badge (danger)", True),
     ".status-badge.warning": ("Status badge (warning)", True),
     ".status-badge.info": ("Status badge (info)", True),
+    # Solid status fills. Their ink is derived from the fill (styles.css,
+    # "SOLID STATUS FILLS"); before that, solid badges measured 1.5-3.9:1
+    # in most themes and `.text-dark` on a dark-orange warning fill 3.35.
+    ".badge.probe-fill-primary": ("Solid badge (bg-primary)", True),
+    ".badge.probe-fill-secondary": ("Solid badge (bg-secondary)", True),
+    ".badge.probe-fill-success": ("Solid badge (bg-success)", True),
+    ".badge.probe-fill-danger": ("Solid badge (bg-danger)", True),
+    ".badge.probe-fill-warning": ("Solid badge (bg-warning)", True),
+    ".badge.probe-fill-info": ("Solid badge (bg-info)", True),
+    ".badge.probe-fill-dark": ("Solid badge (bg-dark)", True),
+    ".probe-tbg-primary": ("text-bg-primary", True),
+    ".probe-tbg-secondary": ("text-bg-secondary", True),
+    ".probe-tbg-success": ("text-bg-success", True),
+    ".probe-tbg-danger": ("text-bg-danger", True),
+    ".probe-tbg-warning": ("text-bg-warning", True),
+    ".probe-tbg-info": ("text-bg-info", True),
+    ".probe-tbg-dark": ("text-bg-dark", True),
+    ".bg-warning .probe-warn-dark": (".text-dark on bg-warning", True),
+    # Components a 3.30.0 sweep found failing in themes nobody had listed:
+    # alerts in Charcoal/Coffee/Slate, outline buttons in most themes,
+    # `.text-dark` / `.text-body-secondary` in Lightning, `.bg-light` copy
+    # in Dark and Coffee.
+    ".alert.probe-alert-primary": ("Alert (primary)", True),
+    ".alert.probe-alert-secondary": ("Alert (secondary)", True),
+    ".alert.probe-alert-success": ("Alert (success)", True),
+    ".alert.probe-alert-danger": ("Alert (danger)", True),
+    ".alert.probe-alert-warning": ("Alert (warning)", True),
+    ".alert.probe-alert-info": ("Alert (info)", True),
+    ".probe-outline-primary": ("Outline button (primary)", True),
+    ".probe-outline-secondary": ("Outline button (secondary)", True),
+    ".probe-outline-success": ("Outline button (success)", True),
+    ".probe-outline-danger": ("Outline button (danger)", True),
+    ".probe-outline-warning": ("Outline button (warning)", True),
+    ".probe-outline-info": ("Outline button (info)", True),
+    ".probe-outline-dark": ("Outline button (dark)", True),
+    ".card .probe-text-dark": ("Card .text-dark", True),
+    ".card .probe-body-secondary": ("Card .text-body-secondary", True),
+    ".bg-light .probe-bglight-text": ("Text on .bg-light", True),
+    ".bg-light .probe-bglight-muted": (".text-muted on .bg-light", True),
 }
 
 FIXTURE = """<!DOCTYPE html>
-<html lang="en" data-theme="cosmo"><head><meta charset="utf-8">
+<html lang="en" data-theme="lightning"><head><meta charset="utf-8">
 <link id="bootstrap-css" rel="stylesheet" href="/static/css/vendor.css">
 <link rel="stylesheet" href="/static/css/styles.css">
-<link rel="stylesheet" href="/static/css/bootswatch.css"></head>
+<link rel="stylesheet" href="/static/css/bootswatch.css">
+<style>
+/* Theme switches are measured right away; a colour still mid-transition
+   (buttons animate `all` over 300ms) would be sampled half-way. */
+*, *::before, *::after { transition: none !important; }
+</style></head>
 <body><main class="page-shell"><div class="container py-4">
   <div class="page-header"><div class="container-fluid">
     <div class="header-content"><div class="header-text">
@@ -140,6 +187,29 @@ FIXTURE = """<!DOCTYPE html>
   <div class="status-badge danger">Danger</div>
   <div class="status-badge warning">Warning</div>
   <div class="status-badge info">Info</div>
+  <span class="badge bg-primary probe-fill-primary">Badge</span>
+  <span class="badge bg-secondary probe-fill-secondary">Badge</span>
+  <span class="badge bg-success probe-fill-success">Badge</span>
+  <span class="badge bg-danger probe-fill-danger">Badge</span>
+  <span class="badge bg-warning probe-fill-warning">Badge</span>
+  <span class="badge bg-info probe-fill-info">Badge</span>
+  <span class="badge bg-dark probe-fill-dark">Badge</span>
+  <span class="badge text-bg-primary probe-tbg-primary">Badge</span>
+  <span class="badge text-bg-secondary probe-tbg-secondary">Badge</span>
+  <span class="badge text-bg-success probe-tbg-success">Badge</span>
+  <span class="badge text-bg-danger probe-tbg-danger">Badge</span>
+  <span class="badge text-bg-warning probe-tbg-warning">Badge</span>
+  <span class="badge text-bg-info probe-tbg-info">Badge</span>
+  <span class="badge text-bg-dark probe-tbg-dark">Badge</span>
+  <div class="bg-warning p-2"><span class="text-dark probe-warn-dark">Warning copy</span></div>
+  <div class="alert alert-primary probe-alert-primary">Alert copy</div>
+  <div class="alert alert-secondary probe-alert-secondary">Alert copy</div>
+  <div class="alert alert-success probe-alert-success">Alert copy</div>
+  <div class="alert alert-danger probe-alert-danger">Alert copy</div>
+  <div class="alert alert-warning probe-alert-warning">Alert copy</div>
+  <div class="alert alert-info probe-alert-info">Alert copy</div>
+  <div class="card"><div class="card-body"><button class="btn btn-outline-primary probe-outline-primary">Button</button> <button class="btn btn-outline-secondary probe-outline-secondary">Button</button> <button class="btn btn-outline-success probe-outline-success">Button</button> <button class="btn btn-outline-danger probe-outline-danger">Button</button> <button class="btn btn-outline-warning probe-outline-warning">Button</button> <button class="btn btn-outline-info probe-outline-info">Button</button> <button class="btn btn-outline-dark probe-outline-dark">Button</button> <p class="text-dark probe-text-dark">Dark text</p><p class="text-body-secondary probe-body-secondary">Secondary text</p></div></div>
+  <div class="bg-light p-2"><span class="probe-bglight-text">Light panel</span> <span class="text-muted probe-bglight-muted">muted</span></div>
 </div></main></body></html>
 """
 
@@ -190,8 +260,9 @@ window.__restoreText = function (sel) {
 # Applies a theme the way theme.js does: set data-theme and, for a Bootswatch
 # theme, point the Bootstrap <link> at its build and wait for it to load.
 SET_THEME_JS = """
-t => new Promise(resolve => {
+([t, mode]) => new Promise(resolve => {
     document.documentElement.setAttribute('data-theme', t);
+    document.documentElement.setAttribute('data-theme-mode', mode);
     const link = document.getElementById('bootstrap-css');
     const href = new URL(t.startsWith('bw-')
         ? '/static/vendor/bootswatch/' + t.slice(3) + '/bootstrap.min.css'
@@ -201,6 +272,16 @@ t => new Promise(resolve => {
     link.href = href;
 })
 """
+
+
+def _theme_modes() -> dict[str, str]:
+    """Theme -> 'light'/'dark', read from theme.js.
+
+    base.html stamps ``data-theme-mode`` alongside ``data-theme`` and some
+    rules key on it, so the fixture must set both to render what users see.
+    """
+    text = (REPO_ROOT / "static" / "js" / "core" / "theme.js").read_text(encoding="utf-8")
+    return dict(re.findall(r"'([a-z-]+)':\s*\{[^}]*?mode:\s*'(light|dark)'", text, re.S))
 
 
 def _relative_luminance(rgb) -> float:
@@ -346,6 +427,7 @@ def main() -> int:
         print("playwright is not installed; skipping contrast audit", file=sys.stderr)
         return 0
 
+    modes = _theme_modes()
     fixture = REPO_ROOT / "static" / "_contrast_fixture.html"
     fixture.write_text(FIXTURE)
     failures = []
@@ -359,7 +441,7 @@ def main() -> int:
                 page.add_script_tag(content=PROBE_JS)
 
                 for theme in THEMES:
-                    page.evaluate(SET_THEME_JS, theme)
+                    page.evaluate(SET_THEME_JS, [theme, modes.get(theme, "light")])
                     page.wait_for_timeout(80)
                     for selector, (label, strict) in PROBES.items():
                         probed = _probe_ratio(page, selector)

@@ -9,12 +9,6 @@
 
     // Available themes
     const THEMES = {
-        'cosmo': {
-            name: 'Cosmo',
-            mode: 'light',
-            description: 'Default light theme with vibrant colors',
-            builtin: true
-        },
         'dark': {
             name: 'Dark',
             mode: 'dark',
@@ -241,7 +235,10 @@
         }
     };
 
-    const DEFAULT_THEME = 'cosmo';
+    const DEFAULT_THEME = 'lightning';
+    // The sun/moon quick toggle flips between the (dark) default and this
+    // light theme. Blue is the closest remaining palette to the retired Cosmo.
+    const DEFAULT_LIGHT_THEME = 'blue';
 
     /**
      * Toggle between light and dark theme modes
@@ -249,11 +246,7 @@
     function toggleTheme() {
         const currentTheme = getCurrentTheme();
         const currentMode = THEMES[currentTheme]?.mode || 'light';
-        
-        // Find the next theme with opposite mode
-        let newTheme = currentMode === 'dark' ? DEFAULT_THEME : 'dark';
-
-        setTheme(newTheme);
+        setTheme(currentMode === 'dark' ? DEFAULT_LIGHT_THEME : DEFAULT_THEME);
     }
 
     /**
