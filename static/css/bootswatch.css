@@ -1,0 +1,298 @@
+/* ============================================================================
+   Bootswatch theme bridge
+   ----------------------------------------------------------------------------
+   A Bootswatch theme (static/vendor/bootswatch/<name>/bootstrap.min.css) is a
+   drop-in replacement for Bootstrap, so swapping it in restyles every
+   Bootstrap component. The rest of the UI, though, paints from EAS Station's
+   own variables (--primary-color, --surface-color, --text-color, ...), and
+   would keep the Cosmo palette on its own. This file derives those variables
+   from the loaded Bootswatch theme so the two halves agree.
+
+   theme.js swaps the stylesheet; this file only maps variables. Every rule is
+   scoped to `:root[data-theme^="bw-"]` — specificity (0,2,0) — so it beats
+   the `:root, [data-theme="cosmo"]` defaults in styles.css and can never leak
+   into the 20 hand-built themes.
+
+   Brand and status colours sit on :root in every Bootswatch build, so they
+   are read straight from --bs-*. Surfaces are not: the dark Bootswatch
+   themes keep Bootstrap's *light* --bs-secondary-bg / --bs-tertiary-bg on
+   :root and set their real card colour only inside `.card`, so dark surfaces
+   are spelled out per theme below.
+
+   Verify with: python3 scripts/diagnostics/check_theme_contrast.py
+   ============================================================================ */
+
+:root[data-theme^="bw-"] {
+    --primary-color: var(--bs-primary);
+    --primary-soft: color-mix(in srgb, var(--bs-primary) 70%, #fff);
+    --primary-dark: color-mix(in srgb, var(--bs-primary) 75%, #000);
+    /* Bootswatch's "secondary" is usually a neutral grey (and pure white in
+       Lux and Zephyr), whereas EAS Station's secondary is the second stop of
+       the navbar / page-header gradients. A deeper shade of the primary keeps
+       those gradients coherent in every theme. */
+    --secondary-color: color-mix(in srgb, var(--bs-primary) 65%, #000);
+    --secondary-soft: color-mix(in srgb, var(--bs-primary) 55%, #fff);
+    --secondary-dark: color-mix(in srgb, var(--bs-primary) 45%, #000);
+    --accent-color: var(--bs-info);
+    --bg-primary: var(--bs-primary);
+
+    --success-color: var(--bs-success);
+    --danger-color: var(--bs-danger);
+    --warning-color: var(--bs-warning);
+    --info-color: var(--bs-info);
+    --critical-color: var(--bs-danger);
+    --light-color: var(--bs-light);
+    --dark-color: var(--bs-dark);
+
+    /* Light defaults: white cards on a lightly tinted page. */
+    --bg-color: color-mix(in srgb, var(--bs-secondary-bg) 60%, var(--bs-body-bg));
+    --surface-color: var(--bs-body-bg);
+    --bg-card: var(--bs-body-bg);
+    --text-color: var(--bs-body-color);
+    --text-secondary: color-mix(in srgb, var(--text-color) 92%, var(--surface-color));
+    --text-muted: color-mix(in srgb, var(--text-color) 85%, var(--surface-color));
+    --border-color: var(--bs-border-color);
+
+    /* Cosmo's iOS-style accent palette paints the app chrome — the navbar
+       and card-header gradients — so without this every Bootswatch theme
+       keeps a purple/indigo navbar. The three gradient hues become shades of
+       the brand colour, deep enough to carry white text even for light
+       primaries like Minty's; the rest follow the theme's status colours. */
+    --vibrant-indigo: var(--secondary-color);
+    --vibrant-purple: var(--primary-dark);
+    --vibrant-blue: color-mix(in srgb, var(--bs-primary) 85%, #000);
+    --vibrant-green: var(--bs-success);
+    --vibrant-red: var(--bs-danger);
+    --vibrant-orange: var(--bs-warning);
+    --vibrant-yellow: var(--bs-warning);
+    --vibrant-teal: var(--bs-info);
+    --mesh-1: var(--primary-dark);
+    --mesh-2: var(--secondary-color);
+    --mesh-3: var(--bs-info);
+    --mesh-4: var(--bs-danger);
+}
+
+/* Plain card headers paint the same --vibrant-* gradient but set their text
+   in --text-color, which is dark in a light theme. Cosmo's bright accents
+   just about carry that; the deep brand shades above do not (Flatly's map
+   header went near-black on navy), and in a dark theme a bright brand
+   colour leaves light text on a mid-tone (Solar's gold). Either way the
+   header becomes a brand tint of the theme's own surface. */
+:root[data-theme^="bw-"][data-theme-mode="light"] .card-header:not([class*="bg-"]) {
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--primary-color) 16%, var(--surface-color)) 0%,
+        color-mix(in srgb, var(--primary-color) 7%, var(--surface-color)) 100%);
+    /* Minty and Lux ship `.card h2 { color: inherit }`, so headings take the
+       header's own (white-on-gradient) colour unless it is reset here. */
+    color: var(--text-color);
+}
+:root[data-theme^="bw-"][data-theme-mode="dark"] .card-header:not([class*="bg-"]) {
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--primary-color) 30%, var(--surface-color)) 0%,
+        color-mix(in srgb, var(--primary-color) 12%, var(--surface-color)) 100%);
+    color: var(--text-color);
+}
+
+/* ── Dark Bootswatch themes ──────────────────────────────────────────────── */
+
+:root:is([data-theme="bw-darkly"],
+         [data-theme="bw-cyborg"],
+         [data-theme="bw-slate"],
+         [data-theme="bw-solar"],
+         [data-theme="bw-superhero"],
+         [data-theme="bw-vapor"]) {
+    /* Same rule Bootstrap uses for its own dark-mode text-emphasis colours
+       (tint 40% toward white): bright enough to clear AA on a dark card. */
+    --primary-ink: color-mix(in srgb, var(--bs-primary) 60%, #fff);
+    --success-ink: color-mix(in srgb, var(--bs-success) 60%, #fff);
+    --danger-ink: color-mix(in srgb, var(--bs-danger) 60%, #fff);
+    --warning-ink: color-mix(in srgb, var(--bs-warning) 60%, #fff);
+    --info-ink: color-mix(in srgb, var(--bs-info) 60%, #fff);
+    --shadow-color: rgba(0, 0, 0, 0.55);
+    --shadow: rgba(0, 0, 0, 0.55);
+}
+
+/* Surfaces copied from each theme's own `.card` / body colours. */
+:root[data-theme="bw-darkly"] {
+    --bg-color: #222;
+    --surface-color: #303030;
+    --bg-card: #303030;
+    --border-color: #444;
+}
+
+:root[data-theme="bw-cyborg"] {
+    --bg-color: #060606;
+    --surface-color: #282828;
+    --bg-card: #282828;
+    --border-color: #3a3a3a;
+}
+
+:root[data-theme="bw-slate"] {
+    --bg-color: #272b30;
+    --surface-color: #32383e;
+    --bg-card: #32383e;
+    --border-color: #52575c;
+}
+
+:root[data-theme="bw-solar"] {
+    --bg-color: #002b36;
+    --surface-color: #073642;
+    --bg-card: #073642;
+    --border-color: #0f4b5a;
+}
+
+:root[data-theme="bw-superhero"] {
+    /* Superhero's own cards are mid-grey #4e5d6c, which no saturated status
+       colour clears AA on (its orange primary measures 1.99:1 there). The
+       theme's deep navy --bs-dark serves as the surface instead. */
+    --bg-color: #0f2537;
+    --surface-color: #20374c;
+    --bg-card: #20374c;
+    --border-color: #4e5d6c;
+}
+
+:root[data-theme="bw-vapor"] {
+    --bg-color: #1a0933;
+    --surface-color: #261047;
+    --bg-card: #261047;
+    --border-color: #3f2a63;
+}
+
+/* ── Per-theme AA corrections ────────────────────────────────────────────────
+   Several Bootswatch palettes ship below WCAG AA for text. Fills keep the
+   theme's own colour; only the text ("ink") is shifted, same hue, until it
+   clears 4.5:1 on that theme's --surface-color. Comments record the failing
+   ratio each override replaces. */
+
+/* Light themes whose brand colour is too light to serve as link text. */
+:root[data-theme="bw-cerulean"] { --primary-ink: #237bad; }  /* #2fa4e7 2.77 -> 4.66 */
+:root[data-theme="bw-litera"]   { --primary-ink: #3d72d0; }  /* #4582ec 3.71 -> 4.65 */
+:root[data-theme="bw-united"]   { --primary-ink: #cb491c; }  /* #e95420 3.65 -> 4.66 */
+:root[data-theme="bw-yeti"]     { --primary-ink: #007ea7; }  /* #008cba 3.85 -> 4.62 */
+:root[data-theme="bw-minty"] {
+    --primary-ink: #4e7e70;     /* #78c2ad 2.08 -> 4.62 */
+    --text-color: #555;         /* Minty's own body grey #888 is 3.37 on white */
+}
+
+/* Dark themes. */
+:root[data-theme="bw-darkly"] { --primary-ink: #9db0c4; }    /* tinted #375a7f: alert-primary 4.37 */
+/* Body text is lifted where the theme's own grey left table headers (a
+   primary-tinted surface) and the derived secondary/muted inks short. */
+:root[data-theme="bw-cyborg"] {
+    --danger-ink: #e26e6e;      /* tinted #c00 4.40 -> 4.70 */
+    --text-color: #b8bab9;      /* #adafae: table header 4.47 */
+}
+:root[data-theme="bw-slate"] {
+    --primary-ink: #a9acae;     /* tinted #3a3f44 3.51 */
+    --text-color: #c8c8c8;      /* #aaa: table header 4.32, muted 3.85 */
+}
+:root[data-theme="bw-solar"] {
+    --text-color: #b4c2c2;      /* base0 #839496: table header 2.89, muted 2.94 */
+}
+
+/* Cerulean and Minty have brand colours too light to carry white text (the
+   page header title measured 2.83 and 2.12 on the stock gradient). Deepen
+   the navbar / card-header hues and the page header for those two rather
+   than darkening the brand colour everywhere. */
+:root:is([data-theme="bw-cerulean"], [data-theme="bw-minty"]) {
+    --vibrant-blue: color-mix(in srgb, var(--bs-primary) 62%, #000);
+    --vibrant-purple: color-mix(in srgb, var(--bs-primary) 55%, #000);
+    --vibrant-indigo: color-mix(in srgb, var(--bs-primary) 45%, #000);
+}
+
+:root:is([data-theme="bw-cerulean"], [data-theme="bw-minty"]) .page-header {
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--primary-color) 62%, #000) 0%,
+        color-mix(in srgb, var(--primary-color) 45%, #000) 100%);
+}
+
+/* ── Component ink ───────────────────────────────────────────────────────────
+   styles.css hard-codes light-theme ink on several Bootstrap components
+   (`.alert-danger { color: #991b1b }` and friends) and then re-patches them
+   for each hand-built dark theme by name. Those lists don't include the
+   Bootswatch themes, and some Bootswatch palettes break the light-theme
+   assumption on their own (Flatly's "dark" is mid-grey #7b8a8b, Cyborg's
+   "light" is #222). Rebuild these components from the theme's AA-tuned
+   inks instead. Every status alert measured 1.1–1.7:1 in the dark
+   Bootswatch themes before this. data-theme-mode is stamped before first
+   paint by base.html, alongside data-theme. */
+:root[data-theme^="bw-"] .alert-primary {
+    color: color-mix(in srgb, var(--primary-ink) 70%, #000);
+    background-color: color-mix(in srgb, var(--primary-color) 10%, var(--surface-color));
+    border-color: var(--primary-color);
+}
+
+/* Light themes keep styles.css's light status alerts, which already clear
+   AA; the dark ones are rebuilt from the theme's (light) inks. */
+:root[data-theme^="bw-"][data-theme-mode="dark"] .alert-primary {
+    color: var(--primary-ink);
+    background-color: color-mix(in srgb, var(--primary-color) 12%, var(--surface-color));
+}
+:root[data-theme^="bw-"][data-theme-mode="dark"] .alert-success {
+    color: var(--success-ink);
+    background-color: color-mix(in srgb, var(--success-color) 12%, var(--surface-color));
+    border-color: var(--success-color);
+}
+:root[data-theme^="bw-"][data-theme-mode="dark"] .alert-danger {
+    color: var(--danger-ink);
+    background-color: color-mix(in srgb, var(--danger-color) 12%, var(--surface-color));
+    border-color: var(--danger-color);
+}
+:root[data-theme^="bw-"][data-theme-mode="dark"] .alert-warning {
+    color: var(--warning-ink);
+    background-color: color-mix(in srgb, var(--warning-color) 12%, var(--surface-color));
+    border-color: var(--warning-color);
+}
+:root[data-theme^="bw-"][data-theme-mode="dark"] .alert-info {
+    color: var(--info-ink);
+    background-color: color-mix(in srgb, var(--info-color) 12%, var(--surface-color));
+    border-color: var(--info-color);
+}
+:root[data-theme^="bw-"] :is(.alert-secondary, .alert-light) {
+    color: var(--text-color);
+    background-color: color-mix(in srgb, var(--text-color) 8%, var(--surface-color));
+    border-color: var(--border-color);
+}
+
+/* Not on (or inside) a `bg-*` fill: `badge bg-light text-dark` and friends
+   must keep their dark ink, or it lands on Vapor's cyan --bs-light. */
+:root[data-theme^="bw-"] .text-dark:not(.badge, [class*="bg-"], [class*="bg-"] *) {
+    color: var(--text-color) !important;
+}
+/* ...and on a fill it means stock Bootstrap's near-black, which several
+   Bootswatch builds redefine (Flatly's "dark" is grey, Cyborg's is light). */
+:root[data-theme^="bw-"] :is(.text-dark[class*="bg-"], [class*="bg-"] .text-dark) {
+    color: #212529 !important;
+}
+:root[data-theme^="bw-"] .btn-outline-dark {
+    --bs-btn-color: var(--text-color);
+    --bs-btn-border-color: var(--text-color);
+    color: var(--text-color);
+    border-color: var(--text-color);
+}
+:root[data-theme^="bw-"] .btn-outline-secondary {
+    --bs-btn-color: var(--text-secondary);
+    --bs-btn-border-color: var(--border-color);
+    color: var(--text-secondary);
+    border-color: var(--text-secondary);
+}
+:root[data-theme^="bw-"] .btn-outline-primary {
+    color: var(--primary-ink);
+    border-color: var(--primary-ink);
+}
+:root[data-theme^="bw-"] :is(.btn-outline-dark, .btn-outline-secondary, .btn-outline-primary):hover {
+    color: var(--surface-color);
+}
+
+/* Bootstrap's own secondary text (.text-body-secondary, form help text). */
+:root[data-theme="bw-minty"],
+:root[data-theme="bw-solar"] {
+    --bs-secondary-color: var(--text-secondary);
+}
+
+/* Cyborg inverts Bootstrap's light/dark pair (--bs-light #222, --bs-dark
+   #adafae). styles.css paints `.bg-light` from --light-color and forces dark
+   ink on it, so point --light-color back at the light half of the pair. */
+:root[data-theme="bw-cyborg"] {
+    --light-color: #adafae;
+}

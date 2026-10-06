@@ -12,7 +12,9 @@
             // light variant first and snap to dark a moment later. Keep this list
             // in sync with the dark-mode entries in static/js/core/theme.js.
             const DARK_THEMES = ['dark', 'coffee', 'aurora', 'nebula', 'midnight',
-                                 'charcoal', 'obsidian', 'slate', 'lightning'];
+                                 'charcoal', 'obsidian', 'slate', 'lightning',
+                                 'bw-darkly', 'bw-cyborg', 'bw-slate', 'bw-solar',
+                                 'bw-superhero', 'bw-vapor'];
             document.documentElement.setAttribute(
                 'data-theme-mode', DARK_THEMES.includes(savedTheme) ? 'dark' : 'light');
         })();
@@ -44,13 +46,30 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="application-name" content="EAS Station">
 
-    <!-- Vendor CSS (Bootstrap) -->
-    <link href="{{ url_for('static', filename='css/vendor.css') }}" rel="stylesheet">
+    <!-- Vendor CSS (Bootstrap). A "bw-<name>" theme swaps this for that
+         Bootswatch build; theme.js does the same on a live theme switch.
+         Swapping the href here, before first paint, keeps the link
+         parser-inserted and therefore render-blocking, so there is no flash
+         of stock Bootstrap. -->
+    <link id="bootstrap-css" href="{{ url_for('static', filename='css/vendor.css') }}" rel="stylesheet"
+          data-default-href="{{ url_for('static', filename='css/vendor.css') }}"
+          data-bootswatch-href="{{ url_for('static', filename='vendor/bootswatch/__THEME__/bootstrap.min.css') }}">
+    <script>
+        (function() {
+            const theme = document.documentElement.getAttribute('data-theme') || '';
+            if (theme.startsWith('bw-')) {
+                const link = document.getElementById('bootstrap-css');
+                link.href = link.dataset.bootswatchHref.replace('__THEME__', theme.slice(3));
+            }
+        })();
+    </script>
     <!-- Font Awesome (local to avoid CDN tracking prevention blocks) -->
     <link href="{{ url_for('static', filename='vendor/fontawesome/css/all.min.css') }}" rel="stylesheet">
 
     <!-- EAS Station™ Styles (Consolidated) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <!-- Maps EAS Station's theme variables onto the active Bootswatch theme -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootswatch.css') }}">
 
     <script>
         window.CSRF_TOKEN = {{ csrf_token | tojson }};

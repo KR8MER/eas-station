@@ -128,6 +128,116 @@
             mode: 'dark',
             description: 'Stormcloud sky with electric-yellow bolts and arc-blue plasma',
             builtin: true
+        },
+
+        // Bootswatch themes (https://bootswatch.com, MIT). Each swaps the
+        // Bootstrap stylesheet for static/vendor/bootswatch/<bootswatch>/;
+        // static/css/bootswatch.css maps the app's own variables onto it.
+        // Keep the dark entries in sync with DARK_THEMES in base.html.
+        'bw-cerulean': {
+            name: 'Cerulean',
+            mode: 'light',
+            description: 'A calm blue sky (Bootswatch)',
+            bootswatch: 'cerulean',
+            builtin: true
+        },
+        'bw-flatly': {
+            name: 'Flatly',
+            mode: 'light',
+            description: 'Flat and modern, midnight blue with teal links (Bootswatch)',
+            bootswatch: 'flatly',
+            builtin: true
+        },
+        'bw-litera': {
+            name: 'Litera',
+            mode: 'light',
+            description: 'The medium is the message — clean editorial type (Bootswatch)',
+            bootswatch: 'litera',
+            builtin: true
+        },
+        'bw-lux': {
+            name: 'Lux',
+            mode: 'light',
+            description: 'A touch of class, near-black on white (Bootswatch)',
+            bootswatch: 'lux',
+            builtin: true
+        },
+        'bw-minty': {
+            name: 'Minty',
+            mode: 'light',
+            description: 'A fresh feel in mint and coral (Bootswatch)',
+            bootswatch: 'minty',
+            builtin: true
+        },
+        'bw-sandstone': {
+            name: 'Sandstone',
+            mode: 'light',
+            description: 'A touch of warmth on parchment surfaces (Bootswatch)',
+            bootswatch: 'sandstone',
+            builtin: true
+        },
+        'bw-united': {
+            name: 'United',
+            mode: 'light',
+            description: 'Ubuntu orange and unique aubergine (Bootswatch)',
+            bootswatch: 'united',
+            builtin: true
+        },
+        'bw-yeti': {
+            name: 'Yeti',
+            mode: 'light',
+            description: 'A friendly foundation in ocean blue (Bootswatch)',
+            bootswatch: 'yeti',
+            builtin: true
+        },
+        'bw-zephyr': {
+            name: 'Zephyr',
+            mode: 'light',
+            description: 'Breezy and beautiful royal blue (Bootswatch)',
+            bootswatch: 'zephyr',
+            builtin: true
+        },
+        'bw-darkly': {
+            name: 'Darkly',
+            mode: 'dark',
+            description: 'Flatly in night mode (Bootswatch)',
+            bootswatch: 'darkly',
+            builtin: true
+        },
+        'bw-cyborg': {
+            name: 'Cyborg',
+            mode: 'dark',
+            description: 'Jet black and electric blue (Bootswatch)',
+            bootswatch: 'cyborg',
+            builtin: true
+        },
+        'bw-slate': {
+            name: 'Slate',
+            mode: 'dark',
+            description: 'Shades of gunmetal gray (Bootswatch)',
+            bootswatch: 'slate',
+            builtin: true
+        },
+        'bw-solar': {
+            name: 'Solar',
+            mode: 'dark',
+            description: 'A spin on Solarized (Bootswatch)',
+            bootswatch: 'solar',
+            builtin: true
+        },
+        'bw-superhero': {
+            name: 'Superhero',
+            mode: 'dark',
+            description: 'The brave and the blue, with orange accents (Bootswatch)',
+            bootswatch: 'superhero',
+            builtin: true
+        },
+        'bw-vapor': {
+            name: 'Vapor',
+            mode: 'dark',
+            description: 'A cyberpunk aesthetic in neon on purple (Bootswatch)',
+            bootswatch: 'vapor',
+            builtin: true
         }
     };
 
@@ -156,6 +266,7 @@
         }
 
         const theme = THEMES[themeName];
+        applyBootstrapStylesheet(theme.bootswatch);
         document.documentElement.setAttribute('data-theme', themeName);
         document.documentElement.setAttribute('data-theme-mode', theme.mode);
         localStorage.setItem('theme', themeName);
@@ -174,6 +285,46 @@
                 themeName: theme.name
             }
         }));
+    }
+
+    /**
+     * Point the Bootstrap <link> at a Bootswatch build, or back at stock
+     * Bootstrap when `bootswatch` is falsy. base.html does the same before
+     * first paint; this handles live switches. The new sheet is loaded
+     * alongside the old one and the old one removed only once it has
+     * arrived, so the page never renders without Bootstrap in between.
+     */
+    let pendingBootstrapLink = null;
+
+    function applyBootstrapStylesheet(bootswatch) {
+        const link = document.getElementById('bootstrap-css');
+        if (!link) return;
+        const href = new URL(bootswatch
+            ? link.dataset.bootswatchHref.replace('__THEME__', bootswatch)
+            : link.dataset.defaultHref, document.baseURI).href;
+
+        // Drop a sheet still loading from a previous rapid switch.
+        if (pendingBootstrapLink) {
+            pendingBootstrapLink.remove();
+            pendingBootstrapLink = null;
+        }
+        if (link.href === href) return;
+
+        const next = link.cloneNode();
+        next.removeAttribute('id');
+        next.href = href;
+        next.onload = () => {
+            pendingBootstrapLink = null;
+            link.remove();
+            next.id = 'bootstrap-css';
+        };
+        next.onerror = () => {
+            console.warn(`Bootstrap stylesheet failed to load: ${href}`);
+            next.remove();
+            pendingBootstrapLink = null;
+        };
+        pendingBootstrapLink = next;
+        link.after(next);
     }
 
     /**
@@ -431,6 +582,7 @@
                         </h6>
                         <p class="card-text small text-muted">${escapeHtml(theme.description)}</p>
                         <span class="badge bg-${theme.mode === 'dark' ? 'dark' : 'light'} text-${theme.mode === 'dark' ? 'light' : 'dark'}">${escapeHtml(theme.mode)}</span>
+                        ${theme.bootswatch ? '<span class="badge bg-info ms-1">Bootswatch</span>' : ''}
                         ${!theme.builtin ? `<button class="btn btn-sm btn-danger float-end theme-delete-btn" data-theme-key="${escapeAttr(key)}"><i class="fas fa-trash"></i></button>` : ''}
                     </div>
                 </div>
