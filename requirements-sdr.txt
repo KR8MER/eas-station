@@ -14,7 +14,7 @@ Jinja2>=3.1.0
 itsdangerous>=2.0.0
 
 # Database
-SQLAlchemy>=2.0.0
+SQLAlchemy>=2.1.4
 psycopg2-binary>=2.9.13
 GeoAlchemy2>=0.15.0
 greenlet>=3.5.6
@@ -27,11 +27,11 @@ hiredis>=3.0.0
 psutil>=5.9.0
 python-dotenv>=1.2.4
 PyYAML>=6.0.0
-pytz>=2024.1
+pytz>=2026.5
 python-dateutil>=2.8.0
 
 # JSON parsing
-orjson>=3.9.0
+orjson>=3.13.0
 
 # HTTP client (for app_utils)
 requests>=2.31.0
