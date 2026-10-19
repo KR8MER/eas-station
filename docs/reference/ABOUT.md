@@ -45,7 +45,7 @@ The application combines open-source tooling and optional cloud integrations. Ve
 - Flask 3.1.3 web framework
 - Werkzeug 3.1.9 WSGI utilities
 - Flask-SQLAlchemy 3.1.1 ORM integration
-- SQLAlchemy 2.1.2 ORM core
+- SQLAlchemy 2.1.4 ORM core
 - Gunicorn 26.2.0 production WSGI server
 
 ### Data and Spatial Layer
@@ -55,7 +55,7 @@ The application combines open-source tooling and optional cloud integrations. Ve
 
 ### System and Utilities
 - requests 2.34.2 for CAP feed retrieval and IPAWS integration
-- pytz 2026.4 timezone utilities
+- pytz 2026.5 timezone utilities
 - psutil 7.2.2 system health and receiver monitoring
 - python-dotenv 1.2.4 configuration loading
 - cryptography — Ed25519 signing and SHA-256 hashing backing the tamper-evident `audit_logs` chain (see `app_core/auth/audit.py::AuditLogger.verify_chain`)
