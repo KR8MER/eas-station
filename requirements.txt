@@ -122,7 +122,7 @@ zigpy-znp>=1.1.1   # Z-Stack (CC2652P / CC1352P) radio driver
 
 # GPS HAT support (Adafruit Ultimate GPS HAT #2324)
 pynmea2==1.19.0  # NMEA-0183 sentence parser for GPS receivers
-Pillow==12.3.0  # Image processing for VFD graphics rendering
+Pillow==13.0.0  # Image processing for VFD graphics rendering
 
 # OLED display support (Argon Industria SSD1306 module)
 luma.oled==3.15.0  # I2C SSD1306/SH1106 driver used by the Argon OLED

@@ -7,6 +7,11 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.30.1] - 2026-10-23 - Bump pillow from 12.3.0 to 13.0.0
+
+### Changed
+- Bump pillow from 12.3.0 to 13.0.0 (Dependabot #2735); documented versions synced by scripts/sync_dependency_versions.py.
+
 ## [3.30.0] - 2026-10-06 - Lightning is the default theme; Cosmo retired; readable status fills
 
 ### Changed
