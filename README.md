@@ -3,7 +3,7 @@
 [![Tests](https://github.com/KR8MER/eas-station/actions/workflows/tests.yml/badge.svg)](https://github.com/KR8MER/eas-station/actions/workflows/tests.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-3.30.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.30.1-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -29,7 +29,7 @@
 [![SciPy](https://img.shields.io/badge/SciPy-1.18.1-8CAAE6?style=flat-square&logo=scipy&logoColor=white)](https://scipy.org/)
 [![Numba](https://img.shields.io/badge/Numba-0.68.0%2B-00A3E0?style=flat-square&logo=numba&logoColor=white)](https://numba.pydata.org/)
 [![lxml](https://img.shields.io/badge/lxml-6.1.3-4A7EBB?style=flat-square)](https://lxml.de/)
-[![Pillow](https://img.shields.io/badge/Pillow-12.3.0-3776AB?style=flat-square)](https://python-pillow.org/)
+[![Pillow](https://img.shields.io/badge/Pillow-13.0.0-3776AB?style=flat-square)](https://python-pillow.org/)
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3.0-7952B3?style=flat-square&logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
 [![Font Awesome](https://img.shields.io/badge/Font%20Awesome-6.4.0-528DD7?style=flat-square&logo=fontawesome&logoColor=white)](https://fontawesome.com/)
 [![Leaflet](https://img.shields.io/badge/Leaflet-1.9.4-199900?style=flat-square&logo=leaflet&logoColor=white)](https://leafletjs.com/)
@@ -551,7 +551,7 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 | gpiozero | 2.0.1.post3 | BSD‑3‑Clause | High‑level GPIO control for relay HATs, PTT lines, and transmitter keying. | https://gpiozero.readthedocs.io/ |
 | rpi‑ws281x | ≥ 0.0.5 | MIT | WS2812B / NeoPixel addressable LED strip driver (DMA‑backed on the Pi). | https://github.com/rpi-ws281x/rpi-ws281x-python |
 | luma.oled | 3.15.0 | MIT | I2C SSD1306/SH1106 driver for the Argon OLED status panel. | https://github.com/rm-hull/luma.oled |
-| Pillow | 12.3.0 | MIT‑CMU | Rasterizes glyphs and bitmaps for the VFD screen editor and OLED frames. | https://python-pillow.org/ |
+| Pillow | 13.0.0 | MIT‑CMU | Rasterizes glyphs and bitmaps for the VFD screen editor and OLED frames. | https://python-pillow.org/ |
 | zigpy | ≥ 2.1 | GPL‑3.0 | Core Zigbee protocol stack for optional wireless sensor / device control. | https://github.com/zigpy/zigpy |
 | zigpy‑znp | ≥ 0.11 | GPL‑3.0 | TI Z‑Stack (CC2652P / CC1352P) radio driver under `zigpy`. | https://github.com/zigpy/zigpy-znp |
 | pynmea2 | 1.19.0 | MIT | Parses NMEA‑0183 sentences (GGA, GSA, GSV, RMC) from the GPS HAT. | https://github.com/Knio/pynmea2 |
