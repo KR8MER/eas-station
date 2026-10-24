@@ -7,6 +7,11 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.30.1] - 2026-10-24 - Bump brotli from 1.2.0 to 1.2.1
+
+### Changed
+- Bump brotli from 1.2.0 to 1.2.1 (Dependabot #2736); documented versions synced by scripts/sync_dependency_versions.py.
+
 ## [3.30.0] - 2026-10-06 - Lightning is the default theme; Cosmo retired; readable status fills
 
 ### Changed
