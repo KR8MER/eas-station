@@ -7,6 +7,11 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.30.2] - 2026-10-26 - Bump the python-deps group across 1 directory with 14 updates
+
+### Changed
+- Bump the python-deps group across 1 directory with 14 updates (Dependabot #2737); documented versions synced by scripts/sync_dependency_versions.py.
+
 ## [3.30.1] - 2026-10-24 - Bump brotli from 1.2.0 to 1.2.1
 
 ### Changed

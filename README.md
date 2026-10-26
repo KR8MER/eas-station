@@ -3,7 +3,7 @@
 [![Tests](https://github.com/KR8MER/eas-station/actions/workflows/tests.yml/badge.svg)](https://github.com/KR8MER/eas-station/actions/workflows/tests.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-3.30.1-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-3.30.2-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -11,8 +11,8 @@
 [![Werkzeug](https://img.shields.io/badge/Werkzeug-3.1.9-000000?style=flat-square)](https://werkzeug.palletsprojects.com/)
 [![Jinja2](https://img.shields.io/badge/Jinja2-3.1.6-B41717?style=flat-square&logo=jinja&logoColor=white)](https://jinja.palletsprojects.com/)
 [![Socket.IO](https://img.shields.io/badge/Socket.IO-5.17.0-010101?style=flat-square&logo=socketdotio&logoColor=white)](https://socket.io/)
-[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.1.2-CA2C39?style=flat-square&logo=sqlalchemy&logoColor=white)](https://www.sqlalchemy.org/)
-[![Alembic](https://img.shields.io/badge/Alembic-1.20.0-6BA3BE?style=flat-square&logo=sqlalchemy&logoColor=white)](https://alembic.sqlalchemy.org/)
+[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.1.6-CA2C39?style=flat-square&logo=sqlalchemy&logoColor=white)](https://www.sqlalchemy.org/)
+[![Alembic](https://img.shields.io/badge/Alembic-1.20.1-6BA3BE?style=flat-square&logo=sqlalchemy&logoColor=white)](https://alembic.sqlalchemy.org/)
 [![PostgreSQL + PostGIS](https://img.shields.io/badge/PostgreSQL-17%20%2B%20PostGIS-0093D0?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-8.0-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
 [![Gunicorn](https://img.shields.io/badge/Gunicorn-26.2.0-499848?style=flat-square&logo=gunicorn&logoColor=white)](https://gunicorn.org/)
@@ -25,11 +25,11 @@
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-system-007808?style=flat-square&logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
 [![pydub](https://img.shields.io/badge/pydub-0.25.1-FF8A65?style=flat-square)](https://github.com/jiaaro/pydub)
 [![eSpeak NG](https://img.shields.io/badge/eSpeak%20NG-TTS-5C2D91?style=flat-square)](https://github.com/espeak-ng/espeak-ng)
-[![NumPy](https://img.shields.io/badge/NumPy-2.5.3-013243?style=flat-square&logo=numpy&logoColor=white)](https://numpy.org/)
+[![NumPy](https://img.shields.io/badge/NumPy-2.5.4-013243?style=flat-square&logo=numpy&logoColor=white)](https://numpy.org/)
 [![SciPy](https://img.shields.io/badge/SciPy-1.18.1-8CAAE6?style=flat-square&logo=scipy&logoColor=white)](https://scipy.org/)
 [![Numba](https://img.shields.io/badge/Numba-0.68.0%2B-00A3E0?style=flat-square&logo=numba&logoColor=white)](https://numba.pydata.org/)
 [![lxml](https://img.shields.io/badge/lxml-6.1.3-4A7EBB?style=flat-square)](https://lxml.de/)
-[![Pillow](https://img.shields.io/badge/Pillow-12.3.0-3776AB?style=flat-square)](https://python-pillow.org/)
+[![Pillow](https://img.shields.io/badge/Pillow-13.0.0-3776AB?style=flat-square)](https://python-pillow.org/)
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3.0-7952B3?style=flat-square&logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
 [![Font Awesome](https://img.shields.io/badge/Font%20Awesome-6.4.0-528DD7?style=flat-square&logo=fontawesome&logoColor=white)](https://fontawesome.com/)
 [![Leaflet](https://img.shields.io/badge/Leaflet-1.9.4-199900?style=flat-square&logo=leaflet&logoColor=white)](https://leafletjs.com/)
@@ -488,8 +488,8 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 
 | Library | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
-| SQLAlchemy | 2.1.2 | MIT | ORM for every persisted entity — alerts, settings, audit logs, RBAC, GPS samples. | https://www.sqlalchemy.org/ |
-| Alembic | 1.20.0 | MIT | Schema migrations (`app_core/migrations/versions/*`); `alembic upgrade head` runs on install/update. | https://alembic.sqlalchemy.org/ |
+| SQLAlchemy | 2.1.6 | MIT | ORM for every persisted entity — alerts, settings, audit logs, RBAC, GPS samples. | https://www.sqlalchemy.org/ |
+| Alembic | 1.20.1 | MIT | Schema migrations (`app_core/migrations/versions/*`); `alembic upgrade head` runs on install/update. | https://alembic.sqlalchemy.org/ |
 | psycopg2‑binary | 2.9.12 | LGPL‑3.0 | Sync PostgreSQL driver SQLAlchemy talks to. | https://www.psycopg.org/ |
 | GeoAlchemy2 | 0.20.0 | MIT | SQLAlchemy types and ST_* function bindings for PostGIS geometry/geography columns. | https://geoalchemy-2.readthedocs.io/ |
 | PostgreSQL | 17 | PostgreSQL | Primary database (alerts, users, audit, configuration). | https://www.postgresql.org/ |
@@ -502,7 +502,7 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 |---|---|---|---|---|
 | Redis (server) | 8.0 | RSAL/SSPL/AGPL (per upstream) | Pub/sub bus between the web app and the SDR / hardware services; cache; rate‑limit store; capture registry; live spectrum + waterfall feed. | https://redis.io/ |
 | redis (Python) | 7.4.1 | MIT | Python client for the Redis server. Held at 7.4.x: redis-py 8.x leaks memory per pub/sub message (CHANGELOG 3.23.4). | https://github.com/redis/redis-py |
-| hiredis | 3.4.2 | BSD‑3‑Clause | C parser accelerator for `redis‑py` (faster pub/sub fan‑out). | https://github.com/redis/hiredis-py |
+| hiredis | 3.5.0 | BSD‑3‑Clause | C parser accelerator for `redis‑py` (faster pub/sub fan‑out). | https://github.com/redis/hiredis-py |
 | Gunicorn | 26.2.0 | MIT | Production WSGI server fronting the Flask app. | https://gunicorn.org/ |
 | gevent | 26.9.0+ | MIT | Async worker class for Gunicorn so Flask‑SocketIO can hold thousands of concurrent WebSocket connections. | https://www.gevent.org/ |
 | Nginx | system (apt) | BSD‑2‑Clause | Reverse proxy / TLS terminator / static file server in front of Gunicorn and Icecast. Installed via `install.sh`'s `apt-get install nginx` — no version pin, and no Docker/Alpine image is involved despite this table's earlier claim. | https://nginx.org/ |
@@ -515,15 +515,15 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 |---|---|---|---|---|
 | requests | 2.34.2 | Apache‑2.0 | Sync HTTP client used by the CAP/IPAWS pollers and most outbound integrations. | https://requests.readthedocs.io/ |
 | httpx | 0.28.1 | BSD‑3‑Clause | Modern async HTTP client with connection pooling for high‑throughput CAP fetches. | https://www.python-httpx.org/ |
-| certifi | 2026.7.22 | MPL‑2.0 | Up‑to‑date CA bundle for SSL verification (mandatory for IPAWS over TLS). | https://github.com/certifi/python-certifi |
+| certifi | 2026.10.19 | MPL‑2.0 | Up‑to‑date CA bundle for SSL verification (mandatory for IPAWS over TLS). | https://github.com/certifi/python-certifi |
 | feedparser | 6.0.14 | BSD‑2‑Clause | Parses RSS/Atom feeds used by the LED‑sign news ticker. | https://github.com/kurtmckee/feedparser |
-| orjson | 3.12.0 | Apache‑2.0 / MIT | Fast C‑backed JSON encoder/decoder for the live data feeds and Redis payloads. | https://github.com/ijl/orjson |
+| orjson | 3.13.0 | Apache‑2.0 / MIT | Fast C‑backed JSON encoder/decoder for the live data feeds and Redis payloads. | https://github.com/ijl/orjson |
 | ujson | 6.0.0 | BSD‑3‑Clause | Fallback fast JSON parser when `orjson` is unavailable. | https://github.com/ultrajson/ultrajson |
 | PyYAML | 6.0.3 | MIT | Reads screen editor definitions and config templates. | https://pyyaml.org/ |
 | lxml | 6.1.3 | BSD‑3‑Clause | High‑performance XML parser for CAP alert ingestion (5–10× faster than stdlib). | https://lxml.de/ |
-| mistune | 3.3.4 | BSD‑3‑Clause | Renders the in‑app documentation viewer (`/docs/*`) from project markdown. | https://mistune.lepture.com/ |
+| mistune | 3.4.0 | BSD‑3‑Clause | Renders the in‑app documentation viewer (`/docs/*`) from project markdown. | https://mistune.lepture.com/ |
 | python‑dateutil | 2.9.0.post0 | Apache‑2.0 / BSD‑3 | Robust parsing of CAP timestamp fields with mixed offsets and tz abbreviations. | https://dateutil.readthedocs.io/ |
-| pytz | 2026.4 | MIT | Time‑zone database for local display of alert effective/expire times and audit logs. | https://pythonhosted.org/pytz/ |
+| pytz | 2026.5 | MIT | Time‑zone database for local display of alert effective/expire times and audit logs. | https://pythonhosted.org/pytz/ |
 | python‑dotenv | 1.2.1 | BSD‑3‑Clause | Loads `.env` configuration at startup. | https://github.com/theskumar/python-dotenv |
 | psutil | 7.2.2 | BSD‑3‑Clause | System‑health snapshot: CPU/mem/disk/load/temperature shields and the System Health dashboard. | https://github.com/giampaolo/psutil |
 | openpyxl | 3.1.5 | MIT | XLSX export of alert history and audit reports. | https://openpyxl.readthedocs.io/ |
@@ -532,7 +532,7 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 
 | Component | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
-| NumPy | 2.5.3 | BSD‑3‑Clause | Foundation for every IQ buffer, FM demod, FFT, and SAME bit slicer. Also drives the one‑click IQ capture (`numpy.save` to `.npy`). | https://numpy.org/ |
+| NumPy | 2.5.4 | BSD‑3‑Clause | Foundation for every IQ buffer, FM demod, FFT, and SAME bit slicer. Also drives the one‑click IQ capture (`numpy.save` to `.npy`). | https://numpy.org/ |
 | SciPy | 1.18.1 | BSD‑3‑Clause | DSP filter design (`signal.lfilter`, FIR/IIR design) for the interference notch, deemphasis, and channel filters. | https://scipy.org/ |
 | Numba | ≥ 0.67.0, < 0.68 | BSD‑2‑Clause | JIT‑compiles the inner SAME DLL and RBDS workers; ~6× faster real‑time demod on a Pi. | https://numba.pydata.org/ |
 | pydub | 0.25.1 | MIT | Decodes MP3/AAC/OGG Icecast streams for the EAS audio monitor. | https://github.com/jiaaro/pydub |
@@ -550,8 +550,8 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 | pyserial | 3.5 | BSD‑3‑Clause | Serial transport for the VFD display, RS‑232 LED signs, and UART NMEA GPS. | https://github.com/pyserial/pyserial |
 | gpiozero | 2.0.1.post3 | BSD‑3‑Clause | High‑level GPIO control for relay HATs, PTT lines, and transmitter keying. | https://gpiozero.readthedocs.io/ |
 | rpi‑ws281x | ≥ 0.0.5 | MIT | WS2812B / NeoPixel addressable LED strip driver (DMA‑backed on the Pi). | https://github.com/rpi-ws281x/rpi-ws281x-python |
-| luma.oled | 3.15.0 | MIT | I2C SSD1306/SH1106 driver for the Argon OLED status panel. | https://github.com/rm-hull/luma.oled |
-| Pillow | 12.3.0 | MIT‑CMU | Rasterizes glyphs and bitmaps for the VFD screen editor and OLED frames. | https://python-pillow.org/ |
+| luma.oled | 3.16.0 | MIT | I2C SSD1306/SH1106 driver for the Argon OLED status panel. | https://github.com/rm-hull/luma.oled |
+| Pillow | 13.0.0 | MIT‑CMU | Rasterizes glyphs and bitmaps for the VFD screen editor and OLED frames. | https://python-pillow.org/ |
 | zigpy | ≥ 2.1 | GPL‑3.0 | Core Zigbee protocol stack for optional wireless sensor / device control. | https://github.com/zigpy/zigpy |
 | zigpy‑znp | ≥ 0.11 | GPL‑3.0 | TI Z‑Stack (CC2652P / CC1352P) radio driver under `zigpy`. | https://github.com/zigpy/zigpy-znp |
 | pynmea2 | 1.19.0 | MIT | Parses NMEA‑0183 sentences (GGA, GSA, GSV, RMC) from the GPS HAT. | https://github.com/Knio/pynmea2 |
