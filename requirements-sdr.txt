@@ -35,7 +35,7 @@ orjson>=3.9.0
 
 # HTTP client (for app_utils)
 requests>=2.31.0
-certifi>=2024.0.0
+certifi>=2026.10.18
 
 # XML parsing (for CAP alerts in app_core)
 lxml>=6.1.3
