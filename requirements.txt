@@ -34,7 +34,7 @@ greenlet==3.5.6  # Required for SQLAlchemy 2.0 sync operations with gevent
 # HTTP client for API calls
 requests==2.34.2
 feedparser==6.0.14          # RSS/Atom feed parsing for LED sign RSS ticker
-certifi==2026.7.22  # Updated CA bundle for SSL certificate verification (required for IPAWS)
+certifi==2026.10.18  # Updated CA bundle for SSL certificate verification (required for IPAWS)
 httpx==0.28.1  # Modern async HTTP client with connection pooling
 
 # Timezone handling (CRITICAL FOR PROPER TIME DISPLAY)
