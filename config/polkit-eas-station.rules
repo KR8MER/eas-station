@@ -10,10 +10,31 @@
  * prevents sudo from elevating privileges.  The GPS manager calls
  * busctl directly to request the NTP disable when a PPS-backed GPS
  * fix is available so the GPS clock is not overridden.
+ *
+ * Also allows the eas-station user to manage NetworkManager connections
+ * (WiFi scan/connect/disconnect from the admin Network page).  The
+ * distro's default NetworkManager rule only authorizes local, active
+ * sessions, which a systemd service never is, so without this rule every
+ * nmcli connect from the web UI fails with "Not authorized to control
+ * networking."
  */
 polkit.addRule(function(action, subject) {
     if (action.id === "org.freedesktop.timedate1.set-ntp" &&
         subject.user === "eas-station") {
+        return polkit.Result.YES;
+    }
+});
+
+var EAS_STATION_NM_ACTIONS = [
+    "org.freedesktop.NetworkManager.network-control",
+    "org.freedesktop.NetworkManager.settings.modify.system",
+    "org.freedesktop.NetworkManager.wifi.scan",
+    "org.freedesktop.NetworkManager.enable-disable-wifi"
+];
+
+polkit.addRule(function(action, subject) {
+    if (subject.user === "eas-station" &&
+        EAS_STATION_NM_ACTIONS.indexOf(action.id) >= 0) {
         return polkit.Result.YES;
     }
 });

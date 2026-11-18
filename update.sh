@@ -161,6 +161,11 @@ else
     echo_warning "Update may prompt for passwords"
 fi
 
+# Refresh polkit rule (NTP toggle for GPS, NetworkManager for the admin Network page)
+if [ -f "$INSTALL_DIR/config/polkit-eas-station.rules" ]; then
+    install -m 0644 "$INSTALL_DIR/config/polkit-eas-station.rules" /etc/polkit-1/rules.d/60-eas-station.rules
+fi
+
 # Get current version info
 cd "$INSTALL_DIR"
 CURRENT_BRANCH=""
