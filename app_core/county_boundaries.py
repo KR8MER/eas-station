@@ -58,6 +58,75 @@ def same_codes_to_geoids(fips_codes: List[str]) -> List[str]:
     ]
 
 
+# SAME location code meaning "the entire United States" (e.g. the National
+# Periodic Test).  It also ends in "000", so it must be checked before the
+# statewide rule or it is read as the nonexistent state FIPS "00".
+NATIONWIDE_SAME_CODE = "000000"
+
+# Simplification tolerance (degrees, ~1 km) for the nationwide union.  A raw
+# union of all ~3,200 counties is ~1M vertices; simplified it is ~50k vertices
+# (~1.2 MB GeoJSON) and builds in a few seconds on a Pi 5.
+_NATIONWIDE_SIMPLIFY_TOLERANCE = 0.01
+
+
+def build_same_union_query(same_codes: List[str]) -> Optional[tuple]:
+    """Build the SQL that unions county boundaries for a list of SAME codes.
+
+    Handles three code shapes:
+
+    * ``000000`` – nationwide: every county, simplified to keep the
+      geometry small enough to render.
+    * ``0SS000`` – statewide: every county in state ``SS``.
+    * ``0SSCCC`` – a single county (Census GEOID ``SSCCC``).
+
+    Returns ``(sql, params)`` selecting ``union_geom`` and ``county_count``
+    from ``us_county_boundaries``, or ``None`` when no code is usable.
+    """
+    geoids: set = set()
+    state_fps: set = set()
+    nationwide = False
+
+    for code in same_codes or []:
+        if not isinstance(code, str) or len(code) != 6 or not code.isdigit():
+            continue
+        if code == NATIONWIDE_SAME_CODE:
+            nationwide = True
+        elif code.endswith("000"):
+            state_fps.add(code[1:3])
+        else:
+            # Drop only the single leading zero; lstrip('0') would over-strip
+            # codes for states 01-09.
+            geoids.add(code[1:])
+
+    if nationwide:
+        sql = (
+            "SELECT ST_SetSRID(ST_Multi(ST_Union("
+            f"ST_SimplifyPreserveTopology(geom, {_NATIONWIDE_SIMPLIFY_TOLERANCE})"
+            ")), 4326) AS union_geom, COUNT(*) AS county_count"
+            " FROM us_county_boundaries WHERE geom IS NOT NULL"
+        )
+        return sql, {}
+
+    conditions = []
+    params: Dict[str, Any] = {}
+    if geoids:
+        conditions.append("geoid = ANY(:geoids)")
+        params["geoids"] = sorted(geoids)
+    if state_fps:
+        conditions.append("statefp = ANY(:state_fps)")
+        params["state_fps"] = sorted(state_fps)
+    if not conditions:
+        return None
+
+    sql = (
+        "SELECT ST_SetSRID(ST_Multi(ST_Union(geom)), 4326) AS union_geom,"
+        " COUNT(*) AS county_count"
+        " FROM us_county_boundaries"
+        f" WHERE ({' OR '.join(conditions)}) AND geom IS NOT NULL"
+    )
+    return sql, params
+
+
 def _find_bundled_shapefile() -> Optional[Path]:
     """Locate the bundled county shapefile relative to the project root."""
     # Try a few common project roots
@@ -319,6 +388,8 @@ __all__ = [
     "load_counties_from_shapefile",
     "delete_counties",
     "same_codes_to_geoids",
+    "build_same_union_query",
+    "NATIONWIDE_SAME_CODE",
     "STATE_ABBREV_TO_FIPS",
     "STATE_FIPS_TO_ABBREV",
     "_find_bundled_shapefile",

@@ -29,6 +29,7 @@ from geoalchemy2 import Geography
 from sqlalchemy import cast, func, text
 
 from app_core.models import Boundary, CAPAlert, Intersection, USCountyBoundary
+from app_core.county_boundaries import build_same_union_query
 from app_core.extensions import db
 
 # Conversion constant: square metres → square miles
@@ -145,59 +146,17 @@ def try_build_geometry_from_same_codes(alert_id: int) -> bool:
         if not same_codes:
             return False
 
-        geoids = set()
-        statewide_state_fps = set()
-
-        for code in same_codes:
-            if not isinstance(code, str) or len(code) < 5:
-                continue
-            if code.endswith('000'):
-                # Statewide: SAME 039000 → state FIPS "39"
-                state_fp = code[1:3] if len(code) == 6 else code.lstrip('0')[:2]
-                statewide_state_fps.add(state_fp)
-                continue
-            # SAME codes are always 6 chars: 0SSCCC.  Drop the single leading
-            # prefix zero to obtain the 5-digit Census GEOID (SSCCC).
-            # Using lstrip('0') would over-strip codes for states 01-09
-            # (e.g. "001001" → "1001" instead of the correct "01001").
-            geoid = code[1:]
-            geoids.add(geoid)
-
-        if not geoids and not statewide_state_fps:
+        query = build_same_union_query(same_codes)
+        if query is None:
             return False
+        sql, params = query
 
         # Use a SAVEPOINT so that any DB error is contained
         nested = db.session.begin_nested()
         try:
-            conditions = []
-            params: Dict[str, Any] = {}
-
-            if geoids:
-                conditions.append("geoid = ANY(:geoids)")
-                params["geoids"] = list(geoids)
-            if statewide_state_fps:
-                conditions.append("statefp = ANY(:state_fps)")
-                params["state_fps"] = list(statewide_state_fps)
-
-            where_clause = " OR ".join(conditions)
-
-            count = db.session.execute(
-                text(f"SELECT COUNT(*) FROM us_county_boundaries WHERE ({where_clause}) AND geom IS NOT NULL"),
-                params,
-            ).scalar()
-
-            if not count:
-                nested.rollback()
-                return False
-
-            union_geom = db.session.execute(
-                text(f"""
-                    SELECT ST_SetSRID(ST_Multi(ST_Union(geom)), 4326)
-                    FROM us_county_boundaries
-                    WHERE ({where_clause}) AND geom IS NOT NULL
-                """),
-                params,
-            ).scalar()
+            row = db.session.execute(text(sql), params).one()
+            count = row.county_count
+            union_geom = row.union_geom if count else None
 
             if union_geom is None:
                 nested.rollback()
