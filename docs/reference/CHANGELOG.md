@@ -7,6 +7,12 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.30.2] - 2026-11-18 - Allow WiFi changes from the Network page
+
+### Fixed
+- The admin Network page could not connect to WiFi: every attempt failed with "Not authorized to control networking." The distro's NetworkManager polkit rule only authorizes local, active login sessions, which the `eas-station` systemd service never has. `config/polkit-eas-station.rules` now grants the `eas-station` user the NetworkManager network-control, settings-modify, WiFi-scan and WiFi-toggle actions.
+- The polkit rule was never installed by `install.sh` or `update.sh` (the GPS NTP grant relied on a manual copy). Both now install it to `/etc/polkit-1/rules.d/60-eas-station.rules`.
+
 ## [3.30.1] - 2026-10-24 - Bump brotli from 1.2.0 to 1.2.1
 
 ### Changed

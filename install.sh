@@ -2501,6 +2501,16 @@ udevadm control --reload-rules
 udevadm trigger
 echo_success "Udev rules created"
 
+# polkit rule: lets the service user toggle NTP (GPS) and manage
+# NetworkManager connections (admin Network page) without a login session
+echo_info "Installing polkit rules..."
+if [ -f "$INSTALL_DIR/config/polkit-eas-station.rules" ]; then
+    install -m 0644 "$INSTALL_DIR/config/polkit-eas-station.rules" /etc/polkit-1/rules.d/60-eas-station.rules
+    echo_success "Polkit rules installed"
+else
+    echo_warning "Polkit rules file not found (config/polkit-eas-station.rules)"
+fi
+
 # Enable and start services
 echo_step "Start EAS Station Services"
 
