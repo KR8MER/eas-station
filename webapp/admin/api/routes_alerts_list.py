@@ -159,7 +159,7 @@ def get_alerts():
                             'headline': alert.headline,
                             'description': (
                                 alert.description[:500] + '...'
-                                if len(alert.description) > 500
+                                if alert.description and len(alert.description) > 500
                                 else alert.description
                             ),
                             'area_desc': alert.area_desc,

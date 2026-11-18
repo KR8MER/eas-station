@@ -196,6 +196,7 @@ from app_utils.eas import load_eas_config
 from app_core.audio.auto_forward import auto_forward_cap_alert
 print(f"[CAP_POLLER] Importing app_core.models...")
 from app_core.models import PollerSettings
+from app_core.county_boundaries import build_same_union_query
 from poller.cap_alert_parsing import (
     _apply_cancellation_status,
     _coords_equal,
@@ -1979,47 +1980,13 @@ class CAPPoller:
             if not same_codes:
                 return False
 
-            geoids: set = set()
-            statewide_state_fps: set = set()
-
-            for code in same_codes:
-                if not isinstance(code, str) or len(code) != 6:
-                    continue
-                if code.endswith('000'):
-                    # Statewide: SAME 039000 → state FIPS "39"
-                    statewide_state_fps.add(code[1:3])
-                    continue
-                # SAME codes are always 6 chars: 0SSCCC.  Drop the single leading
-                # zero to obtain the 5-digit Census GEOID (SSCCC).  Using lstrip('0')
-                # would over-strip codes for states 01-09.
-                geoid = code[1:]
-                geoids.add(geoid)
-
-            if not geoids and not statewide_state_fps:
+            query = build_same_union_query(same_codes)
+            if query is None:
                 return False
-
-            conditions = []
-            params: Dict[str, Any] = {}
-
-            if geoids:
-                conditions.append("geoid = ANY(:geoids)")
-                params["geoids"] = list(geoids)
-            if statewide_state_fps:
-                conditions.append("statefp = ANY(:state_fps)")
-                params["state_fps"] = list(statewide_state_fps)
-
-            where_clause = " OR ".join(conditions)
+            sql, params = query
 
             # Compute the county union and match count in a single query.
-            row = self.db_session.execute(
-                text(
-                    f"SELECT ST_SetSRID(ST_Multi(ST_Union(geom)), 4326) AS union_geom,"
-                    f" COUNT(*) AS county_count"
-                    f" FROM us_county_boundaries"
-                    f" WHERE ({where_clause}) AND geom IS NOT NULL"
-                ),
-                params,
-            ).one()
+            row = self.db_session.execute(text(sql), params).one()
 
             if not row.county_count or row.union_geom is None:
                 return False

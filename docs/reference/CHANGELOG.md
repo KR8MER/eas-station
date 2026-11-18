@@ -7,6 +7,12 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.30.3] - 2026-11-18 - Map nationwide (000000) alerts
+
+### Fixed
+- Nationwide alerts never appeared on the map. The SAME location code `000000` ("entire United States", used by the National Periodic Test) ends in `000`, so both the poller and the web map read it as a statewide code for the nonexistent state FIPS `00` and built no geometry. It now unions every county, simplified to ~1 km (~50k vertices) so the result stays small enough to render. The parsing the poller and web app each had their own copy of now lives in one helper, `app_core.county_boundaries.build_same_union_query`.
+- The map's "show expired alerts" view (`/api/alerts?include_expired=true`) returned HTTP 500 whenever any alert with a map area had no description text (e.g. monthly Practice/Demo Warnings), so no alerts loaded at all.
+
 ## [3.30.2] - 2026-11-18 - Allow WiFi changes from the Network page
 
 ### Fixed
