@@ -7,6 +7,11 @@ All notable changes to this project are documented in this file. The format is b
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [3.30.4] - 2026-11-23 - Bump the python-deps group across 1 directory with 27 updates
+
+### Changed
+- Bump the python-deps group across 1 directory with 27 updates (Dependabot #2775); documented versions synced by scripts/sync_dependency_versions.py.
+
 ## [3.30.3] - 2026-11-18 - Map nationwide (000000) alerts
 
 ### Fixed
